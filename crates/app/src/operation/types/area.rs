@@ -190,30 +190,30 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         // Authored geometry: the numbers ARE the area.
         // #1504: a Slot's picks (two opposite edges or a face) seed its
         // endpoints and width and bound where it may cut.
-        OpType::Slot => format!("a {kind} is authored by its two endpoints and width, seeded from two picked opposite edges or a face and kept inside them - move those instead of a boundary"),
-        OpType::TrochoidalSlot => format!("a {kind} is authored by its two endpoints and width - move those instead of a boundary"),
+        OpType::Slot => camcraft_i18n::tf("a {kind} is authored by its two endpoints and width, seeded from two picked opposite edges or a face and kept inside them - move those instead of a boundary", &[format!("{}", kind)]),
+        OpType::TrochoidalSlot => camcraft_i18n::tf("a {kind} is authored by its two endpoints and width - move those instead of a boundary", &[format!("{}", kind)]),
         // #1443: the carved region is the pick itself.
-        OpType::VCarve => format!("a {kind} carves the closed region that is picked - pick the region instead of a boundary"),
-        OpType::Circular => format!("a {kind} is authored by its centre and radius, typed or fitted to a picked round rim or face - set those instead of a boundary"),
+        OpType::VCarve => camcraft_i18n::tf("a {kind} carves the closed region that is picked - pick the region instead of a boundary", &[format!("{}", kind)]),
+        OpType::Circular => camcraft_i18n::tf("a {kind} is authored by its centre and radius, typed or fitted to a picked round rim or face - set those instead of a boundary", &[format!("{}", kind)]),
         // The cone's ride is the wall itself: an offset or clipped
         // outline would be ridden where nothing was picked.
         OpType::Chamfer2D => {
-            format!("a {kind}'s cone lies on the picked wall - its ride cannot be offset or clipped; pick other edges instead")
+            camcraft_i18n::tf("a {kind}'s cone lies on the picked wall - its ride cannot be offset or clipped; pick other edges instead", &[format!("{}", kind)])
         }
         // Hole lists.
         OpType::Drill | OpType::Bore | OpType::Thread => {
-            format!("{kind} rides its hole list - edit the holes instead of a boundary")
+            camcraft_i18n::tf("{kind} rides its hole list - edit the holes instead of a boundary", &[format!("{}", kind)])
         }
-        OpType::Probe => format!("a {kind} touches its picked feature - there is no area to bound"),
+        OpType::Probe => camcraft_i18n::tf("a {kind} touches its picked feature - there is no area to bound", &[format!("{}", kind)]),
         OpType::PlasmaProfile => {
-            format!("a {kind} cuts its picked contours through the plate - pick the contours instead of a boundary")
+            camcraft_i18n::tf("a {kind} cuts its picked contours through the plate - pick the contours instead of a boundary", &[format!("{}", kind)])
         }
         OpType::WireContour => {
-            format!("a {kind} cuts its picked profile through the workpiece - pick the profile instead of a boundary")
+            camcraft_i18n::tf("a {kind} cuts its picked profile through the workpiece - pick the profile instead of a boundary", &[format!("{}", kind)])
         }
-        OpType::Deburr => format!("{kind} breaks the model's own exposed edges - there is no area to bound"),
-        OpType::SinkerBurn | OpType::SinkerSideBurn => format!("a {kind} burns its electrode's own face - there is no area to bound"),
-        OpType::SlotUndercut => format!("a {kind} cuts its authored slot at depth - there is no area to bound"),
+        OpType::Deburr => camcraft_i18n::tf("{kind} breaks the model's own exposed edges - there is no area to bound", &[format!("{}", kind)]),
+        OpType::SinkerBurn | OpType::SinkerSideBurn => camcraft_i18n::tf("a {kind} burns its electrode's own face - there is no area to bound", &[format!("{}", kind)]),
+        OpType::SlotUndercut => camcraft_i18n::tf("a {kind} cuts its authored slot at depth - there is no area to bound", &[format!("{}", kind)]),
         // Mesh-driven with a moving tool axis: the model's own shadow.
         OpType::Contour5D
         | OpType::Parallel5D
@@ -225,7 +225,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         | OpType::MultiAxisRough
         | OpType::Flow5D
         | OpType::MultiAxisContour => {
-            format!("{kind} is mesh-driven with a moving tool axis - its area is the model's own shadow, not a boundary")
+            camcraft_i18n::tf("{kind} is mesh-driven with a moving tool axis - its area is the model's own shadow, not a boundary", &[format!("{}", kind)])
         }
         // The turning family: the limit is the turned silhouette.
         OpType::Facing
@@ -240,7 +240,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         | OpType::MultiPassTurning
         | OpType::FormTurning
         | OpType::BoringTurning => {
-            format!("{kind} is a turning ride - its limit is the turned profile's own silhouette, not a boundary")
+            camcraft_i18n::tf("{kind} is a turning ride - its limit is the turned profile's own silhouette, not a boundary", &[format!("{}", kind)])
         }
     })
 }

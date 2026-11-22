@@ -185,7 +185,7 @@ impl RecentFiles {
     /// dropped, repeats keep their newest place, and each list is cut
     /// to the cap - a hand-edited file can never grow a list past it.
     pub fn from_json(text: &str) -> Result<Self, String> {
-        let disk: OnDisk = serde_json::from_str(text).map_err(|e| format!("not a recents file ({e})"))?;
+        let disk: OnDisk = serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("not a recents file ({e})", &[format!("{}", e)]))?;
         if disk.format != FORMAT {
             return Err(format!("format '{}' is not {FORMAT}", disk.format));
         }
@@ -232,7 +232,7 @@ impl RecentEntry {
     /// The refusal a click on a missing entry earns, naming the file.
     #[must_use]
     pub fn refusal(&self, kind: RecentKind) -> String {
-        format!("{} is missing - recent {} not opened ({})", self.name, kind.noun(), self.path.display())
+        camcraft_i18n::tf("{} is missing - recent {} not opened ({})", &[format!("{}", self.name), format!("{}", kind.noun()), format!("{}", self.path.display())])
     }
 }
 
@@ -268,7 +268,7 @@ pub fn load(path: &Path) -> (RecentFiles, Option<String>) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (RecentFiles::default(), None),
         Err(e) => {
-            let why = format!("recent files not read ({}): {e} - starting empty", path.display());
+            let why = camcraft_i18n::tf("recent files not read ({}): {e} - starting empty", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             return (RecentFiles::default(), Some(why));
         }
@@ -276,7 +276,7 @@ pub fn load(path: &Path) -> (RecentFiles, Option<String>) {
     match RecentFiles::from_json(&text) {
         Ok(r) => (r, None),
         Err(e) => {
-            let why = format!("recent files ignored ({}): {e} - starting empty", path.display());
+            let why = camcraft_i18n::tf("recent files ignored ({}): {e} - starting empty", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             (RecentFiles::default(), Some(why))
         }

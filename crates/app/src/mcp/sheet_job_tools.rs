@@ -24,7 +24,7 @@ fn num(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Number(n)) => n.as_f64().map(Some).ok_or_else(|| format!("\"{key}\" {n} is not a number")),
-        Some(other) => Err(format!("\"{key}\" must be a number in mm, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a number in mm, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -36,7 +36,7 @@ fn word<'a>(a: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, Str
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s)),
-        Some(other) => Err(format!("\"{key}\" must be a word, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a word, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -64,7 +64,7 @@ fn set_sheet_job(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String>
         let xy_zero = match word(a, "xy_zero")? {
             None => SheetCorner::FrontLeft,
             Some(w) => SheetCorner::from_word(w).ok_or_else(|| {
-                format!("\"xy_zero\" '{w}' is not front_left, front_right, back_left, back_right or centre")
+                camcraft_i18n::tf("\"xy_zero\" '{w}' is not front_left, front_right, back_left, back_right or centre", &[format!("{}", w)])
             })?,
         };
         let job = SheetJob {

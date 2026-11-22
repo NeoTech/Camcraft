@@ -127,28 +127,28 @@ pub fn compute(
         _ => {}
     }
     let mut rpm = turning_data::rpm_at(vc, diameter)
-        .ok_or_else(|| format!("the working diameter {diameter} mm makes no spindle speed"))?
+        .ok_or_else(|| camcraft_i18n::tf("the working diameter {diameter} mm makes no spindle speed", &[format!("{}", diameter)]))?
         .round();
     let mut notes = Vec::new();
     let max_rpm = tool.turning.and_then(|t| t.max_rpm);
     if let Some(hi) = max_rpm
         && rpm > hi
     {
-        notes.push(format!("{rpm:.0} rpm held to the tool's maximum {hi:.0}"));
+        notes.push(camcraft_i18n::tf("{rpm:.0} rpm held to the tool's maximum {hi:.0}", &[format!("{:.0}", rpm), format!("{:.0}", hi)]));
         rpm = hi.floor();
     }
     // #1031: the setup's chuck or collet rating.
     if let Some(hi) = workholding
         && rpm > hi
     {
-        notes.push(format!("{rpm:.0} rpm held to the workholding's maximum {hi:.0}"));
+        notes.push(camcraft_i18n::tf("{rpm:.0} rpm held to the workholding's maximum {hi:.0}", &[format!("{:.0}", rpm), format!("{:.0}", hi)]));
         rpm = hi.floor();
     }
     if let Some(m) = machine {
         if let Some(hi) = m.spindle_max
             && rpm > hi
         {
-            notes.push(format!("{rpm:.0} rpm held to the machine's {hi:.0}"));
+            notes.push(camcraft_i18n::tf("{rpm:.0} rpm held to the machine's {hi:.0}", &[format!("{:.0}", rpm), format!("{:.0}", hi)]));
             rpm = hi.floor();
         }
         if let Some(lo) = m.spindle_min
@@ -156,20 +156,18 @@ pub fn compute(
         {
             // Raising it would run Vc over the table at this diameter
             // and could cross the tool's own ceiling: refuse instead.
-            return Err(format!(
-                "{rpm:.0} rpm at the {diameter:.1} mm working diameter is under the machine's minimum {lo:.0}"
-            ));
+            return Err(camcraft_i18n::tf("{rpm:.0} rpm at the {diameter:.1} mm working diameter is under the machine's minimum {lo:.0}", &[format!("{:.0}", rpm), format!("{:.1}", diameter), format!("{:.0}", lo)]));
         }
     }
     if !(rpm.is_finite() && rpm >= 1.0) {
-        return Err(format!("the clamps leave no spindle speed ({rpm})"));
+        return Err(camcraft_i18n::tf("the clamps leave no spindle speed ({rpm})", &[format!("{}", rpm)]));
     }
     let feed = frev * rpm;
     let plunge_feed = 0.5 * frev * rpm;
     if let Some(ceil) = machine.and_then(|m| m.feed_ceiling([1.0, 1.0, 0.0]))
         && feed > ceil
     {
-        return Err(format!("{feed:.0} mm/min is over the machine's feed ceiling {ceil:.0}"));
+        return Err(camcraft_i18n::tf("{feed:.0} mm/min is over the machine's feed ceiling {ceil:.0}", &[format!("{:.0}", feed), format!("{:.0}", ceil)]));
     }
     Ok(Suggestion {
         tool: tool_name.to_owned(),
@@ -188,11 +186,11 @@ pub fn compute(
 /// The suggestion for a [`css_op`] whose tool is `tool`.
 pub fn suggest(world: &World, op: &crate::schema::Operation, tool: &Tool, material: WorkMaterial) -> Result<Suggestion, String> {
     if !tabulated(tool.kind) {
-        return Err(format!("the turning table does not speak for a {}", tool.kind));
+        return Err(camcraft_i18n::tf("the turning table does not speak for a {}", &[format!("{}", tool.kind)]));
     }
     let tm = tool
         .tool_material
-        .ok_or_else(|| format!("tool {} states no tool material (HSS or carbide)", op.tool))?;
+        .ok_or_else(|| camcraft_i18n::tf("tool {} states no tool material (HSS or carbide)", &[format!("{}", op.tool)]))?;
     let setup = op.setup.as_deref();
     let d = working_diameter(world, setup).ok_or("no stock to read a working diameter from - set the stock first")?;
     let hold = crate::setup_workholding::of(world, setup);

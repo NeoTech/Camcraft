@@ -45,7 +45,7 @@ fn read(source: &MachineSource) -> Result<(Value, KeyOrder), Refusal> {
     match serde_json::from_str::<Value>(&text) {
         Ok(v) if v.is_object() => Ok((v, KeyOrder::of_text(&text))),
         Ok(_) => Err(Refusal { key: "file".to_owned(), rule: "must be one machine object { ... }".to_owned() }),
-        Err(e) => Err(Refusal { key: "file".to_owned(), rule: format!("not readable JSON ({e})") }),
+        Err(e) => Err(Refusal { key: "file".to_owned(), rule: camcraft_i18n::tf("not readable JSON ({e})", &[format!("{}", e)]) }),
     }
 }
 
@@ -167,7 +167,7 @@ impl MachineDraft {
         }
         let code = code.trim();
         if code.is_empty() {
-            return Err(format!("coolant {name}: enter its M code (M7 air or mist, M8 flood) before adding it"));
+            return Err(camcraft_i18n::tf("coolant {name}: enter its M code (M7 air or mist, M8 flood) before adding it", &[format!("{}", name)]));
         }
         let head = fields::heads(&self.value).into_iter().next().ok_or("this machine has no head to carry a coolant")?;
         let list = format!("{head}/tool_station/coolants");
@@ -179,7 +179,7 @@ impl MachineDraft {
         match self.value.pointer_mut(&list) {
             Some(Value::Array(a)) => a.push(entry),
             Some(slot) => *slot = json!([entry]),
-            None => return Err(format!("{list}: not a coolant list")),
+            None => return Err(camcraft_i18n::tf("{list}: not a coolant list", &[format!("{}", list)])),
         }
         self.dirty = true;
         Ok(())
@@ -190,7 +190,7 @@ impl MachineDraft {
     /// the seeded Flood of a blank machine included (#869). Refused by
     /// name when the pointer names no coolant entry.
     pub fn remove_coolant(&mut self, field_pointer: &str) -> Result<(), String> {
-        let not_one = || format!("{field_pointer}: not a coolant entry");
+        let not_one = || camcraft_i18n::tf("{field_pointer}: not a coolant entry", &[format!("{}", field_pointer)]);
         let entry = field_pointer.rsplit_once('/').map(|(e, _)| e).ok_or_else(not_one)?;
         let (list, index) = entry.rsplit_once('/').ok_or_else(not_one)?;
         let index: usize = index.parse().map_err(|_| not_one())?;

@@ -41,7 +41,7 @@ const DIMS: [&str; 9] =
     ["body_length", "body_width", "body_height", "jaw_width", "jaw_height", "jaw_thickness", "face_offset", "bolt_diameter", "slot_travel"];
 
 fn points(v: &Value, k: &str) -> Result<Vec<[f64; 2]>, String> {
-    let bad = || format!("\"{k}\" must be a list of [x, y] mm positions");
+    let bad = || camcraft_i18n::tf("\"{k}\" must be a list of [x, y] mm positions", &[format!("{}", k)]);
     v.as_array()
         .ok_or_else(bad)?
         .iter()
@@ -55,7 +55,7 @@ fn points(v: &Value, k: &str) -> Result<Vec<[f64; 2]>, String> {
 /// `p` with the overrides of object `key` in `a` applied.
 fn with_overrides(mut p: JawParams, a: &Map<String, Value>, key: &str) -> Result<JawParams, String> {
     let Some(o) = a.get(key) else { return Ok(p) };
-    let o = o.as_object().ok_or_else(|| format!("\"{key}\" must be an object of overrides"))?;
+    let o = o.as_object().ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be an object of overrides", &[format!("{}", key)]))?;
     for (k, v) in o {
         match k.as_str() {
             "bolts" => p.bolts = points(v, k)?,
@@ -72,9 +72,9 @@ fn with_overrides(mut p: JawParams, a: &Map<String, Value>, key: &str) -> Result
                     "bolt_diameter" => &mut p.bolt_diameter,
                     "slot_travel" => &mut p.slot_travel,
                     "slide" if key == "figures" => &mut p.slide,
-                    other => return Err(format!("unknown jaw block figure \"{other}\" (one of {}, bolts, pins)", DIMS.join(", "))),
+                    other => return Err(camcraft_i18n::tf("unknown jaw block figure \"{other}\" (one of {}, bolts, pins)", &[format!("{}", other), format!("{}", DIMS.join(", "))])),
                 };
-                *slot = v.as_f64().ok_or_else(|| format!("\"{k}\" must be a number of mm"))?;
+                *slot = v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"{k}\" must be a number of mm", &[format!("{}", k)]))?;
             }
         }
     }
@@ -97,7 +97,7 @@ fn add_mod_vise_pair(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
     let label = req_str(a, "size")?;
     let row = modvise::preset(label).ok_or_else(|| {
         let all: Vec<&str> = modvise::PRESETS.iter().map(|s| s.label).collect();
-        format!("no mod vise preset '{label}' (one of {})", all.join(", "))
+        camcraft_i18n::tf("no mod vise preset '{label}' (one of {})", &[format!("{}", label), format!("{}", all.join(", "))])
     })?;
     let yaw = match a.get("yaw") {
         None | Some(Value::Null) => 0.0,
@@ -133,7 +133,7 @@ fn s_add() -> Value {
             "description": "[x, y] mm in the block frame (origin = the anchor bolt, +Y toward the jaw face); one bolt is [0, 0]." });
         props.insert("bolts".into(), pts.clone());
         props.insert("pins".into(), pts);
-        json!({ "type": "object", "properties": props, "additionalProperties": false, "description": format!("Override the {what} block's figures (mm).") })
+        json!({ "type": "object", "properties": props, "additionalProperties": false, "description": camcraft_i18n::tf("Override the {what} block's figures (mm).", &[format!("{}", what)]) })
     };
     obj(
         json!({
@@ -156,7 +156,7 @@ fn insert_of(a: &Map<String, Value>) -> Result<Option<JawInsert>, String> {
         Some(v) => match v.as_str() {
             Some("hard") => Ok(Some(JawInsert::Hard)),
             Some("soft") => Ok(Some(JawInsert::Soft)),
-            _ => Err(format!("\"insert\" is hard or soft (got {v})")),
+            _ => Err(camcraft_i18n::tf("\"insert\" is hard or soft (got {v})", &[format!("{}", v)])),
         },
     }
 }
@@ -166,7 +166,7 @@ fn set_mod_jaw(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let current = model::find_by_name(&env.world, name)
         .and_then(|e| fixture::def_of(&env.world, &e))
         .and_then(|d| d.mod_jaw)
-        .ok_or_else(|| format!("'{name}' is not a mod vise jaw block"))?;
+        .ok_or_else(|| camcraft_i18n::tf("'{name}' is not a mod vise jaw block", &[format!("{}", name)]))?;
     let mut params = with_overrides(current, a, "figures")?;
     if let Some(i) = insert_of(a)? {
         params.insert = i;

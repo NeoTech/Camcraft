@@ -92,10 +92,8 @@ pub(super) fn fold(
         let merged = match (now, stop) {
             (AfterOperation::GoHome, _) => {
                 let label = model::operation_label(world, name, e);
-                return Err(format!(
-                    "{label} ends with Go home, and the program changes to setup '{next}' after it, which needs a pause for the re-clamp - \
-                     the post writes one after-action there: set the operation to Pause (M0), or choose Run straight on or One file per setup under Between setups"
-                ));
+                return Err(camcraft_i18n::tf("{label} ends with Go home, and the program changes to setup '{next}' after it, which needs a pause for the re-clamp - \
+                     the post writes one after-action there: set the operation to Pause (M0), or choose Run straight on or One file per setup under Between setups", &[format!("{}", label), format!("{}", next)]));
             }
             (AfterOperation::ProgramStop, _) | (_, AfterOperation::ProgramStop) => AfterOperation::ProgramStop,
             _ => stop,

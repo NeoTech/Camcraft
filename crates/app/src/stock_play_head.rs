@@ -130,7 +130,7 @@ impl FieldPlay {
                 self.cur.with_partial(&sim, m, f)
             }
         }
-        .map_err(|e| format!("playback could not cut {}: {e}", op.name))?;
+        .map_err(|e| camcraft_i18n::tf("playback could not cut {}: {e}", &[format!("{}", op.name), format!("{}", e)]))?;
         if let Some((stock, bricks)) = cut {
             self.partial = Some(stock);
             self.partial_bricks = bricks;

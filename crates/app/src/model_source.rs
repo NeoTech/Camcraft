@@ -67,7 +67,7 @@ pub fn read(path: &Path) -> Result<ModelSource, String> {
 /// A browser has no file to read again.
 #[cfg(target_arch = "wasm32")]
 pub fn read(path: &Path) -> Result<ModelSource, String> {
-    Err(format!("{}: no SHA-256 in this build", path.display()))
+    Err(camcraft_i18n::tf("{}: no SHA-256 in this build", &[format!("{}", path.display())]))
 }
 
 /// How much of a source file is read at a time for its digest.

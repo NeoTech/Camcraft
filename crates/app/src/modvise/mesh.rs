@@ -65,7 +65,7 @@ fn simplify(raw: &[(f64, f64)]) -> Vec<(f64, f64)> {
 /// assumed checked.
 pub fn solid(p: &JawParams) -> Result<Vec<Triangle>, String> {
     let poly = profile(p);
-    let caps = triangulate(&poly).map_err(|_| format!("the {} profile could not be triangulated (degenerate dimensions)", p.what()))?;
+    let caps = triangulate(&poly).map_err(|_| camcraft_i18n::tf("the {} profile could not be triangulated (degenerate dimensions)", &[format!("{}", p.what())]))?;
     let xc = p.centre_x();
     let h = 0.5 * p.body_width.max(p.jaw_width);
     let (x0, x1) = (xc - h, xc + h);

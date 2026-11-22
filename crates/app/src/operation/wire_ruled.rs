@@ -52,7 +52,7 @@ pub(super) struct RuledPicks {
 }
 
 fn invalid(why: String) -> GenError {
-    GenError::Invalid(format!("wire contour: {why}"))
+    GenError::Invalid(camcraft_i18n::tf("wire contour: {why}", &[format!("{}", why)]))
 }
 
 /// The op's two profiles, read from the world: `None` for any op that
@@ -73,14 +73,14 @@ pub(super) fn picks_of(world: &World, op: &Operation) -> Option<Result<RuledPick
 fn profile(world: &World, setup: Option<&str>, side: WireSide, g: &GeoSel) -> Result<Picked, GenError> {
     let label = crate::pick::geo_label(world, g);
     let Some(entity) = model::find_by_name(world, &g.entity) else {
-        return Err(GenError::Invalid(format!("the selection names '{}', which is gone", g.entity)));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the selection names '{}', which is gone", &[format!("{}", g.entity)])));
     };
     let Some(features) = model::features_of(world, &entity) else {
-        return Err(GenError::Invalid(format!("'{}' has no geometry to select from", g.entity)));
+        return Err(GenError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
     };
     let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
     let place = |p: &[f64; 3]| transform_point(Point3::new(p[0], p[1], p[2]), loc.pos, loc.rot);
-    let gone = || GenError::Invalid(format!("{label} is no longer in the model: re-pick it"));
+    let gone = || GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)]));
     let (pts, closed): (Vec<Point3>, bool) = match g.feature {
         FeatureSel::Face(fid) => {
             let f = features.faces.iter().find(|f| f.id == fid).ok_or_else(gone)?;
@@ -92,11 +92,7 @@ fn profile(world: &World, setup: Option<&str>, side: WireSide, g: &GeoSel) -> Re
             let ring = match (rings.as_slice(), holes.as_slice(), side) {
                 ([one], _, _) | (_, [one], WireSide::Die) => *one,
                 _ => {
-                    return Err(invalid(format!(
-                        "{label} has {} closed rings ({} openings) - a profile is one ring: a die face reads its one opening; pick the edge chains of the ring to cut (the chains of one ring are stitched)",
-                        rings.len(),
-                        holes.len()
-                    )));
+                    return Err(invalid(camcraft_i18n::tf("{label} has {} closed rings ({} openings) - a profile is one ring: a die face reads its one opening; pick the edge chains of the ring to cut (the chains of one ring are stitched)", &[format!("{}", label), format!("{}", rings.len()), format!("{}", holes.len())])));
                 }
             };
             (ring.verts.iter().filter_map(|&vi| features.verts.get(vi as usize)).map(place).collect(), true)
@@ -106,24 +102,20 @@ fn profile(world: &World, setup: Option<&str>, side: WireSide, g: &GeoSel) -> Re
             (feature::chain_points(&features, &c).iter().map(place).collect(), c.closed)
         }
         _ => {
-            return Err(invalid(format!(
-                "{label} is not a profile - a 4-axis cut pairs two flat profiles; pick the top and bottom faces, or the edge chains of each outline"
-            )));
+            return Err(invalid(camcraft_i18n::tf("{label} is not a profile - a 4-axis cut pairs two flat profiles; pick the top and bottom faces, or the edge chains of each outline", &[format!("{}", label)])));
         }
     };
     let (lo, hi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| (a.min(p.z), b.max(p.z)));
     if pts.is_empty() || !(lo.is_finite() && hi.is_finite()) {
-        return Err(invalid(format!("{label} has no points to read a profile from")));
+        return Err(invalid(camcraft_i18n::tf("{label} has no points to read a profile from", &[format!("{}", label)])));
     }
     if hi - lo > FLAT {
-        return Err(invalid(format!(
-            "{label} is not flat (it runs from Z{lo:.3} to Z{hi:.3}) - each profile of a 4-axis cut lies on one horizontal plane"
-        )));
+        return Err(invalid(camcraft_i18n::tf("{label} is not flat (it runs from Z{lo:.3} to Z{hi:.3}) - each profile of a 4-axis cut lies on one horizontal plane", &[format!("{}", label), format!("{:.3}", lo), format!("{:.3}", hi)])));
     }
     let xy: Vec<Point2> = pts.iter().map(|p| Point2::new(p.x, p.y)).collect();
     let z = (lo + hi) * 0.5;
     Ok(if closed {
-        Picked { z, loops: vec![Loop::new(xy).map_err(|e| invalid(format!("{label} is not a usable ring: {e}")))?], chains: Vec::new() }
+        Picked { z, loops: vec![Loop::new(xy).map_err(|e| invalid(camcraft_i18n::tf("{label} is not a usable ring: {e}", &[format!("{}", label), format!("{}", e)])))?], chains: Vec::new() }
     } else {
         Picked { z, loops: Vec::new(), chains: vec![xy] }
     })
@@ -144,16 +136,11 @@ fn plane_ring(world: &World, setup: Option<&str>, items: &[GeoSel], here: Vec<(u
     match rings.as_slice() {
         [(_, ring, _)] if consumed.len() == n => Ok(Picked {
             z,
-            loops: vec![Loop::new(ring.clone()).map_err(|e| invalid(format!("the ring stitched at Z{z:.3} is not usable: {e}")))?],
+            loops: vec![Loop::new(ring.clone()).map_err(|e| invalid(camcraft_i18n::tf("the ring stitched at Z{z:.3} is not usable: {e}", &[format!("{:.3}", z), format!("{}", e)])))?],
             chains: Vec::new(),
         }),
-        [] | [_] => Err(invalid(format!(
-            "the {n} open runs at Z{z:.3} do not close into one ring - pick every edge of the outline on that plane, or one face or closed edge chain"
-        ))),
-        many => Err(invalid(format!(
-            "the {n} open runs at Z{z:.3} close into {} rings - a 4-axis profile is one ring on each plane; pick the runs of one outline",
-            many.len()
-        ))),
+        [] | [_] => Err(invalid(camcraft_i18n::tf("the {n} open runs at Z{z:.3} do not close into one ring - pick every edge of the outline on that plane, or one face or closed edge chain", &[format!("{}", n), format!("{:.3}", z)]))),
+        many => Err(invalid(camcraft_i18n::tf("the {n} open runs at Z{z:.3} close into {} rings - a 4-axis profile is one ring on each plane; pick the runs of one outline", &[format!("{}", n), format!("{:.3}", z), format!("{}", many.len())]))),
     }
 }
 
@@ -167,20 +154,14 @@ fn read(world: &World, setup: Option<&str>, side: WireSide, items: &[GeoSel]) ->
         found.push(plane_ring(world, setup, items, here, z)?);
     }
     if found.len() != 2 {
-        return Err(invalid(format!(
-            "a 4-axis cut pairs two profiles, and {} are picked - pick the upper profile and the lower profile, one face or edge chain each",
-            found.len()
-        )));
+        return Err(invalid(camcraft_i18n::tf("a 4-axis cut pairs two profiles, and {} are picked - pick the upper profile and the lower profile, one face or edge chain each", &[format!("{}", found.len())])));
     }
     found.sort_by(|a, b| a.z.total_cmp(&b.z));
     let (Some(upper), Some(lower)) = (found.pop(), found.pop()) else {
         return Err(invalid("a 4-axis cut pairs two profiles".into()));
     };
     if upper.z - lower.z <= FLAT {
-        return Err(invalid(format!(
-            "both picked profiles lie at Z{:.3} - a 4-axis cut pairs an upper profile with a lower one at another height",
-            lower.z
-        )));
+        return Err(invalid(camcraft_i18n::tf("both picked profiles lie at Z{:.3} - a 4-axis cut pairs an upper profile with a lower one at another height", &[format!("{:.3}", lower.z)])));
     }
     Ok(RuledPicks { upper, lower })
 }
@@ -218,17 +199,12 @@ pub(super) fn generate(
     picks: &RuledPicks,
 ) -> Result<Toolpath, GenError> {
     if op.taper_deg != 0.0 {
-        return Err(invalid(format!(
-            "a 4-axis cut and a {:.3} degree taper are both stated - the two profiles are the lean; set the taper angle to 0",
-            op.taper_deg
-        )));
+        return Err(invalid(camcraft_i18n::tf("a 4-axis cut and a {:.3} degree taper are both stated - the two profiles are the lean; set the taper angle to 0", &[format!("{:.3}", op.taper_deg)])));
     }
     let top = hs.top.unwrap_or(p.plane_z);
     for (which, plane, word, at) in [("upper", "top", top, picks.upper.z), ("lower", "bottom", p.plane_z, picks.lower.z)] {
         if (word - at).abs() > FLAT {
-            return Err(invalid(format!(
-                "the {which} profile lies at Z{at:.3} and the workpiece's {plane} plane at Z{word:.3} - a 4-axis cut reads the {which} profile on the {plane} plane; set the plane to the profile's height"
-            )));
+            return Err(invalid(camcraft_i18n::tf("the {which} profile lies at Z{at:.3} and the workpiece's {plane} plane at Z{word:.3} - a 4-axis cut reads the {which} profile on the {plane} plane; set the plane to the profile's height", &[format!("{}", which), format!("{:.3}", at), format!("{}", plane), format!("{:.3}", word), format!("{}", which), format!("{}", plane)])));
         }
     }
     let pt = |q: Option<[f64; 2]>| q.map(|[x, y]| Point2::new(x, y));
@@ -254,10 +230,7 @@ pub(super) fn generate(
     );
     let mut path = wire_contour_ruled(upper, lower, p, &ruled)?;
     if four.pairing == WirePairingRule::ArcLength && !four.sync.is_empty() {
-        path.notes.push(format!(
-            "wire EDM: 4-axis - {} sync pair(s) are stored and not read: the pairing is by arc length",
-            four.sync.len()
-        ));
+        path.notes.push(camcraft_i18n::tf("wire EDM: 4-axis - {} sync pair(s) are stored and not read: the pairing is by arc length", &[format!("{}", four.sync.len())]));
     }
     Ok(path)
 }

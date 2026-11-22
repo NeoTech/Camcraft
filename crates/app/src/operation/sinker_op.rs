@@ -75,7 +75,7 @@ pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> R
 pub fn condition_gap_as(world: &World, setup: Option<&str>, label: &str, op: &SinkerBurnOp) -> Result<f64, String> {
     let c = condition_as(world, setup, label, op, &[ConditionField::Gap])?;
     let machine = crate::setup_mount::machine_label(&crate::machine::of_setup(world, setup));
-    c.gap.ok_or_else(|| format!("machine {machine}: EDM condition {:?} states no spark gap", op.condition.trim()))
+    c.gap.ok_or_else(|| camcraft_i18n::tf("machine {machine}: EDM condition {:?} states no spark gap", &[format!("{}", machine), format!("{:?}", op.condition.trim())]))
 }
 
 /// The Sinker Burn's condition with every field in `need` stated
@@ -109,25 +109,20 @@ pub fn condition_as(
 ) -> Result<crate::machine::Condition, String> {
     let kind = crate::machine::kind_of_setup(world, setup);
     if kind != Kind::SinkerEdm {
-        return Err(format!(
-            "a {label} burns on a sinker EDM; the setup's machine is a {}",
-            kind.word()
-        ));
+        return Err(camcraft_i18n::tf("a {label} burns on a sinker EDM; the setup's machine is a {}", &[format!("{}", label), format!("{}", kind.word())]));
     }
     let what = label;
     let mounted = crate::machine::of_setup(world, setup);
     let label = crate::setup_mount::machine_label(&mounted);
     let id = op.condition.trim();
     if id.is_empty() {
-        return Err(format!(
-            "the {what} names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
-        ));
+        return Err(camcraft_i18n::tf("the {what} names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)", &[format!("{}", what), format!("{}", label)]));
     }
     let edm = mounted
         .1
         .as_ref()
         .and_then(|m| m.edm.as_ref())
-        .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
+        .ok_or_else(|| camcraft_i18n::tf("machine {label} states no EDM section, so no condition {id:?}", &[format!("{}", label), format!("{:?}", id)]))?;
     edm.condition(&label, id, need).cloned()
 }
 
@@ -146,20 +141,13 @@ pub fn orbit_law(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Resul
     let kind = o.kind.word();
     let edm = mounted.1.as_ref().and_then(|m| m.edm.as_ref());
     if !edm.is_some_and(|e| e.orbits.iter().any(|w| w.kind == kind)) {
-        return Err(format!(
-            "machine {label} lists no {kind} orbit under edm.orbits - burn without an orbit, or pick a pattern the machine offers"
-        ));
+        return Err(camcraft_i18n::tf("machine {label} lists no {kind} orbit under edm.orbits - burn without an orbit, or pick a pattern the machine offers", &[format!("{}", label), format!("{}", kind)]));
     }
     let Some(max) = edm.and_then(|e| e.max_orbit_radius) else {
-        return Err(format!(
-            "machine {label} states no maximum orbit radius (edm.max_orbit_radius) - a {kind} orbit cannot be checked against it"
-        ));
+        return Err(camcraft_i18n::tf("machine {label} states no maximum orbit radius (edm.max_orbit_radius) - a {kind} orbit cannot be checked against it", &[format!("{}", label), format!("{}", kind)]));
     };
     if o.radius > max {
-        return Err(format!(
-            "the {kind} orbit radius {:.3} exceeds machine {label}'s maximum orbit radius {max:.3}",
-            o.radius
-        ));
+        return Err(camcraft_i18n::tf("the {kind} orbit radius {:.3} exceeds machine {label}'s maximum orbit radius {max:.3}", &[format!("{}", kind), format!("{:.3}", o.radius), format!("{}", label), format!("{:.3}", max)]));
     }
     Ok(())
 }
@@ -188,10 +176,7 @@ pub fn sinker_params(
     facets: &[Triangle],
 ) -> Result<SinkerParams, GenError> {
     if tool.kind != ToolKind::Electrode {
-        return Err(GenError::Invalid(format!(
-            "a Sinker Burn mounts a sinker electrode, not a {}",
-            tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("a Sinker Burn mounts a sinker electrode, not a {}", &[format!("{}", tool.kind)])));
     }
     if let Some(why) = tool.torch_refusal() {
         return Err(GenError::Invalid(why));
@@ -247,7 +232,7 @@ pub(super) fn generate_sinker(
         (SinkerPass::Single, _) => None,
         (_, Some(r)) => Some(r.map_err(GenError::Invalid)?),
         (_, None) => {
-            return Err(GenError::Invalid(format!("sinker {}: its condition's undersize was never read", op.pass.label())));
+            return Err(GenError::Invalid(camcraft_i18n::tf("sinker {}: its condition's undersize was never read", &[format!("{}", op.pass.label())])));
         }
     };
     if let Some(r) = &read {

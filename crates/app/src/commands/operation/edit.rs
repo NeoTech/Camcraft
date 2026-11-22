@@ -103,10 +103,7 @@ impl EditOperationParams {
         // all (M9.1); this is the defense-in-depth refusal behind it, and
         // it names the real door: ChangeOperationKind, the row's menu.
         if params.kind() != prev.params.kind() {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a {} operation; change its kind with the retype menu on its browser row",
-                prev.params.kind()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a {} operation; change its kind with the retype menu on its browser row", &[format!("{}", name), format!("{}", prev.params.kind())])));
         }
         // #2599: new angles on a legacy tilt take the current frame basis.
         let params = params.with_stepped_tilt_basis(&prev.params);
@@ -121,10 +118,7 @@ impl EditOperationParams {
         }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("operation parameters are not usable for a {} operation", &[format!("{}", params.kind())])));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         // #894: a thread's pitch, infeed and holes against the mounted thread mill.
@@ -150,7 +144,7 @@ impl EditOperationParams {
         if !area.is_sane_for(&params) {
             return Err(CommandError::Invalid(match operation::area_unsupported(params.kind()) {
                 None => "the Boundary settings are not usable - distances must be finite, within 10 m, the extension not negative, and every boundary must name its picks".to_string(),
-                Some(why) => format!("{why}; its Boundary settings stay at their defaults"),
+                Some(why) => camcraft_i18n::tf("{why}; its Boundary settings stay at their defaults", &[format!("{}", why)]),
             }));
         }
         let picks: Vec<_> = area.picks().cloned().collect();
@@ -229,10 +223,7 @@ impl ChangeOperationKind {
             return Err(CommandError::Invalid(why));
         }
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("operation parameters are not usable for a {} operation", &[format!("{}", params.kind())])));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         if let Some(msg) = crate::operation::side_sane(world, &params, &prev.src) {

@@ -163,7 +163,7 @@ pub fn prior_state(
         let digest = prior_digest(world, name, setup);
         let min_r = chain.ops().filter(|a| a.cut && a.radius > 0.0).map(|a| a.radius).fold(tool_r, f64::min);
         let grid = carried_grid(world, &chain, min_r, true)
-            .map_err(|e| GenError::Invalid(format!("rest from previous setups: {e}")))?;
+            .map_err(|e| GenError::Invalid(camcraft_i18n::tf("rest from previous setups: {e}", &[format!("{}", e)])))?;
         return Ok(PriorState { grid: Some(grid), digest });
     }
     let ahead = chain.into_ops();
@@ -187,7 +187,7 @@ pub fn prior_state(
         .filter(|a| a.cut && a.radius > 0.0)
         .map(|a| a.radius)
         .fold(tool_r, f64::min);
-    let refused = |e: String| GenError::Invalid(format!("rest from previous operations: {e}"));
+    let refused = |e: String| GenError::Invalid(camcraft_i18n::tf("rest from previous operations: {e}", &[format!("{}", e)]));
     // #637: the stock on this thread's engine (the column grid by default).
     let mut held = stock_sim::carry::first_held(world, setup, min_r).map_err(refused)?;
     let runs: Vec<(SimOp, bool)> = ahead
@@ -323,10 +323,7 @@ pub fn prior_plan(world: &World, name: &str, setup: Option<&str>, tool_r: f64) -
     let facing = |a: &Ahead| a.kind == crate::operation::OpType::Facing && a.nose.is_some();
     let turning = |a: &Ahead| a.kind.info().family() == crate::operation::Family::Turn;
     if let Some(a) = ahead.iter().find(|a| !facing(a) && (lathe || turning(a))) {
-        return Err(format!(
-            "operation '{}' ahead is a turning pass other than facing - the column grid cannot read its removal",
-            a.name
-        ));
+        return Err(camcraft_i18n::tf("operation '{}' ahead is a turning pass other than facing - the column grid cannot read its removal", &[format!("{}", a.name)]));
     }
     let min_r = ahead.iter().map(|a| a.nose.unwrap_or(a.radius)).filter(|r| *r > 0.0).fold(tool_r, f64::min);
     if !crosses {
@@ -356,18 +353,9 @@ pub fn prior_stale(world: &World, name: &str, setup: Option<&str>) -> Option<Str
     let crosses = chain.crosses();
     let origin = chain.origin().map(str::to_owned);
     match chain.into_ops().into_iter().find(|a| a.cut) {
-        Some(a) if crosses => Some(format!(
-            "operation '{}' ahead of it in the program, or a setup the stock is carried through, changed - regenerate the program in order",
-            a.name
-        )),
-        Some(a) => Some(format!(
-            "operation '{}' ahead of it in the program changed - regenerate the program in order",
-            a.name
-        )),
-        None if crosses => Some(format!(
-            "the stock carried from setup '{}' changed - regenerate the program in order",
-            origin.unwrap_or_default()
-        )),
+        Some(a) if crosses => Some(camcraft_i18n::tf("operation '{}' ahead of it in the program, or a setup the stock is carried through, changed - regenerate the program in order", &[format!("{}", a.name)])),
+        Some(a) => Some(camcraft_i18n::tf("operation '{}' ahead of it in the program changed - regenerate the program in order", &[format!("{}", a.name)])),
+        None if crosses => Some(camcraft_i18n::tf("the stock carried from setup '{}' changed - regenerate the program in order", &[format!("{}", origin.unwrap_or_default())])),
         None => None,
     }
 }

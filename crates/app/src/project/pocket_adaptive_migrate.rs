@@ -110,10 +110,7 @@ pub(super) fn settle(entities: &mut [EntityDto], from: u32) -> Vec<String> {
         op.stamp = None;
 
         if dropped.is_empty() {
-            notes.push(format!(
-                "operation '{}': migrated from retired 2D Pocket Adaptive strategy to 2D Adaptive (Spiral)",
-                dto.name
-            ));
+            notes.push(camcraft_i18n::tf("operation '{}': migrated from retired 2D Pocket Adaptive strategy to 2D Adaptive (Spiral)", &[format!("{}", dto.name)]));
         } else {
             // Never retain a cache produced under dropped entry/rest parameters.
             op.cache = None;
@@ -122,11 +119,7 @@ pub(super) fn settle(entities: &mut [EntityDto], from: u32) -> Vec<String> {
                     op.needs_review.push(item.clone());
                 }
             }
-            notes.push(format!(
-                "operation '{}': migrated from retired 2D Pocket Adaptive to 2D Adaptive (Spiral); turned off {} - marked needs review",
-                dto.name,
-                dropped.join("; ")
-            ));
+            notes.push(camcraft_i18n::tf("operation '{}': migrated from retired 2D Pocket Adaptive to 2D Adaptive (Spiral); turned off {} - marked needs review", &[format!("{}", dto.name), format!("{}", dropped.join("; "))]));
         }
     }
     notes

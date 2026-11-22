@@ -91,7 +91,7 @@ pub fn file_in(dir: &Path, name: &str) -> Result<PathBuf, SaveError> {
         return Err(SaveError::BadName("is empty".to_owned()));
     }
     if n.contains(['/', '\\', ':']) || n.starts_with('.') {
-        return Err(SaveError::BadName(format!("'{n}' must be a plain name, not a path")));
+        return Err(SaveError::BadName(camcraft_i18n::tf("'{n}' must be a plain name, not a path", &[format!("{}", n)])));
     }
     let file = if n.to_ascii_lowercase().ends_with(".mch") { n.to_owned() } else { format!("{n}.mch") };
     Ok(dir.join(file))
@@ -104,7 +104,7 @@ pub fn file_in(dir: &Path, name: &str) -> Result<PathBuf, SaveError> {
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), SaveError> {
     use std::io::Write;
     let io = |e: std::io::Error| SaveError::Io(e.to_string());
-    let dir = path.parent().ok_or_else(|| SaveError::Io(format!("{} has no folder", path.display())))?;
+    let dir = path.parent().ok_or_else(|| SaveError::Io(camcraft_i18n::tf("{} has no folder", &[format!("{}", path.display())])))?;
     std::fs::create_dir_all(dir).map_err(io)?;
     let name = path.file_name().map_or_else(|| "machine".into(), |n| n.to_string_lossy().into_owned());
     let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));

@@ -25,7 +25,7 @@ pub(super) fn major_rims(region: Region, holes: &[Hole], depth: f64) -> Result<R
         return Ok(region);
     }
     if !(depth.is_finite() && depth >= 0.0) {
-        return Err(GenError::Invalid(format!("thread depth {depth} is not a length")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("thread depth {depth} is not a length", &[format!("{}", depth)])));
     }
     let mut minor: Vec<f64> = holes.iter().map(|h| h.radius).collect();
     let mut loops: Vec<Loop> = Vec::new();

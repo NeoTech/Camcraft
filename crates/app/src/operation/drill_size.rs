@@ -77,16 +77,8 @@ pub(super) fn detect_notes(world: &World, name: &str, params: &OpParams) -> Vec<
     undersize_holes(&tool, params)
         .into_iter()
         .map(|h| {
-            format!(
-                "the {:.3} mm hole at ({:.3}, {:.3}) is wider than the {:.3} mm drill: it is drilled {:.3} mm (a pilot) - \
-                 use a {:.3} mm drill, or follow with a Bore or a reamer",
-                h.radius * 2.0,
-                tidy(h.xy.x),
-                tidy(h.xy.y),
-                tool.diameter,
-                tool.diameter,
-                h.radius * 2.0,
-            )
+            camcraft_i18n::tf("the {:.3} mm hole at ({:.3}, {:.3}) is wider than the {:.3} mm drill: it is drilled {:.3} mm (a pilot) - \
+                 use a {:.3} mm drill, or follow with a Bore or a reamer", &[format!("{:.3}", h.radius * 2.0), format!("{:.3}", tidy(h.xy.x)), format!("{:.3}", tidy(h.xy.y)), format!("{:.3}", tool.diameter), format!("{:.3}", tool.diameter), format!("{:.3}", h.radius * 2.0)])
         })
         .collect()
 }

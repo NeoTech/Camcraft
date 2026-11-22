@@ -27,7 +27,7 @@ impl TryFrom<String> for MaterialWord {
         }
         WorkMaterial::from_word(&w)
             .map(|m| MaterialWord(Some(m)))
-            .ok_or_else(|| format!("unknown workpiece material {w:?} in a tool's cutting data"))
+            .ok_or_else(|| camcraft_i18n::tf("unknown workpiece material {w:?} in a tool's cutting data", &[format!("{:?}", w)]))
     }
 }
 
@@ -49,7 +49,7 @@ impl TryFrom<String> for StockMaterialWord {
     fn try_from(w: String) -> Result<Self, Self::Error> {
         WorkMaterial::from_word(&w)
             .map(StockMaterialWord)
-            .ok_or_else(|| format!("unknown workpiece material {w:?} on a setup's stock"))
+            .ok_or_else(|| camcraft_i18n::tf("unknown workpiece material {w:?} on a setup's stock", &[format!("{:?}", w)]))
     }
 }
 

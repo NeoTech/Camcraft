@@ -64,11 +64,11 @@ fn delete_model(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
             };
             if source || op.area.picks().any(|p| p.entity == name) {
                 let label = model::operation_label(&env.world, &key, &entity);
-                return Err(format!("model '{name}' is used by operation '{label}' - remove its model references first; nothing deleted"));
+                return Err(camcraft_i18n::tf("model '{name}' is used by operation '{label}' - remove its model references first; nothing deleted", &[format!("{}", name), format!("{}", label)]));
             }
         }
         if matches!(model::stock_def_of(&env.world, &entity), Some(StockShape::FromModel { source }) if source == name) {
-            return Err(format!("model '{name}' is used by stock '{key}' - change that stock's source first; nothing deleted"));
+            return Err(camcraft_i18n::tf("model '{name}' is used by stock '{key}' - change that stock's source first; nothing deleted", &[format!("{}", name), format!("{}", key)]));
         }
     }
     let cmd = DeleteEntity::new(&env.world, name).map_err(cmd_err)?;
@@ -127,7 +127,7 @@ fn s_move_model() -> Value {
 fn opt_mm(a: &Map<String, Value>, key: &str, default: f64) -> Result<f64, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(default),
-        Some(v) => v.as_f64().ok_or_else(|| format!("\"{key}\" must be a number in mm, got {v}")),
+        Some(v) => v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a number in mm, got {v}", &[format!("{}", key), format!("{}", v)])),
     }
 }
 
@@ -138,7 +138,7 @@ fn opt_count(a: &Map<String, Value>, key: &str, default: usize) -> Result<usize,
         Some(v) => v
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
-            .ok_or_else(|| format!("\"{key}\" must be a whole number, got {v}")),
+            .ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a whole number, got {v}", &[format!("{}", key), format!("{}", v)])),
     }
 }
 

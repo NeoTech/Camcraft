@@ -62,7 +62,7 @@ fn align_part_cylinder(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         Some("x") => TargetAxis::X,
         Some("y") => TargetAxis::Y,
         None | Some("z") => TargetAxis::Z,
-        Some(other) => return Err(format!("\"target\" must be x, y or z, got \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"target\" must be x, y or z, got \"{other}\"", &[format!("{}", other)])),
     };
     let angle = match a.get("angle_deg") {
         None => 0.0,
@@ -91,17 +91,17 @@ fn place_setup_origin(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
             let point = match opt_str(a, "point")? {
                 None | Some("corner") => BoxPoint::Corner,
                 Some("centre") => BoxPoint::Centre,
-                Some(other) => return Err(format!("\"point\" must be corner or centre, got \"{other}\"")),
+                Some(other) => return Err(camcraft_i18n::tf("\"point\" must be corner or centre, got \"{other}\"", &[format!("{}", other)])),
             };
             if source == "model_box" { OriginAt::ModelBox(point) } else { OriginAt::StockBox(point) }
         }
-        other => return Err(format!("\"source\" must be model_box, stock_box or vertex, got \"{other}\"")),
+        other => return Err(camcraft_i18n::tf("\"source\" must be model_box, stock_box or vertex, got \"{other}\"", &[format!("{}", other)])),
     };
     let location = crate::commands::place_setup_origin(&env.world, &setup, &at).map_err(cmd_err)?;
     let previous = crate::setup::wcs_entity(&env.world, Some(&setup))
         .and_then(|e| crate::model::transform_of(&env.world, &e));
     if previous == Some(location) {
-        return Err(format!("setup '{setup}' already holds that origin"));
+        return Err(camcraft_i18n::tf("setup '{setup}' already holds that origin", &[format!("{}", setup)]));
     }
     let cmd = SetWcsOrigin::for_setup(&env.world, Some(&setup), location).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -133,7 +133,7 @@ fn flag(a: &Map<String, Value>, key: &str) -> Result<bool, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(false),
         Some(Value::Bool(b)) => Ok(*b),
-        Some(other) => Err(format!("\"{key}\" must be true or false, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be true or false, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -149,7 +149,7 @@ fn set_part_axes(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String>
     let primary = match opt_str(a, "primary")? {
         None | Some("y") => InPlaneAxis::Y,
         Some("x") => InPlaneAxis::X,
-        Some(other) => return Err(format!("\"primary\" must be \"y\" or \"x\", got \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"primary\" must be \"y\" or \"x\", got \"{other}\"", &[format!("{}", other)])),
     };
     let axes = InPlaneAxes { y: axis_of(env, a, "y", "flip_y")?, x: axis_of(env, a, "x", "flip_x")?, primary };
     // Both axes: the full 3D frame (#769) - no in-plane turn angle, and
@@ -190,7 +190,7 @@ fn plane_of(a: &Map<String, Value>) -> Result<ArcPlane, String> {
         None | Some("g17") => Ok(ArcPlane::Xy),
         Some("g18") => Ok(ArcPlane::Xz),
         Some("g19") => Ok(ArcPlane::Yz),
-        Some(other) => Err(format!("\"plane\" must be \"g17\", \"g18\" or \"g19\", got \"{other}\"")),
+        Some(other) => Err(camcraft_i18n::tf("\"plane\" must be \"g17\", \"g18\" or \"g19\", got \"{other}\"", &[format!("{}", other)])),
     }
 }
 
@@ -245,7 +245,7 @@ fn lay_part_on_points(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
         None | Some("g17") => ArcPlane::Xy,
         Some("g18") => ArcPlane::Xz,
         Some("g19") => ArcPlane::Yz,
-        Some(other) => return Err(format!("\"plane\" must be \"g17\", \"g18\" or \"g19\", got \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"plane\" must be \"g17\", \"g18\" or \"g19\", got \"{other}\"", &[format!("{}", other)])),
     };
     let place = match a.get("place") {
         None | Some(Value::Null) => true,

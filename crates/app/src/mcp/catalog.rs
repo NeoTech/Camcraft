@@ -67,15 +67,10 @@ fn first_sentence(text: &str) -> String {
 #[must_use]
 pub fn reference_markdown() -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "<!-- Generated from crates/app/src/mcp/tools.rs. Do not edit by hand. Write it again with: {REFERENCE_COMMAND} -->\n"
-    ));
+    out.push_str(&camcraft_i18n::tf("<!-- Generated from crates/app/src/mcp/tools.rs. Do not edit by hand. Write it again with: {REFERENCE_COMMAND} -->\n", &[format!("{}", REFERENCE_COMMAND)]));
     out.push_str("# CamCraft MCP tool reference\n\n");
     let all: Vec<_> = tools::all().collect();
-    out.push_str(&format!(
-        "The server lists {} tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.\n\n",
-        all.len()
-    ));
+    out.push_str(&camcraft_i18n::tf("The server lists {} tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.\n\n", &[format!("{}", all.len())]));
     out.push_str("| Tool | Arguments | What it does |\n|---|---|---|\n");
     for t in all {
         let args = arguments(&(t.schema)());

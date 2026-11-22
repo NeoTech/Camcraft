@@ -31,13 +31,13 @@ impl SourceDto {
     /// in lowercase hex. Anything else is a corrupt file.
     pub fn check(&self, owner: &str, is_model: bool) -> Result<(), String> {
         if !is_model {
-            return Err(format!("'{owner}' records a source file but is not a model"));
+            return Err(camcraft_i18n::tf("'{owner}' records a source file but is not a model", &[format!("{}", owner)]));
         }
         if self.path.trim().is_empty() {
-            return Err(format!("'{owner}' records a source with no file path"));
+            return Err(camcraft_i18n::tf("'{owner}' records a source with no file path", &[format!("{}", owner)]));
         }
         if !crate::model_source::is_digest(&self.sha256) {
-            return Err(format!("'{owner}' records a source whose sha256 is not 64 lowercase hex digits"));
+            return Err(camcraft_i18n::tf("'{owner}' records a source whose sha256 is not 64 lowercase hex digits", &[format!("{}", owner)]));
         }
         Ok(())
     }

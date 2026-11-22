@@ -55,16 +55,10 @@ impl Tilt {
             );
         }
         if !(-90.0..=90.0).contains(&self.a_deg) {
-            return Some(format!(
-                "Tilted plane (3+2): Tool axis A ({} deg) must be in -90..90 deg (Tool axis B -180..180 deg) - for the face opposite the top, use Tool axis A 0 and Tool axis B 180",
-                self.a_deg
-            ));
+            return Some(camcraft_i18n::tf("Tilted plane (3+2): Tool axis A ({} deg) must be in -90..90 deg (Tool axis B -180..180 deg) - for the face opposite the top, use Tool axis A 0 and Tool axis B 180", &[format!("{}", self.a_deg)]));
         }
         if !(-180.0..=180.0).contains(&self.b_deg) {
-            return Some(format!(
-                "Tilted plane (3+2): Tool axis B ({} deg) must be in -180..180 deg (Tool axis A -90..90 deg) - for the face opposite the top, use Tool axis A 0 and Tool axis B 180",
-                self.b_deg
-            ));
+            return Some(camcraft_i18n::tf("Tilted plane (3+2): Tool axis B ({} deg) must be in -180..180 deg (Tool axis A -90..90 deg) - for the face opposite the top, use Tool axis A 0 and Tool axis B 180", &[format!("{}", self.b_deg)]));
         }
         if !self.origin.iter().all(|v| v.is_finite() && v.abs() < 1e9) {
             return Some(

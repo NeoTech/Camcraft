@@ -37,7 +37,7 @@ pub fn op_kind_of(p: &Pocket) -> OpType {
 /// A feature with no usable depth or width.
 pub fn operation_for(p: &Pocket, base: &OpParams) -> Result<(SrcRef, OpParams), String> {
     if !(p.depth.is_finite() && p.depth > 0.0 && p.floor_z.is_finite() && p.top_z.is_finite()) {
-        return Err(format!("the feature on '{}' has no usable depth", p.model));
+        return Err(camcraft_i18n::tf("the feature on '{}' has no usable depth", &[format!("{}", p.model)]));
     }
     let kind = op_kind_of(p);
     let mut params = if base.kind() == kind { base.clone() } else { operation::retype_params(base, kind as usize) };
@@ -50,7 +50,7 @@ pub fn operation_for(p: &Pocket, base: &OpParams) -> Result<(SrcRef, OpParams), 
         }
         (OpParams::Slot { a, b, width, top_z, bottom_z, .. }, Some(s)) => {
             if !(s.width.is_finite() && s.width > 0.0) {
-                return Err(format!("the slot on '{}' has no usable width", p.model));
+                return Err(camcraft_i18n::tf("the slot on '{}' has no usable width", &[format!("{}", p.model)]));
             }
             *a = s.a;
             *b = s.b;
@@ -59,6 +59,6 @@ pub fn operation_for(p: &Pocket, base: &OpParams) -> Result<(SrcRef, OpParams), 
             *bottom_z = Height::fixed(p.floor_z);
             Ok((SrcRef::Stock, params))
         }
-        _ => Err(format!("the feature on '{}' maps to no operation kind", p.model)),
+        _ => Err(camcraft_i18n::tf("the feature on '{}' maps to no operation kind", &[format!("{}", p.model)])),
     }
 }

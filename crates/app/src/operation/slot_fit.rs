@@ -26,18 +26,15 @@ const FIT_TOL: f64 = 1e-4;
 pub(crate) fn refuse_unfit_slot(kind: &str, a: Point2, b: Point2, width: f64, region: &Region) -> Result<(), GenError> {
     let half = 0.5 * width;
     if !(half.is_finite() && half > 0.0) {
-        return Err(GenError::Invalid(format!("{kind}: a slot width of {width} mm cannot be fitted to its selection")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: a slot width of {width} mm cannot be fitted to its selection", &[format!("{}", kind), format!("{}", width)])));
     }
     let loops = region.loops();
     if loops.is_empty() {
-        return Err(GenError::Invalid(format!("{kind}: the selection resolves to no region, so nothing confines the slot")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the selection resolves to no region, so nothing confines the slot", &[format!("{}", kind)])));
     }
     for (name, p) in [("A", a), ("B", b)] {
         if !region.contains(p) {
-            return Err(GenError::Invalid(format!(
-                "{kind}: endpoint {name} ({:.3}, {:.3}) lies outside the selected region - the slot would cut past the selection into the model; move the endpoints inside the selection or change the selection",
-                p.x, p.y
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: endpoint {name} ({:.3}, {:.3}) lies outside the selected region - the slot would cut past the selection into the model; move the endpoints inside the selection or change the selection", &[format!("{}", kind), format!("{}", name), format!("{:.3}", p.x), format!("{:.3}", p.y)])));
         }
     }
     let mut nearest: Option<(f64, Point2)> = None;
@@ -52,16 +49,7 @@ pub(crate) fn refuse_unfit_slot(kind: &str, a: Point2, b: Point2, width: f64, re
         }
     }
     match nearest {
-        Some((d, at)) if d + FIT_TOL < half => Err(GenError::Invalid(format!(
-            "{kind}: the {width:.3} mm wide slot from A ({:.3}, {:.3}) to B ({:.3}, {:.3}) does not fit its selection - it needs {half:.3} mm clear each side of its centre line, but the selection's edge comes within {d:.3} mm at ({:.3}, {:.3}), so the cut would run {:.3} mm past the selection into the model; shorten or narrow the slot, or select the region it should cut",
-            a.x,
-            a.y,
-            b.x,
-            b.y,
-            at.x,
-            at.y,
-            half - d
-        ))),
+        Some((d, at)) if d + FIT_TOL < half => Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the {width:.3} mm wide slot from A ({:.3}, {:.3}) to B ({:.3}, {:.3}) does not fit its selection - it needs {half:.3} mm clear each side of its centre line, but the selection's edge comes within {d:.3} mm at ({:.3}, {:.3}), so the cut would run {:.3} mm past the selection into the model; shorten or narrow the slot, or select the region it should cut", &[format!("{}", kind), format!("{:.3}", width), format!("{:.3}", a.x), format!("{:.3}", a.y), format!("{:.3}", b.x), format!("{:.3}", b.y), format!("{:.3}", half), format!("{:.3}", d), format!("{:.3}", at.x), format!("{:.3}", at.y), format!("{:.3}", half - d)]))),
         _ => Ok(()),
     }
 }

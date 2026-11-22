@@ -36,7 +36,7 @@ fn kind_index(name: &str) -> Result<usize, String> {
             KindInfo::ALL.get(i).is_some_and(|k| k.label.to_ascii_lowercase() == want)
                 || super::job::kind_defaults(i).0 == want
         })
-        .ok_or_else(|| format!("unknown operation kind '{name}' - see list_operation_types"))
+        .ok_or_else(|| camcraft_i18n::tf("unknown operation kind '{name}' - see list_operation_types", &[format!("{}", name)]))
 }
 
 /// An operation by its stable key or its display label.
@@ -77,9 +77,9 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
             merged_key_context(&Value::Object(fields_of(base)), &tagged[&key], "", &mut context);
         }
         let detail = if context.is_empty() { String::new() } else {
-            format!("; merged object keys: {}; use null to remove unwanted keys before changing shape", context.join("; "))
+            camcraft_i18n::tf("; merged object keys: {}; use null to remove unwanted keys before changing shape", &[format!("{}", context.join("; "))])
         };
-        format!("bad params patch: {e}{detail}")
+        camcraft_i18n::tf("bad params patch: {e}{detail}", &[format!("{}", e), format!("{}", detail)])
     })?;
     let Value::Object(back) = project::params_to_json(&next) else {
         return Err("the patched parameters could not be read back".into());
@@ -100,7 +100,7 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
         }
     }
     if let Some(path) = lost(patch, &back, "") {
-        return Err(format!("bad params patch: unknown field {path} - a {key} operation has no field \"{path}\"; see list_operation_types"));
+        return Err(camcraft_i18n::tf("bad params patch: unknown field {path} - a {key} operation has no field \"{path}\"; see list_operation_types", &[format!("{}", path), format!("{}", key), format!("{}", path)]));
     }
     Ok(next)
 }
@@ -210,7 +210,7 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
                 .into_iter()
                 .find(|(n, _)| *n == c)
                 .map(|(_, t)| t)
-                .ok_or_else(|| format!("no catalog tool named '{c}' - see list_tool_catalog"))?;
+                .ok_or_else(|| camcraft_i18n::tf("no catalog tool named '{c}' - see list_tool_catalog", &[format!("{}", c)]))?;
             (Some(c.to_owned()), t)
         }
         (None, Some(d)) => {
@@ -220,7 +220,7 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
             if d.get("holder").is_some_and(|h| !h.is_null()) {
                 return Err("bad tool definition: its \"holder\" reference is not read by add_tool - name the library holder in add_tool's own \"holder\" (set_tool_holder sets the gauge length and projection)".into());
             }
-            (None, project::tool_from_json(d).map_err(|e| format!("bad tool definition: {e}"))?)
+            (None, project::tool_from_json(d).map_err(|e| camcraft_i18n::tf("bad tool definition: {e}", &[format!("{}", e)]))?)
         }
         _ => return Err("give exactly one of \"catalog\" or \"definition\"".into()),
     };
@@ -291,8 +291,8 @@ pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Val
 pub(super) fn edit_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let key = find_op(env, req_str(a, "name")?)?;
     let patch = a.get("params").ok_or("\"params\" is required")?;
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     let next = patched(&op.params, patch)?;
     let cmd = EditOperationParams::new(&env.world, &key, next).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -319,8 +319,8 @@ fn clearance_warning(env: &Env, key: &str, out: &mut Value) {
 /// hole left out because the op cannot make it.
 pub(super) fn detect_holes(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let key = find_op(env, req_str(a, "name")?)?;
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     let operation::DetectedHoles { params: next, skipped, undersize } =
         operation::detect_holes(&env.world, &key, &op.params, op.setup.as_deref(), &op.src)?;
     let (holes, radial) = match &next {

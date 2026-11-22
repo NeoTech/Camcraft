@@ -61,18 +61,10 @@ impl ProbeSeed {
         let [x, y, z] = self.target;
         let at = format!("({x:.3}, {y:.3}, {z:.3})");
         match self.mode {
-            ProbeMode::Face => format!("Face touch toward {} at {at}", dir_word(self.dir)),
-            ProbeMode::Edge => format!("Edge touch toward {} under {at}", dir_word(self.dir)),
-            ProbeMode::Corner => format!(
-                "Outside corner, touches toward {} and {} at {at}",
-                dir_word(self.dir),
-                dir_word(self.dir_y)
-            ),
-            ProbeMode::Bore | ProbeMode::Boss => format!(
-                "{} centre, radius {:.3} mm, rim centre {at}",
-                if self.mode == ProbeMode::Bore { "Bore" } else { "Boss" },
-                self.radius.unwrap_or(0.0)
-            ),
+            ProbeMode::Face => camcraft_i18n::tf("Face touch toward {} at {at}", &[format!("{}", dir_word(self.dir)), format!("{}", at)]),
+            ProbeMode::Edge => camcraft_i18n::tf("Edge touch toward {} under {at}", &[format!("{}", dir_word(self.dir)), format!("{}", at)]),
+            ProbeMode::Corner => camcraft_i18n::tf("Outside corner, touches toward {} and {} at {at}", &[format!("{}", dir_word(self.dir)), format!("{}", dir_word(self.dir_y)), format!("{}", at)]),
+            ProbeMode::Bore | ProbeMode::Boss => camcraft_i18n::tf("{} centre, radius {:.3} mm, rim centre {at}", &[format!("{}", if self.mode == ProbeMode::Bore { "Bore" } else { "Boss" }), format!("{:.3}", self.radius.unwrap_or(0.0)), format!("{}", at)]),
         }
     }
 }
@@ -92,8 +84,8 @@ pub(super) struct PickCtx {
 impl PickCtx {
     pub(super) fn of(world: &World, entity: &str, setup: Option<&str>) -> Result<PickCtx, String> {
         let e = model::find_by_name(world, entity)
-            .ok_or_else(|| format!("'{entity}' is gone - re-pick the feature"))?;
-        let none = || format!("'{entity}' carries no geometry to probe");
+            .ok_or_else(|| camcraft_i18n::tf("'{entity}' is gone - re-pick the feature", &[format!("{}", entity)]))?;
+        let none = || camcraft_i18n::tf("'{entity}' carries no geometry to probe", &[format!("{}", entity)]);
         let features = model::features_of(world, &e).ok_or_else(none)?;
         let tris = model::facets_of(world, &e).ok_or_else(none)?;
         let loc = crate::setup_align::pose_in(world, &e, setup).unwrap_or_default();
@@ -197,10 +189,7 @@ pub fn probe_seed(world: &World, setup: Option<&str>, sel: &GeoSel) -> Result<Pr
         }
         FeatureSel::Patch(id) => super::probe_pick_round::wall_seed(&cx, *id),
         FeatureSel::Vertex(id) => corner_seed(&cx, *id),
-        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => Err(format!(
-            "{} is a DXF sketch pick, which carries no 3D surface to probe",
-            crate::pick::geo_label(world, sel)
-        )),
+        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => Err(camcraft_i18n::tf("{} is a DXF sketch pick, which carries no 3D surface to probe", &[format!("{}", crate::pick::geo_label(world, sel))])),
     }
 }
 
@@ -218,10 +207,7 @@ fn face_seed(cx: &PickCtx, id: u64) -> Result<ProbeSeed, String> {
             return Err("the picked face looks down - the stylus only descends in Z; probe it from a side".into());
         }
         None => {
-            return Err(format!(
-                "the picked face stands {} off X, Y and Z - a probe touches along an axis",
-                off_axis(n)
-            ));
+            return Err(camcraft_i18n::tf("the picked face stands {} off X, Y and Z - a probe touches along an axis", &[format!("{}", off_axis(n))]));
         }
     };
     let target = on_face(cx, fi).ok_or("the picked face has no area to touch")?;
@@ -286,19 +272,14 @@ fn edge_seed(cx: &PickCtx, chain: &feature::Chain) -> Result<ProbeSeed, String> 
     let u = Point3::new(d.x / len, d.y / len, d.z / len);
     let bend = pts.iter().map(|p| (*p - a).cross(u)).map(|v| v.dot(v).sqrt()).fold(0.0, f64::max);
     if bend.is_nan() || bend > PICK_TOL {
-        return Err(format!(
-            "the picked edge is not straight (it bends {bend:.3} mm off its chord) - an edge touch needs a straight edge; pick a vertex or a round rim instead"
-        ));
+        return Err(camcraft_i18n::tf("the picked edge is not straight (it bends {bend:.3} mm off its chord) - an edge touch needs a straight edge; pick a vertex or a round rim instead", &[format!("{:.3}", bend)]));
     }
     if (b.z - a.z).abs() > PICK_TOL {
         return Err("the picked edge is not level - an edge touch runs under a horizontal top edge".into());
     }
     let walls = walls_below(cx, &cx.faces_of_edges(chain.edges.iter().copied()), a.z);
     let [(_, dir, _)] = walls.as_slice() else {
-        return Err(format!(
-            "the picked edge has {} vertical side faces facing X or Y under it - an edge touch needs exactly one",
-            walls.len()
-        ));
+        return Err(camcraft_i18n::tf("the picked edge has {} vertical side faces facing X or Y under it - an edge touch needs exactly one", &[format!("{}", walls.len())]));
     };
     let m = Point3::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
     Ok(ProbeSeed { mode: ProbeMode::Edge, dir: *dir, dir_y: ProbeDir::YPos, target: [m.x, m.y, m.z], radius: None })
@@ -315,21 +296,14 @@ fn corner_seed(cx: &PickCtx, id: u64) -> Result<ProbeSeed, String> {
     for &fi in &faces {
         let n = cx.outward(fi).ok_or("a face at the picked vertex has no area")?;
         if axis_of(n).is_none() {
-            return Err(format!(
-                "a face at the picked vertex stands {} off the axes - an outside corner takes two vertical walls facing X and Y",
-                off_axis(n)
-            ));
+            return Err(camcraft_i18n::tf("a face at the picked vertex stands {} off the axes - an outside corner takes two vertical walls facing X and Y", &[format!("{}", off_axis(n))]));
         }
     }
     let walls = walls_below(cx, &faces, v.z);
     let xs: Vec<_> = walls.iter().filter(|w| w.1.is_x()).collect();
     let ys: Vec<_> = walls.iter().filter(|w| w.1.is_y()).collect();
     let ([(_, dx, cxw)], [(_, dy, cyw)]) = (xs.as_slice(), ys.as_slice()) else {
-        return Err(format!(
-            "the picked vertex tops {} wall(s) facing X and {} facing Y - an outside corner takes exactly one of each below it",
-            xs.len(),
-            ys.len()
-        ));
+        return Err(camcraft_i18n::tf("the picked vertex tops {} wall(s) facing X and {} facing Y - an outside corner takes exactly one of each below it", &[format!("{}", xs.len()), format!("{}", ys.len())]));
     };
     // Outside, not inside: each wall runs away from the vertex the way
     // the OTHER touch travels (`probing::contacts` insets each touch
@@ -371,10 +345,7 @@ pub fn probe_from_picks(world: &World, setup: Option<&str>, params: &OpParams, i
         return None;
     }
     let [sel] = items else {
-        return Some(Err(format!(
-            "a probe is seeded from one pick, not {} - pick one face, edge, vertex or round wall",
-            items.len()
-        )));
+        return Some(Err(camcraft_i18n::tf("a probe is seeded from one pick, not {} - pick one face, edge, vertex or round wall", &[format!("{}", items.len())])));
     };
     Some(probe_seed(world, setup, sel).and_then(|s| seeded_params(params, &s).ok_or_else(|| "not a probe".to_owned())))
 }
@@ -388,7 +359,7 @@ pub fn probe_account(world: &World, setup: Option<&str>, items: &[GeoSel], param
     }
     Some(match items {
         [sel] => match probe_seed(world, setup, sel) {
-            Ok(s) => (vec![format!("Probe from the pick: {}", s.describe())], None),
+            Ok(s) => (vec![camcraft_i18n::tf("Probe from the pick: {}", &[format!("{}", s.describe())])], None),
             Err(e) => (Vec::new(), Some(e)),
         },
         _ => (Vec::new(), Some("a probe is seeded from one pick - remove the others".into())),

@@ -104,12 +104,9 @@ pub fn plan_links(
                 let name = steel.boxes.get(k).map_or("?", |(n, _)| n.as_str());
                 let cap = steel.ceiling.unwrap_or(f64::NAN);
                 let (a, b) = (head.from, tail.to);
-                return Err(GenError::Invalid(format!(
-                    "the link at moves {i}..{j}, ({:.3}, {:.3}) to ({:.3}, {:.3}), cannot clear fixture '{name}': \
+                return Err(GenError::Invalid(camcraft_i18n::tf("the link at moves {i}..{j}, ({:.3}, {:.3}) to ({:.3}, {:.3}), cannot clear fixture '{name}': \
                      its steel stands to Z {top:.3}, and the machine's Z stroke tops out at Z {cap:.3} - \
-                     move the fixture or the part",
-                    a.x, a.y, b.x, b.y
-                ))
+                     move the fixture or the part", &[format!("{}", i), format!("{}", j), format!("{:.3}", a.x), format!("{:.3}", a.y), format!("{:.3}", b.x), format!("{:.3}", b.y), format!("{}", name), format!("{:.3}", top), format!("{:.3}", cap)]))
                 // #1015: an upright mill's path is world (no frame routes): it rides along.
                 .with_ghost(&path));
             }
@@ -126,18 +123,12 @@ pub fn plan_links(
     let mut out = splice(path, swaps);
     if let Some((a, h, k)) = first {
         let name = steel.boxes.get(k).map_or("?", |(n, _)| n.as_str());
-        out.notes.push(format!(
-            "fixture: {raised} link(s) raised over the workholding instead of striking it \
-             (first: from ({:.3}, {:.3}) over '{name}' at Z {h:.3})",
-            a.x, a.y
-        ));
+        out.notes.push(camcraft_i18n::tf("fixture: {raised} link(s) raised over the workholding instead of striking it \
+             (first: from ({:.3}, {:.3}) over '{name}' at Z {h:.3})", &[format!("{}", raised), format!("{:.3}", a.x), format!("{:.3}", a.y), format!("{}", name), format!("{:.3}", h)]));
     }
     if let Some(a) = stuck {
-        out.notes.push(format!(
-            "fixture: the link from ({:.3}, {:.3}, {:.3}) strikes steel standing over its own end - no height \
-             clears it, so it was left as laid and its fixture hit stands",
-            a.x, a.y, a.z
-        ));
+        out.notes.push(camcraft_i18n::tf("fixture: the link from ({:.3}, {:.3}, {:.3}) strikes steel standing over its own end - no height \
+             clears it, so it was left as laid and its fixture hit stands", &[format!("{:.3}", a.x), format!("{:.3}", a.y), format!("{:.3}", a.z)]));
     }
     Ok(out)
 }

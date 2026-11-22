@@ -22,7 +22,7 @@ pub(super) fn view(w: &flecs_ecs::prelude::World, dnt: &DoNotTouch) -> Value {
 pub(super) fn set_operation_do_not_touch(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     for k in a.keys() {
         if !matches!(k.as_str(), "operation" | "clearance" | "picks") {
-            return Err(format!("set_operation_do_not_touch: unknown field '{k}'"));
+            return Err(camcraft_i18n::tf("set_operation_do_not_touch: unknown field '{k}'", &[format!("{}", k)]));
         }
     }
     let key = edit::find_op(env, req_str(a, "operation")?)?;
@@ -39,7 +39,7 @@ pub(super) fn set_operation_do_not_touch(env: &mut Env, a: &Map<String, Value>) 
     let cmd = SetOperationDoNotTouch::new(&env.world, &key, DoNotTouch { clearance, picks })
         .map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
     let dnt = model::operation_of(&env.world, &e)
         .map(|o| o.area.do_not_touch)
         .unwrap_or_default();
@@ -54,12 +54,12 @@ pub(super) fn set_operation_do_not_touch(env: &mut Env, a: &Map<String, Value>) 
 pub(super) fn get_operation_do_not_touch(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     for k in a.keys() {
         if k != "operation" {
-            return Err(format!("get_operation_do_not_touch: unknown field '{k}'"));
+            return Err(camcraft_i18n::tf("get_operation_do_not_touch: unknown field '{k}'", &[format!("{}", k)]));
         }
     }
     let key = edit::find_op(env, req_str(a, "operation")?)?;
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     Ok(json!({
         "operation": key,
         "clearance": op.area.do_not_touch.clearance,

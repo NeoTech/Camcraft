@@ -124,7 +124,7 @@ fn fixed_strike(
                 return Ok(None); // beside the work along the line: the swing never reaches it
             }
             box_distance(&[sd, z])
-                .ok_or_else(|| format!("it reaches across the {letter} centerline over the work's length"))?
+                .ok_or_else(|| camcraft_i18n::tf("it reaches across the {letter} centerline over the work's length", &[format!("{}", letter)]))?
         }
         None => box_distance(&ranges(&pts, |v| v))
             .ok_or_else(|| "it holds the WCS origin the stacked rotaries turn the work about".to_string())?,
@@ -167,26 +167,16 @@ pub(super) fn standing_problems(world: &World) -> Standing {
         match face {
             _ if stacked => note(
                 &mut out,
-                format!(
-                    "{} turns the work on more than one rotary: the face under them moves with the turns, so the work is not judged against the face the rotary stands on",
-                    m.model
-                ),
+                camcraft_i18n::tf("{} turns the work on more than one rotary: the face under them moves with the turns, so the work is not judged against the face the rotary stands on", &[format!("{}", m.model)]),
             ),
             None => note(
                 &mut out,
-                format!(
-                    "{} states no axis_to_table for {letter}: the work is not judged against the face the rotary stands on",
-                    m.model
-                ),
+                camcraft_i18n::tf("{} states no axis_to_table for {letter}: the work is not judged against the face the rotary stands on", &[format!("{}", m.model), format!("{}", letter)]),
             ),
-            Some(h) if !(h.is_finite() && h - s.r >= MARGIN_MM) => out.problems.push(format!(
-                "{name}: the {letter}{a:.3} index swings the work into the face the rotary stands on - the stock, \
+            Some(h) if !(h.is_finite() && h - s.r >= MARGIN_MM) => out.problems.push(camcraft_i18n::tf("{name}: the {letter}{a:.3} index swings the work into the face the rotary stands on - the stock, \
                  part and turning fixtures sweep {:.3} mm about the {letter} centerline, which stands {h:.3} mm \
                  above that face (table, plate or subplate), a clearance of {:.3} mm against the {MARGIN_MM:.1} mm \
-                 needed",
-                s.r,
-                h - s.r
-            )),
+                 needed", &[format!("{}", name), format!("{}", letter), format!("{:.3}", a), format!("{:.3}", s.r), format!("{}", letter), format!("{:.3}", h), format!("{:.3}", h - s.r), format!("{:.1}", MARGIN_MM)])),
             Some(_) => {}
         }
         for (fname, fe) in fixture::tagged(world, op.setup.as_deref()) {
@@ -195,14 +185,10 @@ pub(super) fn standing_problems(world: &World) -> Standing {
             }
             match fixed_strike(world, &fe, &s, origin, (!stacked).then_some((line, letter.as_str()))) {
                 Ok(None) => {}
-                Ok(Some(d)) => out.problems.push(format!(
-                    "{name}: the {letter}{a:.3} index swings the work into standing fixture {fname} - the work \
+                Ok(Some(d)) => out.problems.push(camcraft_i18n::tf("{name}: the {letter}{a:.3} index swings the work into standing fixture {fname} - the work \
                      sweeps {:.3} mm about {about} and {fname} stands {d:.3} mm from it, a clearance of {:.3} mm \
-                     against the {MARGIN_MM:.1} mm needed",
-                    s.r,
-                    d - s.r
-                )),
-                Err(why) => note(&mut out, format!("standing fixture {fname}: {why}")),
+                     against the {MARGIN_MM:.1} mm needed", &[format!("{}", name), format!("{}", letter), format!("{:.3}", a), format!("{}", fname), format!("{:.3}", s.r), format!("{}", about), format!("{}", fname), format!("{:.3}", d), format!("{:.3}", d - s.r), format!("{:.1}", MARGIN_MM)])),
+                Err(why) => note(&mut out, camcraft_i18n::tf("standing fixture {fname}: {why}", &[format!("{}", fname), format!("{}", why)])),
             }
         }
     }

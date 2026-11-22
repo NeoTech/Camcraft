@@ -32,10 +32,10 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
     let mut areas = 0usize;
     for g in items {
         let Some(entity) = model::find_by_name(world, &g.entity) else {
-            return Err(GenError::Invalid(format!("the selection names '{}', which is gone", g.entity)));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the selection names '{}', which is gone", &[format!("{}", g.entity)])));
         };
         let Some(features) = model::features_of(world, &entity) else {
-            return Err(GenError::Invalid(format!("'{}' has no geometry to select from", g.entity)));
+            return Err(GenError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
         };
         let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
         let xy = |p: &[f64; 3]| {
@@ -43,14 +43,14 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
             Point2::new(w.x, w.y)
         };
         let label = crate::pick::geo_label(world, g);
-        let gone = || GenError::Invalid(format!("{label} is no longer in the model: re-pick it"));
+        let gone = || GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)]));
         match &g.feature {
             FeatureSel::Face(fid) => {
                 let f = features.faces.iter().find(|f| f.id == *fid).ok_or_else(gone)?;
                 for l in f.loops.iter().filter(|l| !matches!(l.kind, LoopKind::Open)) {
                     let pts: Vec<Point2> = l.verts.iter().filter_map(|&vi| features.verts.get(vi as usize)).map(xy).collect();
                     rings.push(Loop::new(pts).map_err(|_| {
-                        GenError::Invalid(format!("{label} bounds no area seen from above - pick the slot's floor face or two opposite edges"))
+                        GenError::Invalid(camcraft_i18n::tf("{label} bounds no area seen from above - pick the slot's floor face or two opposite edges", &[format!("{}", label)]))
                     })?);
                 }
                 areas += 1;
@@ -60,7 +60,7 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
                 let pts: Vec<Point2> = feature::chain_points(&features, &c).iter().map(xy).collect();
                 if c.closed {
                     rings.push(Loop::new(pts).map_err(|_| {
-                        GenError::Invalid(format!("{label} bounds no area seen from above - pick the slot's floor face or two opposite edges"))
+                        GenError::Invalid(camcraft_i18n::tf("{label} bounds no area seen from above - pick the slot's floor face or two opposite edges", &[format!("{}", label)]))
                     })?);
                     areas += 1;
                 } else {
@@ -71,23 +71,14 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
             | FeatureSel::Vertex(_)
             | FeatureSel::SketchChain(_)
             | FeatureSel::SketchLayer(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{label} is not an edge or a face - a Slot is picked by two opposite straight edges or one floor face"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is not an edge or a face - a Slot is picked by two opposite straight edges or one floor face", &[format!("{}", label)])));
             }
         }
     }
     match (edges.as_slice(), areas) {
         ([e1, e2], 0) => SlotBound::from_edges(e1, e2),
         ([], 1) => SlotBound::from_face(Region::new(rings)?),
-        _ => Err(GenError::Invalid(format!(
-            "a Slot is picked by two opposite straight edges or one floor face - this selection has {} open edge{} and {} face{} or ring{}",
-            edges.len(),
-            if edges.len() == 1 { "" } else { "s" },
-            areas,
-            if areas == 1 { "" } else { "s" },
-            if areas == 1 { "" } else { "s" },
-        ))),
+        _ => Err(GenError::Invalid(camcraft_i18n::tf("a Slot is picked by two opposite straight edges or one floor face - this selection has {} open edge{} and {} face{} or ring{}", &[format!("{}", edges.len()), format!("{}", if edges.len() == 1 { "" } else { "s" }), format!("{}", areas), format!("{}", if areas == 1 { "" } else { "s" }), format!("{}", if areas == 1 { "" } else { "s" })]))),
     }
 }
 
@@ -164,7 +155,7 @@ pub fn slot_fit_of(world: &World, op: &Operation) -> Option<Result<String, Strin
     }
     let (l, w) = bound.room();
     if bound.centerline().is_some() {
-        return Some(Ok(format!("From selection: centerline {l:.3} mm long - the slot follows it at the typed width")));
+        return Some(Ok(camcraft_i18n::tf("From selection: centerline {l:.3} mm long - the slot follows it at the typed width", &[format!("{:.3}", l)])));
     }
-    Some(Ok(format!("From selection: room {l:.3} x {w:.3} mm - the slot stays inside it")))
+    Some(Ok(camcraft_i18n::tf("From selection: room {l:.3} x {w:.3} mm - the slot stays inside it", &[format!("{:.3}", l), format!("{:.3}", w)])))
 }

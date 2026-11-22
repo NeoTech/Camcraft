@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 
 pub(super) fn delete_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let name = req_str(a, "name")?;
-    let entity = model::find_by_name(&env.world, name).ok_or_else(|| format!("no tool named '{name}'"))?;
+    let entity = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no tool named '{name}'", &[format!("{}", name)]))?;
     if model::tool_of(&env.world, &entity).is_none() {
         return Err(format!("'{name}' is not a tool"));
     }
@@ -27,9 +27,7 @@ pub(super) fn delete_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value
             0 => String::new(),
             n => format!(" (and {n} more)"),
         };
-        return Err(format!(
-            "tool '{name}' is used by operation {first}{more} - give the operation another tool first (set_tool); nothing deleted"
-        ));
+        return Err(camcraft_i18n::tf("tool '{name}' is used by operation {first}{more} - give the operation another tool first (set_tool); nothing deleted", &[format!("{}", name), format!("{}", first), format!("{}", more)]));
     }
     let cmd = DeleteTool::new(&env.world, name).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);

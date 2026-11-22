@@ -29,38 +29,19 @@ pub(super) fn render_stock(world: &World, ctx: Option<&str>, out: &mut String) {
             ));
         }
         Some(StockShape::Cylinder { diameter, height }) => {
-            out.push_str(&format!(
-                "  cylinder DIA {}  HEIGHT {}\n",
-                mm(diameter),
-                mm(height)
-            ));
+            out.push_str(&camcraft_i18n::tf("  cylinder DIA {}  HEIGHT {}\n", &[format!("{}", mm(diameter)), format!("{}", mm(height))]));
         }
         Some(StockShape::FromModel { source }) => {
             let facets = model::facets_of(world, &entity).map_or(0, |t| t.len());
-            out.push_str(&format!(
-                "  from model '{source}' - {facets} facet(s)\n"
-            ));
+            out.push_str(&camcraft_i18n::tf("  from model '{source}' - {facets} facet(s)\n", &[format!("{}", source), format!("{}", facets)]));
             if let Some(b) = model::entity_world_aabb(world, &entity) {
-                out.push_str(&format!(
-                    "  world box  min ({}, {}, {})  max ({}, {}, {})\n",
-                    mm(b.min.x),
-                    mm(b.min.y),
-                    mm(b.min.z),
-                    mm(b.max.x),
-                    mm(b.max.y),
-                    mm(b.max.z),
-                ));
+                out.push_str(&camcraft_i18n::tf("  world box  min ({}, {}, {})  max ({}, {}, {})\n", &[format!("{}", mm(b.min.x)), format!("{}", mm(b.min.y)), format!("{}", mm(b.min.z)), format!("{}", mm(b.max.x)), format!("{}", mm(b.max.y)), format!("{}", mm(b.max.z))]));
             }
         }
         None => out.push_str("  (stock entity with no shape definition)\n"),
     }
     let loc = model::transform_of(world, &entity).unwrap_or_default();
-    out.push_str(&format!(
-        "  placed at  X {}  Y {}  Z {}\n\n",
-        mm(loc.pos.x),
-        mm(loc.pos.y),
-        mm(loc.pos.z)
-    ));
+    out.push_str(&camcraft_i18n::tf("  placed at  X {}  Y {}  Z {}\n\n", &[format!("{}", mm(loc.pos.x)), format!("{}", mm(loc.pos.y)), format!("{}", mm(loc.pos.z))]));
 }
 
 /// #320: where a setup after the first takes its stock from, and what
@@ -75,17 +56,8 @@ fn render_source(world: &World, ctx: Option<&str>, out: &mut String) {
         return;
     }
     match setup_stock::incoming(world, &name) {
-        Ok(i) => out.push_str(&format!(
-            "  incoming min ({}, {}, {})  max ({}, {}, {})  volume {} mm3 - the block below is not cut from\n",
-            mm(i.min[0]),
-            mm(i.min[1]),
-            mm(i.min[2]),
-            mm(i.max[0]),
-            mm(i.max[1]),
-            mm(i.max[2]),
-            mm(i.volume),
-        )),
-        Err(why) => out.push_str(&format!("  incoming not known: {why}\n")),
+        Ok(i) => out.push_str(&camcraft_i18n::tf("  incoming min ({}, {}, {})  max ({}, {}, {})  volume {} mm3 - the block below is not cut from\n", &[format!("{}", mm(i.min[0])), format!("{}", mm(i.min[1])), format!("{}", mm(i.min[2])), format!("{}", mm(i.max[0])), format!("{}", mm(i.max[1])), format!("{}", mm(i.max[2])), format!("{}", mm(i.volume))])),
+        Err(why) => out.push_str(&camcraft_i18n::tf("  incoming not known: {why}\n", &[format!("{}", why)])),
     }
 }
 
@@ -112,28 +84,22 @@ pub(super) fn render_wcs(world: &World, ctx: Option<&str>, out: &mut String) {
                         crate::schema::WcsRotationOutput::Bake => "baked into XY",
                         crate::schema::WcsRotationOutput::Control => "control rotation G68 / ROT",
                     };
-                    out.push_str(&format!("       rotated {deg:.3} deg about Z ({mode})\n"));
+                    out.push_str(&camcraft_i18n::tf("       rotated {deg:.3} deg about Z ({mode})\n", &[format!("{:.3}", deg), format!("{}", mode)]));
                 }
-                crate::posting::OffsetFrame::Rotated { deg, axis } => out.push_str(&format!(
-                    "       rotated {deg:.3} deg about {axis} - the post refuses a rotated offset\n"
-                )),
+                crate::posting::OffsetFrame::Rotated { deg, axis } => out.push_str(&camcraft_i18n::tf("       rotated {deg:.3} deg about {axis} - the post refuses a rotated offset\n", &[format!("{:.3}", deg), format!("{}", axis)])),
                 crate::posting::OffsetFrame::NonFinite => out.push_str(
                     "       placement is not finite - the post refuses this offset\n",
                 ),
             }
         }
-        None => out.push_str(&format!("  {label}  (not placed - at the origin)\n")),
+        None => out.push_str(&camcraft_i18n::tf("  {label}  (not placed - at the origin)\n", &[format!("{}", label)])),
     }
     // #1649: a flipped axis changes every sign the operator reads.
     let flip = crate::setup_wcs_flip::of_setup(world, ctx);
     if flip.iter().any(|f| *f) {
         let axes = crate::setup_wcs_flip::axes_text(flip);
         let one = flip.iter().filter(|f| **f).count() == 1;
-        out.push_str(&format!(
-            "       {axes} {} flipped - the program is mirrored on {}\n",
-            if one { "axis" } else { "axes" },
-            if one { "it" } else { "them" }
-        ));
+        out.push_str(&camcraft_i18n::tf("       {axes} {} flipped - the program is mirrored on {}\n", &[format!("{}", axes), format!("{}", if one { "axis" } else { "axes" }), format!("{}", if one { "it" } else { "them" })]));
     }
     // #870: where that origin sits, in words - what the operator touches
     // off. An unplaced WCS is read at the world origin.
@@ -142,7 +108,7 @@ pub(super) fn render_wcs(world: &World, ctx: Option<&str>, out: &mut String) {
     // #196, #329, #931: the one offset the setup's program runs in: the
     // setup's label (offset 1 when unset), named by the setup's post -
     // never another offset's name.
-    out.push_str(&format!("  program offset: {}\n", setup::wcs_name(world, ctx)));
+    out.push_str(&camcraft_i18n::tf("  program offset: {}\n", &[format!("{}", setup::wcs_name(world, ctx))]));
     out.push('\n');
 }
 
@@ -152,18 +118,13 @@ pub(super) fn render_datum(world: &World, ctx: Option<&str>, out: &mut String) {
         .filter(|s| !s.is_empty())
     {
         out.push_str("DATUM\n");
-        out.push_str(&format!(
-            "  transferred from '{from}' - its stock and placed offsets were cloned\n\n"
-        ));
+        out.push_str(&camcraft_i18n::tf("  transferred from '{from}' - its stock and placed offsets were cloned\n\n", &[format!("{}", from)]));
     }
     // #326: the operator must clamp the part the way the program assumes.
     // As modelled prints nothing (identity is absence - sheets unchanged).
     if let Some(a) = setup::effective(world, ctx).and_then(|s| crate::setup_align::stored(world, &s)) {
         out.push_str("PART ALIGNMENT\n");
-        out.push_str(&format!(
-            "  {} - clamp the part this way up; stock, offsets and fixtures above are in this frame\n\n",
-            crate::setup_align::describe(Some(a))
-        ));
+        out.push_str(&camcraft_i18n::tf("  {} - clamp the part this way up; stock, offsets and fixtures above are in this frame\n\n", &[format!("{}", crate::setup_align::describe(Some(a)))]));
     }
 }
 
@@ -183,10 +144,7 @@ pub(super) fn render_machine_axes(world: &World, ctx: Option<&str>, out: &mut St
     }
     out.push_str("MACHINE AXES\n");
     for l in letters {
-        out.push_str(&format!(
-            "  {} - the program is mirrored in {l} for this machine\n",
-            crate::machine::inverted_axis_line(l)
-        ));
+        out.push_str(&camcraft_i18n::tf("  {} - the program is mirrored in {l} for this machine\n", &[format!("{}", crate::machine::inverted_axis_line(l)), format!("{}", l)]));
     }
     if rev_c {
         out.push_str("  C rotary turns clockwise about +Z (-Z axis) - posted C is negated for this machine\n");

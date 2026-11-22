@@ -114,7 +114,7 @@ pub fn parse_with_cause(data: &[u8], budget: usize) -> Result<GradedStep, Import
     })?;
     let chord = read.chord_mm;
     if !(chord.is_finite() && chord > 0.0) {
-        return Err(ImportError::Step(format!("tessellation reported a chord error of {chord} mm")));
+        return Err(ImportError::Step(camcraft_i18n::tf("tessellation reported a chord error of {chord} mm", &[format!("{}", chord)])));
     }
     if read.mesh.facets.is_empty() {
         return Err(ImportError::Empty);

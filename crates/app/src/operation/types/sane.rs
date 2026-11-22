@@ -81,9 +81,9 @@ impl OpParams {
             match self {
                 OpParams::Contour { tilt: None, .. } => {}
                 OpParams::Contour { .. } => {
-                    return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
+                    return Some(camcraft_i18n::tf("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt", &[format!("{}", what)]));
                 }
-                _ => return Some(format!("a {what} point is taken only by the 2D contour so far - clear it on this operation")),
+                _ => return Some(camcraft_i18n::tf("a {what} point is taken only by the 2D contour so far - clear it on this operation", &[format!("{}", what)])),
             }
         }
         match self {
@@ -1339,9 +1339,7 @@ impl OpParams {
         };
         let room = clearance - top;
         (height > room + 1e-9).then(|| {
-            format!(
-                "a {height:.3} mm microlift would feed {who} return above the clearance plane - at most {room:.3} mm (the clearance above the top) fits; use the Retract return to hop higher"
-            )
+            camcraft_i18n::tf("a {height:.3} mm microlift would feed {who} return above the clearance plane - at most {room:.3} mm (the clearance above the top) fits; use the Retract return to hop higher", &[format!("{:.3}", height), format!("{}", who), format!("{:.3}", room)])
         })
     }
 }

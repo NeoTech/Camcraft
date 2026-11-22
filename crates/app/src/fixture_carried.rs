@@ -336,10 +336,8 @@ pub fn carried_fixture_problems(world: &World) -> Vec<String> {
         let to = setup.as_deref().unwrap_or_default();
         for (fname, fe) in fixtures {
             if let Some(d) = fixture_depth(world, &fname, &fe, &body) {
-                out.push(format!(
-                    "setup '{to}': fixture '{fname}' {FIXTURE_IN_CARRIED} setup '{origin}' ({d:.2} mm deep) - \
-                     the part that setup leaves cannot be held as modelled; move the fixture or re-check the hold"
-                ));
+                out.push(camcraft_i18n::tf("setup '{to}': fixture '{fname}' {FIXTURE_IN_CARRIED} setup '{origin}' ({d:.2} mm deep) - \
+                     the part that setup leaves cannot be held as modelled; move the fixture or re-check the hold", &[format!("{}", to), format!("{}", fname), format!("{}", FIXTURE_IN_CARRIED), format!("{}", origin), format!("{:.2}", d)]));
             }
         }
     }

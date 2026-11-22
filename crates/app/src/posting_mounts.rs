@@ -75,7 +75,7 @@ pub fn machine_value_for(machine: &(String, Option<Machine>)) -> Value {
 pub(super) fn posted_machine_for(machine: &(String, Option<Machine>)) -> Result<Value, String> {
     match &machine.1 {
         Some(m) => Ok(crate::post::machine::mirror(m)),
-        None => super::default_machine_checked().map_err(|why| format!("post blocked - {why}")),
+        None => super::default_machine_checked().map_err(|why| camcraft_i18n::tf("post blocked - {why}", &[format!("{}", why)])),
     }
 }
 
@@ -94,10 +94,8 @@ pub(super) fn active(world: &World) -> Mount {
 /// would cross setup boundaries without a stop.
 pub(super) fn refuse_per_op(world: &World, surface: &str) -> Result<(), String> {
     if crate::setup_post_options::in_force(world).per_op {
-        return Err(format!(
-            "Output is set to One file per operation - {surface} cannot hold per-operation programs; \
-             post one file per operation, or switch Output to One program"
-        ));
+        return Err(camcraft_i18n::tf("Output is set to One file per operation - {surface} cannot hold per-operation programs; \
+             post one file per operation, or switch Output to One program", &[format!("{}", surface)]));
     }
     Ok(())
 }
@@ -113,21 +111,13 @@ pub(super) fn single(world: &World, by_post: bool) -> Result<Mount, String> {
     let per_setup = super::setup_change::split(world, mounts.clone());
     if mounts.len() <= 1 && per_setup.len() > 1 {
         let names: Vec<String> = per_setup.iter().map(Mount::label).collect();
-        return Err(format!(
-            "Between setups is set to One file per setup, and the program holds {} setups ({}) - \
-             post it as one file per setup, or choose another Between setups",
-            per_setup.len(),
-            names.join("; ")
-        ));
+        return Err(camcraft_i18n::tf("Between setups is set to One file per setup, and the program holds {} setups ({}) - \
+             post it as one file per setup, or choose another Between setups", &[format!("{}", per_setup.len()), format!("{}", names.join("; "))]));
     }
     if mounts.len() > 1 {
         let names: Vec<String> = mounts.iter().map(Mount::label).collect();
-        return Err(format!(
-            "the program's setups run on {} mounts ({}) - one file holds one post for one machine; \
-             post the program as one file per mount",
-            mounts.len(),
-            names.join("; ")
-        ));
+        return Err(camcraft_i18n::tf("the program's setups run on {} mounts ({}) - one file holds one post for one machine; \
+             post the program as one file per mount", &[format!("{}", mounts.len()), format!("{}", names.join("; "))]));
     }
     Ok(mounts.into_iter().next().unwrap_or_else(|| active(world)))
 }
@@ -178,7 +168,7 @@ pub(super) fn machine_problems(world: &World) -> Vec<String> {
         let line = match check {
             Ok(c) if !c.is_ok() => {
                 let more = if c.more > 0 { format!(" (+{} more)", c.more) } else { String::new() };
-                format!("machine {}: {} limit problem(s): {}{more}", m.model, c.problems.len(), c.problems.join("; "))
+                camcraft_i18n::tf("machine {}: {} limit problem(s): {}{more}", &[format!("{}", m.model), format!("{}", c.problems.len()), format!("{}", c.problems.join("; ")), format!("{}", more)])
             }
             Ok(_) => continue,
             Err(err) => format!("machine: {err}"),
@@ -300,7 +290,7 @@ fn post_each(
     // otherwise each op's own mount's post (the scripts read above).
     let mut report = match explicit {
         Some((_, c)) => {
-            let voice = crate::post::dialect::work_voice(c).map_err(|e| format!("post engine: {e}"))?;
+            let voice = crate::post::dialect::work_voice(c).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?;
             crate::posting::verification_report_by(world, &|_| voice)
         }
         None => verification_report(world),
@@ -310,7 +300,7 @@ fn post_each(
         report.problems.extend(wcs_slot::shared_word_problems_in(world, Some(&m.setups)));
     }
     if !report.problems.is_empty() {
-        return Err(format!("post blocked - {}", report.problems.join("; ")));
+        return Err(camcraft_i18n::tf("post blocked - {}", &[format!("{}", report.problems.join("; "))]));
     }
     let dir = out_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let program = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("program");
@@ -337,16 +327,11 @@ fn post_each(
         )?;
         let mch = posted_machine_for(&mount.machine).map_err(|why| format!("{}: {why}", mount.label()))?;
         let out = engine::run_program_with(&cps, &mch, &cnc::serialize(&records), &options, &id)
-            .map_err(|e| format!("{}: post engine: {e}", mount.label()))?;
+            .map_err(|e| camcraft_i18n::tf("{}: post engine: {e}", &[format!("{}", mount.label()), format!("{}", e)]))?;
         if !out.warnings.is_empty() {
-            return Err(format!(
-                "post blocked - {}: {} warning(s): {}",
-                mount.label(),
-                out.warnings.len(),
-                out.warnings.join("; ")
-            ));
+            return Err(camcraft_i18n::tf("post blocked - {}: {} warning(s): {}", &[format!("{}", mount.label()), format!("{}", out.warnings.len()), format!("{}", out.warnings.join("; "))]));
         }
-        let ext = sanitise(&engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?, "nc");
+        let ext = sanitise(&engine::extension_of(&cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?, "nc");
         let path = dir.join(format!("{}.{ext}", file_stem(program, k + 1, &mount.setups.join("_"))));
         let ops = records.iter().filter(|r| matches!(r, cnc::Record::Section { begin: true })).count();
         let line_pos = viewer_map(&records, &out);

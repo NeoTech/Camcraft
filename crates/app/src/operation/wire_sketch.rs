@@ -35,16 +35,11 @@ pub(crate) fn pick(world: &World, src: &SrcRef) -> Result<(String, ClosedChain),
         return Err("select one closed DXF chain for Wire Contour".into());
     };
     let (_, sketch) = sketch::find(world, &g.entity)
-        .ok_or_else(|| format!("DXF profile '{}' is missing", g.entity))?;
+        .ok_or_else(|| camcraft_i18n::tf("DXF profile '{}' is missing", &[format!("{}", g.entity)]))?;
     match sketch.data.chains().find(id) {
         Some(SketchChainRef::Closed(c)) => Ok((g.entity.clone(), c.clone())),
-        Some(SketchChainRef::Open(_)) => Err(format!(
-            "DXF chain {id} is open; select a closed chain for Wire Contour"
-        )),
-        None => Err(format!(
-            "DXF chain {id} is missing from '{}'; select it again",
-            g.entity
-        )),
+        Some(SketchChainRef::Open(_)) => Err(camcraft_i18n::tf("DXF chain {id} is open; select a closed chain for Wire Contour", &[format!("{}", id)])),
+        None => Err(camcraft_i18n::tf("DXF chain {id} is missing from '{}'; select it again", &[format!("{}", id), format!("{}", g.entity)])),
     }
 }
 
@@ -72,9 +67,7 @@ pub(crate) fn resolve(
     let (e, sk) = sketch::find(world, &profile).ok_or("the selected DXF profile is missing")?;
     let declared = op.setup.as_deref();
     if setup::effective(world, declared) != setup::effective(world, sk.setup.as_deref()) {
-        return Err(format!(
-            "DXF profile '{profile}' is on another setup's stock"
-        ));
+        return Err(camcraft_i18n::tf("DXF profile '{profile}' is on another setup's stock", &[format!("{}", profile)]));
     }
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(why);
@@ -256,11 +249,7 @@ impl SelectedWireChain {
                 || corners.iter().all(|p| p.y < lo.y)
                 || corners.iter().all(|p| p.y > hi.y))
             {
-                return Err(format!(
-                    "the wire cut or freed piece cannot clear unselected DXF primitive {} on layer '{}'",
-                    index + 1,
-                    item.layer
-                ));
+                return Err(camcraft_i18n::tf("the wire cut or freed piece cannot clear unselected DXF primitive {} on layer '{}'", &[format!("{}", index + 1), format!("{}", item.layer)]));
             }
         }
         Ok(())

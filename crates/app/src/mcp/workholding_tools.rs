@@ -24,7 +24,7 @@ fn set_workholding_max_rpm(env: &mut Env, a: &Map<String, Value>) -> Result<Valu
         None => return Err("\"max_rpm\" is required (an rpm, or null to clear)".into()),
         Some(Value::Null) => None,
         Some(Value::Number(n)) => Some(n.as_f64().ok_or_else(|| format!("\"max_rpm\" {n} is not a number"))?),
-        Some(other) => return Err(format!("\"max_rpm\" must be a number or null, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"max_rpm\" must be a number or null, got {other}", &[format!("{}", other)])),
     };
     let name = setup_or_active(env, a)?.ok_or("no setup is declared - add_setup first (the limit belongs to a setup)")?;
     let cmd = SetSetupWorkholdingRpm::new(&env.world, &name, next).map_err(cmd_err)?;

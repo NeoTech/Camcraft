@@ -64,7 +64,7 @@ impl SlotUndercutOp {
             return Some("Slot Undercut entry slot width must not be negative".into());
         }
         if self.bulge.abs() > crate::machining2d::UNDERCUT_MAX_BULGE + 1e-12 {
-            return Some(format!("Slot Undercut bulge {} sweeps more than a half circle", self.bulge));
+            return Some(camcraft_i18n::tf("Slot Undercut bulge {} sweeps more than a half circle", &[format!("{}", self.bulge)]));
         }
         if !(self.stepover > 0.0 && self.feed > 0.0 && self.plunge_feed > 0.0) {
             return Some("Slot Undercut stepover and feeds must be positive".into());

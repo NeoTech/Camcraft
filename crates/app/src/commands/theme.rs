@@ -40,14 +40,14 @@ pub fn theme_set(world: &World, next: &ThemeRef) {
 pub fn check_theme(next: &ThemeRef) -> Result<(), String> {
     match next {
         ThemeRef::File(path) => {
-            let meta = std::fs::metadata(path).map_err(|e| format!("theme file {path}: {e}"))?;
+            let meta = std::fs::metadata(path).map_err(|e| camcraft_i18n::tf("theme file {path}: {e}", &[format!("{}", path), format!("{}", e)]))?;
             if !meta.is_file() {
-                return Err(format!("theme file {path}: not a file"));
+                return Err(camcraft_i18n::tf("theme file {path}: not a file", &[format!("{}", path)]));
             }
         }
         ThemeRef::Named(name) => {
             if !BUILTINS.contains(&name.as_str()) {
-                return Err(format!("built-in theme {name} is not one of {}", BUILTINS.join(", ")));
+                return Err(camcraft_i18n::tf("built-in theme {name} is not one of {}", &[format!("{}", name), format!("{}", BUILTINS.join(", "))]));
             }
         }
         ThemeRef::Dark => {}

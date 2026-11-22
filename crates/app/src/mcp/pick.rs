@@ -33,7 +33,7 @@ pub(super) fn feature_id(f: &FeatureSel) -> String {
 
 /// [`feature_id`]'s inverse; anything else is refused by its text.
 pub(super) fn parse_feature_id(s: &str) -> Result<FeatureSel, String> {
-    let bad = || format!("bad feature id '{s}' - use an id list_features prints, like \"face:0x00ab…\" or \"sketch_chain:…\"");
+    let bad = || camcraft_i18n::tf("bad feature id '{s}' - use an id list_features prints, like \"face:0x00ab…\" or \"sketch_chain:…\"", &[format!("{}", s)]);
     let (kind, rest) = s.trim().split_once(':').ok_or_else(bad)?;
     if kind == "sketch_layer" {
         if rest.is_empty() {
@@ -66,12 +66,12 @@ pub(super) fn parse_feature_id(s: &str) -> Result<FeatureSel, String> {
 /// operation, a setup, a work offset or a fixture.
 pub(super) fn req_model(env: &Env, name: &str) -> Result<Entity, String> {
     let w = &env.world;
-    let e = model::find_by_name(w, name).ok_or_else(|| format!("no model named '{name}'"))?;
+    let e = model::find_by_name(w, name).ok_or_else(|| camcraft_i18n::tf("no model named '{name}'", &[format!("{}", name)]))?;
     if !model::is_model(w, &e) {
         return Err(format!("'{name}' is not a model"));
     }
     if model::is_fixture(w, &e) {
-        return Err(format!("'{name}' is a fixture - workholding is checked for collisions, not machined"));
+        return Err(camcraft_i18n::tf("'{name}' is a fixture - workholding is checked for collisions, not machined", &[format!("{}", name)]));
     }
     Ok(e)
 }
@@ -80,7 +80,7 @@ pub(super) fn req_model(env: &Env, name: &str) -> Result<Entity, String> {
 pub(super) fn req_pick_target(env: &Env, name: &str) -> Result<Entity, String> {
     let w = &env.world;
     let e = model::find_by_name(w, name)
-        .ok_or_else(|| format!("no model named '{name}' - import a model or DXF profile first"))?;
+        .ok_or_else(|| camcraft_i18n::tf("no model named '{name}' - import a model or DXF profile first", &[format!("{}", name)]))?;
     if crate::sketch::is_sketch(w, &e) {
         return Ok(e);
     }
@@ -90,10 +90,10 @@ pub(super) fn req_pick_target(env: &Env, name: &str) -> Result<Entity, String> {
 /// One `{model, id}` pick, checked to be on a part model.
 pub(super) fn pick_of(env: &Env, v: &Value) -> Result<GeoSel, String> {
     let Value::Object(m) = v else {
-        return Err(format!("a pick is an object {{\"model\", \"id\"}}, got {v}"));
+        return Err(camcraft_i18n::tf("a pick is an object {{\"model\", \"id\"}}, got {v}", &[format!("{}", v)]));
     };
     if let Some(k) = m.keys().find(|k| *k != "model" && *k != "id") {
-        return Err(format!("a pick has \"model\" and \"id\" only, not \"{k}\""));
+        return Err(camcraft_i18n::tf("a pick has \"model\" and \"id\" only, not \"{k}\"", &[format!("{}", k)]));
     }
     let entity = req_str(m, "model")?;
     req_model(env, entity)?;
@@ -109,7 +109,7 @@ fn parse_chain_side(v: &Value) -> Result<Option<ChainSide>, String> {
         Value::Null => Ok(None),
         Value::String(s) if s == "inside" => Ok(Some(ChainSide::Inside)),
         Value::String(s) if s == "outside" => Ok(Some(ChainSide::Outside)),
-        other => Err(format!("\"side\" must be \"inside\", \"outside\", or null, got {other}")),
+        other => Err(camcraft_i18n::tf("\"side\" must be \"inside\", \"outside\", or null, got {other}", &[format!("{}", other)])),
     }
 }
 
@@ -120,10 +120,10 @@ struct ContourPick {
 
 fn contour_pick_of(env: &Env, v: &Value) -> Result<ContourPick, String> {
     let Value::Object(m) = v else {
-        return Err(format!("a pick is an object {{\"model\", \"id\"}}, got {v}"));
+        return Err(camcraft_i18n::tf("a pick is an object {{\"model\", \"id\"}}, got {v}", &[format!("{}", v)]));
     };
     if let Some(k) = m.keys().find(|k| !matches!(k.as_str(), "model" | "id" | "side" | "reverse")) {
-        return Err(format!("unexpected pick key \"{k}\" - allowed: model, id, side, reverse"));
+        return Err(camcraft_i18n::tf("unexpected pick key \"{k}\" - allowed: model, id, side, reverse", &[format!("{}", k)]));
     }
     let entity = req_str(m, "model")?;
     req_pick_target(env, entity)?;
@@ -137,14 +137,11 @@ fn contour_pick_of(env: &Env, v: &Value) -> Result<ContourPick, String> {
     let reverse = match m.get("reverse") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(b)) => *b,
-        Some(other) => return Err(format!("\"reverse\" must be a boolean, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"reverse\" must be a boolean, got {other}", &[format!("{}", other)])),
     };
     let has_override = side.is_some() || reverse;
     if has_override && !matches!(pick.feature, FeatureSel::SketchChain(_)) {
-        return Err(format!(
-            "per-chain \"side\" and \"reverse\" require a sketch_chain id, not '{}'",
-            feature_id(&pick.feature)
-        ));
+        return Err(camcraft_i18n::tf("per-chain \"side\" and \"reverse\" require a sketch_chain id, not '{}'", &[format!("{}", feature_id(&pick.feature))]));
     }
     Ok(ContourPick { sel: pick, override_spec: has_override.then_some((side, reverse)) })
 }
@@ -153,9 +150,9 @@ fn contour_pick_of(env: &Env, v: &Value) -> Result<ContourPick, String> {
 pub(super) fn picks_of(env: &Env, v: Option<&Value>, key: &str) -> Result<Vec<GeoSel>, String> {
     match v {
         Some(Value::Array(items)) if !items.is_empty() => items.iter().map(|p| pick_of(env, p)).collect(),
-        Some(Value::Array(_)) => Err(format!("\"{key}\" needs at least one pick")),
+        Some(Value::Array(_)) => Err(camcraft_i18n::tf("\"{key}\" needs at least one pick", &[format!("{}", key)])),
         None | Some(Value::Null) => Err(format!("\"{key}\" is required")),
-        Some(other) => Err(format!("\"{key}\" must be an array of picks, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be an array of picks, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -179,19 +176,13 @@ pub(super) fn kind_door(w: &World, label: &str, params: &OpParams, items: &[GeoS
     if matches!(params, OpParams::MultiAxisContour { .. }) {
         // Its picks ARE the path: curves only (selection's drive_chains).
         if let Some(g) = first(|f| !matches!(f, FeatureSel::Chain(_))) {
-            return Err(format!(
-                "{} is not an edge chain - a {label} operation machines picked edge chains",
-                crate::pick::geo_label(w, g)
-            ));
+            return Err(camcraft_i18n::tf("{} is not an edge chain - a {label} operation machines picked edge chains", &[format!("{}", crate::pick::geo_label(w, g)), format!("{}", label)]));
         }
     } else if operation::selection_drives_region(params)
         && let Some(g) = first(|f| matches!(f, FeatureSel::Vertex(_)))
     {
         // A point bounds no region (the selection walk's own refusal).
-        return Err(format!(
-            "{} is a point - a {label} operation's area needs faces or edge chains",
-            crate::pick::geo_label(w, g)
-        ));
+        return Err(camcraft_i18n::tf("{} is a point - a {label} operation's area needs faces or edge chains", &[format!("{}", crate::pick::geo_label(w, g)), format!("{}", label)]));
     }
     Ok(())
 }
@@ -204,7 +195,7 @@ pub(super) fn set_operation_geometry(env: &mut Env, a: &Map<String, Value>) -> R
         Some(Value::Array(items)) if !items.is_empty() => items,
         Some(Value::Array(_)) => return Err("\"picks\" needs at least one pick".into()),
         None | Some(Value::Null) => return Err("\"picks\" is required".into()),
-        Some(other) => return Err(format!("\"picks\" must be an array of picks, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"picks\" must be an array of picks, got {other}", &[format!("{}", other)])),
     };
     let mut items = Vec::with_capacity(raw.len());
     let mut overrides = Vec::new();
@@ -222,16 +213,13 @@ pub(super) fn set_operation_geometry(env: &mut Env, a: &Map<String, Value>) -> R
         }
         items.push(parsed.sel);
     }
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     kind_door(&env.world, op.params.kind().info().label, &op.params, &items)?;
     let cmd = if matches!(op.params, OpParams::Contour { .. }) {
         SetOperationGeometry::with_chain_overrides(&env.world, &key, items, overrides)
     } else if !overrides.is_empty() {
-        return Err(format!(
-            "per-chain overrides apply to 2D Contour only, not {}",
-            op.params.kind()
-        ));
+        return Err(camcraft_i18n::tf("per-chain overrides apply to 2D Contour only, not {}", &[format!("{}", op.params.kind())]));
     } else {
         SetOperationGeometry::new(&env.world, &key, items)
     }
@@ -249,8 +237,8 @@ pub(super) fn get_operation_geometry(env: &mut Env, a: &Map<String, Value>) -> R
 
 pub(super) fn geometry_view(env: &Env, key: &str) -> Result<Value, String> {
     let w = &env.world;
-    let e = model::find_by_name(w, key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(w, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(w, key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(w, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     let (source, notes) = match &op.src {
         SrcRef::Stock => (json!("stock"), Vec::new()),
         SrcRef::Entity(n) => (json!({ "model": n }), Vec::new()),

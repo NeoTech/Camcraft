@@ -52,7 +52,7 @@ pub fn to_view(world: &World, setup: &str) -> Location {
 /// body with no material left, and a sheet with no facet to draw.
 pub fn incoming_shape(world: &World, setup: &str) -> Result<IncomingShape, String> {
     let body = crate::stock_sim::incoming_body(world, setup)?;
-    let (lo, hi) = body.bounds().ok_or_else(|| format!("no material reaches setup '{setup}'"))?;
+    let (lo, hi) = body.bounds().ok_or_else(|| camcraft_i18n::tf("no material reaches setup '{setup}'", &[format!("{}", setup)]))?;
     let incoming = Incoming { min: [lo.x, lo.y, lo.z], max: [hi.x, hi.y, hi.z], volume: body.volume() };
     let sheet = body.display().surface(&[]);
     let map = to_view(world, setup);
@@ -75,7 +75,7 @@ pub fn incoming_shape(world: &World, setup: &str) -> Result<IncomingShape, Strin
         mesh.push(Triangle::new(m(t.a), m(t.b), m(t.c)));
     }
     if mesh.is_empty() {
-        return Err(format!("the stock reaching setup '{setup}' has no surface to draw"));
+        return Err(camcraft_i18n::tf("the stock reaching setup '{setup}' has no surface to draw", &[format!("{}", setup)]));
     }
     Ok(IncomingShape { incoming, mesh })
 }

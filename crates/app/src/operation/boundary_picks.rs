@@ -56,9 +56,9 @@ impl PickShape {
     #[must_use]
     pub fn summary(&self) -> String {
         match self {
-            PickShape::Open { picks, .. } => format!("{}, open chain", plural(*picks, "edge", "edges")),
+            PickShape::Open { picks, .. } => camcraft_i18n::tf("{}, open chain", &[format!("{}", plural(*picks, "edge", "edges"))]),
             PickShape::Chains { picks, chains } => {
-                format!("{}, {} open chains", plural(*picks, "edge", "edges"), chains.len())
+                camcraft_i18n::tf("{}, {} open chains", &[format!("{}", plural(*picks, "edge", "edges")), format!("{}", chains.len())])
             }
             PickShape::Closed { picks, faces, rings } => {
                 let mut parts = Vec::new();
@@ -107,10 +107,7 @@ pub(super) fn picks_geom(
                 None => Ok(OpenGeom::Chains(chains)),
             }
         }
-        (false, n) => Err(GenError::Invalid(format!(
-            "the boundary picks spell {} closed ring(s) and {n} open run(s) - a boundary is one open chain or closed rings; remove the open edges or close them",
-            loops.len()
-        ))),
+        (false, n) => Err(GenError::Invalid(camcraft_i18n::tf("the boundary picks spell {} closed ring(s) and {n} open run(s) - a boundary is one open chain or closed rings; remove the open edges or close them", &[format!("{}", loops.len()), format!("{}", n)]))),
     }
 }
 
@@ -150,11 +147,7 @@ pub fn area_pick_issue(world: &World, setup: Option<&str>, area: &AreaControls, 
         let shape = boundary_pick_shape(world, setup, p, params);
         shape.is_open().then(|| {
             let role = if b.mode == BoundaryMode::Include { "Include" } else { "Exclude" };
-            format!(
-                "boundary {} ({role}) is an open chain ({}) - an include / exclude must enclose an area: Shift-click or 'Extend to loop' to close it, or set its role to Open",
-                i + 1,
-                shape.summary()
-            )
+            camcraft_i18n::tf("boundary {} ({role}) is an open chain ({}) - an include / exclude must enclose an area: Shift-click or 'Extend to loop' to close it, or set its role to Open", &[format!("{}", i + 1), format!("{}", role), format!("{}", shape.summary())])
         })
     })
 }
@@ -312,13 +305,13 @@ pub fn extend_to_loop_in(world: &World, setup: Option<&str>, picks: &[GeoSel]) -
         return Err("the picked edges lie on different models - one loop runs on one model".into());
     }
     let e = model::find_by_name(world, &entity).ok_or_else(|| format!("'{entity}' is gone"))?;
-    let f = model::features_of(world, &e).ok_or_else(|| format!("'{entity}' has no edges"))?;
+    let f = model::features_of(world, &e).ok_or_else(|| camcraft_i18n::tf("'{entity}' has no edges", &[format!("{}", entity)]))?;
     let loc = crate::setup_align::pose_in(world, &e, setup).unwrap_or_default();
     let mut want: Vec<u32> = Vec::new();
     for g in &chains {
         let FeatureSel::Chain(id) = g.feature else { continue };
         let c = crate::model::resolve_chain(&f, id)
-            .ok_or_else(|| format!("{} is no longer in the model - re-pick it", crate::pick::geo_label(world, g)))?;
+            .ok_or_else(|| camcraft_i18n::tf("{} is no longer in the model - re-pick it", &[format!("{}", crate::pick::geo_label(world, g))]))?;
         want.extend(c.edges);
     }
     let map = edge_map(&f);

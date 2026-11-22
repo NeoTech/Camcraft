@@ -53,16 +53,13 @@ pub(super) fn carve(
     params: &OpParams,
 ) -> Result<Toolpath, GenError> {
     let OpParams::VCarve { stepdown, feed, plunge_feed, flat_clear, flat_stepover, .. } = params else {
-        return Err(GenError::Invalid(format!("{LABEL} was handed another operation's parameters")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{LABEL} was handed another operation's parameters", &[format!("{}", LABEL)])));
     };
     if tool.kind != ToolKind::Taper {
-        return Err(GenError::Invalid(format!(
-            "{LABEL} cuts with the cone of a V-bit - it needs a chamfer mill (V-bit), '{}' is a {}",
-            tool_name, tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{LABEL} cuts with the cone of a V-bit - it needs a chamfer mill (V-bit), '{}' is a {}", &[format!("{}", LABEL), format!("{}", tool_name), format!("{}", tool.kind)])));
     }
     let need = |z: Option<f64>, what: &str| {
-        z.ok_or_else(|| GenError::Invalid(format!("{LABEL} needs {what}: set the height")))
+        z.ok_or_else(|| GenError::Invalid(camcraft_i18n::tf("{LABEL} needs {what}: set the height", &[format!("{}", LABEL), format!("{}", what)])))
     };
     let p = VCarveParams {
         angle_deg: tool.tip_angle,
@@ -83,10 +80,7 @@ pub(super) fn carve(
     if tan_half.is_finite() && tan_half > 0.0 {
         let deepest = (p.top_z - p.bottom_z).min(p.cone_height());
         if tool.flute_len < deepest - 1e-9 {
-            return Err(GenError::Invalid(format!(
-                "the cone of '{}' has {} mm of flute, short of the {:.1} mm maximum depth of this {LABEL}",
-                tool_name, tool.flute_len, deepest
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the cone of '{}' has {} mm of flute, short of the {:.1} mm maximum depth of this {LABEL}", &[format!("{}", tool_name), format!("{}", tool.flute_len), format!("{:.1}", deepest), format!("{}", LABEL)])));
         }
     }
     machining2d::v_carve(region, &p)

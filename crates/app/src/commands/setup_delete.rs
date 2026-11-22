@@ -38,9 +38,7 @@ impl DeleteSetup {
         for (op_name, op_e) in crate::program_entry::sequence(world) {
             let declared = crate::program_entry::declared_setup(world, &op_e);
             if setup::belongs(world, declared.as_deref(), name) {
-                return Err(CommandError::Invalid(format!(
-                    "'{op_name}' machines in '{name}' - move or delete it first"
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("'{op_name}' machines in '{name}' - move or delete it first", &[format!("{}", op_name), format!("{}", name)])));
             }
         }
         // #316: a setup placed relative to this one would lose the setup
@@ -48,14 +46,10 @@ impl DeleteSetup {
         // #1862: a DXF profile lies on this setup's stock - it is not
         // deleted with the setup behind the user's back.
         if let Some(profile) = crate::sketch::placed_in(world, Some(name)).first() {
-            return Err(CommandError::Invalid(format!(
-                "the DXF profile '{profile}' is placed in '{name}' - delete it first"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("the DXF profile '{profile}' is placed in '{name}' - delete it first", &[format!("{}", profile), format!("{}", name)])));
         }
         if let Some(child) = crate::setup_relative::dependents(world, name).first() {
-            return Err(CommandError::Invalid(format!(
-                "'{child}' is placed relative to '{name}' - unlink it first"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{child}' is placed relative to '{name}' - unlink it first", &[format!("{}", child), format!("{}", name)])));
         }
         let owned = |n: &str| {
             n != STOCK_NAME

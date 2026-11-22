@@ -40,10 +40,10 @@ pub const MAX_STATED_RPM: f64 = 100_000.0;
 #[must_use]
 pub fn invalid(rpm: f64) -> Option<String> {
     if !rpm.is_finite() || rpm < 1.0 {
-        return Some(format!("a workholding maximum must be at least 1 rpm, got {rpm}"));
+        return Some(camcraft_i18n::tf("a workholding maximum must be at least 1 rpm, got {rpm}", &[format!("{}", rpm)]));
     }
     if rpm > MAX_STATED_RPM {
-        return Some(format!("a workholding maximum of {rpm} rpm is past any lathe spindle (at most {MAX_STATED_RPM})"));
+        return Some(camcraft_i18n::tf("a workholding maximum of {rpm} rpm is past any lathe spindle (at most {MAX_STATED_RPM})", &[format!("{}", rpm), format!("{}", MAX_STATED_RPM)]));
     }
     None
 }
@@ -211,16 +211,10 @@ pub fn program_problems_by(world: &World, voice: &dyn Fn(Option<&str>) -> WorkVo
                 match c_rate(world, declared) {
                     Some(rate) if rate / 360.0 > hold => {
                         let (c, h) = shown(rate / 360.0, hold);
-                        out.push(format!(
-                            "{label}: turns the work on the C axis at up to {c} rpm (the machine's C rate of {rate:.0} degrees per minute), over setup '{}''s workholding maximum of {h} rpm - state the chuck's real rating or a slower C rate",
-                            setup_name()
-                        ));
+                        out.push(camcraft_i18n::tf("{label}: turns the work on the C axis at up to {c} rpm (the machine's C rate of {rate:.0} degrees per minute), over setup '{}''s workholding maximum of {h} rpm - state the chuck's real rating or a slower C rate", &[format!("{}", label), format!("{}", c), format!("{:.0}", rate), format!("{}", setup_name()), format!("{}", h)]));
                     }
                     Some(_) => {}
-                    None => out.push(format!(
-                        "{label}: turns the work on the C axis, but the machine states no C rate, so how fast the work turns cannot be held to setup '{}''s workholding maximum of {hold:.0} rpm - state the C axis's speeds in the machine file",
-                        setup_name()
-                    )),
+                    None => out.push(camcraft_i18n::tf("{label}: turns the work on the C axis, but the machine states no C rate, so how fast the work turns cannot be held to setup '{}''s workholding maximum of {hold:.0} rpm - state the C axis's speeds in the machine file", &[format!("{}", label), format!("{}", setup_name()), format!("{:.0}", hold)])),
                 }
             }
             WorkSpeed::Stated => {
@@ -234,11 +228,7 @@ pub fn program_problems_by(world: &World, voice: &dyn Fn(Option<&str>) -> WorkVo
                 if rpm > hold {
                     let label = model::operation_label(world, &name, &e);
                     let (r, h) = shown(rpm, hold);
-                    out.push(format!(
-                        "{label}: turns the work at {r} rpm (G97), over setup '{}''s workholding maximum of {h} rpm - lower tool {}'s rpm or state the chuck's real rating",
-                        setup_name(),
-                        op.tool
-                    ));
+                    out.push(camcraft_i18n::tf("{label}: turns the work at {r} rpm (G97), over setup '{}''s workholding maximum of {h} rpm - lower tool {}'s rpm or state the chuck's real rating", &[format!("{}", label), format!("{}", r), format!("{}", setup_name()), format!("{}", h), format!("{}", op.tool)]));
                 }
             }
         }

@@ -53,13 +53,9 @@ pub(super) fn judge(holes: &[Hole], path: &Toolpath, tool_r: f64, prior: Option<
             continue;
         };
         let (x, y, d) = (hole.xy.x, hole.xy.y, hole.radius * 2.0);
-        let advice = format!(
-            "a thread mill does not cut at its centre - add a drilling operation of at least the {d:.3} mm minor diameter, deep enough for its point, before the thread"
-        );
+        let advice = camcraft_i18n::tf("a thread mill does not cut at its centre - add a drilling operation of at least the {d:.3} mm minor diameter, deep enough for its point, before the thread", &[format!("{:.3}", d)]);
         let Some(dex) = prior else {
-            return Err(GenError::Invalid(format!(
-                "the hole at ({x:.3}, {y:.3}) is not drilled yet: nothing ahead of the thread in this setup's program opens it, or the program ahead cannot be read - {advice}"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the hole at ({x:.3}, {y:.3}) is not drilled yet: nothing ahead of the thread in this setup's program opens it, or the program ahead cannot be read - {advice}", &[format!("{:.3}", x), format!("{:.3}", y), format!("{}", advice)])));
         };
         let r = tool_r.max(hole.radius - dex.cell);
         let top = if r.is_finite() && r >= 0.0 {
@@ -70,14 +66,10 @@ pub(super) fn judge(holes: &[Hole], path: &Toolpath, tool_r: f64, prior: Option<
         match top {
             Some(top) if top <= low + Z_SLACK => {}
             Some(top) => {
-                return Err(GenError::Invalid(format!(
-                    "the hole at ({x:.3}, {y:.3}) is not drilled yet: the stock the program ahead leaves stands at z {top:.3} inside it, above the thread mill's lowest point at z {low:.3} - {advice}"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("the hole at ({x:.3}, {y:.3}) is not drilled yet: the stock the program ahead leaves stands at z {top:.3} inside it, above the thread mill's lowest point at z {low:.3} - {advice}", &[format!("{:.3}", x), format!("{:.3}", y), format!("{:.3}", top), format!("{:.3}", low), format!("{}", advice)])));
             }
             None => {
-                return Err(GenError::Invalid(format!(
-                    "the hole at ({x:.3}, {y:.3}) cannot be judged: the stock the program ahead leaves is unreadable there - {advice}"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("the hole at ({x:.3}, {y:.3}) cannot be judged: the stock the program ahead leaves is unreadable there - {advice}", &[format!("{:.3}", x), format!("{:.3}", y), format!("{}", advice)])));
             }
         }
     }
@@ -102,18 +94,12 @@ pub(super) fn judge_bosses(bosses: &[Hole], path: &Toolpath, tool_r: f64, prior:
     };
     let advice = "a thread mill cuts only the thread's own depth";
     let Some(dex) = prior else {
-        return Err(GenError::Invalid(format!(
-            "the boss at ({:.3}, {:.3}) is not cleared: nothing ahead of the thread in this setup's program machines the stock around it, or the program ahead cannot be read - {advice} - clear the stock around the boss down to the thread's bottom before the thread",
-            first.xy.x, first.xy.y
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the boss at ({:.3}, {:.3}) is not cleared: nothing ahead of the thread in this setup's program machines the stock around it, or the program ahead cannot be read - {advice} - clear the stock around the boss down to the thread's bottom before the thread", &[format!("{:.3}", first.xy.x), format!("{:.3}", first.xy.y), format!("{}", advice)])));
     };
     let cols = Columns::of_grid(dex);
     let cell = cols.cell();
     let unreadable = |x: &Hole| {
-        GenError::Invalid(format!(
-            "the boss at ({:.3}, {:.3}) cannot be judged: the stock the program ahead leaves is unreadable around it - {advice}",
-            x.xy.x, x.xy.y
-        ))
+        GenError::Invalid(camcraft_i18n::tf("the boss at ({:.3}, {:.3}) cannot be judged: the stock the program ahead leaves is unreadable around it - {advice}", &[format!("{:.3}", x.xy.x), format!("{:.3}", x.xy.y), format!("{}", advice)]))
     };
     if !(cell.is_finite() && cell > 0.0 && tool_r.is_finite() && tool_r > 0.0) {
         return Err(unreadable(first));
@@ -177,15 +163,7 @@ pub(super) fn judge_bosses(bosses: &[Hole], path: &Toolpath, tool_r: f64, prior:
         .iter()
         .filter(|((_, _, k), _)| *k == own)
         .fold((0.0f64, f64::INFINITY), |(far, lo), (_, p)| (far.max((p.x - x.xy.x).hypot(p.y - x.xy.y) + tool_r), lo.min(p.z)));
-    Err(GenError::Invalid(format!(
-        "the boss at ({:.3}, {:.3}) is not cleared: the stock the program ahead leaves stands at z {:.3} at ({:.3}, {:.3}), {:.3} mm from the boss's axis, above the thread mill's tip at z {tip:.3} there - {advice} - machine the stock around the boss away, out to {far:.3} mm from its axis and down to z {lowest:.3}, before the thread",
-        x.xy.x,
-        x.xy.y,
-        tip + over,
-        c.x,
-        c.y,
-        (c.x - x.xy.x).hypot(c.y - x.xy.y)
-    )))
+    Err(GenError::Invalid(camcraft_i18n::tf("the boss at ({:.3}, {:.3}) is not cleared: the stock the program ahead leaves stands at z {:.3} at ({:.3}, {:.3}), {:.3} mm from the boss's axis, above the thread mill's tip at z {tip:.3} there - {advice} - machine the stock around the boss away, out to {far:.3} mm from its axis and down to z {lowest:.3}, before the thread", &[format!("{:.3}", x.xy.x), format!("{:.3}", x.xy.y), format!("{:.3}", tip + over), format!("{:.3}", c.x), format!("{:.3}", c.y), format!("{:.3}", (c.x - x.xy.x).hypot(c.y - x.xy.y)), format!("{:.3}", tip), format!("{}", advice), format!("{:.3}", far), format!("{:.3}", lowest)])))
 }
 
 #[cfg(test)]

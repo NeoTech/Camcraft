@@ -28,7 +28,7 @@ pub fn check(budget: u64) -> Result<usize, String> {
     if !(MIN..=CEILING).contains(&budget) {
         return Err(format!("{NAME} {budget} is outside {MIN}..={CEILING} facets"));
     }
-    usize::try_from(budget).map_err(|_| format!("{NAME} {budget} does not fit this machine's address size"))
+    usize::try_from(budget).map_err(|_| camcraft_i18n::tf("{NAME} {budget} does not fit this machine's address size", &[format!("{}", NAME), format!("{}", budget)]))
 }
 
 /// An optional budget argument from the script verb or MCP: absent or null
@@ -39,9 +39,9 @@ pub fn from_json(v: Option<&serde_json::Value>) -> Result<Option<u64>, String> {
         None | Some(serde_json::Value::Null) => Ok(None),
         Some(serde_json::Value::Number(n)) => match n.as_u64() {
             Some(b) => check(b).map(|_| Some(b)),
-            None => Err(format!("{NAME} must be a whole number of facets in {MIN}..={CEILING}, got {n}")),
+            None => Err(camcraft_i18n::tf("{NAME} must be a whole number of facets in {MIN}..={CEILING}, got {n}", &[format!("{}", NAME), format!("{}", MIN), format!("{}", CEILING), format!("{}", n)])),
         },
-        Some(other) => Err(format!("{NAME} must be a whole number of facets, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("{NAME} must be a whole number of facets, got {other}", &[format!("{}", NAME), format!("{}", other)])),
     }
 }
 

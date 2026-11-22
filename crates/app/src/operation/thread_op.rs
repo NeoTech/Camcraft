@@ -59,13 +59,7 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
             return super::thread_boss::door(tool, holes, depth, bottom_z.is_none().then_some(None));
         }
         holes.iter().find(|x| tool.diameter * 0.5 >= x.radius).map(|x| {
-            format!(
-                "a {} mm thread mill has no air to enter the {} mm drill hole at ({}, {}) - the mill must be smaller than the thread's minor diameter",
-                tool.diameter,
-                x.radius * 2.0,
-                x.xy.x,
-                x.xy.y
-            )
+            camcraft_i18n::tf("a {} mm thread mill has no air to enter the {} mm drill hole at ({}, {}) - the mill must be smaller than the thread's minor diameter", &[format!("{}", tool.diameter), format!("{}", x.radius * 2.0), format!("{}", x.xy.x), format!("{}", x.xy.y)])
         })
     };
     let pitch = match form::resolve_pitch(tool, *pitch) {
@@ -85,15 +79,10 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
     };
     let h = depth_of(pitch, *external);
     if tool.diameter * 0.5 <= h {
-        return Some(format!(
-            "a {} mm thread mill is no wider than twice the {h} mm thread depth of a {pitch} mm pitch - its teeth leave no core",
-            tool.diameter
-        ));
+        return Some(camcraft_i18n::tf("a {} mm thread mill is no wider than twice the {h} mm thread depth of a {pitch} mm pitch - its teeth leave no core", &[format!("{}", tool.diameter), format!("{}", h), format!("{}", pitch)]));
     }
     if *infeed > h + 1e-9 {
-        return Some(format!(
-            "the radial infeed of {infeed} mm is more than the {h} mm thread depth a {pitch} mm pitch stands at"
-        ));
+        return Some(camcraft_i18n::tf("the radial infeed of {infeed} mm is more than the {h} mm thread depth a {pitch} mm pitch stands at", &[format!("{}", infeed), format!("{}", h), format!("{}", pitch)]));
     }
     // #988: the pass control against this thread's depth.
     if let Some(why) = passes.refusal(Some(h), *infeed) {
@@ -109,10 +98,7 @@ pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights
         return Err(GenError::Invalid("not a thread-milling operation".into()));
     };
     if !form::is_thread_mill(tool.kind) {
-        return Err(GenError::Invalid(format!(
-            "thread milling needs a thread mill or a single-form thread mill - this tool is a {}",
-            tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("thread milling needs a thread mill or a single-form thread mill - this tool is a {}", &[format!("{}", tool.kind)])));
     }
     // The pitch first: an unstated one on a single-form mill passes the
     // door (an unfinished operation) and is refused here, by name.

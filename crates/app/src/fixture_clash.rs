@@ -60,19 +60,13 @@ pub fn clash(body: &[Triangle], steel: &[Triangle]) -> Option<[f64; 3]> {
 /// The part warning, by name, with the caller's hint.
 #[must_use]
 pub fn part_message(part: &str, fixture: &str, hit: [f64; 3], hint: &str) -> String {
-    format!(
-        "'{part}' would sit inside the fixture '{fixture}' (near {:.2}, {:.2}, {:.2}) - {hint}",
-        hit[0], hit[1], hit[2]
-    )
+    camcraft_i18n::tf("'{part}' would sit inside the fixture '{fixture}' (near {:.2}, {:.2}, {:.2}) - {hint}", &[format!("{}", part), format!("{}", fixture), format!("{:.2}", hit[0]), format!("{:.2}", hit[1]), format!("{:.2}", hit[2]), format!("{}", hint)])
 }
 
 /// The stock warning, by name, with the caller's hint.
 #[must_use]
 pub fn stock_message(stock: &str, fixture: &str, hit: [f64; 3], hint: &str) -> String {
-    format!(
-        "the stock '{stock}' would sink into the fixture '{fixture}' (near {:.2}, {:.2}, {:.2}) - {hint}",
-        hit[0], hit[1], hit[2]
-    )
+    camcraft_i18n::tf("the stock '{stock}' would sink into the fixture '{fixture}' (near {:.2}, {:.2}, {:.2}) - {hint}", &[format!("{}", stock), format!("{}", fixture), format!("{:.2}", hit[0]), format!("{:.2}", hit[1]), format!("{:.2}", hit[2]), format!("{}", hint)])
 }
 
 /// Warnings joined into one status line (duplicates dropped).

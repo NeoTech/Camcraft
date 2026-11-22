@@ -107,9 +107,9 @@ fn require_fixture(world: &World, name: &str) -> Result<Entity, String> {
     if name.trim().is_empty() {
         return Err("no fixture chosen - import one and mark it on the Fixtures page".into());
     }
-    let e = model::find_by_name(world, name).ok_or_else(|| format!("no fixture named '{name}'"))?;
+    let e = model::find_by_name(world, name).ok_or_else(|| camcraft_i18n::tf("no fixture named '{name}'", &[format!("{}", name)]))?;
     if !model::is_fixture(world, &e) {
-        return Err(format!("'{name}' is not a fixture - mark it on the Fixtures page first"));
+        return Err(camcraft_i18n::tf("'{name}' is not a fixture - mark it on the Fixtures page first", &[format!("{}", name)]));
     }
     Ok(e)
 }
@@ -119,9 +119,9 @@ fn require_part(world: &World, name: &str) -> Result<Entity, String> {
     if name.trim().is_empty() {
         return Err("no part to locate - import a model first".into());
     }
-    let e = model::find_by_name(world, name).ok_or_else(|| format!("no model named '{name}'"))?;
+    let e = model::find_by_name(world, name).ok_or_else(|| camcraft_i18n::tf("no model named '{name}'", &[format!("{}", name)]))?;
     if !setup_align::is_part(world, &e) {
-        return Err(format!("'{name}' is not a part - pick the model the fixture holds"));
+        return Err(camcraft_i18n::tf("'{name}' is not a part - pick the model the fixture holds", &[format!("{}", name)]));
     }
     Ok(e)
 }
@@ -141,9 +141,9 @@ fn held(world: &World, spec: &LocateSpec, part: &Entity, setup: Option<&str>) ->
         LocateBody::Part => Ok((spec.part.clone(), setup_align::pose_in(world, part, setup).unwrap_or_default())),
         LocateBody::Stock => {
             let name = stock_of(world, &spec.fixture).ok_or_else(|| {
-                format!("the setup of '{}' has no stock to locate - set the stock first, or locate the part", spec.fixture)
+                camcraft_i18n::tf("the setup of '{}' has no stock to locate - set the stock first, or locate the part", &[format!("{}", spec.fixture)])
             })?;
-            let e = model::find_by_name(world, &name).ok_or_else(|| format!("no stock named '{name}'"))?;
+            let e = model::find_by_name(world, &name).ok_or_else(|| camcraft_i18n::tf("no stock named '{name}'", &[format!("{}", name)]))?;
             Ok((name, model::transform_of(world, &e).unwrap_or_default()))
         }
     }
@@ -164,13 +164,10 @@ pub fn plan(world: &World, spec: &LocateSpec) -> Result<Plan, String> {
     for (i, m) in spec.mates.iter().enumerate() {
         let k = i + 1;
         if m.part.entity != held {
-            return Err(format!("mate {k}: {} is not on the {noun} '{held}'", crate::pick::geo_label(world, &m.part)));
+            return Err(camcraft_i18n::tf("mate {k}: {} is not on the {noun} '{held}'", &[format!("{}", k), format!("{}", crate::pick::geo_label(world, &m.part)), format!("{}", noun), format!("{}", held)]));
         }
         if m.fixture.entity != spec.fixture {
-            return Err(format!(
-                "mate {k}: {} is not on the fixture '{}'",
-                crate::pick::geo_label(world, &m.fixture), spec.fixture
-            ));
+            return Err(camcraft_i18n::tf("mate {k}: {} is not on the fixture '{}'", &[format!("{}", k), format!("{}", crate::pick::geo_label(world, &m.fixture)), format!("{}", spec.fixture)]));
         }
         let p = mate_datum(world, &m.part, part_pose).map_err(|e| format!("mate {k}: {e}"))?;
         let f = mate_datum(world, &m.fixture, fixture_pose).map_err(|e| format!("mate {k}: {e}"))?;
@@ -186,7 +183,7 @@ pub fn plan(world: &World, spec: &LocateSpec) -> Result<Plan, String> {
 /// [`mate_datum`] refuses.
 pub fn read_pick(world: &World, fixture: &str, g: &GeoSel) -> Result<crate::pick::MateDatum, String> {
     let setup = model::find_by_name(world, fixture).and_then(|fe| fixture::def_of(world, &fe)).and_then(|d| d.setup);
-    let e = model::find_by_name(world, &g.entity).ok_or_else(|| format!("no model named '{}'", g.entity))?;
+    let e = model::find_by_name(world, &g.entity).ok_or_else(|| camcraft_i18n::tf("no model named '{}'", &[format!("{}", g.entity)]))?;
     // A stock reads where `plan` reads it: its own placement (#2173).
     let pose = if model::is_stock(world, &e) {
         model::transform_of(world, &e).unwrap_or_default()

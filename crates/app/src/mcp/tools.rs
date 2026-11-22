@@ -108,7 +108,7 @@ pub(super) fn list() -> Vec<Value> {
 pub(crate) fn call(env: &mut Env, name: &str, args: &Value) -> Result<Value, String> {
     let Some(tool) = all().find(|t| t.name == name) else {
         let names: Vec<&str> = all().map(|t| t.name).collect();
-        return Err(format!("unknown tool '{name}' - tools: {}", names.join(", ")));
+        return Err(camcraft_i18n::tf("unknown tool '{name}' - tools: {}", &[format!("{}", name), format!("{}", names.join(", "))]));
     };
     let empty = Map::new();
     let map = args.as_object().unwrap_or(&empty);
@@ -118,7 +118,7 @@ pub(crate) fn call(env: &mut Env, name: &str, args: &Value) -> Result<Value, Str
     let known = schema["properties"].as_object();
     for key in map.keys() {
         if known.is_none_or(|k| !k.contains_key(key)) {
-            return Err(format!("{name}: unknown argument \"{key}\""));
+            return Err(camcraft_i18n::tf("{name}: unknown argument \"{key}\"", &[format!("{}", name), format!("{}", key)]));
         }
     }
     (tool.run)(env, map).map_err(|e| format!("{name}: {e}"))
@@ -130,7 +130,7 @@ pub(super) fn req_str<'a>(a: &'a Map<String, Value>, key: &str) -> Result<&'a st
     match a.get(key) {
         Some(Value::String(s)) if !s.is_empty() => Ok(s),
         None | Some(Value::Null) => Err(format!("\"{key}\" is required")),
-        Some(other) => Err(format!("\"{key}\" must be a non-empty string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a non-empty string, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -138,7 +138,7 @@ pub(super) fn opt_str<'a>(a: &'a Map<String, Value>, key: &str) -> Result<Option
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s)),
-        Some(other) => Err(format!("\"{key}\" must be a string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a string, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -182,7 +182,7 @@ fn import_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
     let holders = match a.get("holders") {
         None | Some(Value::Null) => true,
         Some(Value::Bool(b)) => *b,
-        Some(other) => return Err(format!("\"holders\" must be true or false, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"holders\" must be true or false, got {other}", &[format!("{}", other)])),
     };
     let format = match opt_str(a, "format")? {
         None => None,
@@ -228,7 +228,7 @@ fn set_between_setups(env: &mut Env, word: &str) -> Result<(), String> {
     use crate::schema::{BetweenSetups, PostOptions};
     let want = BetweenSetups::from_word(word).ok_or_else(|| {
         let words: Vec<&str> = BetweenSetups::ALL.iter().map(|b| b.word()).collect();
-        format!("unknown between_setups '{word}' - one of: {}", words.join(", "))
+        camcraft_i18n::tf("unknown between_setups '{word}' - one of: {}", &[format!("{}", word), format!("{}", words.join(", "))])
     })?;
     let active = crate::setup::active(&env.world);
     if let Some(name) = active.as_deref()
@@ -392,7 +392,7 @@ fn s_set_tool() -> Value {
 fn s_post() -> Value {
     // #2374: every registry post, so an agent learns each name from the list.
     let names: Vec<&str> = crate::posting::BUILTINS.iter().map(|(n, _)| *n).collect();
-    let post_doc = format!("A built-in post name ({}) or a .cps path.", names.join(", "));
+    let post_doc = camcraft_i18n::tf("A built-in post name ({}) or a .cps path.", &[format!("{}", names.join(", "))]);
     obj(
         json!({
             "output": { "type": "string", "description": "The .nc file to write." },

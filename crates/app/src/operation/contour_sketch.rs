@@ -112,9 +112,7 @@ pub(super) fn resolve_plan(
     }
     let mut notes = Vec::new();
     if closed_outer + closed_inside > 0 || open_count > 0 {
-        notes.push(format!(
-            "DXF sketch contour: {closed_outer} outside, {closed_inside} inside, {open_count} open centerline"
-        ));
+        notes.push(camcraft_i18n::tf("DXF sketch contour: {closed_outer} outside, {closed_inside} inside, {open_count} open centerline", &[format!("{}", closed_outer), format!("{}", closed_inside), format!("{}", open_count)]));
     }
     Ok(SketchContourPlan {
         items,
@@ -129,10 +127,7 @@ fn validate_plan(plan: &SketchContourPlan, control_comp: bool, comp_name: &str) 
             return Err(GenError::Invalid(why.clone()));
         }
         if !item.closed && control_comp {
-            return Err(GenError::Invalid(format!(
-                "{comp_name} compensation does not ride open sketch chain {} - choose In computer",
-                item.label
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{comp_name} compensation does not ride open sketch chain {} - choose In computer", &[format!("{}", comp_name), format!("{}", item.label)])));
         }
         if item.closed
             && item.eff_side.is_none()
@@ -225,10 +220,7 @@ pub(super) fn generate_plan(
     if area.is_some()
         && let Some(open) = plan.items.iter().find(|i| !i.closed)
     {
-        return Err(GenError::Invalid(format!(
-            "the Boundary settings shape an area, and {} is an open sketch chain the cutter rides outside those controls - reset the Boundary settings, or pick closed chains only",
-            open.label
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the Boundary settings shape an area, and {} is an open sketch chain the cutter rides outside those controls - reset the Boundary settings, or pick closed chains only", &[format!("{}", open.label)])));
     }
 
     let closed_items: Vec<&ResolvedSketchChain> = plan.items.iter().filter(|i| i.closed).collect();

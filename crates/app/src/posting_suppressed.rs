@@ -28,10 +28,8 @@ pub(super) fn suppressed_problems(world: &World) -> Vec<String> {
             continue;
         }
         for gone in crate::rest::suppressed_cuts_ahead(world, &name, op.setup.as_deref()) {
-            out.push(format!(
-                "operation {name} was generated against the cut of suppressed {gone}; \
-                 unsuppress {gone} or suppress {name} too"
-            ));
+            out.push(camcraft_i18n::tf("operation {name} was generated against the cut of suppressed {gone}; \
+                 unsuppress {gone} or suppress {name} too", &[format!("{}", name), format!("{}", gone), format!("{}", gone), format!("{}", name)]));
         }
     }
     out

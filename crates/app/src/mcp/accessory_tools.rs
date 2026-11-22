@@ -32,14 +32,14 @@ fn with_dims(mut a: Accessory, args: &Map<String, Value>) -> Result<Accessory, S
     if let Some(d) = args.get("dimensions") {
         let d = d.as_object().ok_or("\"dimensions\" must be an object of mm lengths")?;
         for (k, v) in d {
-            let v = v.as_f64().ok_or_else(|| format!("dimension \"{k}\" must be a number of mm"))?;
+            let v = v.as_f64().ok_or_else(|| camcraft_i18n::tf("dimension \"{k}\" must be a number of mm", &[format!("{}", k)]))?;
             a = a.with_dim(k, v)?;
         }
     }
     if let Some(s) = args.get("steps") {
         let n = s.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or("\"steps\" must be a whole number")?;
         let kind = a.label();
-        *a.steps_mut().ok_or_else(|| format!("a {kind} has no steps"))? = n;
+        *a.steps_mut().ok_or_else(|| camcraft_i18n::tf("a {kind} has no steps", &[format!("{}", kind)]))? = n;
     }
     if let Some(g) = args.get("grip").filter(|v| !v.is_null()) {
         a = a.with_grip(g.as_str().ok_or("\"grip\" must be \"outside\" or \"inside\"")?)?;
@@ -65,7 +65,7 @@ fn view(a: &Accessory) -> Value {
 fn add_accessory(env: &mut Env, args: &Map<String, Value>) -> Result<Value, String> {
     let kind = req_str(args, "kind")?;
     let fresh = Accessory::default_of(kind)
-        .ok_or_else(|| format!("no built-in accessory '{kind}' (one of {})", accessory::KINDS.join(", ")))?;
+        .ok_or_else(|| camcraft_i18n::tf("no built-in accessory '{kind}' (one of {})", &[format!("{}", kind), format!("{}", accessory::KINDS.join(", "))]))?;
     let params = with_dims(fresh, args)?;
     let target = setup_or_active(env, args)?;
     let on_stock = match args.get("fit_to_stock") {

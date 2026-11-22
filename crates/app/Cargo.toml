@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 flecs_ecs = { workspace = true }
 camcraft-geometry = { workspace = true }
+camcraft-i18n = { workspace = true }
 camcraft-cl = { workspace = true }
 camcraft-tools = { workspace = true }
 camcraft-post = { workspace = true }

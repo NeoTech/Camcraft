@@ -39,7 +39,7 @@ impl SetToolCutter {
             None => None,
             Some(p) => Some(
                 cutter_profile::check(&tool, p)
-                    .map_err(|e| CommandError::Invalid(format!("tool '{name}': cutter profile: {e}")))?,
+                    .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("tool '{name}': cutter profile: {e}", &[format!("{}", name), format!("{}", e)])))?,
             ),
         };
         Ok(SetToolCutter { name: name.to_string(), prev: tool_cutter::cutter_of(world, &entity), next })
@@ -88,7 +88,7 @@ impl ReshapeTool {
             None => None,
             Some(p) => Some(
                 cutter_profile::check(&tool, p)
-                    .map_err(|e| CommandError::Invalid(format!("tool '{name}': cutter profile: {e}")))?,
+                    .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("tool '{name}': cutter profile: {e}", &[format!("{}", name), format!("{}", e)])))?,
             ),
         };
         let numbers = ChangeTool::judged(world, name, tool, false)?;

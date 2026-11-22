@@ -20,9 +20,7 @@ pub(super) fn validate_do_not_touch(
     area: &crate::operation::AreaControls,
 ) -> Result<(), CommandError> {
     if !dnt.clearance.is_finite() || dnt.clearance < 0.0 || dnt.clearance > AREA_DISTANCE_MAX {
-        return Err(CommandError::Invalid(format!(
-            "'Do not touch' clearance must be finite and within 0..={AREA_DISTANCE_MAX} mm"
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'Do not touch' clearance must be finite and within 0..={AREA_DISTANCE_MAX} mm", &[format!("{}", AREA_DISTANCE_MAX)])));
     }
     if dnt.is_default() {
         return Ok(());
@@ -35,26 +33,16 @@ pub(super) fn validate_do_not_touch(
         // #1864: a DXF sketch pick is a 2D profile, not a model surface;
         // protection guards model faces and edge chains only.
         if matches!(g.feature, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
-            return Err(CommandError::Invalid(format!(
-                "{desc} is a sketch pick - 'Do not touch' protects model faces or edge chains, not DXF sketch chains or layers"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{desc} is a sketch pick - 'Do not touch' protects model faces or edge chains, not DXF sketch chains or layers", &[format!("{}", desc)])));
         }
         if matches!(g.feature, FeatureSel::Vertex(_)) {
-            return Err(CommandError::Invalid(format!(
-                "{desc} is a vertex - 'Do not touch' protects faces or edge chains, not vertices"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{desc} is a vertex - 'Do not touch' protects faces or edge chains, not vertices", &[format!("{}", desc)])));
         }
         let Some(entity) = model::find_by_name(world, &g.entity) else {
-            return Err(CommandError::Invalid(format!(
-                "'Do not touch' names '{}', which does not exist",
-                g.entity
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'Do not touch' names '{}', which does not exist", &[format!("{}", g.entity)])));
         };
         let Some(features) = model::features_of(world, &entity) else {
-            return Err(CommandError::Invalid(format!(
-                "'{}' has no selectable features for 'Do not touch'",
-                g.entity
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' has no selectable features for 'Do not touch'", &[format!("{}", g.entity)])));
         };
         let found = match g.feature {
             FeatureSel::Face(id) => features.faces.iter().any(|f| f.id == id),
@@ -63,10 +51,7 @@ pub(super) fn validate_do_not_touch(
             FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => false,
         };
         if !found {
-            return Err(CommandError::Invalid(format!(
-                "'Do not touch' {desc} is not in '{}' - pick a valid face, patch, or edge chain",
-                g.entity
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} is not in '{}' - pick a valid face, patch, or edge chain", &[format!("{}", desc), format!("{}", g.entity)])));
         }
     }
     if let Some(why) = avoid_overlap_issue(world, &dnt.picks, src, area) {

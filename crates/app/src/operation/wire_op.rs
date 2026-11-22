@@ -74,13 +74,13 @@ pub fn wire_diameter_of(world: &World, tool_name: &str) -> Result<f64, String> {
         return Err("a Wire Contour needs a wire tool mounted from the library".into());
     }
     let Some(entity) = crate::model::find_by_name(world, tool_name) else {
-        return Err(format!("a Wire Contour's tool '{tool_name}' is not in the library"));
+        return Err(camcraft_i18n::tf("a Wire Contour's tool '{tool_name}' is not in the library", &[format!("{}", tool_name)]));
     };
     let Some(tool) = crate::model::tool_of(world, &entity) else {
         return Err(format!("'{tool_name}' is not a tool"));
     };
     if tool.kind != crate::tools::ToolKind::Wire {
-        return Err(format!("tool '{tool_name}' is a {}; a Wire Contour cuts with a wire", tool.kind));
+        return Err(camcraft_i18n::tf("tool '{tool_name}' is a {}; a Wire Contour cuts with a wire", &[format!("{}", tool_name), format!("{}", tool.kind)]));
     }
     if let Some(why) = camcraft_tools::wire::refusal(&tool) {
         return Err(format!("tool '{tool_name}': {why}"));
@@ -109,16 +109,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, tool_name: &str, op: &Wi
         && !edm.wire_diameters.iter().any(|w| (*w - wire_diameter).abs() <= crate::machine::WIRE_MATCH_MM)
     {
         let list: Vec<String> = edm.wire_diameters.iter().map(|w| format!("{w}")).collect();
-        return Err(format!(
-            "tool '{tool_name}' wire diameter {wire_diameter} mm is not one of machine {}'s edm.wire_diameters ({} mm)",
-            machine.model,
-            list.join(", ")
-        ));
+        return Err(camcraft_i18n::tf("tool '{tool_name}' wire diameter {wire_diameter} mm is not one of machine {}'s edm.wire_diameters ({} mm)", &[format!("{}", tool_name), format!("{}", wire_diameter), format!("{}", machine.model), format!("{}", list.join(", "))]));
     }
     let (id, gap) = one_condition(&machine, &op.condition, tool_name, wire_diameter, "a Wire Contour")?;
     let mut skims = Vec::with_capacity(op.skims.len());
     for (i, s) in op.skims.iter().enumerate() {
-        let who = format!("skim {} of the Wire Contour", i + 1);
+        let who = camcraft_i18n::tf("skim {} of the Wire Contour", &[format!("{}", i + 1)]);
         let (condition, gap) =
             one_condition(&machine, &s.condition, tool_name, wire_diameter, &who).map_err(|e| if e.starts_with(&who) { e } else { format!("{who}: {e}") })?;
         skims.push(WirePass { condition, wire_diameter, gap, reverse: s.reverse });
@@ -171,33 +167,25 @@ fn one_condition(
         Some(cs) => format!("it states {}", cs.iter().map(|c| c.id.as_str()).collect::<Vec<_>>().join(", ")),
     };
     if id.trim().is_empty() {
-        return Err(format!("{who} names no EDM condition - choose one of machine {}'s conditions ({})", machine.model, stated()));
+        return Err(camcraft_i18n::tf("{who} names no EDM condition - choose one of machine {}'s conditions ({})", &[format!("{}", who), format!("{}", machine.model), format!("{}", stated())]));
     }
     let Some(edm) = machine.edm.as_ref() else {
-        return Err(format!("machine {} states no EDM condition {id:?} ({})", machine.model, stated()));
+        return Err(camcraft_i18n::tf("machine {} states no EDM condition {id:?} ({})", &[format!("{}", machine.model), format!("{:?}", id), format!("{}", stated())]));
     };
     let known = edm.conditions.iter().any(|c| c.id == id);
     let c = edm
         .condition(&machine.model, id, &[ConditionField::Gap])
         .map_err(|e| if known { e } else { format!("{e} ({})", stated()) })?;
     let Some(gap) = c.gap else {
-        return Err(format!("machine {}: EDM condition {:?} states no gap", machine.model, c.id));
+        return Err(camcraft_i18n::tf("machine {}: EDM condition {:?} states no gap", &[format!("{}", machine.model), format!("{:?}", c.id)]));
     };
     if let Some(d) = c.wire_diameter
         && (d - wire_diameter).abs() > crate::machine::WIRE_MATCH_MM
     {
-        return Err(format!(
-            "machine {}: EDM condition {:?} expects wire diameter {d} mm, but tool '{tool_name}' is {wire_diameter} mm",
-            machine.model, c.id
-        ));
+        return Err(camcraft_i18n::tf("machine {}: EDM condition {:?} expects wire diameter {d} mm, but tool '{tool_name}' is {wire_diameter} mm", &[format!("{}", machine.model), format!("{:?}", c.id), format!("{}", d), format!("{}", tool_name), format!("{}", wire_diameter)]));
     }
     if gap >= wire_diameter * 0.5 {
-        return Err(format!(
-            "machine {}: EDM condition {:?} spark gap {gap} mm must be smaller than tool '{tool_name}' wire radius ({} mm)",
-            machine.model,
-            c.id,
-            wire_diameter * 0.5
-        ));
+        return Err(camcraft_i18n::tf("machine {}: EDM condition {:?} spark gap {gap} mm must be smaller than tool '{tool_name}' wire radius ({} mm)", &[format!("{}", machine.model), format!("{:?}", c.id), format!("{}", gap), format!("{}", tool_name), format!("{}", wire_diameter * 0.5)]));
     }
     Ok((c.id.clone(), gap))
 }
@@ -235,7 +223,7 @@ pub fn cutoff_of(world: &World, setup: Option<&str>, tool_name: &str, op: &WireC
     let probe = WireContourOp { condition: t.cutoff_condition.clone(), skims: Vec::new(), ..op.clone() };
     condition_of(world, setup, tool_name, &probe)
         .map(Some)
-        .map_err(|e| format!("the tab cut-off's condition: {e}"))
+        .map_err(|e| camcraft_i18n::tf("the tab cut-off's condition: {e}", &[format!("{}", e)]))
 }
 
 /// The condition's share of the operation's stamp (#532, #2011): its id,
@@ -322,9 +310,7 @@ pub fn wire_params(
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
     };
     if !(top.is_finite() && bottom.is_finite()) || bottom >= top {
-        return Err(GenError::Invalid(format!(
-            "wire contour: the workpiece's bottom ({bottom:.3}) does not stand below its top ({top:.3})"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("wire contour: the workpiece's bottom ({bottom:.3}) does not stand below its top ({top:.3})", &[format!("{:.3}", bottom), format!("{:.3}", top)])));
     }
     Ok(WireParams {
         wire_diameter: cond.wire_diameter,
@@ -351,10 +337,7 @@ pub fn wire_params(
 #[must_use]
 pub fn tabs_taper_refusal(op: &WireContourOp) -> Option<String> {
     (op.tabs.is_some() && op.taper_deg != 0.0).then(|| {
-        format!(
-            "wire contour: tabs can't be combined with a taper yet (a {:.3} degree taper is asked) - remove the tabs or set the taper to 0",
-            op.taper_deg
-        )
+        camcraft_i18n::tf("wire contour: tabs can't be combined with a taper yet (a {:.3} degree taper is asked) - remove the tabs or set the taper to 0", &[format!("{:.3}", op.taper_deg)])
     })
 }
 
@@ -375,14 +358,11 @@ pub fn skims_refusal(op: &WireContourOp) -> Option<String> {
     } else if op.tabs.is_some() {
         "tabs".to_owned()
     } else if op.taper_deg != 0.0 {
-        format!("a {:.3} degree taper", op.taper_deg)
+        camcraft_i18n::tf("a {:.3} degree taper", &[format!("{:.3}", op.taper_deg)])
     } else {
         return None;
     };
-    Some(format!(
-        "wire contour: {} skim pass(es) are stated with {with} - skims are cut on a vertical, untabbed one-profile contour only; remove the skims or that setting",
-        op.skims.len()
-    ))
+    Some(camcraft_i18n::tf("wire contour: {} skim pass(es) are stated with {with} - skims are cut on a vertical, untabbed one-profile contour only; remove the skims or that setting", &[format!("{}", op.skims.len()), format!("{}", with)]))
 }
 
 /// Generate: `picks` is the picked profile (closed rings, open runs)
@@ -448,10 +428,7 @@ pub(super) fn generate_wire(
         // #536 x #540: the burnout's rings are cut vertical; a taper
         // with them is refused by name, never cut upright silently.
         Some(_) if op.taper_deg != 0.0 => {
-            return Err(GenError::Invalid(format!(
-                "wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off",
-                op.taper_deg
-            )))
+            return Err(GenError::Invalid(camcraft_i18n::tf("wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off", &[format!("{:.3}", op.taper_deg)])))
         }
         Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
         // #539 x #536: the tapered builder reads one closed ring; a
@@ -478,12 +455,9 @@ pub(super) fn corner_rule(op: &WireContourOp, cond: &WireCondition) -> Result<Wi
         return Ok(WireCorner::Mitre);
     };
     if op.four_axis.is_some() {
-        return Err(GenError::Invalid(format!(
-            "wire contour: a 4-axis cut, and machine {} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles; a 4-axis cut needs a U/V machine",
-            cond.machine
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("wire contour: a 4-axis cut, and machine {} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles; a 4-axis cut needs a U/V machine", &[format!("{}", cond.machine)])));
     }
-    let (_, corner) = angle.complete(&cond.machine).map_err(|e| GenError::Invalid(format!("wire contour: {e}")))?;
+    let (_, corner) = angle.complete(&cond.machine).map_err(|e| GenError::Invalid(camcraft_i18n::tf("wire contour: {e}", &[format!("{}", e)])))?;
     Ok(match corner {
         crate::machine::TaperCorner::Mitre => WireCorner::Mitre,
         crate::machine::TaperCorner::Cone => WireCorner::Cone,

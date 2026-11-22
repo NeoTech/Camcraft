@@ -74,7 +74,7 @@ fn change_of(
         }
     };
     if next == prev {
-        return Err(CommandError::Invalid(format!("setup '{setup}' already holds the part that way")));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{setup}' already holds the part that way", &[format!("{}", setup)])));
     }
     Ok((prev, next))
 }
@@ -119,9 +119,7 @@ impl AlignPartToSetup {
                     CommandError::Invalid(m) => m,
                     other => other.to_string(),
                 };
-                CommandError::Invalid(format!(
-                    "setup '{child}' is placed relative to '{setup}' and must follow the change, but {why}"
-                ))
+                CommandError::Invalid(camcraft_i18n::tf("setup '{child}' is placed relative to '{setup}' and must follow the change, but {why}", &[format!("{}", child), format!("{}", setup), format!("{}", why)]))
             };
             let c_next = c_next.map(|a| check_location(a, "the carried part alignment")).transpose().map_err(follow)?;
             let stock = following_stock(world, &child, c_prev, c_next, false).map_err(follow)?;

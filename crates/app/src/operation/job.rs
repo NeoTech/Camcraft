@@ -174,7 +174,7 @@ pub struct GenJob {
 /// it - a call-structure drift, which is a bug, and it names itself
 /// rather than cutting a silent shadow (Prime Directive).
 pub(super) fn unreached(what: &str) -> GenError {
-    GenError::Invalid(format!("internal: the job's {what} was never collected"))
+    GenError::Invalid(camcraft_i18n::tf("internal: the job's {what} was never collected", &[format!("{}", what)]))
 }
 
 /// Read the world once, as `generate` would, and pack the answers.

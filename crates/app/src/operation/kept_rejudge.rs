@@ -60,7 +60,7 @@ fn part_problem(world: &World, name: &str, op: &Operation, path: &Toolpath, know
     }
     let job = match super::collect_job(world, op, name) {
         Ok(job) => job,
-        Err(e) => return Some(format!("{name}: the parts beside its source cannot be read again ({e}); regenerate it")),
+        Err(e) => return Some(camcraft_i18n::tf("{name}: the parts beside its source cannot be read again ({e}); regenerate it", &[format!("{}", name), format!("{}", e)])),
     };
     if job.keep_parts.is_empty() && job.neighbour_parts.is_empty() {
         return None;
@@ -139,9 +139,9 @@ fn part_problem(world: &World, name: &str, op: &Operation, path: &Toolpath, know
             // A local path's move numbers are not the posted path's: said only upright.
             let what = if w.is_empty() { String::new() } else { format!(" ({w})") };
             return Some(if known {
-                format!("{name} breaks into part '{part}'{what}")
+                camcraft_i18n::tf("{name} breaks into part '{part}'{what}", &[format!("{}", name), format!("{}", part), format!("{}", what)])
             } else {
-                format!("{name} now cuts part '{part}'{what} - a part moved, added or no longer workholding since it was generated; regenerate it")
+                camcraft_i18n::tf("{name} now cuts part '{part}'{what} - a part moved, added or no longer workholding since it was generated; regenerate it", &[format!("{}", name), format!("{}", part), format!("{}", what)])
             });
         }
     }

@@ -83,7 +83,7 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
     }
     for r in [Role::Origin, Role::X, Role::Y, Role::Z] {
         if picks.iter().filter(|(_, role)| *role == r).count() > 1 {
-            return Err(format!("only one pick may set {} - re-pick one of them", r.label()));
+            return Err(camcraft_i18n::tf("only one pick may set {} - re-pick one of them", &[format!("{}", r.label())]));
         }
     }
     // The two picks that carry the frame's axes, in priority order. A
@@ -117,14 +117,14 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
             }
         }
     }
-    let a = d1.dir.ok_or_else(|| format!("{} sets no axis - re-pick it", super::geo_label(world, g1)))?;
+    let a = d1.dir.ok_or_else(|| camcraft_i18n::tf("{} sets no axis - re-pick it", &[format!("{}", super::geo_label(world, g1))]))?;
     // Normalise right after reading: a Chain datum's direction is the
     // raw edge walk, so it carries the edge's length. Reading it raw left
     // the frame scaled and `quat_from_axes` returned a silently wrong
     // rotation for a part tipped off the table.
     let a_len = norm(a);
     if !(a_len.is_finite() && a_len > 0.0) {
-        return Err(format!("{} has no length - re-pick it", super::geo_label(world, g1)));
+        return Err(camcraft_i18n::tf("{} has no length - re-pick it", &[format!("{}", super::geo_label(world, g1))]));
     }
     let a = scale(a, 1.0 / a_len);
     // The projection maths is #187's step for step, so a role table with
@@ -178,15 +178,12 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
 /// project, check the lean against `tilt` (already a sine), normalize.
 /// Refused by name when the two picks stand too near parallel.
 fn square_to(world: &World, g: &GeoSel, d: Option<[f64; 3]>, axis: [f64; 3], tilt: f64) -> Result<[f64; 3], String> {
-    let d = d.ok_or_else(|| format!("{} sets no axis - re-pick it", super::geo_label(world, g)))?;
+    let d = d.ok_or_else(|| camcraft_i18n::tf("{} sets no axis - re-pick it", &[format!("{}", super::geo_label(world, g))]))?;
     let len = norm(d);
     let ex = sub(d, scale(axis, dot(d, axis)));
     let ex_len = norm(ex);
     if !len.is_finite() || len <= 0.0 || ex_len < len * tilt {
-        return Err(format!(
-            "{} is too near parallel to the first axis - pick picks that lean apart",
-            super::geo_label(world, g)
-        ));
+        return Err(camcraft_i18n::tf("{} is too near parallel to the first axis - pick picks that lean apart", &[format!("{}", super::geo_label(world, g))]));
     }
     Ok(scale(ex, 1.0 / ex_len))
 }
@@ -206,14 +203,8 @@ fn datum_for(world: &World, g: &GeoSel, role: Role) -> Result<Datum, String> {
             plane: None,
             ends: None,
         }),
-        (FeatureSel::Vertex(_), _) => Err(format!(
-            "{} sets no axis - pick a face, a straight edge or a wall for it",
-            super::geo_label(world, g)
-        )),
-        (FeatureSel::Chain(_), Role::Origin) => Err(format!(
-            "{} sets an axis - pick a vertex or a wall for the origin",
-            super::geo_label(world, g)
-        )),
+        (FeatureSel::Vertex(_), _) => Err(camcraft_i18n::tf("{} sets no axis - pick a face, a straight edge or a wall for it", &[format!("{}", super::geo_label(world, g))])),
+        (FeatureSel::Chain(_), Role::Origin) => Err(camcraft_i18n::tf("{} sets an axis - pick a vertex or a wall for the origin", &[format!("{}", super::geo_label(world, g))])),
         (FeatureSel::Chain(_), _) => {
             let (a, b) = straight_edge(world, g, pose, &format!("for {}", role.label()))?;
             // The raw walk vector is the direction: `align_roles` squares
@@ -235,10 +226,7 @@ fn datum_for(world: &World, g: &GeoSel, role: Role) -> Result<Datum, String> {
             None => wall_datum(world, g, role),
         },
         (FeatureSel::Patch(_), _) => wall_datum(world, g, role),
-        (FeatureSel::SketchChain(_), _) | (FeatureSel::SketchLayer(_), _) => Err(format!(
-            "{} is a DXF sketch pick - pick a model face, edge or vertex",
-            super::geo_label(world, g)
-        )),
+        (FeatureSel::SketchChain(_), _) | (FeatureSel::SketchLayer(_), _) => Err(camcraft_i18n::tf("{} is a DXF sketch pick - pick a model face, edge or vertex", &[format!("{}", super::geo_label(world, g))])),
     }
 }
 

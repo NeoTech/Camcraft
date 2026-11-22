@@ -43,26 +43,21 @@ pub(super) fn picks_of(world: &World, op: &Operation) -> Option<Result<Picked, G
 /// The refusal of a kind whose path cannot keep to picked faces yet:
 /// said by name, so the picks are never silently read as the model.
 fn not_yet(kind: &str) -> GenError {
-    GenError::Invalid(format!(
-        "{kind} cannot yet keep to picked faces - set the geometry to the whole model, or finish the picked faces with Rotary Parallel"
-    ))
+    GenError::Invalid(camcraft_i18n::tf("{kind} cannot yet keep to picked faces - set the geometry to the whole model, or finish the picked faces with Rotary Parallel", &[format!("{}", kind)]))
 }
 
 fn resolve(world: &World, items: &[GeoSel]) -> Result<Picked, GenError> {
     const KIND: &str = "Rotary Parallel";
     let Some(first) = items.first() else {
-        return Err(GenError::Invalid(format!("{KIND}: the selection is empty - pick faces of the turned surface, or set the geometry to the whole model")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: the selection is empty - pick faces of the turned surface, or set the geometry to the whole model", &[format!("{}", KIND)])));
     };
     if let Some(other) = items.iter().find(|g| g.entity != first.entity) {
-        return Err(GenError::Invalid(format!(
-            "{KIND}: the picked faces are on different models ('{}' and '{}') - the work turns about one model's axis; pick faces of one model",
-            first.entity, other.entity
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: the picked faces are on different models ('{}' and '{}') - the work turns about one model's axis; pick faces of one model", &[format!("{}", KIND), format!("{}", first.entity), format!("{}", other.entity)])));
     }
-    let gone = |label: &str| GenError::Invalid(format!("{KIND}: {label} is no longer in the model: re-pick it"));
+    let gone = |label: &str| GenError::Invalid(camcraft_i18n::tf("{KIND}: {label} is no longer in the model: re-pick it", &[format!("{}", KIND), format!("{}", label)]));
     let name = first.entity.as_str();
     let entity = model::find_by_name(world, name)
-        .ok_or_else(|| GenError::Invalid(format!("{KIND}: the selection names '{name}', which is gone")))?;
+        .ok_or_else(|| GenError::Invalid(camcraft_i18n::tf("{KIND}: the selection names '{name}', which is gone", &[format!("{}", KIND), format!("{}", name)])))?;
     let features = model::features_of(world, &entity).ok_or_else(|| gone(&format!("'{name}'")))?;
     let facets_of = |fid: feature::FaceId| features.faces.iter().find(|f| f.id == fid).map(|f| f.facets.clone());
     let mut out: Picked = Vec::with_capacity(items.len());
@@ -79,9 +74,7 @@ fn resolve(world: &World, items: &[GeoSel]) -> Result<Picked, GenError> {
                 all
             }
             FeatureSel::Chain(_) | FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{KIND}: {label} is not a face - the passes keep to picked faces of the turned surface; pick faces, or set the geometry to the whole model"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: {label} is not a face - the passes keep to picked faces of the turned surface; pick faces, or set the geometry to the whole model", &[format!("{}", KIND), format!("{}", label)])));
             }
         };
         out.push((label, idx));
@@ -103,20 +96,16 @@ pub(super) fn usable(picks: Option<Result<Picked, GenError>>, material: &[Triang
     for (label, idx) in &picks {
         let face: Option<Vec<Triangle>> = idx.iter().map(|&i| material.get(i as usize).copied()).collect();
         let Some(face) = face else {
-            return Err(GenError::Invalid(format!("{KIND}: {label} is no longer in the model: re-pick it")));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: {label} is no longer in the model: re-pick it", &[format!("{}", KIND), format!("{}", label)])));
         };
         if !crate::multiaxis::rotary_pick::faces_outward(&ax, &face) {
-            return Err(GenError::Invalid(format!(
-                "{KIND}: {label} does not face away from the work's axis - the tool stands on the radial, so it cannot reach an end face or the wall of a bore; pick faces of the turned surface"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: {label} does not face away from the work's axis - the tool stands on the radial, so it cannot reach an end face or the wall of a bore; pick faces of the turned surface", &[format!("{}", KIND), format!("{}", label)])));
         }
         all.extend(face);
     }
     let n = crate::multiaxis::rotary_pick::groups(&all);
     if n != 1 {
-        return Err(GenError::Invalid(format!(
-            "{KIND}: the picked faces are not connected - they form {n} separate groups; pick faces that touch, or make one operation for each group"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{KIND}: the picked faces are not connected - they form {n} separate groups; pick faces that touch, or make one operation for each group", &[format!("{}", KIND), format!("{}", n)])));
     }
     Ok(Some(all))
 }

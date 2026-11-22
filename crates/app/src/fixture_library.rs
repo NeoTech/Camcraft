@@ -96,7 +96,7 @@ pub fn entry_from_model(
 ) -> Result<FixtureEntry, String> {
     let e = model::find_by_name(world, name)
         .filter(|e| model::is_model(world, e))
-        .ok_or_else(|| format!("no model named '{name}'"))?;
+        .ok_or_else(|| camcraft_i18n::tf("no model named '{name}'", &[format!("{}", name)]))?;
     let facets: Vec<Triangle> = model::facets_of(world, &e).map(|f| f.to_vec()).unwrap_or_default();
     let origin = match datum {
         DatumChoice::ModelOrigin => Point3::ZERO,
@@ -123,28 +123,28 @@ pub fn check_entry(e: &FixtureEntry) -> Result<(), String> {
         return Err("a fixture has no name".into());
     }
     if name.trim() != name {
-        return Err(format!("fixture '{name}': the name has leading or trailing spaces"));
+        return Err(camcraft_i18n::tf("fixture '{name}': the name has leading or trailing spaces", &[format!("{}", name)]));
     }
     if name == crate::fixture::MACHINE_TABLE {
-        return Err(format!("fixture '{name}': that name is the derived machine table"));
+        return Err(camcraft_i18n::tf("fixture '{name}': that name is the derived machine table", &[format!("{}", name)]));
     }
     if e.facets.is_empty() {
-        return Err(format!("fixture '{name}' has no facets"));
+        return Err(camcraft_i18n::tf("fixture '{name}' has no facets", &[format!("{}", name)]));
     }
     if e.facets.len() > MAX_FACETS {
         return Err(format!("fixture '{name}' has {} facets (at most {MAX_FACETS})", e.facets.len()));
     }
     if e.facets.iter().any(|t| !(t.a.is_finite() && t.b.is_finite() && t.c.is_finite())) {
-        return Err(format!("fixture '{name}' has a non-finite vertex"));
+        return Err(camcraft_i18n::tf("fixture '{name}' has a non-finite vertex", &[format!("{}", name)]));
     }
     if !e.datum.pos.is_finite() || normalize_quat(e.datum.rot).is_none() {
-        return Err(format!("fixture '{name}': the datum must be a finite point and a rotation"));
+        return Err(camcraft_i18n::tf("fixture '{name}': the datum must be a finite point and a rotation", &[format!("{}", name)]));
     }
     if e.step_source.as_ref().is_some_and(|s| s.trim().is_empty()) {
-        return Err(format!("fixture '{name}': step_source cannot be blank"));
+        return Err(camcraft_i18n::tf("fixture '{name}': step_source cannot be blank", &[format!("{}", name)]));
     }
     if let Some(prof) = &e.profile {
-        prof.check().map_err(|why| format!("fixture '{name}': invalid profile ({why})"))?;
+        prof.check().map_err(|why| camcraft_i18n::tf("fixture '{name}': invalid profile ({why})", &[format!("{}", name), format!("{}", why)]))?;
     }
     Ok(())
 }
@@ -165,10 +165,10 @@ pub fn to_text(entries: &[FixtureEntry]) -> Result<String, String> {
         if let [a, b] = w
             && a.name == b.name
         {
-            return Err(format!("fixture '{}' appears twice in the library", a.name));
+            return Err(camcraft_i18n::tf("fixture '{}' appears twice in the library", &[format!("{}", a.name)]));
         }
     }
-    let s = |v: &Value| serde_json::to_string(v).map_err(|e| format!("fixture library not written: {e}"));
+    let s = |v: &Value| serde_json::to_string(v).map_err(|e| camcraft_i18n::tf("fixture library not written: {e}", &[format!("{}", e)]));
     let mut out = String::new();
     out.push_str(&format!(
         "{{\n  \"format\": {},\n  \"version\": {VERSION},\n  \"units\": \"mm\",\n  \"fixtures\": [",
@@ -185,7 +185,7 @@ pub fn to_text(entries: &[FixtureEntry]) -> Result<String, String> {
             out.push_str(&format!("      \"step_source\": {},\n", s(&json!(step))?));
         }
         if let Some(prof) = &e.profile {
-            let v = serde_json::to_value(prof).map_err(|err| format!("fixture library not written: {err}"))?;
+            let v = serde_json::to_value(prof).map_err(|err| camcraft_i18n::tf("fixture library not written: {err}", &[format!("{}", err)]))?;
             out.push_str(&format!("      \"profile\": {},\n", s(&v)?));
         }
         let datum = json!({ "origin": num3(e.datum.pos), "rot": e.datum.rot });
@@ -213,14 +213,14 @@ fn read_entry(row: &Value, n: usize) -> Result<FixtureEntry, String> {
         .get("name")
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| format!("fixture #{n} has no name"))?
+        .ok_or_else(|| camcraft_i18n::tf("fixture #{n} has no name", &[format!("{}", n)]))?
         .to_owned();
     let note = match row.get("note") {
         None | Some(Value::Null) => None,
-        Some(v) => Some(v.as_str().ok_or_else(|| format!("fixture '{name}': the note is not text"))?.to_owned()),
+        Some(v) => Some(v.as_str().ok_or_else(|| camcraft_i18n::tf("fixture '{name}': the note is not text", &[format!("{}", name)]))?.to_owned()),
     };
-    let d = row.get("datum").ok_or_else(|| format!("fixture '{name}' has no datum"))?;
-    let pos = point(d.get("origin")).ok_or_else(|| format!("fixture '{name}': the datum origin is not [x, y, z]"))?;
+    let d = row.get("datum").ok_or_else(|| camcraft_i18n::tf("fixture '{name}' has no datum", &[format!("{}", name)]))?;
+    let pos = point(d.get("origin")).ok_or_else(|| camcraft_i18n::tf("fixture '{name}': the datum origin is not [x, y, z]", &[format!("{}", name)]))?;
     let rot: Vec<f64> = d
         .get("rot")
         .and_then(Value::as_array)
@@ -228,34 +228,34 @@ fn read_entry(row: &Value, n: usize) -> Result<FixtureEntry, String> {
         .unwrap_or_default();
     let rot: [f64; 4] = rot
         .try_into()
-        .map_err(|_| format!("fixture '{name}': the datum rot is not [x, y, z, w]"))?;
+        .map_err(|_| camcraft_i18n::tf("fixture '{name}': the datum rot is not [x, y, z, w]", &[format!("{}", name)]))?;
     // Kept as written (the insert normalizes at its chokepoint), so a
     // read -> write round trip is byte-stable; only a non-rotation fails.
     if normalize_quat(rot).is_none() {
-        return Err(format!("fixture '{name}': the datum rot is not a rotation"));
+        return Err(camcraft_i18n::tf("fixture '{name}': the datum rot is not a rotation", &[format!("{}", name)]));
     }
     let rows = row
         .get("facets")
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("fixture '{name}' has no \"facets\" array"))?;
+        .ok_or_else(|| camcraft_i18n::tf("fixture '{name}' has no \"facets\" array", &[format!("{}", name)]))?;
     let mut facets = Vec::with_capacity(rows.len().min(MAX_FACETS));
     for (k, t) in rows.iter().enumerate() {
         let tri = t.as_array().and_then(|v| match v.as_slice() {
             [a, b, c] => Some(Triangle::new(point(Some(a))?, point(Some(b))?, point(Some(c))?)),
             _ => None,
         });
-        let tri = tri.ok_or_else(|| format!("fixture '{name}': facet #{} is not three [x, y, z] points", k + 1))?;
+        let tri = tri.ok_or_else(|| camcraft_i18n::tf("fixture '{name}': facet #{} is not three [x, y, z] points", &[format!("{}", name), format!("{}", k + 1)]))?;
         facets.push(tri);
     }
     let step_source = match row.get("step_source") {
         None | Some(Value::Null) => None,
-        Some(v) => Some(v.as_str().ok_or_else(|| format!("fixture '{name}': step_source is not text"))?.to_owned()),
+        Some(v) => Some(v.as_str().ok_or_else(|| camcraft_i18n::tf("fixture '{name}': step_source is not text", &[format!("{}", name)]))?.to_owned()),
     };
     let profile = match row.get("profile") {
         None | Some(Value::Null) => None,
         Some(v) => Some(
             serde_json::from_value::<crate::fixture_profile::FixtureProfile>(v.clone())
-                .map_err(|e| format!("fixture '{name}': invalid profile: {e}"))?,
+                .map_err(|e| camcraft_i18n::tf("fixture '{name}': invalid profile: {e}", &[format!("{}", name), format!("{}", e)]))?,
         ),
     };
     let entry = FixtureEntry { name, note, datum: Location { pos, rot }, facets, step_source, profile };
@@ -269,22 +269,22 @@ fn read_entry(row: &Value, n: usize) -> Result<FixtureEntry, String> {
 /// a non-finite number each refuse the whole file, naming the entry.
 /// An empty `fixtures` array is a valid (empty) library.
 pub fn parse(text: &str) -> Result<Vec<FixtureEntry>, String> {
-    let root: Value = serde_json::from_str(text).map_err(|e| format!("not a fixture library (bad JSON: {e})"))?;
+    let root: Value = serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("not a fixture library (bad JSON: {e})", &[format!("{}", e)]))?;
     let o = root.as_object().ok_or("not a fixture library: expected an object")?;
     match o.get("format").and_then(Value::as_str) {
         Some(FORMAT) => {}
-        Some(other) => return Err(format!("not a fixture library: format is '{other}', not '{FORMAT}'")),
-        None => return Err(format!("not a fixture library: no \"format\": \"{FORMAT}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("not a fixture library: format is '{other}', not '{FORMAT}'", &[format!("{}", other), format!("{}", FORMAT)])),
+        None => return Err(camcraft_i18n::tf("not a fixture library: no \"format\": \"{FORMAT}\"", &[format!("{}", FORMAT)])),
     }
     match o.get("version").and_then(Value::as_u64) {
         Some(VERSION) => {}
-        Some(v) => return Err(format!("fixture library version {v} is not supported (this build reads {VERSION})")),
+        Some(v) => return Err(camcraft_i18n::tf("fixture library version {v} is not supported (this build reads {VERSION})", &[format!("{}", v), format!("{}", VERSION)])),
         None => return Err("not a fixture library: no \"version\"".into()),
     }
     if let Some(u) = o.get("units").and_then(Value::as_str)
         && u != "mm"
     {
-        return Err(format!("fixture library units '{u}' are not supported (lengths are mm)"));
+        return Err(camcraft_i18n::tf("fixture library units '{u}' are not supported (lengths are mm)", &[format!("{}", u)]));
     }
     let rows = o
         .get("fixtures")
@@ -294,7 +294,7 @@ pub fn parse(text: &str) -> Result<Vec<FixtureEntry>, String> {
     for (i, row) in rows.iter().enumerate() {
         let entry = read_entry(row, i.saturating_add(1))?;
         if out.iter().any(|e| e.name == entry.name) {
-            return Err(format!("fixture '{}' appears twice in the library", entry.name));
+            return Err(camcraft_i18n::tf("fixture '{}' appears twice in the library", &[format!("{}", entry.name)]));
         }
         out.push(entry);
     }

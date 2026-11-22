@@ -106,7 +106,7 @@ fn matrix_of(rot: [f64; 4]) -> [[f64; 3]; 3] {
 }
 
 fn carry_head(from: &str, to: &str) -> String {
-    format!("carrying the machined stock from setup '{from}' into setup '{to}'")
+    camcraft_i18n::tf("carrying the machined stock from setup '{from}' into setup '{to}'", &[format!("{}", from), format!("{}", to)])
 }
 
 /// The machine both setups mount (#343: each its own, else the
@@ -156,7 +156,7 @@ pub(crate) fn carry_turn(world: &flecs_ecs::prelude::World, from: &str, to: &str
         if e == crate::stock_sim::CARRY_TURN_REFUSAL {
             // #866: say WHICH turn, in the words the alignment row uses.
             let [x, y, z] = crate::setup_align::angles_of(Some(t));
-            format!("{head}: '{to}' holds the part turned X {x}°, Y {y}°, Z {z}° from how '{from}' holds it, and {e}")
+            camcraft_i18n::tf("{head}: '{to}' holds the part turned X {x}°, Y {y}°, Z {z}° from how '{from}' holds it, and {e}", &[format!("{}", head), format!("{}", to), format!("{}", x), format!("{}", y), format!("{}", z), format!("{}", from), format!("{}", e)])
         } else {
             format!("{head}: {e}")
         }
@@ -218,11 +218,7 @@ pub fn side_on_note(world: &flecs_ecs::prelude::World) -> Option<String> {
             continue;
         }
         if matches!(entry(world, before.as_deref(), eff.as_deref()), Ok(Entry::Carry(t)) if t.side_on()) {
-            return Some(format!(
-                "the stock carried from setup '{}' into setup '{}' is turned side-on - its turned faces are read up to one grid cell outside the real stock, never inside it, and a gouge cut before the turn is counted from the setup that cut it",
-                before.unwrap_or_default(),
-                eff.unwrap_or_default()
-            ));
+            return Some(camcraft_i18n::tf("the stock carried from setup '{}' into setup '{}' is turned side-on - its turned faces are read up to one grid cell outside the real stock, never inside it, and a gouge cut before the turn is counted from the setup that cut it", &[format!("{}", before.unwrap_or_default()), format!("{}", eff.unwrap_or_default())]));
         }
     }
     None
@@ -314,7 +310,7 @@ pub(crate) fn walk(
         }
     }
     if let Some(u) = until {
-        return Err(format!("the program never enters setup '{u}'"));
+        return Err(camcraft_i18n::tf("the program never enters setup '{u}'", &[format!("{}", u)]));
     }
     Ok(Walked { held, frame, spanned, origin, left })
 }

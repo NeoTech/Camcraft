@@ -36,11 +36,11 @@ fn with_dims(mut p: ViseParams, a: &Map<String, Value>) -> Result<ViseParams, St
     let Some(d) = a.get("dimensions") else { return Ok(p) };
     let d = d.as_object().ok_or("\"dimensions\" must be an object of mm lengths")?;
     for (k, v) in d {
-        let v = v.as_f64().ok_or_else(|| format!("dimension \"{k}\" must be a number of mm"))?;
+        let v = v.as_f64().ok_or_else(|| camcraft_i18n::tf("dimension \"{k}\" must be a number of mm", &[format!("{}", k)]))?;
         let slot = match k.as_str() {
             "min_opening" | "lip_height" | "lip_depth" | "grip_depth" | "grip_width" => {
                 let ViseStyle::SelfCentering(sc) = &mut p.style else {
-                    return Err(format!("dimension \"{k}\" is a self-centering vise's; this one is a standard vise"));
+                    return Err(camcraft_i18n::tf("dimension \"{k}\" is a self-centering vise's; this one is a standard vise", &[format!("{}", k)]));
                 };
                 match k.as_str() {
                     "min_opening" => &mut sc.min_opening,
@@ -60,7 +60,7 @@ fn with_dims(mut p: ViseParams, a: &Map<String, Value>) -> Result<ViseParams, St
             "base_height" => &mut p.base_height,
             "housing_length" => &mut p.housing_length,
             "housing_height" => &mut p.housing_height,
-            other => return Err(format!("unknown vise dimension \"{other}\" (one of {})", DIMS.join(", "))),
+            other => return Err(camcraft_i18n::tf("unknown vise dimension \"{other}\" (one of {})", &[format!("{}", other), format!("{}", DIMS.join(", "))])),
         };
         *slot = v;
     }
@@ -70,7 +70,7 @@ fn with_dims(mut p: ViseParams, a: &Map<String, Value>) -> Result<ViseParams, St
 fn opt_f64(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => v.as_f64().map(Some).ok_or_else(|| format!("\"{key}\" must be a number")),
+        Some(v) => v.as_f64().map(Some).ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a number", &[format!("{}", key)])),
     }
 }
 
@@ -99,7 +99,7 @@ fn add_builtin_vise(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
     let label = req_str(a, "size")?;
     let row = vise::size(label).ok_or_else(|| {
         let all: Vec<&str> = vise::presets().map(|s| s.label).collect();
-        format!("no built-in vise '{label}' (one of {})", all.join(", "))
+        camcraft_i18n::tf("no built-in vise '{label}' (one of {})", &[format!("{}", label), format!("{}", all.join(", "))])
     })?;
     let mut params = with_dims(row.half_open(), a)?;
     if let Some(o) = opt_f64(a, "opening")? {

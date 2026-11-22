@@ -157,16 +157,16 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
     out.check_tool_count(machine, &names.iter().map(String::as_str).collect::<Vec<_>>());
 
     for (name, e) in &ops {
-        let op = model::operation_of(world, e).ok_or_else(|| format!("{name}: lost its operation"))?;
+        let op = model::operation_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         let tool_entity = model::find_by_name(world, &op.tool)
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         let tool = model::tool_of(world, &tool_entity)
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         // #368: a modelled body is the holder the magazine measures.
         let tool = crate::tool_body::judged(world, &tool_entity, tool)
             .map_err(|e| format!("{name}: tool {}: {e}", op.tool))?
             .0;
-        let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        let cache = model::toolpath_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         // Travel numbers in the file are PROGRAM coordinates; the
         // cached moves are world millimeters. This is the post's own
         // origin law (one copy, in posting), so a G54 slide shifts
@@ -192,13 +192,7 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
         {
             say(
                 &mut out,
-                format!(
-                    "{name}: spindle power estimated {:.2} kW ({:.1} cm3/min of {} at kc {:.0} N/mm2), above the machine's {limit:.2} kW",
-                    p.kw,
-                    p.mrr / 1000.0,
-                    mat.label(),
-                    p.kc
-                ),
+                camcraft_i18n::tf("{name}: spindle power estimated {:.2} kW ({:.1} cm3/min of {} at kc {:.0} N/mm2), above the machine's {limit:.2} kW", &[format!("{}", name), format!("{:.2}", p.kw), format!("{:.1}", p.mrr / 1000.0), format!("{}", mat.label()), format!("{:.0}", p.kc), format!("{:.2}", limit)]),
             );
         }
         // The tool table: long or fat cutters the magazine refuses.
@@ -221,10 +215,7 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
         {
             say(
                 &mut out,
-                format!(
-                    "{name}: parting hands the part to a second spindle; {} states {n} spindle(s)",
-                    machine.model
-                ),
+                camcraft_i18n::tf("{name}: parting hands the part to a second spindle; {} states {n} spindle(s)", &[format!("{}", name), format!("{}", machine.model), format!("{}", n)]),
             );
         }
 

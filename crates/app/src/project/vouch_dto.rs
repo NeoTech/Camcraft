@@ -35,14 +35,14 @@ impl VouchDto {
     /// a fidelity flag: a mesh cannot be both vouched for and flagged.
     pub fn check(&self, owner: &str, is_model: bool, flagged: bool) -> Result<(), String> {
         if !is_model {
-            return Err(format!("'{owner}' records a fidelity vouch but is not a model"));
+            return Err(camcraft_i18n::tf("'{owner}' records a fidelity vouch but is not a model", &[format!("{}", owner)]));
         }
         if flagged {
-            return Err(format!("'{owner}' records a fidelity vouch and a fidelity flag at once"));
+            return Err(camcraft_i18n::tf("'{owner}' records a fidelity vouch and a fidelity flag at once", &[format!("{}", owner)]));
         }
         match crate::model_vouch::checked_by(&self.by) {
             Ok(by) if by == self.by => Ok(()),
-            _ => Err(format!("'{owner}' records a fidelity vouch with no usable name")),
+            _ => Err(camcraft_i18n::tf("'{owner}' records a fidelity vouch with no usable name", &[format!("{}", owner)])),
         }
     }
 }

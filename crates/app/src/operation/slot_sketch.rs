@@ -53,24 +53,19 @@ fn resolve(world: &World, items: &[GeoSel]) -> Result<SlotBound, GenError> {
     let mut chains: Vec<(String, bool, Vec<Point2>)> = Vec::new();
     visit_src_chains(world, &SrcRef::Selection(items.to_vec()), |entity, pose, chain, label| {
         let Some(pose) = pose else {
-            return Err(GenError::Invalid(format!("DXF profile '{entity}' has no stock to lie on - set up stock first")));
+            return Err(GenError::Invalid(camcraft_i18n::tf("DXF profile '{entity}' has no stock to lie on - set up stock first", &[format!("{}", entity)])));
         };
         chains.push((label, chain.is_closed(), transform_chain_pts(pose, &chain.sample(SAMPLE_TOL))?));
         Ok(())
     })?;
     let [(label, closed, pts)] = chains.as_slice() else {
-        return Err(GenError::Invalid(format!(
-            "a slot on a DXF profile cuts one chain, and this selection has {} chains - pick one closed slot outline or one open centerline for each operation",
-            chains.len()
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("a slot on a DXF profile cuts one chain, and this selection has {} chains - pick one closed slot outline or one open centerline for each operation", &[format!("{}", chains.len())])));
     };
     if !*closed {
         return SlotBound::from_centerline(pts).map_err(|e| GenError::Invalid(format!("{label}: {}", bare(&e))));
     }
     let not_slot = |why: String| {
-        GenError::Invalid(format!(
-            "{label} is not a slot outline: {why} - pick a closed line-arc slot loop (two parallel sides and two half-circle ends) or an open straight centerline"
-        ))
+        GenError::Invalid(camcraft_i18n::tf("{label} is not a slot outline: {why} - pick a closed line-arc slot loop (two parallel sides and two half-circle ends) or an open straight centerline", &[format!("{}", label), format!("{}", why)]))
     };
     let ring = Loop::new(pts.clone()).map_err(|e| not_slot(e.to_string()))?;
     let region = Region::new(vec![ring]).map_err(|e| not_slot(e.to_string()))?;
@@ -81,12 +76,7 @@ fn resolve(world: &World, items: &[GeoSel]) -> Result<SlotBound, GenError> {
     let stadium = len * fit.width + std::f64::consts::FRAC_PI_4 * fit.width * fit.width;
     // A NaN on either side refuses.
     if stadium.is_nan() || area.is_nan() || stadium < OUTLINE_COVER * area {
-        return Err(not_slot(format!(
-            "the largest straight slot inside it, {:.3} mm long and {:.3} mm wide, covers only {:.1}% of it",
-            len + fit.width,
-            fit.width,
-            100.0 * stadium / area
-        )));
+        return Err(not_slot(camcraft_i18n::tf("the largest straight slot inside it, {:.3} mm long and {:.3} mm wide, covers only {:.1}% of it", &[format!("{:.3}", len + fit.width), format!("{:.3}", fit.width), format!("{:.1}", 100.0 * stadium / area)])));
     }
     Ok(bound)
 }

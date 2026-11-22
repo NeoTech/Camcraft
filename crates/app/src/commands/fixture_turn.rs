@@ -52,9 +52,7 @@ impl TurnFixture {
         let turn = quat_from_axis_angle(axis, degrees.rem_euclid(360.0).to_radians());
         let rot = settle_rot(prev.rot, quat_mul(turn, prev.rot));
         if rot == prev.rot {
-            return Err(CommandError::Needs(format!(
-                "a turn of {degrees} degrees leaves '{name}' as it stands - nothing to do"
-            )));
+            return Err(CommandError::Needs(camcraft_i18n::tf("a turn of {degrees} degrees leaves '{name}' as it stands - nothing to do", &[format!("{}", degrees), format!("{}", name)])));
         }
         let next = Location { pos: prev.pos, rot };
         let write = MoveFixture::locating(world, name, next)?;
@@ -90,7 +88,7 @@ impl Command for TurnFixture {
 #[must_use]
 pub fn held_message(fixture: &str, held: &[String]) -> String {
     let names = held.iter().map(|n| format!("'{n}'")).collect::<Vec<_>>().join(", ");
-    format!("{names} did not turn with the fixture '{fixture}' - locate them on it again")
+    camcraft_i18n::tf("{names} did not turn with the fixture '{fixture}' - locate them on it again", &[format!("{}", names), format!("{}", fixture)])
 }
 
 /// A component within this of an exact quarter-turn value snaps to it.

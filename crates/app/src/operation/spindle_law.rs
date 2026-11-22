@@ -174,11 +174,9 @@ pub fn set_aside_note(r: &SpindleReading) -> Option<String> {
         return None;
     }
     let pct = shown_pct(r.outlier_share);
-    Some(format!(
-        "the lathe axis was read on the revolved surface; {pct:.1}% of the turned (non-end-face) \
+    Some(camcraft_i18n::tf("the lathe axis was read on the revolved surface; {pct:.1}% of the turned (non-end-face) \
          surface (keyways, flats, holes, eccentric sections) was set aside and is not turned - \
-         machine those features in a later setup"
-    ))
+         machine those features in a later setup", &[format!("{:.1}", pct)]))
 }
 
 /// Refuse by name a part that reads differently about its fitted axis
@@ -217,10 +215,8 @@ fn refusal(r: &SpindleReading, slot: &str) -> GenError {
         ));
     }
     let aside = if r.outlier_share > 0.0 {
-        format!(
-            " (read on the revolved surface; {pct:.1}% of the part's turned (non-end-face) surface - \
-             keyways, flats, holes - set aside)"
-        )
+        camcraft_i18n::tf(" (read on the revolved surface; {pct:.1}% of the part's turned (non-end-face) surface - \
+             keyways, flats, holes - set aside)", &[format!("{:.1}", pct)])
     } else {
         String::new()
     };
@@ -269,7 +265,7 @@ pub(crate) fn post_problem(world: &World, name: &str, e: &Entity) -> Option<Stri
     // the freshness check right after this names that, as it always has.
     let m = super::material_of(world, setup, &op.src).ok()?;
     let why = check(&m.facets, origin, &slot).err()?;
-    Some(format!("{name}: {why} - fix it and regenerate before posting"))
+    Some(camcraft_i18n::tf("{name}: {why} - fix it and regenerate before posting", &[format!("{}", name), format!("{}", why)]))
 }
 
 #[cfg(test)]

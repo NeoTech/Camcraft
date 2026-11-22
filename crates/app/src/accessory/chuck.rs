@@ -54,8 +54,8 @@ impl Accessory {
     /// refused by name for another kind or key.
     pub fn with_grip(mut self, key: &str) -> Result<Self, String> {
         let kind = self.label();
-        let grip = Grip::of(key).ok_or_else(|| format!("no grip \"{key}\" (one of {})", Grip::KEYS.join(", ")))?;
-        *self.grip_mut().ok_or_else(|| format!("a {kind} has no jaws to grip {key}"))? = grip;
+        let grip = Grip::of(key).ok_or_else(|| camcraft_i18n::tf("no grip \"{key}\" (one of {})", &[format!("{}", key), format!("{}", Grip::KEYS.join(", "))]))?;
+        *self.grip_mut().ok_or_else(|| camcraft_i18n::tf("a {kind} has no jaws to grip {key}", &[format!("{}", kind), format!("{}", key)]))? = grip;
         Ok(self)
     }
 }
@@ -109,9 +109,9 @@ pub fn fit_to_stock(a: &Accessory, stock: &Aabb) -> Result<(Accessory, Point3), 
         Accessory::ThreeJawChuck(c) => (Accessory::ThreeJawChuck(outside(c)?.gripping(d)), -seat(c)),
         Accessory::FourJawChuck(c) => (Accessory::FourJawChuck(outside(c)?.gripping(d)), -seat(c)),
         Accessory::ColletChuck(c) => (Accessory::ColletChuck(c.gripping(d)), c.nose_length),
-        other => return Err(format!("only a lathe chuck fits to the stock, not a {}", other.label())),
+        other => return Err(camcraft_i18n::tf("only a lathe chuck fits to the stock, not a {}", &[format!("{}", other.label())])),
     };
-    fit.check().map_err(|e| format!("closed on the {d:.3} mm stock: {e}"))?;
+    fit.check().map_err(|e| camcraft_i18n::tf("closed on the {d:.3} mm stock: {e}", &[format!("{:.3}", d), format!("{}", e)]))?;
     Ok((fit, Point3::new(under.x, under.y, under.z + lift)))
 }
 

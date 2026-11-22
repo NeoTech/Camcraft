@@ -73,7 +73,7 @@ pub(crate) fn profile_view(world: &World, name: &str) -> Option<Value> {
 pub(crate) fn v_import_dxf(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a DXF path")?);
     if args.len() > 2 {
-        return Err(format!("importDxf takes a path and one options object, got {} arguments", args.len()));
+        return Err(camcraft_i18n::tf("importDxf takes a path and one options object, got {} arguments", &[format!("{}", args.len())]));
     }
     let given = match args.get(1) {
         None | Some(Value::Null) => Default::default(),
@@ -82,27 +82,24 @@ pub(crate) fn v_import_dxf(env: &mut Env, args: Vec<Value>) -> Result<Value, Str
     let text = |key: &str| match given.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
-        Some(other) => Err(format!("\"{key}\" must be a string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a string, got {other}", &[format!("{}", key), format!("{}", other)])),
     };
     let units = match text("units")?.as_deref() {
         None => None,
         Some("mm") => Some(Unit::Millimeters),
         Some("in") => Some(Unit::Inches),
-        Some(other) => return Err(format!("\"units\" must be \"mm\" or \"in\", not \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"units\" must be \"mm\" or \"in\", not \"{other}\"", &[format!("{}", other)])),
     };
     let join_tolerance = match given.get("join_tol") {
         None | Some(Value::Null) => None,
-        Some(v) => Some(v.as_f64().ok_or_else(|| format!("\"join_tol\" must be a number in mm, got {v}"))?),
+        Some(v) => Some(v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"join_tol\" must be a number in mm, got {v}", &[format!("{}", v)]))?),
     };
     let options = DxfOptions { units, join_tolerance, name: text("name")? };
     let cmd = ImportDxf::new(&env.world, text("setup")?.as_deref(), &path, &options).map_err(|e| e.to_string())?;
     let name = cmd.name().to_owned();
     env.history.execute(&env.world, cmd);
-    let mut out = profile_view(&env.world, &name).ok_or_else(|| format!("the DXF profile '{name}' did not land"))?;
+    let mut out = profile_view(&env.world, &name).ok_or_else(|| camcraft_i18n::tf("the DXF profile '{name}' did not land", &[format!("{}", name)]))?;
     let used = out["units"]["used"].as_str().unwrap_or_default().to_owned();
-    out["summary"] = json!(format!(
-        "'{name}' placed on the stock top: {} primitives read in {used}, {} closed and {} open chains, {} rejected, {} entities skipped",
-        out["primitives"], out["chains"]["closed"], out["chains"]["open"], out["chains"]["rejected"], out["skipped_total"],
-    ));
+    out["summary"] = json!(camcraft_i18n::tf("'{name}' placed on the stock top: {} primitives read in {used}, {} closed and {} open chains, {} rejected, {} entities skipped", &[format!("{}", name), format!("{}", out["primitives"]), format!("{}", used), format!("{}", out["chains"]["closed"]), format!("{}", out["chains"]["open"]), format!("{}", out["chains"]["rejected"]), format!("{}", out["skipped_total"])]));
     Ok(out)
 }

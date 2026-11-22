@@ -77,7 +77,7 @@ impl PlateDef {
     /// `at` turned `yaw_deg`, or why not (named).
     pub fn local_pose(&self, at: &MountAt, yaw_deg: f64) -> Result<Location, String> {
         if !yaw_deg.is_finite() {
-            return Err(format!("the turn on the plate must be finite (got {yaw_deg})"));
+            return Err(camcraft_i18n::tf("the turn on the plate must be finite (got {yaw_deg})", &[format!("{}", yaw_deg)]));
         }
         let (x, y, heading) = match at {
             MountAt::Hole(h) => {
@@ -89,7 +89,7 @@ impl PlateDef {
                 let (ax, ay) = g.locate(a).map_err(|e| format!("dowel {e}"))?;
                 let (bx, by) = g.locate(b).map_err(|e| format!("dowel {e}"))?;
                 if (bx - ax).hypot(by - ay) < 1e-9 {
-                    return Err(format!("a dowel pair needs two different holes (got {} twice)", a.trim()));
+                    return Err(camcraft_i18n::tf("a dowel pair needs two different holes (got {} twice)", &[format!("{}", a.trim())]));
                 }
                 (ax, ay, (by - ay).atan2(bx - ax))
             }
@@ -125,7 +125,7 @@ pub fn on_the_plate(plate: &[Triangle], fixture: &[Triangle], local: Location) -
         .ok_or("the fixture has no geometry")?;
     for (side, over) in [("-X", pb[0] - fb[0]), ("-Y", pb[1] - fb[1]), ("+X", fb[2] - pb[2]), ("+Y", fb[3] - pb[3])] {
         if over > EDGE_TOL {
-            return Err(format!("it would hang {over:.3} mm off the plate's {side} edge"));
+            return Err(camcraft_i18n::tf("it would hang {over:.3} mm off the plate's {side} edge", &[format!("{:.3}", over), format!("{}", side)]));
         }
     }
     Ok(())

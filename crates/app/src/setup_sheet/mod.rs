@@ -94,7 +94,7 @@ pub fn render(world: &World, setup_name: Option<&str>) -> Result<String, String>
     if let Some(s) = setup_name
         && !setup::exists(world, s)
     {
-        return Err(format!("no setup named '{s}' in this document"));
+        return Err(camcraft_i18n::tf("no setup named '{s}' in this document", &[format!("{}", s)]));
     }
     // The resolved context every lookup below stands in for. `None`
     // stays `None` - the setup resolvers read that as the first setup
@@ -104,7 +104,7 @@ pub fn render(world: &World, setup_name: Option<&str>) -> Result<String, String>
     let title = target.clone().unwrap_or_else(|| "Implicit".to_string());
 
     let mut out = String::new();
-    out.push_str(&format!("SETUP SHEET - {title}\n"));
+    out.push_str(&camcraft_i18n::tf("SETUP SHEET - {title}\n", &[format!("{}", title)]));
     out.push_str("LAW: every number is resolved from the live document at render\n");
     out.push_str("     time (no timestamps - the same document renders byte-identical).\n");
     out.push_str("     Operations follow the program law: setup rank, then position.\n");
@@ -135,7 +135,7 @@ pub fn render_all(world: &World) -> Vec<(String, String)> {
     if names.is_empty() {
         return vec![(
             "Implicit".to_string(),
-            render(world, None).unwrap_or_else(|e| format!("(render failed: {e})")),
+            render(world, None).unwrap_or_else(|e| camcraft_i18n::tf("(render failed: {e})", &[format!("{}", e)])),
         )];
     }
     names
@@ -161,14 +161,8 @@ pub fn simulate_verdict(world: &World) -> String {
 fn sim_line(world: &World) -> String {
     match crate::stock_sim::simulate_document(world) {
         Ok(sim) if sim.dev.is_clean() => "SIM: clean - within deviation tolerance".to_string(),
-        Ok(sim) => format!(
-            "SIM: {} rest cell(s) (max {} mm), {} gouge cell(s) (max {} mm)",
-            sim.dev.rest_cells,
-            mm(sim.dev.max_rest),
-            sim.dev.gouge_cells,
-            mm(sim.dev.max_gouge),
-        ),
-        Err(e) => format!("SIM: not judged - {e}"),
+        Ok(sim) => camcraft_i18n::tf("SIM: {} rest cell(s) (max {} mm), {} gouge cell(s) (max {} mm)", &[format!("{}", sim.dev.rest_cells), format!("{}", mm(sim.dev.max_rest)), format!("{}", sim.dev.gouge_cells), format!("{}", mm(sim.dev.max_gouge))]),
+        Err(e) => camcraft_i18n::tf("SIM: not judged - {e}", &[format!("{}", e)]),
     }
 }
 

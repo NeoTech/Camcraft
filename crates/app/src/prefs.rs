@@ -136,7 +136,7 @@ impl ViewPrefs {
     /// whole file; a theme name or colour-vision word this build does not
     /// know falls back to that preference's default, named in the notes.
     pub fn from_json(text: &str) -> Result<(Self, Vec<String>), String> {
-        let disk: OnDisk = serde_json::from_str(text).map_err(|e| format!("not a preferences file ({e})"))?;
+        let disk: OnDisk = serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("not a preferences file ({e})", &[format!("{}", e)]))?;
         if disk.format != FORMAT {
             return Err(format!("format '{}' is not {FORMAT}", disk.format));
         }
@@ -149,7 +149,7 @@ impl ViewPrefs {
                 ThemeRef::Named(n)
             }
             Some(ThemeOnDisk::Named(n)) => {
-                notes.push(format!("theme '{n}' is not a built-in - using dark"));
+                notes.push(camcraft_i18n::tf("theme '{n}' is not a built-in - using dark", &[format!("{}", n)]));
                 ThemeRef::Dark
             }
         };
@@ -158,7 +158,7 @@ impl ViewPrefs {
             Some(w) => match ColorVision::ALL.into_iter().find(|c| vision_word(*c) == w) {
                 Some(c) => c,
                 None => {
-                    notes.push(format!("colour-vision mode '{w}' is not known - using off"));
+                    notes.push(camcraft_i18n::tf("colour-vision mode '{w}' is not known - using off", &[format!("{}", w)]));
                     ColorVision::Off
                 }
             },
@@ -171,7 +171,7 @@ impl ViewPrefs {
             None => None,
             Some(t) if valid_language_tag(&t) => Some(t),
             Some(t) => {
-                notes.push(format!("language '{t}' is not a language tag - following the system locale"));
+                notes.push(camcraft_i18n::tf("language '{t}' is not a language tag - following the system locale", &[format!("{}", t)]));
                 None
             }
         };
@@ -205,7 +205,7 @@ pub fn load(path: &Path) -> (ViewPrefs, Option<String>) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ViewPrefs::default(), None),
         Err(e) => {
-            let why = format!("preferences not read ({}): {e} - using the defaults", path.display());
+            let why = camcraft_i18n::tf("preferences not read ({}): {e} - using the defaults", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             return (ViewPrefs::default(), Some(why));
         }
@@ -218,7 +218,7 @@ pub fn load(path: &Path) -> (ViewPrefs, Option<String>) {
             (p, Some(why))
         }
         Err(e) => {
-            let why = format!("preferences ignored ({}): {e} - using the defaults", path.display());
+            let why = camcraft_i18n::tf("preferences ignored ({}): {e} - using the defaults", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             (ViewPrefs::default(), Some(why))
         }
@@ -305,7 +305,7 @@ pub fn setup_name(raw: &str) -> Result<&str, String> {
         return Err(String::from("the setup needs a name"));
     }
     if name.chars().count() > SETUP_NAME_MAX {
-        return Err(format!("the setup name is longer than {SETUP_NAME_MAX} characters"));
+        return Err(camcraft_i18n::tf("the setup name is longer than {SETUP_NAME_MAX} characters", &[format!("{}", SETUP_NAME_MAX)]));
     }
     if name.chars().any(char::is_control) {
         return Err(String::from("the setup name has a control character"));
@@ -338,7 +338,7 @@ impl PanelSetups {
     /// or a name that stands twice is dropped, named in the notes.
     pub fn from_json(text: &str) -> Result<(Self, Vec<String>), String> {
         let disk: SetupsOnDisk =
-            serde_json::from_str(text).map_err(|e| format!("not a panel setup file ({e})"))?;
+            serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("not a panel setup file ({e})", &[format!("{}", e)]))?;
         if disk.format != SETUPS_FORMAT {
             return Err(format!("format '{}' is not {SETUPS_FORMAT}", disk.format));
         }
@@ -353,11 +353,11 @@ impl PanelSetups {
                 }
             };
             if !raw.dock.is_object() {
-                notes.push(format!("setup '{name}' is dropped: its arrangement is not a saved dock"));
+                notes.push(camcraft_i18n::tf("setup '{name}' is dropped: its arrangement is not a saved dock", &[format!("{}", name)]));
                 continue;
             }
             if setups.iter().any(|s| s.name == name) {
-                notes.push(format!("setup '{name}' stands twice - the second one is dropped"));
+                notes.push(camcraft_i18n::tf("setup '{name}' stands twice - the second one is dropped", &[format!("{}", name)]));
                 continue;
             }
             setups.push(SavedSetup { name, dock: raw.dock });
@@ -367,11 +367,11 @@ impl PanelSetups {
             None => None,
             Some(Ok(n)) if setups.iter().any(|s| s.name == n) => Some(n.to_owned()),
             Some(Ok(n)) => {
-                notes.push(format!("the last setup '{n}' is not in the file - starting with the default"));
+                notes.push(camcraft_i18n::tf("the last setup '{n}' is not in the file - starting with the default", &[format!("{}", n)]));
                 None
             }
             Some(Err(why)) => {
-                notes.push(format!("the last setup name is dropped: {why}"));
+                notes.push(camcraft_i18n::tf("the last setup name is dropped: {why}", &[format!("{}", why)]));
                 None
             }
         };
@@ -423,7 +423,7 @@ pub fn load_setups(path: &Path) -> (PanelSetups, Option<String>) {
             return (PanelSetups::default(), None);
         }
         Err(e) => {
-            let why = format!("panel setups not read ({}): {e} - the defaults are used", path.display());
+            let why = camcraft_i18n::tf("panel setups not read ({}): {e} - the defaults are used", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             return (PanelSetups::default(), Some(why));
         }
@@ -431,12 +431,12 @@ pub fn load_setups(path: &Path) -> (PanelSetups, Option<String>) {
     match PanelSetups::from_json(&text) {
         Ok((p, notes)) if notes.is_empty() => (p, None),
         Ok((p, notes)) => {
-            let why = format!("panel setups ({}): {}", path.display(), notes.join("; "));
+            let why = camcraft_i18n::tf("panel setups ({}): {}", &[format!("{}", path.display()), format!("{}", notes.join("; "))]);
             tracing::warn!("{why}");
             (p, Some(why))
         }
         Err(e) => {
-            let why = format!("panel setups ignored ({}): {e} - the defaults are used", path.display());
+            let why = camcraft_i18n::tf("panel setups ignored ({}): {e} - the defaults are used", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             (PanelSetups::default(), Some(why))
         }

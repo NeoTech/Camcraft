@@ -33,7 +33,7 @@ use crate::schema::{FixtureDef, Location};
 fn jaw_named(world: &World, name: &str) -> Result<(FixtureDef, JawParams, Location), CommandError> {
     let e = model::find_by_name(world, name).ok_or_else(|| CommandError::NotFound(name.to_owned()))?;
     let def = fixture::def_of(world, &e).ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a fixture")))?;
-    let jaw = def.mod_jaw.clone().ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a mod vise jaw block")))?;
+    let jaw = def.mod_jaw.clone().ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a mod vise jaw block", &[format!("{}", name)])))?;
     Ok((def, jaw, model::transform_of(world, &e).unwrap_or_default()))
 }
 
@@ -89,10 +89,7 @@ impl SetModJaw {
     pub fn new(world: &World, name: &str, params: JawParams) -> Result<Self, CommandError> {
         let (prev, old, before) = jaw_named(world, name)?;
         if params.side != old.side {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is the {} of its pair - an edit keeps its side (place a new pair to change it)",
-                old.what()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is the {} of its pair - an edit keeps its side (place a new pair to change it)", &[format!("{}", name), format!("{}", old.what())])));
         }
         let facets = params.mesh().map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
         let after = match &prev.plate.mount {
@@ -159,27 +156,27 @@ impl RefitModVise {
         let (fdef, fj, _) = jaw_named(world, fixed)?;
         let (prev, aj, before) = jaw_named(world, adjustable)?;
         if fj.side != JawSide::Fixed {
-            return Err(CommandError::Invalid(format!("'{fixed}' is the {}, not the fixed jaw block of a pair", fj.what())));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{fixed}' is the {}, not the fixed jaw block of a pair", &[format!("{}", fixed), format!("{}", fj.what())])));
         }
         if aj.side != JawSide::Adjustable {
-            return Err(CommandError::Invalid(format!("'{adjustable}' is the {} - only the adjustable jaw block is re-fitted", aj.what())));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{adjustable}' is the {} - only the adjustable jaw block is re-fitted", &[format!("{}", adjustable), format!("{}", aj.what())])));
         }
-        let not_on = |n: &str| CommandError::Invalid(format!("'{n}' is not bolted to a plate's hole - re-place the pair"));
+        let not_on = |n: &str| CommandError::Invalid(camcraft_i18n::tf("'{n}' is not bolted to a plate's hole - re-place the pair", &[format!("{}", n)]));
         let fm = fdef.plate.mount.clone().ok_or_else(|| not_on(fixed))?;
         let am = prev.plate.mount.clone().ok_or_else(|| not_on(adjustable))?;
         let MountAt::Hole(at) = &fm.at else { return Err(not_on(fixed)) };
         if fm.plate != am.plate {
-            return Err(CommandError::Invalid(format!("'{fixed}' stands on '{}', '{adjustable}' on '{}' - not one pair", fm.plate, am.plate)));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{fixed}' stands on '{}', '{adjustable}' on '{}' - not one pair", &[format!("{}", fixed), format!("{}", fm.plate), format!("{}", adjustable), format!("{}", am.plate)])));
         }
         if fdef.setup != prev.setup {
-            return Err(CommandError::Invalid(format!("'{fixed}' and '{adjustable}' are in different setups - not one pair")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{fixed}' and '{adjustable}' are in different setups - not one pair", &[format!("{}", fixed), format!("{}", adjustable)])));
         }
         let def = plate_of(world, &fm.plate)?;
         let (pat, plate_mesh) = plate_at(world, &fm.plate)?;
         let stock = model::stock_world_aabb_for(world, prev.setup.as_deref())
-            .ok_or_else(|| CommandError::Invalid(format!("'{adjustable}': its setup has no stock to re-fit the mod vise to")))?;
+            .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{adjustable}': its setup has no stock to re-fit the mod vise to", &[format!("{}", adjustable)])))?;
         let fit = modvise::fit_pair(&def, pat, &fj, &aj.with_slide(0.0), at, fm.yaw_deg, &stock)
-            .map_err(|e| CommandError::Invalid(format!("mod vise '{adjustable}' not re-fitted: {e}")))?;
+            .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("mod vise '{adjustable}' not re-fitted: {e}", &[format!("{}", adjustable), format!("{}", e)])))?;
         let params = aj.with_slide(fit.slide);
         let facets = params.mesh().map_err(|e| CommandError::Invalid(format!("'{adjustable}': {e}")))?;
         let m = PlateMount { plate: fm.plate.clone(), at: MountAt::Hole(fit.adjustable_at.clone()), yaw_deg: fit.yaw_deg + 180.0 };
@@ -225,7 +222,7 @@ pub fn partner_of(world: &World, adjustable: &str) -> Result<String, CommandErro
         .plate
         .mount
         .map(|m| m.plate)
-        .ok_or_else(|| CommandError::Invalid(format!("'{adjustable}' is not bolted to a plate - re-place the pair")))?;
+        .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{adjustable}' is not bolted to a plate - re-place the pair", &[format!("{}", adjustable)])))?;
     let fixed: Vec<String> = mount::riders(world, &plate)
         .into_iter()
         .filter(|n| {
@@ -236,12 +233,8 @@ pub fn partner_of(world: &World, adjustable: &str) -> Result<String, CommandErro
         .collect();
     match fixed.as_slice() {
         [one] => Ok(one.clone()),
-        [] => Err(CommandError::Invalid(format!("'{plate}' carries no fixed jaw block for '{adjustable}' to clamp against"))),
-        many => Err(CommandError::Invalid(format!(
-            "'{plate}' carries {} fixed jaw blocks ({}) - name the one '{adjustable}' clamps against",
-            many.len(),
-            many.join(", ")
-        ))),
+        [] => Err(CommandError::Invalid(camcraft_i18n::tf("'{plate}' carries no fixed jaw block for '{adjustable}' to clamp against", &[format!("{}", plate), format!("{}", adjustable)]))),
+        many => Err(CommandError::Invalid(camcraft_i18n::tf("'{plate}' carries {} fixed jaw blocks ({}) - name the one '{adjustable}' clamps against", &[format!("{}", plate), format!("{}", many.len()), format!("{}", many.join(", ")), format!("{}", adjustable)]))),
     }
 }
 

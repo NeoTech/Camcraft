@@ -127,9 +127,7 @@ pub(super) fn face_band_sane(
     for (label, zone) in forbidden {
         let z = turn_region(zone, turn)?;
         if band.intersect(&z)?.area().abs() > 1e-2 {
-            return Err(GenError::Invalid(format!(
-                "Face clears the bounding band of its area, and that band crosses {label} - use a Pocket to follow a shaped area, or move the boundary"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("Face clears the bounding band of its area, and that band crosses {label} - use a Pocket to follow a shaped area, or move the boundary", &[format!("{}", label)])));
         }
     }
     Ok(())

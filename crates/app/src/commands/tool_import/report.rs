@@ -21,7 +21,7 @@ impl ImportMode {
             "add" => Ok(Self::Add),
             "update" => Ok(Self::Update),
             "replace" => Ok(Self::Replace),
-            other => Err(format!("unknown import mode '{other}' (use add, update or replace)")),
+            other => Err(camcraft_i18n::tf("unknown import mode '{other}' (use add, update or replace)", &[format!("{}", other)])),
         }
     }
 
@@ -88,7 +88,7 @@ impl ImportReport {
             }
         }
         if !self.skipped.is_empty() {
-            parts.push(format!("{} already in the document ({})", self.skipped.len(), list(&self.skipped)));
+            parts.push(camcraft_i18n::tf("{} already in the document ({})", &[format!("{}", self.skipped.len()), format!("{}", list(&self.skipped))]));
         }
         if self.holders > 0 {
             parts.push(format!(
@@ -99,7 +99,7 @@ impl ImportReport {
         }
         if self.holders_left_out > 0 {
             let s = if self.holders_left_out == 1 { "" } else { "s" };
-            parts.push(format!("{} holder{s} in the file not imported", self.holders_left_out));
+            parts.push(camcraft_i18n::tf("{} holder{s} in the file not imported", &[format!("{}", self.holders_left_out), format!("{}", s)]));
         }
         parts.join("; ")
     }

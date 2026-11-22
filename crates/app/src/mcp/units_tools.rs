@@ -31,7 +31,7 @@ fn set_units(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let next = match req_str(a, "unit")? {
         "mm" => Unit::Millimeters,
         "inch" => Unit::Inches,
-        other => return Err(format!("\"unit\" must be \"mm\" or \"inch\", not \"{other}\"")),
+        other => return Err(camcraft_i18n::tf("\"unit\" must be \"mm\" or \"inch\", not \"{other}\"", &[format!("{}", other)])),
     };
     let cmd = SetUnits::new(&env.world, next).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);

@@ -28,9 +28,7 @@ pub(super) fn extend_run_to_footprint(
     material: Option<&Region>,
 ) -> Result<Loop, GenError> {
     let ambiguous = || {
-        GenError::Invalid(format!(
-            "{label} and the selection geometry is ambiguous; use a closed chain or a Face pick"
-        ))
+        GenError::Invalid(camcraft_i18n::tf("{label} and the selection geometry is ambiguous; use a closed chain or a Face pick", &[format!("{}", label)]))
     };
     let Some(outer) = envelope
         .loops()

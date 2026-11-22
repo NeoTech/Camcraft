@@ -89,7 +89,7 @@ pub fn to_step(input: &Path, settings: &Settings) -> Result<Vec<u8>, CommandErro
     let input = std::path::absolute(input).map_err(ImportError::Io)?;
     let name = input.file_name().map_or_else(|| input.display().to_string(), |n| n.to_string_lossy().into_owned());
     let sandbox = Sandbox::new(&settings.temp_root).map_err(|e| {
-        CommandError::Needs(format!("no private folder under {} for the conversion: {e}; {NOTHING}", settings.temp_root.display()))
+        CommandError::Needs(camcraft_i18n::tf("no private folder under {} for the conversion: {e}; {NOTHING}", &[format!("{}", settings.temp_root.display()), format!("{}", e), format!("{}", NOTHING)]))
     })?;
     version(&exe, &sandbox, settings)?;
     check(&exe, &input, &name, &sandbox, settings)?;
@@ -101,10 +101,7 @@ pub fn to_step(input: &Path, settings: &Settings) -> Result<Vec<u8>, CommandErro
 fn resolve(settings: &Settings, ext: &str) -> Result<PathBuf, CommandError> {
     if let Some(stated) = &settings.path {
         if !runnable(stated) {
-            return Err(CommandError::Needs(format!(
-                "the cadmpeg path in the preferences ({}) is not a program file; correct it, or clear it to search PATH",
-                stated.display()
-            )));
+            return Err(CommandError::Needs(camcraft_i18n::tf("the cadmpeg path in the preferences ({}) is not a program file; correct it, or clear it to search PATH", &[format!("{}", stated.display())])));
         }
         return std::path::absolute(stated).map_err(|e| ImportError::Io(e).into());
     }
@@ -119,9 +116,7 @@ fn resolve(settings: &Settings, ext: &str) -> Result<PathBuf, CommandError> {
         .map(|dir| dir.join(&program))
         .find(|candidate| runnable(candidate))
         .ok_or_else(|| {
-            CommandError::Needs(format!(
-                "install cadmpeg to import .{ext} files: the program was not found on PATH; or set its path in the preferences"
-            ))
+            CommandError::Needs(camcraft_i18n::tf("install cadmpeg to import .{ext} files: the program was not found on PATH; or set its path in the preferences", &[format!("{}", ext)]))
         })
 }
 
@@ -148,19 +143,11 @@ fn version(exe: &Path, sandbox: &Sandbox, settings: &Settings) -> Result<(), Com
     let line = text.lines().next().unwrap_or_default().trim();
     let word = line.rsplit(char::is_whitespace).next().unwrap_or_default();
     let Some((found, pre_release)) = parse_version(word).filter(|_| out.code == Some(0)) else {
-        return Err(CommandError::Invalid(format!(
-            "{} is not a usable cadmpeg: `--version` printed '{}' ({})",
-            exe.display(),
-            clip(line),
-            exit_text(out.code)
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("{} is not a usable cadmpeg: `--version` printed '{}' ({})", &[format!("{}", exe.display()), format!("{}", clip(line)), format!("{}", exit_text(out.code))])));
     };
     if found < MIN_VERSION || (found == MIN_VERSION && pre_release) {
         let (major, minor, patch) = MIN_VERSION;
-        return Err(CommandError::Needs(format!(
-            "cadmpeg {word} at {} is too old: an import needs {major}.{minor}.{patch} or newer; update cadmpeg",
-            exe.display()
-        )));
+        return Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg {word} at {} is too old: an import needs {major}.{minor}.{patch} or newer; update cadmpeg", &[format!("{}", word), format!("{}", exe.display()), format!("{}", major), format!("{}", minor), format!("{}", patch)])));
     }
     Ok(())
 }
@@ -185,18 +172,18 @@ fn check(exe: &Path, input: &Path, name: &str, sandbox: &Sandbox, settings: &Set
     let args = [OsStr::new("check"), OsStr::new("--json"), input.as_os_str()];
     let out = stage("check", &limits, run::run(exe, &args, sandbox, &limits))?;
     let blocking = serde_json::from_slice::<serde_json::Value>(&out.stdout).ok().map(|report| blocking_findings(&report));
-    let findings = |n: usize| format!("{n} blocking finding{}", if n == 1 { "" } else { "s" });
+    let findings = |n: usize| camcraft_i18n::tf("{n} blocking finding{}", &[format!("{}", n), format!("{}", if n == 1 { "" } else { "s" })]);
     if out.code != Some(0) {
         let detail = match blocking {
             Some(n) if n > 0 => findings(n),
             _ => last_line(&out.stderr),
         };
-        return Err(CommandError::Needs(format!("cadmpeg check refused {name} ({}): {detail}; {NOTHING}", exit_text(out.code))));
+        return Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg check refused {name} ({}): {detail}; {NOTHING}", &[format!("{}", name), format!("{}", exit_text(out.code)), format!("{}", detail), format!("{}", NOTHING)])));
     }
     match blocking {
         Some(0) => Ok(()),
-        Some(n) => Err(CommandError::Needs(format!("cadmpeg check has {} for {name}; {NOTHING}", findings(n)))),
-        None => Err(CommandError::Needs(format!("cadmpeg check gave no report that can be read for {name}; {NOTHING}"))),
+        Some(n) => Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg check has {} for {name}; {NOTHING}", &[format!("{}", findings(n)), format!("{}", name), format!("{}", NOTHING)]))),
+        None => Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg check gave no report that can be read for {name}; {NOTHING}", &[format!("{}", name), format!("{}", NOTHING)]))),
     }
 }
 
@@ -239,14 +226,10 @@ fn convert(exe: &Path, input: &Path, name: &str, sandbox: &Sandbox, settings: &S
     ];
     let out = stage("convert", &limits, run::run(exe, &args, sandbox, &limits))?;
     if out.code != Some(0) {
-        return Err(CommandError::Needs(format!(
-            "cadmpeg convert refused {name} ({}): {}; {NOTHING}",
-            exit_text(out.code),
-            last_line(&out.stderr)
-        )));
+        return Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg convert refused {name} ({}): {}; {NOTHING}", &[format!("{}", name), format!("{}", exit_text(out.code)), format!("{}", last_line(&out.stderr)), format!("{}", NOTHING)])));
     }
     match run::len(&step) {
-        0 => Err(CommandError::Needs(format!("cadmpeg wrote no STEP output for {name}; {NOTHING}"))),
+        0 => Err(CommandError::Needs(camcraft_i18n::tf("cadmpeg wrote no STEP output for {name}; {NOTHING}", &[format!("{}", name), format!("{}", NOTHING)]))),
         size if size > max => Err(oversize(max)),
         _ => run::read_bounded(&step, max).map_err(|e| ImportError::Io(e).into()),
     }
@@ -255,24 +238,21 @@ fn convert(exe: &Path, input: &Path, name: &str, sandbox: &Sandbox, settings: &S
 /// The named refusal of a run that gave no output.
 fn stage(what: &str, limits: &Limits<'_>, result: Result<Output, RunError>) -> Result<Output, CommandError> {
     result.map_err(|error| match error {
-        RunError::Io(e) => CommandError::Needs(format!("cadmpeg did not run `{what}`: {e}; {NOTHING}")),
+        RunError::Io(e) => CommandError::Needs(camcraft_i18n::tf("cadmpeg did not run `{what}`: {e}; {NOTHING}", &[format!("{}", what), format!("{}", e), format!("{}", NOTHING)])),
         RunError::Timeout => {
-            CommandError::Needs(format!("cadmpeg did not finish `{what}` within {:?} and was stopped; {NOTHING}", limits.timeout))
+            CommandError::Needs(camcraft_i18n::tf("cadmpeg did not finish `{what}` within {:?} and was stopped; {NOTHING}", &[format!("{}", what), format!("{:?}", limits.timeout), format!("{}", NOTHING)]))
         }
-        RunError::Flood => CommandError::Needs(format!(
-            "cadmpeg printed more than {} MiB during `{what}` and was stopped; {NOTHING}",
-            run::CAPTURE_MAX >> 20
-        )),
+        RunError::Flood => CommandError::Needs(camcraft_i18n::tf("cadmpeg printed more than {} MiB during `{what}` and was stopped; {NOTHING}", &[format!("{}", run::CAPTURE_MAX >> 20), format!("{}", what), format!("{}", NOTHING)])),
         RunError::Oversize => oversize(limits.watch.map_or(0, |(_, max)| max)),
     })
 }
 
 fn oversize(max: u64) -> CommandError {
-    CommandError::Needs(format!("the STEP file that cadmpeg wrote is larger than the import limit of {max} bytes; {NOTHING}"))
+    CommandError::Needs(camcraft_i18n::tf("the STEP file that cadmpeg wrote is larger than the import limit of {max} bytes; {NOTHING}", &[format!("{}", max), format!("{}", NOTHING)]))
 }
 
 fn exit_text(code: Option<i32>) -> String {
-    code.map_or_else(|| "ended by a signal".to_owned(), |c| format!("exit status {c}"))
+    code.map_or_else(|| "ended by a signal".to_owned(), |c| camcraft_i18n::tf("exit status {c}", &[format!("{}", c)]))
 }
 
 /// The last line of the child's error text that is not empty, clipped.

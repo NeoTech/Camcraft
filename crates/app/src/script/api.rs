@@ -40,7 +40,7 @@ pub(crate) fn v_load(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
 /// document that silently goes nowhere is the silent-wrong answer.
 pub(crate) fn v_save(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     if args.len() > 1 {
-        return Err(format!("save takes at most one path, got {}", args.len()));
+        return Err(camcraft_i18n::tf("save takes at most one path, got {}", &[format!("{}", args.len())]));
     }
     let path = match arg_opt(&args, 0, "a project path")? {
         Some(p) => PathBuf::from(p),
@@ -101,7 +101,7 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
 /// table, or a Hurco WinMax `.TCM` tool library (#300, #2566).
 pub(crate) fn v_export_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     if args.is_empty() || args.len() > 3 {
-        return Err(format!("exportTools takes 1 to 3 arguments, got {}", args.len()));
+        return Err(camcraft_i18n::tf("exportTools takes 1 to 3 arguments, got {}", &[format!("{}", args.len())]));
     }
     let path = PathBuf::from(arg_str(&args, 0, "a tool library path")?);
     let explicit_format = match arg_opt(&args, 1, "format")? {
@@ -136,7 +136,7 @@ pub(crate) fn export_tools(
         .filter(|(_, e)| model::tool_of(&env.world, e).is_some())
         .count();
     std::fs::write(path, text)
-        .map_err(|e| format!("tool library not written to {}: {e}", path.display()))?;
+        .map_err(|e| camcraft_i18n::tf("tool library not written to {}: {e}", &[format!("{}", path.display()), format!("{}", e)]))?;
     Ok(json!({ "path": path.display().to_string(), "tools": count, "format": format.label() }))
 }
 
@@ -145,7 +145,7 @@ pub(crate) fn export_tools(
 /// `ImportTools`, one undo step (#300, #889, #899, #2566).
 pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     if args.is_empty() || args.len() > 5 {
-        return Err(format!("importTools takes 1 to 5 arguments, got {}", args.len()));
+        return Err(camcraft_i18n::tf("importTools takes 1 to 5 arguments, got {}", &[format!("{}", args.len())]));
     }
     let path = PathBuf::from(arg_str(&args, 0, "a tool library path")?);
     let mode = match args.get(1) {
@@ -155,7 +155,7 @@ pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, S
     let holders = match args.get(2) {
         None | Some(Value::Null) => true,
         Some(Value::Bool(b)) => *b,
-        Some(other) => return Err(format!("holders must be true or false, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("holders must be true or false, got {other}", &[format!("{}", other)])),
     };
     let explicit_format = match arg_opt(&args, 3, "format")? {
         None => None,
@@ -178,7 +178,7 @@ pub(crate) fn import_tools(
     explicit_unit: Option<crate::units::Unit>,
 ) -> Result<Value, String> {
     let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        .map_err(|e| camcraft_i18n::tf("cannot read {}: {e}", &[format!("{}", path.display()), format!("{}", e)]))?;
     let unit = explicit_unit.unwrap_or_else(|| crate::units::of(&env.world));
     let (format, library) = crate::tool_table::parse_import(
         &text,
@@ -260,11 +260,7 @@ pub(crate) fn v_generate(env: &mut Env, args: Vec<Value>) -> Result<Value, Strin
 /// the GUI's display-only ghost, never kept, never a toolpath.
 pub fn refusal_text(name: &str, e: &crate::commands::CommandError) -> String {
     match e.ghost() {
-        Some(g) => format!(
-            "{name} - {e} [a partial path of {} move(s){} was built before the refusal; it is not kept]",
-            g.len(),
-            if g.truncated() { ", capped" } else { "" }
-        ),
+        Some(g) => camcraft_i18n::tf("{name} - {e} [a partial path of {} move(s){} was built before the refusal; it is not kept]", &[format!("{}", name), format!("{}", e), format!("{}", g.len()), format!("{}", if g.truncated() { ", capped" } else { "" })]),
         None => format!("{name} - {e}"),
     }
 }

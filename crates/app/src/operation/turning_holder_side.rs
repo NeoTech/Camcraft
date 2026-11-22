@@ -54,10 +54,7 @@ pub(super) fn side_of(xs: impl IntoIterator<Item = f64>) -> Result<f64, String> 
     }
     let (far, near) = if neg > pos { (neg, pos) } else { (pos, neg) };
     if near > ON_AXIS && (near > PAST_CENTRE || far <= 2.0 * PAST_CENTRE) {
-        return Err(format!(
-            "the path stands on both sides of the spindle axis ({:.3} mm on one, {:.3} mm on the other) - which side holds the holder cannot be told; a tip may run at most {PAST_CENTRE} mm past centre",
-            far, near
-        ));
+        return Err(camcraft_i18n::tf("the path stands on both sides of the spindle axis ({:.3} mm on one, {:.3} mm on the other) - which side holds the holder cannot be told; a tip may run at most {PAST_CENTRE} mm past centre", &[format!("{:.3}", far), format!("{:.3}", near), format!("{}", PAST_CENTRE)]));
     }
     Ok(if neg > pos { -1.0 } else { 1.0 })
 }

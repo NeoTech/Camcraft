@@ -33,7 +33,7 @@ pub(super) fn area_ctx_of(world: &World, op: &Operation) -> Option<Result<AreaCt
     }
     let tool = model::find_by_name(world, &op.tool).and_then(|e| model::tool_of(world, &e));
     let Some(tool) = tool else {
-        return Some(Err(GenError::Invalid(format!("no tool named '{}'", op.tool))));
+        return Some(Err(GenError::Invalid(camcraft_i18n::tf("no tool named '{}'", &[format!("{}", op.tool)]))));
     };
     let setup = op.setup.as_deref();
     let material = match material_of(world, setup, &op.src) {
@@ -67,7 +67,7 @@ pub(super) const TILT_NO_DIRECTION: &str = "the 3+2 index commands no direction 
 fn build(world: &World, op: &Operation, tool_r: f64, material: &Material, part_solid: bool) -> Result<AreaCtx, GenError> {
     let kind = op.params.kind();
     if let Some(why) = area_unsupported(kind) {
-        return Err(GenError::Invalid(format!("{why}; its Boundary settings must stay at their defaults")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{why}; its Boundary settings must stay at their defaults", &[format!("{}", why)])));
     }
     // The 3+2 index (M11.5 owed): the law runs in the frame the planar
     // generator runs in - the stock outline, the part silhouette, the
@@ -359,5 +359,5 @@ pub(super) fn area_stale_reason(world: &World, op: &Operation) -> Option<String>
     op.area
         .picks()
         .find(|g| model::find_by_name(world, &g.entity).is_none())
-        .map(|g| format!("a Boundary pick names '{}', which was deleted", g.entity))
+        .map(|g| camcraft_i18n::tf("a Boundary pick names '{}', which was deleted", &[format!("{}", g.entity)]))
 }

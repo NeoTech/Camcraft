@@ -51,12 +51,10 @@ pub use super::fixture_move::MoveFixture;
 pub(crate) fn check_location(location: Location, what: &str) -> Result<Location, CommandError> {
     let mut location = location;
     location.rot = normalize_quat(location.rot).ok_or_else(|| {
-        CommandError::Invalid(format!("{what} rotation is not a quaternion"))
+        CommandError::Invalid(camcraft_i18n::tf("{what} rotation is not a quaternion", &[format!("{}", what)]))
     })?;
     if !location.pos.is_finite() {
-        return Err(CommandError::Invalid(format!(
-            "{what} placement must be finite"
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("{what} placement must be finite", &[format!("{}", what)])));
     }
     Ok(location)
 }
@@ -87,9 +85,7 @@ impl TagFixture {
     pub fn new(world: &World, name: &str, setup_name: Option<&str>) -> Result<Self, CommandError> {
         let entity = require_writable(world, name)?;
         if !model::is_model(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is not a model, so it cannot be marked as a fixture - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a model, so it cannot be marked as a fixture - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data", &[format!("{}", name)])));
         }
         if let Some(s) = setup_name
             && !setup::exists(world, s)

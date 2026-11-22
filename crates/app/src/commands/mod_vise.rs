@@ -68,7 +68,7 @@ impl PlaceModVisePair {
         let stock = model::stock_world_aabb_for(world, setup.as_deref())
             .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup.as_deref(), "the mod vise to")))?;
         let fit = modvise::fit_pair(&def, plate_at, fixed, adjustable, at, yaw_deg, &stock)
-            .map_err(|e| CommandError::Invalid(format!("mod vise on '{plate}': {e}")))?;
+            .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("mod vise on '{plate}': {e}", &[format!("{}", plate), format!("{}", e)])))?;
         let fixed_cmd = block(world, plate, setup.as_deref(), fixed.with_slide(0.0), &fit.fixed_at, fit.yaw_deg)?;
         let adj = adjustable.with_slide(fit.slide);
         // The names differ by side ("Mod vise fixed ..." / "... adjustable
@@ -139,16 +139,13 @@ pub(crate) fn judge_face(name: &str, jaw: &JawParams, before: Option<f64>, after
     let Some(after) = after else { return Ok(None) };
     let side = jaw.side.word();
     if after < -deep && before.is_none_or(|b| after < b - deep) {
-        return Err(CommandError::Invalid(format!(
-            "{cause} would put mod vise '{name}''s {side} jaw {:.3} mm into the stock - {hint}",
-            -after
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("{cause} would put mod vise '{name}''s {side} jaw {:.3} mm into the stock - {hint}", &[format!("{}", cause), format!("{}", name), format!("{}", side), format!("{:.3}", -after), format!("{}", hint)])));
     }
     if let Some(before) = before
         && after > deep
         && after > before + deep
     {
-        return Ok(Some(format!("{cause} leaves mod vise '{name}''s {side} jaw {after:.3} mm off the stock - re-fit the pair to clamp it")));
+        return Ok(Some(camcraft_i18n::tf("{cause} leaves mod vise '{name}''s {side} jaw {after:.3} mm off the stock - re-fit the pair to clamp it", &[format!("{}", cause), format!("{}", name), format!("{}", side), format!("{:.3}", after)])));
     }
     Ok(None)
 }

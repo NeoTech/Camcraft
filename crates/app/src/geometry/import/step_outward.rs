@@ -39,9 +39,7 @@ pub(super) fn turn_outward(mesh: &mut Mesh) -> Option<String> {
         })
         .collect();
     *mesh = Mesh::from_facets(facets);
-    let note = format!(
-        "{bodies} closed solid(s) wound inward (negative volume) were turned outward: {turned} facet(s) reversed"
-    );
+    let note = camcraft_i18n::tf("{bodies} closed solid(s) wound inward (negative volume) were turned outward: {turned} facet(s) reversed", &[format!("{}", bodies), format!("{}", turned)]);
     tracing::warn!("import: {note}");
     Some(note)
 }

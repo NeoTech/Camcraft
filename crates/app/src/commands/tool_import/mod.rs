@@ -68,7 +68,7 @@ fn change_refusal(
     if let Some(c) = crate::tool_cutter::cutter_of(world, &entity)
         && let Err(e) = camcraft_tools::cutter_profile::agrees(next, &c)
     {
-        return Some(format!("tool '{name}': the drawn cutter profile no longer fits: {e}"));
+        return Some(camcraft_i18n::tf("tool '{name}': the drawn cutter profile no longer fits: {e}", &[format!("{}", name), format!("{}", e)]));
     }
     None
 }
@@ -78,17 +78,10 @@ fn validate_library_numbers(library: &[LibraryTool]) -> Result<(), CommandError>
     for entry in library {
         let Some(n) = entry.number else { continue };
         if !crate::tool_numbers::valid(n) {
-            return Err(CommandError::Invalid(format!(
-                "tool '{}': tool number {n} is out of range - tool numbers run {}",
-                entry.name,
-                crate::tool_numbers::RANGE_TEXT
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{}': tool number {n} is out of range - tool numbers run {}", &[format!("{}", entry.name), format!("{}", n), format!("{}", crate::tool_numbers::RANGE_TEXT)])));
         }
         if let Some((other, _)) = seen.iter().find(|(_, num)| *num == n) {
-            return Err(CommandError::Invalid(format!(
-                "tools '{other}' and '{}' both claim T{n}",
-                entry.name
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tools '{other}' and '{}' both claim T{n}", &[format!("{}", other), format!("{}", entry.name), format!("{}", n)])));
         }
         seen.push((entry.name.as_str(), n));
     }
@@ -113,9 +106,7 @@ fn collect_replace_removals(
         if let Some(first) = users.first() {
             let more = users.len().saturating_sub(1);
             let more = if more == 0 { String::new() } else { format!(" (and {more} more)") };
-            return Err(CommandError::Invalid(format!(
-                "replace would remove tool '{name}', but operation {first}{more} uses it - keep it in the library or give the operation another tool; nothing imported"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("replace would remove tool '{name}', but operation {first}{more} uses it - keep it in the library or give the operation another tool; nothing imported", &[format!("{}", name), format!("{}", first), format!("{}", more)])));
         }
         dels.push(DeleteTool::new(world, &name)?);
         removed.push(name);
@@ -130,9 +121,7 @@ fn claim_number(
 ) -> Result<u32, CommandError> {
     if let Some(n) = explicit {
         if let Some((other, _)) = owners.iter().find(|(o, num)| *num == n && o != name) {
-            return Err(CommandError::Invalid(format!(
-                "tool '{name}': tool number T{n} is already '{other}''s"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}': tool number T{n} is already '{other}''s", &[format!("{}", name), format!("{}", n), format!("{}", other)])));
         }
         if !owners.iter().any(|(o, _)| o == name) {
             owners.push((name.to_owned(), n));
@@ -141,10 +130,7 @@ fn claim_number(
     }
     let taken: Vec<u32> = owners.iter().map(|(_, n)| *n).collect();
     let n = crate::tool_numbers::next_free_from(&taken).ok_or_else(|| {
-        CommandError::Invalid(format!(
-            "no free tool numbers remain ({})",
-            crate::tool_numbers::RANGE_TEXT
-        ))
+        CommandError::Invalid(camcraft_i18n::tf("no free tool numbers remain ({})", &[format!("{}", crate::tool_numbers::RANGE_TEXT)]))
     })?;
     owners.push((name.to_owned(), n));
     Ok(n)
@@ -209,7 +195,7 @@ impl ImportTools {
                 return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
             }
             if steps.iter().any(|s| matches!(s, Step::Add(n, ..) if *n == name)) || report_has(&report, &name) {
-                return Err(CommandError::Invalid(format!("tool '{name}' appears twice in the library")));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}' appears twice in the library", &[format!("{}", name)])));
             }
             let body = match body {
                 Some(b) if holders => {
@@ -261,9 +247,7 @@ impl ImportTools {
                     steps.push(Step::Change { name, prev, next: tool, prev_number, next_number, body });
                 }
                 (Some(_), None) if mode != ImportMode::Add => {
-                    return Err(CommandError::Invalid(format!(
-                        "'{name}' in the library names something in the document that is not a tool; nothing imported"
-                    )));
+                    return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' in the library names something in the document that is not a tool; nothing imported", &[format!("{}", name)])));
                 }
                 _ => {
                     let Some(free) = (2..=9999u32).map(|i| format!("{name} ({i})")).find(|c| !taken(c)) else {

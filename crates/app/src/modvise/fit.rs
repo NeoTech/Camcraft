@@ -63,13 +63,13 @@ fn hole_at(g: &Grid, x: f64, y: f64) -> Result<String, String> {
     let c = ((x - g.x0) / g.pitch_x).round();
     let r = ((y - g.y0) / g.pitch_y).round();
     if !(c.is_finite() && r.is_finite()) || c < 0.0 || r < 0.0 || c >= f64::from(g.cols) || r >= f64::from(g.rows) {
-        return Err(format!("it is off the grid ({})", g.extent()));
+        return Err(camcraft_i18n::tf("it is off the grid ({})", &[format!("{}", g.extent())]));
     }
     let (nx, ny) = g.node(r as u32, c as u32);
     let name = location_name(r as u32, c as u32);
     let off = (x - nx).hypot(y - ny);
     if off > ON_NODE {
-        return Err(format!("it lands {off:.3} mm from the nearest hole {name}, between holes"));
+        return Err(camcraft_i18n::tf("it lands {off:.3} mm from the nearest hole {name}, between holes", &[format!("{:.3}", off), format!("{}", name)]));
     }
     g.locate(&name)?;
     Ok(name)
@@ -81,13 +81,13 @@ fn footprint(plate: &PlateDef, b: &JawParams, o: (f64, f64), d: (f64, f64), e: (
     let at = |p: &[f64; 2]| (o.0 + p[0] * e.0 + p[1] * d.0, o.1 + p[0] * e.1 + p[1] * d.1);
     for p in &b.bolts {
         let (x, y) = at(p);
-        hole_at(&plate.holes, x, y).map_err(|e| format!("the {} bolt at [{:.3}, {:.3}] mm: {e}", b.what(), p[0], p[1]))?;
+        hole_at(&plate.holes, x, y).map_err(|e| camcraft_i18n::tf("the {} bolt at [{:.3}, {:.3}] mm: {e}", &[format!("{}", b.what()), format!("{:.3}", p[0]), format!("{:.3}", p[1]), format!("{}", e)]))?;
     }
     if !b.pins.is_empty() {
-        let dowels = plate.dowels.as_ref().ok_or_else(|| format!("the {} has locating pins, but the plate has no dowel bores", b.what()))?;
+        let dowels = plate.dowels.as_ref().ok_or_else(|| camcraft_i18n::tf("the {} has locating pins, but the plate has no dowel bores", &[format!("{}", b.what())]))?;
         for p in &b.pins {
             let (x, y) = at(p);
-            hole_at(dowels, x, y).map_err(|e| format!("the {} pin at [{:.3}, {:.3}] mm: {e}", b.what(), p[0], p[1]))?;
+            hole_at(dowels, x, y).map_err(|e| camcraft_i18n::tf("the {} pin at [{:.3}, {:.3}] mm: {e}", &[format!("{}", b.what()), format!("{:.3}", p[0]), format!("{:.3}", p[1]), format!("{}", e)]))?;
         }
     }
     Ok(())
@@ -105,7 +105,7 @@ fn quarter(yaw_deg: f64) -> Option<i64> {
 /// footprint law a figure edit of a placed block (`SetModJaw`, #832)
 /// re-runs where the block stands. Refused by name.
 pub fn footprint_at(plate: &PlateDef, b: &JawParams, at: &str, yaw_deg: f64) -> Result<(), String> {
-    let k = quarter(yaw_deg).ok_or_else(|| format!("the {} stands off a quarter turn ({yaw_deg} degrees)", b.what()))?;
+    let k = quarter(yaw_deg).ok_or_else(|| camcraft_i18n::tf("the {} stands off a quarter turn ({yaw_deg} degrees)", &[format!("{}", b.what()), format!("{}", yaw_deg)]))?;
     let (d, e) = axes(k);
     let o = plate.holes.locate(at).map_err(|e| format!("the {}: {e}", b.what()))?;
     footprint(plate, b, o, d, e)
@@ -145,10 +145,10 @@ pub fn fit_pair(
         return Err("a mod vise pair is a fixed and an adjustable jaw block".into());
     }
     let k = quarter(yaw_deg)
-        .ok_or_else(|| format!("a mod vise pair runs along a grid row or column: turn it 0, 90, 180 or 270 degrees (got {yaw_deg})"))?;
+        .ok_or_else(|| camcraft_i18n::tf("a mod vise pair runs along a grid row or column: turn it 0, 90, 180 or 270 degrees (got {yaw_deg})", &[format!("{}", yaw_deg)]))?;
     let (d, e) = axes(k);
     let (along_pitch, across_pitch) = if k.rem_euclid(2) == 0 { (plate.holes.pitch_y, plate.holes.pitch_x) } else { (plate.holes.pitch_x, plate.holes.pitch_y) };
-    let o = plate.holes.locate(at).map_err(|e| format!("the fixed jaw block: {e}"))?;
+    let o = plate.holes.locate(at).map_err(|e| camcraft_i18n::tf("the fixed jaw block: {e}", &[format!("{}", e)]))?;
     let fixed_at = hole_at(&plate.holes, o.0, o.1)?;
     footprint(plate, fixed, o, d, e)?;
 
@@ -170,24 +170,20 @@ pub fn fit_pair(
     }
     let t_fixed = fixed.face_y();
     if t_near < t_fixed - TOL {
-        return Err(format!(
-            "the stock reaches {:.3} mm into the fixed jaw block at {fixed_at} - place it clear of the stock (its face is {:.3} mm in front of its hole)",
-            t_fixed - t_near,
-            t_fixed
-        ));
+        return Err(camcraft_i18n::tf("the stock reaches {:.3} mm into the fixed jaw block at {fixed_at} - place it clear of the stock (its face is {:.3} mm in front of its hole)", &[format!("{:.3}", t_fixed - t_near), format!("{}", fixed_at), format!("{:.3}", t_fixed)]));
     }
     let top = plate.top_z;
     if z_lo < top - TOL {
-        return Err(format!("the stock reaches {:.3} mm below the plate top - it must sit on the plate", top - z_lo));
+        return Err(camcraft_i18n::tf("the stock reaches {:.3} mm below the plate top - it must sit on the plate", &[format!("{:.3}", top - z_lo)]));
     }
     let grip = fixed.jaw_height.min(adjustable.jaw_height);
     if z_lo >= top + grip - TOL {
-        return Err(format!("the stock sits {:.3} mm above the plate, over the jaws ({grip:.3} mm tall)", z_lo - top));
+        return Err(camcraft_i18n::tf("the stock sits {:.3} mm above the plate, over the jaws ({grip:.3} mm tall)", &[format!("{:.3}", z_lo - top), format!("{:.3}", grip)]));
     }
     let between = |centre: f64, width: f64, what: &str| {
         let (a, b) = (centre - 0.5 * width, centre + 0.5 * width);
         if u_hi <= a + TOL || u_lo >= b - TOL {
-            Err(format!("the stock is beside the {what}, not between the jaws"))
+            Err(camcraft_i18n::tf("the stock is beside the {what}, not between the jaws", &[format!("{}", what)]))
         } else {
             Ok(())
         }
@@ -215,15 +211,12 @@ pub fn fit_pair(
         }
     }
     let Some((t_a, gap)) = pick else {
-        return Err(format!("the grid ends before a hole past the stock along the line of {fixed_at} - no place for the adjustable jaw block"));
+        return Err(camcraft_i18n::tf("the grid ends before a hole past the stock along the line of {fixed_at} - no place for the adjustable jaw block", &[format!("{}", fixed_at)]));
     };
     let oa = (o.0 + t_a * d.0 + lat * e.0, o.1 + t_a * d.1 + lat * e.1);
-    let adjustable_at = hole_at(&plate.holes, oa.0, oa.1).map_err(|e| format!("the adjustable jaw block's place {t_a:.3} mm from {fixed_at}: {e}"))?;
+    let adjustable_at = hole_at(&plate.holes, oa.0, oa.1).map_err(|e| camcraft_i18n::tf("the adjustable jaw block's place {t_a:.3} mm from {fixed_at}: {e}", &[format!("{:.3}", t_a), format!("{}", fixed_at), format!("{}", e)]))?;
     if gap > adjustable.slot_travel + TOL {
-        return Err(format!(
-            "the stock is out of reach: from {adjustable_at}, the nearest hole clear of it, the adjustable jaw block must slide {gap:.3} mm; its slots travel {:.3} mm",
-            adjustable.slot_travel
-        ));
+        return Err(camcraft_i18n::tf("the stock is out of reach: from {adjustable_at}, the nearest hole clear of it, the adjustable jaw block must slide {gap:.3} mm; its slots travel {:.3} mm", &[format!("{}", adjustable_at), format!("{:.3}", gap), format!("{:.3}", adjustable.slot_travel)]));
     }
     let slide = gap.min(adjustable.slot_travel);
     footprint(plate, adjustable, oa, (-d.0, -d.1), (-e.0, -e.1))?;

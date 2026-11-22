@@ -35,7 +35,7 @@ pub fn origin_words(world: &World, ctx: Option<&str>, len: &dyn Fn(f64) -> Strin
 pub fn words_on(pos: Point3, b: &Aabb, what: &str, len: &dyn Fn(f64) -> String) -> String {
     let finite = [pos.x, pos.y, pos.z, b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z];
     if !finite.iter().all(|v| v.is_finite()) {
-        return format!("not known (the origin or the {what} box is not finite)");
+        return camcraft_i18n::tf("not known (the origin or the {what} box is not finite)", &[format!("{}", what)]);
     }
     let side = |v: f64, lo: f64, hi: f64| {
         if (v - lo).abs() <= NEAR {
@@ -50,12 +50,7 @@ pub fn words_on(pos: Point3, b: &Aabb, what: &str, len: &dyn Fn(f64) -> String) 
     };
     let at = (side(pos.x, b.min.x, b.max.x), side(pos.y, b.min.y, b.max.y), side(pos.z, b.min.z, b.max.z));
     let (Some(x), Some(y), Some(z)) = at else {
-        return format!(
-            "off the {what}'s corners: X {} from its left side, Y {} from its front, Z {} from its top",
-            signed(pos.x - b.min.x, len),
-            signed(pos.y - b.min.y, len),
-            signed(pos.z - b.max.z, len),
-        );
+        return camcraft_i18n::tf("off the {what}'s corners: X {} from its left side, Y {} from its front, Z {} from its top", &[format!("{}", what), format!("{}", signed(pos.x - b.min.x, len)), format!("{}", signed(pos.y - b.min.y, len)), format!("{}", signed(pos.z - b.max.z, len))]);
     };
     let level = ["bottom", "mid-height", "top"][z];
     let xs = ["left", "centre", "right"][x];

@@ -61,7 +61,7 @@ fn invalid(why: String) -> CommandError {
 fn plan_moving(world: &World, spec: &LocateSpec) -> Result<fixture_locate::Plan, CommandError> {
     let plan = fixture_locate::plan(world, spec).map_err(invalid)?;
     if fixture_locate::is_still(plan.delta) {
-        return Err(invalid(format!("'{}' already sits that way in '{}' - nothing would move", spec.part, spec.fixture)));
+        return Err(invalid(camcraft_i18n::tf("'{}' already sits that way in '{}' - nothing would move", &[format!("{}", spec.part), format!("{}", spec.fixture)])));
     }
     Ok(plan)
 }

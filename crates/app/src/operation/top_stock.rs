@@ -24,10 +24,8 @@ pub(super) fn note(
         return;
     };
     if let Some(remaining) = carried(Some(top), region, stock, prior) {
-        path.notes.push(format!(
-            "{TOP_STOCK_WARNING} the operation's top Z{top:.3} is below the stock top Z{remaining:.3} over its region - \
-             approach rapids may enter uncut stock; raise Top or face first"
-        ));
+        path.notes.push(camcraft_i18n::tf("{TOP_STOCK_WARNING} the operation's top Z{top:.3} is below the stock top Z{remaining:.3} over its region - \
+             approach rapids may enter uncut stock; raise Top or face first", &[format!("{}", TOP_STOCK_WARNING), format!("{:.3}", top), format!("{:.3}", remaining)]));
     }
 }
 
@@ -149,11 +147,8 @@ pub const CARRIED_STOCK_NOTE: &str = "Carried stock:";
 
 pub(super) fn carried_note(path: &mut Toolpath, top: Option<f64>, material_top: Option<f64>) {
     if let (Some(top), Some(m)) = (top, material_top) {
-        path.notes.push(format!(
-            "{CARRIED_STOCK_NOTE} the operation's top Z{top:.3} is below the material over its region (Z{m:.3}) - \
-             the first descent starts over that material and feeds down; the first level engages {:.3} mm",
-            m - top
-        ));
+        path.notes.push(camcraft_i18n::tf("{CARRIED_STOCK_NOTE} the operation's top Z{top:.3} is below the material over its region (Z{m:.3}) - \
+             the first descent starts over that material and feeds down; the first level engages {:.3} mm", &[format!("{}", CARRIED_STOCK_NOTE), format!("{:.3}", top), format!("{:.3}", m), format!("{:.3}", m - top)]));
     }
 }
 

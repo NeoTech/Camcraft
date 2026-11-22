@@ -42,12 +42,12 @@ impl SetupMachineDto {
     /// file, refused by the setup's name.
     pub fn to_def(&self, setup: &str) -> Result<MachineDef, String> {
         if let Some(r) = self.machine.as_ref().and_then(crate::machine::tooling_refusal) {
-            return Err(format!("setup '{setup}' mounts a machine whose {r}"));
+            return Err(camcraft_i18n::tf("setup '{setup}' mounts a machine whose {r}", &[format!("{}", setup), format!("{}", r)]));
         }
         if let Some(m) = &self.machine
             && !m.is_sane()
         {
-            return Err(format!("setup '{setup}' mounts a machine that states a limit that cannot be meant"));
+            return Err(camcraft_i18n::tf("setup '{setup}' mounts a machine that states a limit that cannot be meant", &[format!("{}", setup)]));
         }
         Ok(MachineDef { path: self.path.clone(), machine: self.machine.clone() })
     }

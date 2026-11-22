@@ -55,13 +55,13 @@ fn check_guide_span(world: &World, setup: Option<&str>, lo: f64, hi: f64) -> Res
         && lo < world_z(lower)?
     {
         let bottom = lo - origin[2];
-        return Err(format!("work bottom Z{bottom:.3} is below the lower guide Z{lower:.3}, outside the guides' reach"));
+        return Err(camcraft_i18n::tf("work bottom Z{bottom:.3} is below the lower guide Z{lower:.3}, outside the guides' reach", &[format!("{:.3}", bottom), format!("{:.3}", lower)]));
     }
     if let Some(upper) = edm.upper_guide_z
         && hi > world_z(upper)?
     {
         let top = hi - origin[2];
-        return Err(format!("work top Z{top:.3} is above the upper guide Z{upper:.3}, outside the guides' reach"));
+        return Err(camcraft_i18n::tf("work top Z{top:.3} is above the upper guide Z{upper:.3}, outside the guides' reach", &[format!("{:.3}", top), format!("{:.3}", upper)]));
     }
     Ok(())
 }
@@ -173,7 +173,7 @@ fn model_sections(world: &World, op: &crate::schema::Operation, hs: &super::Reso
     }
     check_guide_span(world, setup, lo, hi)?;
     let cut = |f: &[Triangle], z: f64, what: &str| {
-        slice::slice(f, z).map_err(|e| format!("the {what}'s section at Z{z:.3} cannot be cut: {e}"))
+        slice::slice(f, z).map_err(|e| camcraft_i18n::tf("the {what}'s section at Z{z:.3} cannot be cut: {e}", &[format!("{}", what), format!("{:.3}", z), format!("{}", e)]))
     };
     let mut sections = Vec::new();
     for z in planes(lo, hi) {
@@ -196,6 +196,6 @@ pub fn cutoff_from(w: &super::types::WireContourOp, path: &crate::cl::Toolpath) 
         return Err("the tabs are not fully stated - the tab count and the start hole place the cut-off".into());
     };
     crate::wire_edm::cutoff_split(path, Point2::new(x, y), n as usize).map(Some).ok_or_else(|| {
-        format!("the path does not hold the tab cut-off its {n} tab(s) state - regenerate it")
+        camcraft_i18n::tf("the path does not hold the tab cut-off its {n} tab(s) state - regenerate it", &[format!("{}", n)])
     })
 }

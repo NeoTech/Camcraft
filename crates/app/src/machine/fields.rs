@@ -298,7 +298,7 @@ pub fn set(raw: &mut Value, pointer: &str, kind: FieldKind, text: &str) -> Resul
         .map(|t| t.replace("~1", "/").replace("~0", "~"))
         .collect();
     let Some((last, path)) = toks.split_last() else {
-        return Err(format!("{pointer}: not a field pointer"));
+        return Err(camcraft_i18n::tf("{pointer}: not a field pointer", &[format!("{}", pointer)]));
     };
     let removing = new.is_none();
     let mut at = &mut *raw;
@@ -312,10 +312,10 @@ pub fn set(raw: &mut Value, pointer: &str, kind: FieldKind, text: &str) -> Resul
         at = match at {
             Value::Object(m) => m.entry(t.clone()).or_insert_with(|| Value::Object(Map::new())),
             Value::Array(a) => {
-                let i: usize = t.parse().map_err(|_| format!("{pointer}: {t} is not a list index"))?;
-                a.get_mut(i).ok_or_else(|| format!("{pointer}: entry {t} is not in the list"))?
+                let i: usize = t.parse().map_err(|_| camcraft_i18n::tf("{pointer}: {t} is not a list index", &[format!("{}", pointer), format!("{}", t)]))?;
+                a.get_mut(i).ok_or_else(|| camcraft_i18n::tf("{pointer}: entry {t} is not in the list", &[format!("{}", pointer), format!("{}", t)]))?
             }
-            _ => return Err(format!("{pointer}: {t} sits inside a value that is not an object")),
+            _ => return Err(camcraft_i18n::tf("{pointer}: {t} sits inside a value that is not an object", &[format!("{}", pointer), format!("{}", t)])),
         };
     }
     if at.is_null() && !removing {
@@ -329,7 +329,7 @@ pub fn set(raw: &mut Value, pointer: &str, kind: FieldKind, text: &str) -> Resul
             m.remove(last);
         }
         (Value::Null, None) => {}
-        _ => return Err(format!("{pointer}: {last} sits inside a value that is not an object")),
+        _ => return Err(camcraft_i18n::tf("{pointer}: {last} sits inside a value that is not an object", &[format!("{}", pointer), format!("{}", last)])),
     }
     if removing {
         prune(raw, path);

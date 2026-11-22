@@ -67,10 +67,7 @@ fn planar_check(runs: &[Run], seq: &[(usize, bool)]) -> Result<(), GenError> {
         return Ok(());
     }
     let names = entities_of(runs, seq.iter().map(|(j, _)| *j));
-    Err(GenError::Invalid(format!(
-        "the picked edges of {} meet end to end but lie on different planes (Z {lo:.3} to {hi:.3}) - a stitched ring must be planar; pick the edges on one plane, or machine each model on its own",
-        name_list(&names)
-    )))
+    Err(GenError::Invalid(camcraft_i18n::tf("the picked edges of {} meet end to end but lie on different planes (Z {lo:.3} to {hi:.3}) - a stitched ring must be planar; pick the edges on one plane, or machine each model on its own", &[format!("{}", name_list(&names)), format!("{:.3}", lo), format!("{:.3}", hi)])))
 }
 
 /// The fork refusal: the runs at the junction `at` (indices into `runs`,
@@ -83,12 +80,7 @@ fn planar_check(runs: &[Run], seq: &[(usize, bool)]) -> Result<(), GenError> {
 pub(super) fn fork_refusal(runs: &[Run], at: &[usize], far: (i64, i64)) -> GenError {
     let names = entities_of(runs, at.iter().copied());
     let ways = at.len();
-    GenError::Invalid(format!(
-        "the picked edges of {} meet {ways} ways at ({:.3}, {:.3}) - a ring across models must meet end to end, one way on; remove the stray edge, or pick one model's loop",
-        name_list(&names),
-        far.0 as f64 / 1e6,
-        far.1 as f64 / 1e6,
-    ))
+    GenError::Invalid(camcraft_i18n::tf("the picked edges of {} meet {ways} ways at ({:.3}, {:.3}) - a ring across models must meet end to end, one way on; remove the stray edge, or pick one model's loop", &[format!("{}", name_list(&names)), format!("{}", ways), format!("{:.3}", far.0 as f64 / 1e6), format!("{:.3}", far.1 as f64 / 1e6)]))
 }
 
 /// The distinct entity names behind `ixs`, in first-seen order.

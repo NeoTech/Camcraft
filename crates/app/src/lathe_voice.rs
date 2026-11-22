@@ -79,16 +79,12 @@ pub fn voice(params: &OpParams, path: &Toolpath, origin: [f64; 3]) -> LatheVoice
     match params {
         OpParams::Drill { .. } => match off_centre(path, origin) {
             None => LatheVoice::WorkSpindle,
-            Some(what) => LatheVoice::Refused(format!(
-                "a Drill operation would be posted on the work spindle with {what} - a lathe post drills with the work \
+            Some(what) => LatheVoice::Refused(camcraft_i18n::tf("a Drill operation would be posted on the work spindle with {what} - a lathe post drills with the work \
                  turning and the drill standing still, which is only right for a hole on the spindle axis; keep the \
-                 on-centre holes in an operation of their own and {FIX}"
-            )),
+                 on-centre holes in an operation of their own and {FIX}", &[format!("{}", what), format!("{}", FIX)])),
         },
-        OpParams::Probe { .. } => LatheVoice::Refused(format!(
-            "a Probe operation cannot be posted through a lathe post - it would open the section on the work spindle \
-             and writes no probing; {FIX}"
-        )),
+        OpParams::Probe { .. } => LatheVoice::Refused(camcraft_i18n::tf("a Probe operation cannot be posted through a lathe post - it would open the section on the work spindle \
+             and writes no probing; {FIX}", &[format!("{}", FIX)])),
         OpParams::PlasmaProfile(_) => LatheVoice::Refused(
             "a Plasma Profile operation cannot be posted through a lathe post - it would open the section on the work \
              spindle, and a torch has none; post it through a plasma post, or suppress the operation"
@@ -101,11 +97,9 @@ pub fn voice(params: &OpParams, path: &Toolpath, origin: [f64; 3]) -> LatheVoice
              spindle, and a wire EDM has none; cut it on a wire EDM machine, or suppress the operation"
                 .to_owned(),
         ),
-        _ => LatheVoice::Refused(format!(
-            "a {kind} operation would be posted on the work spindle - a lathe post turns the work at the tool's speed \
+        _ => LatheVoice::Refused(camcraft_i18n::tf("a {kind} operation would be posted on the work spindle - a lathe post turns the work at the tool's speed \
              while the cutter stands still, so nothing is milled; cut it as C-axis live tooling (a rotary operation), \
-             or {FIX}"
-        )),
+             or {FIX}", &[format!("{}", kind), format!("{}", FIX)])),
     }
 }
 
@@ -122,7 +116,7 @@ fn off_centre(path: &Toolpath, origin: [f64; 3]) -> Option<String> {
         return Some("a tilted drill (a cross hole, not along the spindle axis)".to_owned());
     }
     let at = |x: f64, y: f64| {
-        format!("a hole off the spindle axis (X{:.3} Y{:.3} from the work offset)", x - origin[0], y - origin[1])
+        camcraft_i18n::tf("a hole off the spindle axis (X{:.3} Y{:.3} from the work offset)", &[format!("{:.3}", x - origin[0]), format!("{:.3}", y - origin[1])])
     };
     if let Some(c) = path.cycles.iter().find(|c| off(c.xy.x, c.xy.y)) {
         return Some(at(c.xy.x, c.xy.y));
@@ -189,7 +183,7 @@ pub(crate) fn at_post<'a>(
     script: Option<&str>,
 ) -> Result<(), String> {
     use crate::post::dialect::WorkVoice;
-    let voice = crate::post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
+    let voice = crate::post::dialect::work_voice(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?;
     if voice == WorkVoice::ToolSpindle {
         return Ok(());
     }
@@ -215,21 +209,15 @@ pub(crate) fn at_post<'a>(
             Some(LatheVoice::Refused(why)) => why,
             Some(LatheVoice::WorkSpindle) => {
                 let kind = model::operation_of(world, &e).map_or_else(|| "turning".to_owned(), |op| op.params.kind().to_string());
-                format!(
-                    "a {kind} operation turns the work, and only a turning post may post it - an unstated script is \
+                camcraft_i18n::tf("a {kind} operation turns the work, and only a turning post may post it - an unstated script is \
                      not known to be one, and through a milling post it would come out as milling (a tool change, \
-                     S M3 on the tool spindle, the work standing still)"
-                )
+                     S M3 on the tool spindle, the work standing still)", &[format!("{}", kind)])
             }
         };
-        let named = script.map_or_else(|| "the post script".to_owned(), |s| format!("the post script {s}"));
-        return Err(format!(
-            "{}: {why} ({named} does not state whether it is a milling or a turning post - it has no \
+        let named = script.map_or_else(|| "the post script".to_owned(), |s| camcraft_i18n::tf("the post script {s}", &[format!("{}", s)]));
+        return Err(camcraft_i18n::tf("{}: {why} ({named} does not state whether it is a milling or a turning post - it has no \
              `capabilities` line naming 1 or 2 - so on this setup's {} machine it posts only C-axis live-tool \
-             sections; if it is a turning post, add `capabilities = 2;` to it, a milling post `capabilities = 1;`)",
-            label(),
-            machine.label()
-        ));
+             sections; if it is a turning post, add `capabilities = 2;` to it, a milling post `capabilities = 1;`)", &[format!("{}", label()), format!("{}", why), format!("{}", named), format!("{}", machine.label())]));
     }
     Ok(())
 }

@@ -32,7 +32,7 @@ pub fn condition_wear(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> 
 #[must_use]
 pub fn wear_comp(op: &SinkerBurnOp, cond_wear: Option<f64>) -> Option<WearComp> {
     if let (Some(rate), Some(l), Some(o)) = (op.measured_rate(), op.wear_lost, op.wear_over) {
-        return Some(WearComp { rate, from: format!("measured: {l} lost over {o} burned") });
+        return Some(WearComp { rate, from: camcraft_i18n::tf("measured: {l} lost over {o} burned", &[format!("{}", l), format!("{}", o)]) });
     }
     cond_wear.map(|rate| WearComp { rate, from: format!("condition {}", op.condition.trim()) })
 }

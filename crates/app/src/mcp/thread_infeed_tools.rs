@@ -30,11 +30,11 @@ pub(super) const TOOLS: &[Tool] = &[
 fn thread_params(env: &Env, args: &Map<String, Value>) -> Result<(String, OpParams), String> {
     let key = find_op(env, req_str(args, "name")?)?;
     let entity = model::find_by_name(&env.world, &key)
-        .ok_or_else(|| format!("no operation named '{key}'"))?;
+        .ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
     let operation = model::operation_of(&env.world, &entity)
-        .ok_or_else(|| format!("'{key}' is not an operation"))?;
+        .ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     if !matches!(operation.params, OpParams::Threading { .. }) {
-        return Err(format!("'{key}' is not a Threading operation"));
+        return Err(camcraft_i18n::tf("'{key}' is not a Threading operation", &[format!("{}", key)]));
     }
     Ok((key, operation.params))
 }
@@ -55,7 +55,7 @@ fn plan_value(plan: ThreadInfeed) -> Value {
 fn get(env: &mut Env, args: &Map<String, Value>) -> Result<Value, String> {
     let (key, params) = thread_params(env, args)?;
     let OpParams::Threading { infeed_plan, .. } = params else {
-        return Err(format!("'{key}' is not a Threading operation"));
+        return Err(camcraft_i18n::tf("'{key}' is not a Threading operation", &[format!("{}", key)]));
     };
     Ok(json!({ "name": key, "infeed_plan": plan_value(infeed_plan) }))
 }
@@ -69,7 +69,7 @@ fn check_fields(
         let path = format!("{prefix}.{field}");
         let current = fields
             .get(field)
-            .ok_or_else(|| format!("unknown field {path}"))?;
+            .ok_or_else(|| camcraft_i18n::tf("unknown field {path}", &[format!("{}", path)]))?;
         if let (Some(patch), Some(fields)) = (value.as_object(), current.as_object()) {
             check_fields(patch, fields, &path)?;
         }
@@ -84,7 +84,7 @@ fn set(env: &mut Env, args: &Map<String, Value>) -> Result<Value, String> {
         .and_then(Value::as_object)
         .ok_or("infeed_plan must be an object")?;
     let OpParams::Threading { infeed_plan, .. } = &mut params else {
-        return Err(format!("'{key}' is not a Threading operation"));
+        return Err(camcraft_i18n::tf("'{key}' is not a Threading operation", &[format!("{}", key)]));
     };
     let mut next = plan_value(*infeed_plan);
     let fields = next.as_object().ok_or("infeed_plan could not be read")?;
@@ -92,11 +92,11 @@ fn set(env: &mut Env, args: &Map<String, Value>) -> Result<Value, String> {
     for (field, value) in patch {
         let target = next
             .get_mut(field)
-            .ok_or_else(|| format!("unknown field infeed_plan.{field}"))?;
+            .ok_or_else(|| camcraft_i18n::tf("unknown field infeed_plan.{field}", &[format!("{}", field)]))?;
         merge(target, value);
         // Decode each field separately so malformed values name their field.
         let dto: ThreadInfeedDto = serde_json::from_value(next.clone())
-            .map_err(|error| format!("bad infeed_plan.{field}: {error}"))?;
+            .map_err(|error| camcraft_i18n::tf("bad infeed_plan.{field}: {error}", &[format!("{}", field), format!("{}", error)]))?;
         *infeed_plan = dto.into();
     }
     let result = plan_value(*infeed_plan);
@@ -106,7 +106,7 @@ fn set(env: &mut Env, args: &Map<String, Value>) -> Result<Value, String> {
         .collect::<Vec<_>>()
         .join(", ");
     let command = EditOperationParams::new(&env.world, &key, params)
-        .map_err(|error| format!("bad infeed_plan ({changed_fields}): {error}"))?;
+        .map_err(|error| camcraft_i18n::tf("bad infeed_plan ({changed_fields}): {error}", &[format!("{}", changed_fields), format!("{}", error)]))?;
     env.history.execute(&env.world, command);
     Ok(json!({ "name": key, "infeed_plan": result }))
 }

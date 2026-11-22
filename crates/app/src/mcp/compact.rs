@@ -31,7 +31,7 @@ pub(super) fn flag(a: &Map<String, Value>, key: &str) -> Result<bool, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(false),
         Some(Value::Bool(b)) => Ok(*b),
-        Some(other) => Err(format!("\"{key}\" must be true or false, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be true or false, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -44,7 +44,7 @@ pub(super) fn s_get_job() -> Value {
 pub(super) fn s_list_operation_types() -> Value {
     json!({ "type": "object", "additionalProperties": false, "required": [], "properties": {
         "kind": { "type": "string", "description": "Only this kind, by key or label (e.g. \"face\")." },
-        "section": { "type": "string", "description": format!("Only the kinds of this section: {}.", sections().join(", ")) }
+        "section": { "type": "string", "description": camcraft_i18n::tf("Only the kinds of this section: {}.", &[format!("{}", sections().join(", "))]) }
     }})
 }
 
@@ -124,7 +124,7 @@ pub(super) fn filter_kinds(kinds: Vec<Value>, a: &Map<String, Value>) -> Result<
     if let Some(s) = section {
         let known = sections();
         if !known.iter().any(|n| n.eq_ignore_ascii_case(s)) {
-            return Err(format!("unknown section \"{s}\" - sections: {}", known.join(", ")));
+            return Err(camcraft_i18n::tf("unknown section \"{s}\" - sections: {}", &[format!("{}", s), format!("{}", known.join(", "))]));
         }
     }
     let same = |v: &Value, want: &str| v.as_str().is_some_and(|t| t.eq_ignore_ascii_case(want));
@@ -134,7 +134,7 @@ pub(super) fn filter_kinds(kinds: Vec<Value>, a: &Map<String, Value>) -> Result<
         .filter(|k| section.is_none_or(|want| same(&k["section"], want)))
         .collect();
     if let (Some(want), true) = (kind, kept.is_empty()) {
-        return Err(format!("no operation kind \"{want}\"{} - call list_operation_types without \"kind\" for the list", section.map(|s| format!(" in section {s}")).unwrap_or_default()));
+        return Err(camcraft_i18n::tf("no operation kind \"{want}\"{} - call list_operation_types without \"kind\" for the list", &[format!("{}", want), format!("{}", section.map(|s| format!(" in section {s}")).unwrap_or_default())]));
     }
     Ok(kept)
 }

@@ -32,7 +32,7 @@ impl SetSetupPostOptions {
         if prev == next {
             return Err(CommandError::Invalid(match next {
                 None => format!("setup '{setup}' already follows the document's post options"),
-                Some(_) => format!("setup '{setup}' already has those post options"),
+                Some(_) => camcraft_i18n::tf("setup '{setup}' already has those post options", &[format!("{}", setup)]),
             }));
         }
         Ok(Self { setup: setup.to_owned(), prev, next })

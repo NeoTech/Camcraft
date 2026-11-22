@@ -99,10 +99,7 @@ pub(super) fn pocket_region_on_part(
         return Err(GenError::Empty("nothing in the selection bounds an area".into()));
     }
     let full = |z: f64| {
-        format!(
-            "the part fills the whole selection at Z {} - Bottom Z sits below the selected pocket's floor; raise Bottom Z to the floor",
-            units::len(z, unit, 3)
-        )
+        camcraft_i18n::tf("the part fills the whole selection at Z {} - Bottom Z sits below the selected pocket's floor; raise Bottom Z to the floor", &[format!("{}", units::len(z, unit, 3))])
     };
     match minus_standing(&enclosed, part, planes, full)? {
         Some(r) => Ok(r),
@@ -229,11 +226,8 @@ pub(super) fn stock_pocket(
     };
     let unit = crate::units::of(world);
     let full = |z: f64| {
-        format!(
-            "a pocket on the stock clears the stock around the setup's parts, and the parts fill the whole \
-             stock outline at Z {} - pick the area to clear, or use the model as the source",
-            units::len(z, unit, 3)
-        )
+        camcraft_i18n::tf("a pocket on the stock clears the stock around the setup's parts, and the parts fill the whole \
+             stock outline at Z {} - pick the area to clear, or use the model as the source", &[format!("{}", units::len(z, unit, 3))])
     };
     let planes = ladder_planes(t - oz, mt, b - oz, params.ladder_stepdown(t, b, stepdown));
     let enclosed = match slice::project(&stock, FOOTPRINT_SAMPLES).map_err(from_slice) {
@@ -255,11 +249,8 @@ pub(super) fn around_part(part: &[Triangle], stock: &[Triangle], planes: &[f64],
         return Err(GenError::Empty("the stock casts no outline to clear around the part".into()));
     }
     let full = |z: f64| {
-        format!(
-            "a whole-model pocket clears the stock around the part, and the part fills the whole stock \
-             outline at Z {} - pick the pocket's faces instead",
-            units::len(z, unit, 3)
-        )
+        camcraft_i18n::tf("a whole-model pocket clears the stock around the part, and the part fills the whole stock \
+             outline at Z {} - pick the pocket's faces instead", &[format!("{}", units::len(z, unit, 3))])
     };
     Ok(minus_standing(&enclosed, part, planes, full)?.unwrap_or(enclosed))
 }

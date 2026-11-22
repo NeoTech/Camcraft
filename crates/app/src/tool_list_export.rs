@@ -103,7 +103,7 @@ fn cell(v: &str) -> String {
 #[must_use]
 pub fn text(world: &World, ctx: Option<&str>) -> String {
     let title = crate::setup::effective(world, ctx).unwrap_or_else(|| "Setup".to_owned());
-    let mut out = format!("TOOL LIST - {title}\n");
+    let mut out = camcraft_i18n::tf("TOOL LIST - {title}\n", &[format!("{}", title)]);
     let rows = rows(world, ctx);
     if rows.is_empty() {
         out.push_str("(no operation in this setup uses a tool)\n");

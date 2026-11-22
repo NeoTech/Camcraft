@@ -88,7 +88,7 @@ impl Client {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| format!("HTTP runtime unavailable: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("HTTP runtime unavailable: {e}", &[format!("{}", e)]))?;
         runtime.block_on(async {
             let request = self.post_async(ep, path, headers, auth.as_ref(), body);
             tokio::select! {
@@ -135,12 +135,12 @@ impl Client {
             .body(body.to_string())
             .send()
             .await
-            .map_err(|_| format!("{} could not be reached", ep.host))?;
+            .map_err(|_| camcraft_i18n::tf("{} could not be reached", &[format!("{}", ep.host)]))?;
         let status = resp.status();
         let text = resp
             .text()
             .await
-            .map_err(|_| format!("{} answer not read", ep.host))?;
+            .map_err(|_| camcraft_i18n::tf("{} answer not read", &[format!("{}", ep.host)]))?;
         if !status.is_success() {
             let secret = auth.map(|(name, value)| {
                 if name.eq_ignore_ascii_case("authorization") {
@@ -149,14 +149,9 @@ impl Client {
                     value.as_str()
                 }
             });
-            return Err(format!(
-                "{} answered HTTP {}: {}",
-                ep.host,
-                status.as_u16(),
-                provider_message(&text, secret)
-            ));
+            return Err(camcraft_i18n::tf("{} answered HTTP {}: {}", &[format!("{}", ep.host), format!("{}", status.as_u16()), format!("{}", provider_message(&text, secret))]));
         }
-        serde_json::from_str(&text).map_err(|e| format!("{} answer is not JSON ({e})", ep.host))
+        serde_json::from_str(&text).map_err(|e| camcraft_i18n::tf("{} answer is not JSON ({e})", &[format!("{}", ep.host), format!("{}", e)]))
     }
 }
 

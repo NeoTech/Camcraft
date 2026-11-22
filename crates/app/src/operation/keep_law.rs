@@ -98,9 +98,7 @@ pub(super) fn narrow_noted(
         Ok(None) => {}
         Err(e) => {
             tracing::warn!(kind = label, "the band check around the part did not run: {e}");
-            path.notes.push(format!(
-                "{label}: the check for bands of the stock narrower than the tool did not run ({e}) - look at the stock around the part"
-            ));
+            path.notes.push(camcraft_i18n::tf("{label}: the check for bands of the stock narrower than the tool did not run ({e}) - look at the stock around the part", &[format!("{}", label), format!("{}", e)]));
         }
     }
     match crate::machining2d::unreached_corner_note(region, stock, tool_diameter, leave, unit) {
@@ -109,9 +107,7 @@ pub(super) fn narrow_noted(
         Err(e) => {
             tracing::warn!(kind = label, "the corner check around the part did not run: {e}");
             // #2511: a log line alone left the user with no sign.
-            path.notes.push(format!(
-                "{label}: the check for corners of the stock tighter than the tool did not run ({e}) - look at the stock corners around the part"
-            ));
+            path.notes.push(camcraft_i18n::tf("{label}: the check for corners of the stock tighter than the tool did not run ({e}) - look at the stock corners around the part", &[format!("{}", label), format!("{}", e)]));
         }
     }
     path

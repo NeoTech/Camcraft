@@ -41,7 +41,7 @@ pub(super) fn rotary_letter(
     }
     let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
     if !(len.is_finite() && len > 1e-12) {
-        return Err(GenError::Invalid(format!("{kind}: the fitted rotary axis states no direction")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the fitted rotary axis states no direction", &[format!("{}", kind)])));
     }
     let hit = stated.iter().find(|a| {
         a.axis.is_some_and(|v| {
@@ -52,13 +52,7 @@ pub(super) fn rotary_letter(
     });
     let Some(ax) = hit else {
         let names: Vec<&str> = stated.iter().map(|a| a.name.as_str()).collect();
-        return Err(GenError::Invalid(format!(
-            "{kind} turns the part about ({:.3}, {:.3}, {:.3}); {model} states no rotary on that line (its rotaries: {}) - a mill table's A/B or a mill-turn spindle's C must hold it",
-            dir[0] / len,
-            dir[1] / len,
-            dir[2] / len,
-            if names.is_empty() { "none".to_owned() } else { names.join(", ") }
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind} turns the part about ({:.3}, {:.3}, {:.3}); {model} states no rotary on that line (its rotaries: {}) - a mill table's A/B or a mill-turn spindle's C must hold it", &[format!("{}", kind), format!("{:.3}", dir[0] / len), format!("{:.3}", dir[1] / len), format!("{:.3}", dir[2] / len), format!("{}", model), format!("{}", if names.is_empty() { "none".to_owned() } else { names.join(", ") })])));
     };
     Ok(ax.name.chars().next().map(|c| c.to_ascii_uppercase()))
 }
@@ -98,10 +92,7 @@ pub(super) fn c_center(ax: &crate::multiaxis::axis::Axis, kind: &str) -> Result<
     let d = ax.dir;
     let len = (d.x * d.x + d.y * d.y + d.z * d.z).sqrt();
     if !(len > 1e-12 && (d.z / len).abs() >= SAME_LINE) {
-        return Err(GenError::Invalid(format!(
-            "{kind}: the part turns about ({:.3}, {:.3}, {:.3}), not the spindle's Z line - C cannot hold it",
-            d.x, d.y, d.z
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the part turns about ({:.3}, {:.3}, {:.3}), not the spindle's Z line - C cannot hold it", &[format!("{}", kind), format!("{:.3}", d.x), format!("{:.3}", d.y), format!("{:.3}", d.z)])));
     }
     // It stands within SAME_LINE of vertical, so the crossing is finite.
     let t = -ax.origin.z / d.z;
@@ -139,9 +130,7 @@ fn stamp_c_about(
         // opening stretch adds no move: the section's first G00 C
         // positions it, at no F.)
         if unwound.moves.len() != stamped.moves.len() && !c_rated(machine) {
-            return Err(GenError::Invalid(format!(
-                "{kind}: the path needs a C rewind, but the machine file states a C travel but no C rate - a rewind would post at an uncapped feed; state the C axis's feed or rapid rate"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the path needs a C rewind, but the machine file states a C travel but no C rate - a rewind would post at an uncapped feed; state the C axis's feed or rapid rate", &[format!("{}", kind)])));
         }
         return Ok(unwound);
     }
@@ -156,9 +145,7 @@ fn stamp_c_about(
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), c| (l.min(c), h.max(c)));
     if c_lo < lo - 1e-9 || c_hi > hi + 1e-9 {
         let (word_lo, word_hi) = if sign < 0.0 { (-c_hi, -c_lo) } else { (c_lo, c_hi) };
-        return Err(GenError::Invalid(format!(
-            "{kind}: the path turns C over {word_lo:.3}..{word_hi:.3} deg, past the machine's C travel {mach_lo:.3}..{mach_hi:.3}; unwinding C at links is proven for Rotary Contour only, so {kind} is refused where it would need a rewind"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the path turns C over {word_lo:.3}..{word_hi:.3} deg, past the machine's C travel {mach_lo:.3}..{mach_hi:.3}; unwinding C at links is proven for Rotary Contour only, so {kind} is refused where it would need a rewind", &[format!("{}", kind), format!("{:.3}", word_lo), format!("{:.3}", word_hi), format!("{:.3}", mach_lo), format!("{:.3}", mach_hi), format!("{}", kind)])));
     }
     Ok(stamped)
 }

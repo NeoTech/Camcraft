@@ -32,7 +32,7 @@ pub(super) fn skip_unborable(world: &World, name: &str, params: &mut OpParams) -
     };
     let skipped = keep_borable(holes, d, corner, *stock_to_leave, break_through.unwrap_or(THROUGH_CLEAR));
     if holes.is_empty() {
-        return Err(format!("no hole this Bore op can make: {}", skipped.join("; ")));
+        return Err(camcraft_i18n::tf("no hole this Bore op can make: {}", &[format!("{}", skipped.join("; "))]));
     }
     Ok(skipped)
 }
@@ -66,14 +66,9 @@ pub(super) fn keep_borable(holes: &mut Vec<Hole>, tool_diameter: f64, corner: f6
         let keep = !h.radius.is_finite() || !bore_leaves_core(h.radius, tool_diameter, corner, leave, through);
         if !keep {
             let max = max_bore_diameter(tool_diameter, corner, leave, through);
-            skipped.push(format!(
-                "the {:.3} mm hole at ({:.3}, {:.3}) was skipped: wider than the {max:.3} mm a \
+            skipped.push(camcraft_i18n::tf("the {:.3} mm hole at ({:.3}, {:.3}) was skipped: wider than the {max:.3} mm a \
                  {tool_diameter:.3} mm tool clears within 4096 rings, or its floor reach is too small - \
-                 use a flat end mill, a larger tool, or a pocket operation",
-                h.radius * 2.0,
-                tidy(h.xy.x),
-                tidy(h.xy.y)
-            ));
+                 use a flat end mill, a larger tool, or a pocket operation", &[format!("{:.3}", h.radius * 2.0), format!("{:.3}", tidy(h.xy.x)), format!("{:.3}", tidy(h.xy.y)), format!("{:.3}", max), format!("{:.3}", tool_diameter)]));
         }
         keep
     });

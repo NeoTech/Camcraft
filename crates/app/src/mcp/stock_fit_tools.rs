@@ -31,7 +31,7 @@ fn fit_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         (_, Some(_)) => return Err("\"sides\" fits a box only".into()),
         (None | Some("box"), None) => FitKind::Box(margin),
         (Some("cylinder"), None) => FitKind::Cylinder(margin),
-        (Some(other), None) => return Err(format!("\"shape\" must be \"box\" or \"cylinder\", not \"{other}\"")),
+        (Some(other), None) => return Err(camcraft_i18n::tf("\"shape\" must be \"box\" or \"cylinder\", not \"{other}\"", &[format!("{}", other)])),
     };
     let (cmd, shape) = stock_fit::fit_command(&env.world, kind)?;
     env.history.execute(&env.world, cmd);

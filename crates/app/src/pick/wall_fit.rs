@@ -31,7 +31,7 @@ const RING_BAND: f64 = 0.15;
 pub(crate) fn fit_wall(name: &str, tris: &[Triangle]) -> Result<([f64; 3], [f64; 3]), String> {
     let n = tris.len();
     if n < 8 {
-        return Err(format!("wall of '{}' is too small to fit an axis from", name));
+        return Err(camcraft_i18n::tf("wall of '{}' is too small to fit an axis from", &[format!("{}", name)]));
     }
     // Axis: the direction the facet normals vary least. Winding does
     // not matter: a normal and its negation are the same wall normal.
@@ -56,7 +56,7 @@ pub(crate) fn fit_wall(name: &str, tris: &[Triangle]) -> Result<([f64; 3], [f64;
     if eval[2] <= 0.0 || eval[1] <= FLAT_FRACTION * eval[2] {
         // Degenerate wall: the normals do not spread over a disc, so
         // their flat direction is not unique - a flat fan is no wall.
-        return Err(format!("wall of '{}' is too flat to fit an axis from", name));
+        return Err(camcraft_i18n::tf("wall of '{}' is too flat to fit an axis from", &[format!("{}", name)]));
     }
     // The flat direction is the axis, and its sign is pinned - the
     // +Z-pointing root, then +Y, then +X - so two callers fitting the
@@ -105,7 +105,7 @@ pub(crate) fn fit_wall(name: &str, tris: &[Triangle]) -> Result<([f64; 3], [f64;
     let det = a11 * a22 - a12 * a12;
     let scale_det = (a11 + a22) * (a11 + a22);
     if det.abs() <= 1e-12 * scale_det || !det.is_finite() {
-        return Err(format!("wall of '{}' does not curve enough to fit an axis from", name));
+        return Err(camcraft_i18n::tf("wall of '{}' does not curve enough to fit an axis from", &[format!("{}", name)]));
     }
     let icx = b1 * a22 - b2 * a12;
     let icy = b2 * a11 - b1 * a12;
@@ -114,14 +114,14 @@ pub(crate) fn fit_wall(name: &str, tris: &[Triangle]) -> Result<([f64; 3], [f64;
     let rads: Vec<f64> = pts.iter().map(|[x, y]| norm([x - mx - cx, y - my - cy, 0.0])).collect();
     let mean_r = rads.iter().sum::<f64>() / rads.len() as f64;
     if mean_r <= 0.0 || !mean_r.is_finite() {
-        return Err(format!("wall of '{}' collapses to a point - no axis to fit", name));
+        return Err(camcraft_i18n::tf("wall of '{}' collapses to a point - no axis to fit", &[format!("{}", name)]));
     }
     let spread = rads
         .iter()
         .map(|r| (r - mean_r).abs())
         .fold(0.0f64, f64::max);
     if spread > RING_BAND * mean_r {
-        return Err(format!("wall of '{}' is not round enough to fit an axis from", name));
+        return Err(camcraft_i18n::tf("wall of '{}' is not round enough to fit an axis from", &[format!("{}", name)]));
     }
     // The circle's centre in the plane coordinates, walked back along
     // the basis, and set down at the wall's mean height along the axis.

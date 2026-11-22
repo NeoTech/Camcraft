@@ -20,13 +20,11 @@ pub(super) fn offer_view(world: &World, declared: Option<&str>) -> Value {
     };
     let why = match offer.why {
         OfferWhy::Machine => "the machine names this post".to_owned(),
-        OfferWhy::Kind(serves) => format!("the current post serves a {serves}"),
+        OfferWhy::Kind(serves) => camcraft_i18n::tf("the current post serves a {serves}", &[format!("{}", serves)]),
     };
     let hint = match declared {
-        Some(s) => format!(
-            "set_setup_post {{\"setup\": \"{s}\", \"post\": \"{name}\"}} takes it as one undo step; until then the setup posts with its own post"
-        ),
-        None => format!("post with \"post\": \"{name}\" uses it for one program; add_setup, then set_setup_post, keeps it"),
+        Some(s) => camcraft_i18n::tf("set_setup_post {{\"setup\": \"{s}\", \"post\": \"{name}\"}} takes it as one undo step; until then the setup posts with its own post", &[format!("{}", s), format!("{}", name)]),
+        None => camcraft_i18n::tf("post with \"post\": \"{name}\" uses it for one program; add_setup, then set_setup_post, keeps it", &[format!("{}", name)]),
     };
     json!({ "post": name, "why": why, "hint": hint })
 }

@@ -60,7 +60,7 @@ pub fn check_model(model: &str) -> Result<(), String> {
         && model.len() <= 200
         && !model.contains("..")
         && model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '/'));
-    if ok { Ok(()) } else { Err(format!("model id '{model}' is not a valid model name")) }
+    if ok { Ok(()) } else { Err(camcraft_i18n::tf("model id '{model}' is not a valid model name", &[format!("{}", model)])) }
 }
 
 /// Split the chat panel's tools payload: `{"tools":[...]}` is native
@@ -89,7 +89,7 @@ pub fn build(req: &ChatRequest<'_>) -> Result<WireRequest, String> {
         Provider::OpenAiResponses => ("/responses".to_owned(), openai_responses(req)),
         Provider::Gemini => {
             if req.model.contains('/') {
-                return Err(format!("Gemini model id '{}' must not hold '/'", req.model));
+                return Err(camcraft_i18n::tf("Gemini model id '{}' must not hold '/'", &[format!("{}", req.model)]));
             }
             (format!("/models/{}:generateContent", req.model), gemini(req))
         }

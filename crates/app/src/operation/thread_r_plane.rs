@@ -37,10 +37,7 @@ pub(super) fn door(top_z: Height, features: &[Hole], external: bool) -> Option<S
     let r = top_z.offset;
     let what = if external { "boss" } else { "hole" };
     features.iter().find(|x| !r.is_finite() || r < x.entry_z - 1e-9).map(|x| {
-        format!(
-            "the R plane at z {r} is below the top of the {what} at ({}, {}) at z {} - the rapid down to R would run into it; raise the R plane (feed starts here) to z {} or above",
-            x.xy.x, x.xy.y, x.entry_z, x.entry_z
-        )
+        camcraft_i18n::tf("the R plane at z {r} is below the top of the {what} at ({}, {}) at z {} - the rapid down to R would run into it; raise the R plane (feed starts here) to z {} or above", &[format!("{}", r), format!("{}", what), format!("{}", x.xy.x), format!("{}", x.xy.y), format!("{}", x.entry_z), format!("{}", x.entry_z)])
     })
 }
 
@@ -65,10 +62,7 @@ pub(super) fn judge(path: &Toolpath, tool_r: f64, prior: Option<&Dexel>) -> Resu
             continue;
         };
         if top > m.to.z + Z_SLACK {
-            return Err(GenError::Invalid(format!(
-                "the rapid down to the R plane ends at z {:.3} at ({:.3}, {:.3}), inside the stock the program ahead leaves standing at z {top:.3} over the thread mill there - raise the R plane (feed starts here) to z {top:.3} or above, or machine that stock away before the thread",
-                m.to.z, m.to.x, m.to.y
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the rapid down to the R plane ends at z {:.3} at ({:.3}, {:.3}), inside the stock the program ahead leaves standing at z {top:.3} over the thread mill there - raise the R plane (feed starts here) to z {top:.3} or above, or machine that stock away before the thread", &[format!("{:.3}", m.to.z), format!("{:.3}", m.to.x), format!("{:.3}", m.to.y), format!("{:.3}", top), format!("{:.3}", top)])));
         }
     }
     Ok(())

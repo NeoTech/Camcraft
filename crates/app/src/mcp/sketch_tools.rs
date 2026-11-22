@@ -42,7 +42,7 @@ pub(super) const TOOLS: &[Tool] = &[
 fn insert_text(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let num = |key: &str| match a.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => v.as_f64().map(Some).ok_or_else(|| format!("\"{key}\" must be a number, got {v}")),
+        Some(v) => v.as_f64().map(Some).ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a number, got {v}", &[format!("{}", key), format!("{}", v)])),
     };
     let [x, y] = super::setup_tools::opt_nums::<2>(a, "position")?.unwrap_or_default();
     let options = TextOptions {
@@ -57,13 +57,10 @@ fn insert_text(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let cmd = InsertText::new(&env.world, opt_str(a, "setup")?, &options).map_err(cmd_err)?;
     let name = cmd.name().to_owned();
     env.history.execute(&env.world, cmd);
-    let mut out = dxf::profile_view(&env.world, &name).ok_or_else(|| format!("the text profile '{name}' did not land"))?;
+    let mut out = dxf::profile_view(&env.world, &name).ok_or_else(|| camcraft_i18n::tf("the text profile '{name}' did not land", &[format!("{}", name)]))?;
     out["text"] = json!(options.text);
     out["height"] = json!(options.height);
-    out["summary"] = json!(format!(
-        "'{name}' placed on the stock top: \"{}\" at a cap height of {} mm, {} closed and {} open chains",
-        options.text, options.height, out["chains"]["closed"], out["chains"]["open"],
-    ));
+    out["summary"] = json!(camcraft_i18n::tf("'{name}' placed on the stock top: \"{}\" at a cap height of {} mm, {} closed and {} open chains", &[format!("{}", name), format!("{}", options.text), format!("{}", options.height), format!("{}", out["chains"]["closed"]), format!("{}", out["chains"]["open"])]));
     Ok(out)
 }
 
@@ -117,11 +114,11 @@ fn move_dxf_profile(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
             .and_then(|e| model::transform_of(&env.world, &e))
             .and_then(sketch::face_placement)
             .map_or(0.0, |(_, _, angle)| angle),
-        Some(v) => v.as_f64().ok_or_else(|| format!("\"angle\" must be a number in degrees, got {v}"))?,
+        Some(v) => v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"angle\" must be a number in degrees, got {v}", &[format!("{}", v)]))?,
     };
     let cmd = MoveSketch::new(&env.world, name, x, y, angle).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
-    dxf::profile_view(&env.world, name).ok_or_else(|| format!("'{name}' is not a DXF profile"))
+    dxf::profile_view(&env.world, name).ok_or_else(|| camcraft_i18n::tf("'{name}' is not a DXF profile", &[format!("{}", name)]))
 }
 
 fn s_move_dxf_profile() -> Value {

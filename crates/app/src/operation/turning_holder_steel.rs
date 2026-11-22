@@ -82,7 +82,7 @@ pub(super) fn noted(mut path: Toolpath, params: &OpParams, has_body: bool, unrea
         return path;
     }
     let names = unread.iter().map(|n| format!("'{n}'")).collect::<Vec<_>>().join(", ");
-    let n = format!("{STEEL_UNREAD_NOTE} {names} - it has no geometry the law can read, so a strike on it would pass unseen");
+    let n = camcraft_i18n::tf("{STEEL_UNREAD_NOTE} {names} - it has no geometry the law can read, so a strike on it would pass unseen", &[format!("{}", STEEL_UNREAD_NOTE), format!("{}", names)]);
     if !path.notes.contains(&n) {
         path.notes.push(n);
     }
@@ -106,8 +106,8 @@ pub(crate) fn steel_hits(
     if params.kind().info().section != Section::Turning || (turning.is_empty() && fixed.is_empty()) {
         return Ok(Vec::new());
     }
-    let unjudged = |why: String| format!("the lathe holder body cannot be judged against the fixtures: {why}");
-    let frame = Frame::about(part).map_err(|e| unjudged(format!("no spindle fits the part ({e})")))?;
+    let unjudged = |why: String| camcraft_i18n::tf("the lathe holder body cannot be judged against the fixtures: {why}", &[format!("{}", why)]);
+    let frame = Frame::about(part).map_err(|e| unjudged(camcraft_i18n::tf("no spindle fits the part ({e})", &[format!("{}", e)])))?;
     let sm = SignedMeridian::of(&frame, path);
     // #1102: the holder's side; every radius below is read along the
     // holder's own +x (the path's signed radial times `side`).
@@ -147,7 +147,7 @@ pub(crate) fn lathe_steel_hits(
         return Ok(Vec::new());
     }
     let part = super::material_of(world, op.setup.as_deref(), &op.src)
-        .map_err(|e| format!("the lathe holder body cannot be judged against the fixtures: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("the lathe holder body cannot be judged against the fixtures: {e}", &[format!("{}", e)]))?;
     steel_hits(&op.params, path, &part.facets, body, steel, super::GOUGE_TOL)
 }
 

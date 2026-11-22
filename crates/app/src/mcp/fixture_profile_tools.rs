@@ -52,12 +52,12 @@ pub(super) const TOOLS: &[Tool] = &[
 fn opt_f64(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => v.as_f64().map(Some).ok_or_else(|| format!("\"{key}\" must be a number")),
+        Some(v) => v.as_f64().map(Some).ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a number", &[format!("{}", key)])),
     }
 }
 
 fn fixture_view(env: &Env, name: &str) -> Result<Value, String> {
-    let e = model::find_by_name(&env.world, name).ok_or_else(|| format!("no fixture named '{name}'"))?;
+    let e = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no fixture named '{name}'", &[format!("{}", name)]))?;
     let def = fixture::def_of(&env.world, &e).ok_or_else(|| format!("'{name}' is not a fixture"))?;
     let facets = model::facets_of(&env.world, &e).map_or(0, |f| f.len());
     let has_step_source = crate::step_source::of(&env.world, &e).is_some();
@@ -75,7 +75,7 @@ fn import_dxf_fixture(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
     let path_arg = opt_str(a, "path")?;
     let dxf_arg = opt_str(a, "dxf")?;
     let bytes: Vec<u8> = match (path_arg, dxf_arg) {
-        (Some(p), None) => std::fs::read(p).map_err(|e| format!("cannot read '{p}': {e}"))?,
+        (Some(p), None) => std::fs::read(p).map_err(|e| camcraft_i18n::tf("cannot read '{p}': {e}", &[format!("{}", p), format!("{}", e)]))?,
         (None, Some(text)) => text.as_bytes().to_vec(),
         (Some(_), Some(_)) => return Err("give either \"path\" or \"dxf\", not both".into()),
         (None, None) => return Err("either \"path\" or \"dxf\" is required".into()),
@@ -98,7 +98,7 @@ fn import_dxf_fixture(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
             let depth = opt_f64(a, "depth")?;
             InsertProfileFixture::from_dxf_extruded(&env.world, name, &bytes, setup.as_deref(), axis, depth, loc)
         }
-        other => return Err(format!("unknown DXF fixture kind '{other}' (expected \"spun\" or \"extruded\")")),
+        other => return Err(camcraft_i18n::tf("unknown DXF fixture kind '{other}' (expected \"spun\" or \"extruded\")", &[format!("{}", other)])),
     }
     .map_err(cmd_err)?;
     let landed = cmd.name().to_owned();
@@ -112,7 +112,7 @@ fn set_fixture_profile(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         .get("profile")
         .ok_or_else(|| "\"profile\" object is required".to_owned())?;
     let profile: FixtureProfile =
-        serde_json::from_value(prof_val.clone()).map_err(|e| format!("invalid profile: {e}"))?;
+        serde_json::from_value(prof_val.clone()).map_err(|e| camcraft_i18n::tf("invalid profile: {e}", &[format!("{}", e)]))?;
     let cmd = SetFixtureProfile::new(&env.world, name, profile).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     fixture_view(env, name)
@@ -130,7 +130,7 @@ fn derive_fixture_profile(env: &mut Env, a: &Map<String, Value>) -> Result<Value
             };
             DeriveFixtureProfile::extruded(&env.world, name, axis)
         }
-        other => return Err(format!("unknown profile kind '{other}' (expected \"spun\" or \"extruded\")")),
+        other => return Err(camcraft_i18n::tf("unknown profile kind '{other}' (expected \"spun\" or \"extruded\")", &[format!("{}", other)])),
     }
     .map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -143,14 +143,14 @@ fn get_fixture_profile(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
 
 fn export_fixture_dxf(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let name = req_str(a, "name")?;
-    let e = model::find_by_name(&env.world, name).ok_or_else(|| format!("no fixture named '{name}'"))?;
+    let e = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no fixture named '{name}'", &[format!("{}", name)]))?;
     let prof = fixture::def_of(&env.world, &e)
         .ok_or_else(|| format!("'{name}' is not a fixture"))?
         .profile
-        .ok_or_else(|| format!("fixture '{name}' has no editable profile to export"))?;
+        .ok_or_else(|| camcraft_i18n::tf("fixture '{name}' has no editable profile to export", &[format!("{}", name)]))?;
     let dxf = prof.to_dxf()?;
     if let Some(p) = opt_str(a, "path")? {
-        std::fs::write(p, dxf.as_bytes()).map_err(|err| format!("cannot write '{p}': {err}"))?;
+        std::fs::write(p, dxf.as_bytes()).map_err(|err| camcraft_i18n::tf("cannot write '{p}': {err}", &[format!("{}", p), format!("{}", err)]))?;
     }
     Ok(json!({ "fixture": name, "kind": prof.kind_label(), "dxf": dxf }))
 }

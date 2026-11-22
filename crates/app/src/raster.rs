@@ -223,9 +223,9 @@ impl Canvas {
         let mut enc = png::Encoder::new(&mut out, self.cam.width, self.cam.height);
         enc.set_color(png::ColorType::Rgb);
         enc.set_depth(png::BitDepth::Eight);
-        let mut wr = enc.write_header().map_err(|e| format!("png header: {e}"))?;
-        wr.write_image_data(&self.rgb).map_err(|e| format!("png data: {e}"))?;
-        wr.finish().map_err(|e| format!("png finish: {e}"))?;
+        let mut wr = enc.write_header().map_err(|e| camcraft_i18n::tf("png header: {e}", &[format!("{}", e)]))?;
+        wr.write_image_data(&self.rgb).map_err(|e| camcraft_i18n::tf("png data: {e}", &[format!("{}", e)]))?;
+        wr.finish().map_err(|e| camcraft_i18n::tf("png finish: {e}", &[format!("{}", e)]))?;
         Ok(out)
     }
 }

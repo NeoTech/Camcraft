@@ -29,7 +29,7 @@ pub fn machined_mesh(fv: &FieldView) -> Result<Vec<Triangle>, String> {
     }
     let open = iso::open_edges(&tris);
     if open > 0 {
-        return Err(format!("the extracted surface has {open} open edges - refused, not written"));
+        return Err(camcraft_i18n::tf("the extracted surface has {open} open edges - refused, not written", &[format!("{}", open)]));
     }
     Ok(tris)
 }
@@ -62,7 +62,7 @@ pub fn write_stl(fv: &FieldView, path: &Path) -> Result<usize, String> {
     if u32::try_from(tris.len()).is_err() {
         return Err("the mesh has more facets than binary STL can count".into());
     }
-    std::fs::write(path, stl_bytes(&tris)).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    std::fs::write(path, stl_bytes(&tris)).map_err(|e| camcraft_i18n::tf("could not write {}: {e}", &[format!("{}", path.display()), format!("{}", e)]))?;
     Ok(tris.len())
 }
 

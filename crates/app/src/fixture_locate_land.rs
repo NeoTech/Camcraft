@@ -55,7 +55,7 @@ pub fn stock_lands(world: &World, spec: &LocateSpec, plan: &Plan, stocks: &[(Str
     let want = carried.iter().find(|(n, _)| *n == name).map(|(_, t)| t.as_slice());
     let got = stocks.iter().find(|(n, _)| *n == name).map(|(_, t)| t.as_slice());
     let not_following =
-        || format!("the stock '{name}' does not follow the part - set the stock round the part, or locate the part");
+        || camcraft_i18n::tf("the stock '{name}' does not follow the part - set the stock round the part, or locate the part", &[format!("{}", name)]);
     let (Some(want), Some(got)) = (want, got) else {
         return Err(not_following());
     };
@@ -64,9 +64,7 @@ pub fn stock_lands(world: &World, spec: &LocateSpec, plan: &Plan, stocks: &[(Str
     };
     let off = (0..3).any(|k| (wb.0[k] - gb.0[k]).abs() > LEN_TOL_MM || (wb.1[k] - gb.1[k]).abs() > LEN_TOL_MM);
     if off {
-        return Err(format!(
-            "the stock '{name}' stays square round the part and would not land on the mates - locate it without a turn, or locate the part"
-        ));
+        return Err(camcraft_i18n::tf("the stock '{name}' stays square round the part and would not land on the mates - locate it without a turn, or locate the part", &[format!("{}", name)]));
     }
     // A rigid carry (a stock that does not re-fit) lands by construction.
     let same = want.len() == got.len()
@@ -80,11 +78,7 @@ pub fn stock_lands(world: &World, spec: &LocateSpec, plan: &Plan, stocks: &[(Str
     for (i, m) in spec.mates.iter().enumerate() {
         let k = i + 1;
         let missed = |what: &str| {
-            format!(
-                "mate {k}: {} of the stock '{name}' {what} {} - the stock keeps its upright shape round the turned part, so that face does not meet the fixture; locate it without a turn, or locate the part",
-                crate::pick::feature_name_or_kind(world, &name, &m.part.feature),
-                crate::pick::geo_label(world, &m.fixture),
-            )
+            camcraft_i18n::tf("mate {k}: {} of the stock '{name}' {what} {} - the stock keeps its upright shape round the turned part, so that face does not meet the fixture; locate it without a turn, or locate the part", &[format!("{}", k), format!("{}", crate::pick::feature_name_or_kind(world, &name, &m.part.feature)), format!("{}", name), format!("{}", what), format!("{}", crate::pick::geo_label(world, &m.fixture))])
         };
         match &m.part.feature {
             FeatureSel::Face(fid) => {
@@ -119,7 +113,7 @@ pub fn stock_lands(world: &World, spec: &LocateSpec, plan: &Plan, stocks: &[(Str
 }
 
 fn gone(world: &World, g: &GeoSel) -> String {
-    format!("{} is gone - re-pick it", crate::pick::geo_label(world, g))
+    camcraft_i18n::tf("{} is gone - re-pick it", &[format!("{}", crate::pick::geo_label(world, g))])
 }
 
 /// Does the face `face` (where the mates put it) lie on the followed

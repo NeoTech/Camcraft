@@ -99,17 +99,13 @@ impl UpdateModel {
     /// slot just because someone named the file `G54.stl`.
     pub fn new(world: &World, name: &str, mesh: Mesh) -> Result<Self, CommandError> {
         if mesh.is_empty() {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' would update the model to empty geometry"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' would update the model to empty geometry", &[format!("{}", name)])));
         }
         let Some(entity) = model::find_by_name(world, name) else {
             return Err(CommandError::NotFound(name.to_string()));
         };
         if !model::is_model(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data", &[format!("{}", name)])));
         }
         // Every copy of this model holds the same local facets, so one
         // snapshot serves them all (divergence is what this command

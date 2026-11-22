@@ -164,31 +164,25 @@ pub fn suggest(world: &World, name: &str) -> Result<Suggestion, String> {
     // #1110: a kind that mounts no library tool (a wire cut) has no tool
     // for the table to read - said so, not "tool  is not in the library".
     if !op.params.kind().info().mounts_tool() {
-        return Err(format!(
-            "a {} mounts no library tool - its cut is the machine's EDM condition, and the cutting-data table speaks for milling tools only",
-            op.params.kind()
-        ));
+        return Err(camcraft_i18n::tf("a {} mounts no library tool - its cut is the machine's EDM condition, and the cutting-data table speaks for milling tools only", &[format!("{}", op.params.kind())]));
     }
     let tool = model::find_by_name(world, &op.tool)
         .and_then(|t| model::tool_of(world, &t))
-        .ok_or_else(|| format!("tool {} is not in the library", op.tool))?;
+        .ok_or_else(|| camcraft_i18n::tf("tool {} is not in the library", &[format!("{}", op.tool)]))?;
     if tool.kind == ToolKind::Wire {
-        return Err(format!(
-            "the cutting-data table does not speak for a {} - a wire cut uses the machine's EDM condition",
-            tool.kind
-        ));
+        return Err(camcraft_i18n::tf("the cutting-data table does not speak for a {} - a wire cut uses the machine's EDM condition", &[format!("{}", tool.kind)]));
     }
     let material = material_of(world).ok_or("no workpiece material is stated - pick one first")?;
     if crate::cutting_turn::css_op(&op.params) {
         return crate::cutting_turn::suggest(world, &op, &tool, material);
     }
     if !tabulated(tool.kind) {
-        return Err(format!("the cutting-data table does not speak for a {}", tool.kind));
+        return Err(camcraft_i18n::tf("the cutting-data table does not speak for a {}", &[format!("{}", tool.kind)]));
     }
     let tm = tool
         .tool_material
-        .ok_or_else(|| format!("tool {} states no tool material (HSS or carbide)", op.tool))?;
-    let z = tool.flutes.ok_or_else(|| format!("tool {} states no flute count", op.tool))?;
+        .ok_or_else(|| camcraft_i18n::tf("tool {} states no tool material (HSS or carbide)", &[format!("{}", op.tool)]))?;
+    let z = tool.flutes.ok_or_else(|| camcraft_i18n::tf("tool {} states no flute count", &[format!("{}", op.tool)]))?;
     Ok(compute(&op.tool, &tool, z, tm, material, adaptive_load(&op.params), crate::machine::of_setup(world, op.setup.as_deref()).1.as_ref()))
 }
 
@@ -220,13 +214,13 @@ pub fn compute(
         if let Some(hi) = m.spindle_max
             && rpm > hi
         {
-            notes.push(format!("{rpm:.0} rpm held to the machine's {hi:.0}"));
+            notes.push(camcraft_i18n::tf("{rpm:.0} rpm held to the machine's {hi:.0}", &[format!("{:.0}", rpm), format!("{:.0}", hi)]));
             rpm = hi.floor();
         }
         if let Some(lo) = m.spindle_min
             && rpm < lo
         {
-            notes.push(format!("{rpm:.0} rpm raised to the machine's minimum {lo:.0}"));
+            notes.push(camcraft_i18n::tf("{rpm:.0} rpm raised to the machine's minimum {lo:.0}", &[format!("{:.0}", rpm), format!("{:.0}", lo)]));
             rpm = lo.ceil();
         }
     }
@@ -234,7 +228,7 @@ pub fn compute(
     if let Some(ceil) = machine.and_then(|m| m.feed_ceiling([1.0, 1.0, 0.0]))
         && feed > ceil
     {
-        notes.push(format!("{feed:.0} mm/min held to the machine's {ceil:.0}"));
+        notes.push(camcraft_i18n::tf("{feed:.0} mm/min held to the machine's {ceil:.0}", &[format!("{:.0}", feed), format!("{:.0}", ceil)]));
         feed = ceil.floor();
     }
     Suggestion { tool: tool_name.to_owned(), material, tool_material: tm, vc, fz, thinning, rpm, feed, notes, turning: None }

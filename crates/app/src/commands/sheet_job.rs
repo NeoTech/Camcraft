@@ -71,7 +71,7 @@ impl SetSheetJob {
     pub fn clear(world: &World) -> Result<Self, CommandError> {
         let (setup, prev) = active_setup(world)?;
         if prev.is_none() {
-            return Err(CommandError::Invalid(format!("setup '{setup}' states no sheet job")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{setup}' states no sheet job", &[format!("{}", setup)])));
         }
         Ok(Self { setup, steps: Vec::new(), prev, next: None })
     }

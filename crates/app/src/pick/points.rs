@@ -116,7 +116,7 @@ const UNUSABLE: &str = "the points do not make a usable turn - re-pick them";
 /// plain words. Refuses as [`lay_on_points`] does.
 pub fn points_side(world: &World, picks: &[GeoSel]) -> Result<String, String> {
     let (d, _) = datum_of(world, picks)?;
-    Ok(format!("outside: {} (away from the material)", axis_words(d.normal)))
+    Ok(camcraft_i18n::tf("outside: {} (away from the material)", &[format!("{}", axis_words(d.normal))]))
 }
 
 /// Read three picked corners (document frame) as a datum: their plane's
@@ -128,7 +128,7 @@ fn datum_of(world: &World, picks: &[GeoSel]) -> Result<(Datum, [[f64; 3]; 3]), S
     for g in picks {
         let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(world, g))?;
         if !setup_align::is_part(world, &e) {
-            return Err(format!("'{}' is not the part - pick points of the model", g.entity));
+            return Err(camcraft_i18n::tf("'{}' is not the part - pick points of the model", &[format!("{}", g.entity)]));
         }
         match &g.feature {
             FeatureSel::Vertex(_) => continue,
@@ -143,23 +143,16 @@ fn datum_of(world: &World, picks: &[GeoSel]) -> Result<(Datum, [[f64; 3]; 3]), S
             | FeatureSel::SketchChain(_)
             | FeatureSel::SketchLayer(_) => {}
         }
-        return Err(format!(
-            "{} is a face - pick three points (corners of the model or circle centres)",
-            super::geo_label(world, g)
-        ));
+        return Err(camcraft_i18n::tf("{} is a face - pick three points (corners of the model or circle centres)", &[format!("{}", super::geo_label(world, g))]));
     }
     let [g1, g2, g3] = picks else {
-        return Err(format!("pick three points - {} picked", picks.len()));
+        return Err(camcraft_i18n::tf("pick three points - {} picked", &[format!("{}", picks.len())]));
     };
     let pts = [super::axis::point(world, g1)?, super::axis::point(world, g2)?, super::axis::point(world, g3)?];
     for (i, j) in [(0, 1), (0, 2), (1, 2)] {
         let gap = norm(sub(pts[j], pts[i]));
         if picks[i] == picks[j] || !gap.is_finite() || gap <= COINCIDENT_MM {
-            return Err(format!(
-                "points {} and {} coincide (closer than {COINCIDENT_MM} mm) - pick three points apart",
-                i + 1,
-                j + 1
-            ));
+            return Err(camcraft_i18n::tf("points {} and {} coincide (closer than {COINCIDENT_MM} mm) - pick three points apart", &[format!("{}", i + 1), format!("{}", j + 1), format!("{}", COINCIDENT_MM)]));
         }
     }
     let [a, b, c] = pts;
@@ -168,10 +161,8 @@ fn datum_of(world: &World, picks: &[GeoSel]) -> Result<(Datum, [[f64; 3]; 3]), S
     // Twice the area over the longest side is the triangle's least height.
     let height = norm(n) / longest;
     if !(height.is_finite() && height >= longest * MIN_SPREAD_DEG.to_radians().sin()) {
-        return Err(format!(
-            "the three points are (nearly) collinear - they span less than {MIN_SPREAD_DEG}° across; \
-             pick points spread across the plane"
-        ));
+        return Err(camcraft_i18n::tf("the three points are (nearly) collinear - they span less than {MIN_SPREAD_DEG}° across; \
+             pick points spread across the plane", &[format!("{}", MIN_SPREAD_DEG)]));
     }
     let mut normal = scale(n, 1.0 / norm(n));
     if material_side(world, a, normal) > 0.0 {

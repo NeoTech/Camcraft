@@ -36,8 +36,8 @@ impl SetSetupWorkholdingRpm {
             .ok_or_else(|| CommandError::Invalid(format!("'{setup}' is not a setup")))?;
         if prev == next {
             return Err(CommandError::Invalid(match next {
-                None => format!("setup '{setup}' states no workholding maximum rpm"),
-                Some(r) => format!("setup '{setup}' already states a workholding maximum of {r} rpm"),
+                None => camcraft_i18n::tf("setup '{setup}' states no workholding maximum rpm", &[format!("{}", setup)]),
+                Some(r) => camcraft_i18n::tf("setup '{setup}' already states a workholding maximum of {r} rpm", &[format!("{}", setup), format!("{}", r)]),
             }));
         }
         Ok(Self { setup: setup.to_owned(), prev, next })

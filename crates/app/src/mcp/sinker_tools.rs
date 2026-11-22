@@ -32,7 +32,7 @@ fn opt_mm(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
             .as_f64()
             .filter(|x| x.is_finite())
             .map(Some)
-            .ok_or_else(|| format!("\"{key}\" must be a finite number of mm, got {v}")),
+            .ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a finite number of mm, got {v}", &[format!("{}", key), format!("{}", v)])),
     }
 }
 
@@ -44,7 +44,7 @@ fn electrode_from_faces(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
     if let Some(s) = setup_name
         && !setup::exists(&env.world, s)
     {
-        return Err(format!("no setup named '{s}'"));
+        return Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)]));
     }
     // The undersize is stated, or read from the machine's condition -
     // never both, never neither (absent is not zero).
@@ -89,10 +89,7 @@ fn electrode_from_faces(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
         },
         "frame": if effective_setup.is_some() { "setup" } else { "world" },
         "setup": effective_setup,
-        "note": (e.orbit > 0.0).then(|| format!(
-            "made {:.3} mm smaller per side for an orbit of that radius: burn it as a single Sinker Burn with an orbit of that radius (#544) - a rough or finish takes no orbit until the size law counts it (#1355), and judges this electrode as the wrong size for its condition",
-            e.orbit
-        )),
+        "note": (e.orbit > 0.0).then(|| camcraft_i18n::tf("made {:.3} mm smaller per side for an orbit of that radius: burn it as a single Sinker Burn with an orbit of that radius (#544) - a rough or finish takes no orbit until the size law counts it (#1355), and judges this electrode as the wrong size for its condition", &[format!("{:.3}", e.orbit)])),
         "warning": undersize_warning(undersize),
     }))
 }

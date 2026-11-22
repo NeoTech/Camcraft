@@ -27,11 +27,7 @@ pub fn falls_back(tool: &Tool, body: &HolderProfile) -> bool {
 /// The words every kept-cylinder law adds for a tool with a body.
 #[must_use]
 pub fn enclosure_words(tool: &Tool) -> String {
-    format!(
-        "the tool body is judged here by the cylinder enclosing it, Ø{:.3} mm to {:.3} mm above the tip",
-        tool.holder_d,
-        tool.flute_len + tool.shank_len + tool.holder_len
-    )
+    camcraft_i18n::tf("the tool body is judged here by the cylinder enclosing it, Ø{:.3} mm to {:.3} mm above the tip", &[format!("{:.3}", tool.holder_d), format!("{:.3}", tool.flute_len + tool.shank_len + tool.holder_len)])
 }
 
 /// A generator refusal that names the holder, for a tool carrying a
@@ -54,5 +50,5 @@ pub fn name_enclosure(e: GenError, tool: &Tool, body: Option<&HolderProfile>) ->
 /// as one enclosing band (#842: a body that does not fit the stylus).
 #[must_use]
 pub fn probe_note(tool: &Tool, body: Option<&HolderProfile>) -> Option<String> {
-    body.map(|_| format!("probe reach: {}", enclosure_words(tool)))
+    body.map(|_| camcraft_i18n::tf("probe reach: {}", &[format!("{}", enclosure_words(tool))]))
 }

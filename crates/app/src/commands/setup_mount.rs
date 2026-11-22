@@ -70,8 +70,8 @@ impl SetSetupMachine {
         let next = next.map(|(path, machine)| MachineDef { path, machine });
         if def.machine == next {
             return Err(CommandError::Invalid(match next {
-                None => format!("setup '{setup}' already follows the document's machine"),
-                Some(_) => format!("setup '{setup}' already mounts that machine"),
+                None => camcraft_i18n::tf("setup '{setup}' already follows the document's machine", &[format!("{}", setup)]),
+                Some(_) => camcraft_i18n::tf("setup '{setup}' already mounts that machine", &[format!("{}", setup)]),
             }));
         }
         Ok(Self { setup: setup.to_owned(), prev: def.machine, next })
@@ -88,7 +88,7 @@ impl SetSetupMachine {
     /// Read and parse a `.mch` file, then mount it; the refusal names the file.
     pub fn from_file(world: &World, setup: &str, path: &std::path::Path) -> Result<Self, CommandError> {
         let text = std::fs::read_to_string(path)
-            .map_err(|e| CommandError::Invalid(format!("machine file {}: {e}", path.display())))?;
+            .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("machine file {}: {e}", &[format!("{}", path.display()), format!("{}", e)])))?;
         let m = crate::machine::parse_mch(&text).map_err(|e| CommandError::Invalid(format!("{}: {e}", path.display())))?;
         Self::new(world, setup, Some((path.display().to_string(), Some(m))))
     }
@@ -139,8 +139,8 @@ impl SetSetupPost {
         }
         if def.post == next {
             return Err(CommandError::Invalid(match next {
-                None => format!("setup '{setup}' already follows the document's post"),
-                Some(_) => format!("setup '{setup}' already posts with that post"),
+                None => camcraft_i18n::tf("setup '{setup}' already follows the document's post", &[format!("{}", setup)]),
+                Some(_) => camcraft_i18n::tf("setup '{setup}' already posts with that post", &[format!("{}", setup)]),
             }));
         }
         Ok(Self { setup: setup.to_owned(), prev: def.post, next })

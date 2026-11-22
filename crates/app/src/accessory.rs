@@ -243,10 +243,10 @@ impl Accessory {
             }
             let label = label.to_lowercase();
             if !v.is_finite() {
-                return Err(format!("{what} {label} must be a finite length (got {v})"));
+                return Err(camcraft_i18n::tf("{what} {label} must be a finite length (got {v})", &[format!("{}", what), format!("{}", label), format!("{}", v)]));
             }
             if v <= 0.0 {
-                return Err(format!("{what} {label} must be more than zero (got {v} mm)"));
+                return Err(camcraft_i18n::tf("{what} {label} must be more than zero (got {v} mm)", &[format!("{}", what), format!("{}", label), format!("{}", v)]));
             }
             if v > MAX_DIM {
                 return Err(format!("{what} {label} {v:.3} mm is over {MAX_DIM} mm"));
@@ -254,7 +254,7 @@ impl Accessory {
         }
         match self {
             Self::StepBlock { steps, .. } if !(1..=MAX_STEPS).contains(steps) => {
-                Err(format!("{what} step count must be 1 to {MAX_STEPS} (got {steps})"))
+                Err(camcraft_i18n::tf("{what} step count must be 1 to {MAX_STEPS} (got {steps})", &[format!("{}", what), format!("{}", MAX_STEPS), format!("{}", steps)]))
             }
             Self::StrapClamp { strap_length, strap_width, stud_diameter, stud_offset, heel_length, .. } => {
                 let r = mesh::stud_radius(*stud_diameter);
@@ -262,21 +262,16 @@ impl Accessory {
                 // strap's band is drawn only as wide as the strap - a
                 // wider stud would be modelled narrower than typed.
                 if 2.0 * r >= *strap_width {
-                    return Err(format!(
-                        "{what} stud diameter {stud_diameter:.3} mm (enclosing {:.3} mm) must be less than the strap width {strap_width:.3} mm (the stud passes through the strap)",
-                        2.0 * r
-                    ));
+                    return Err(camcraft_i18n::tf("{what} stud diameter {stud_diameter:.3} mm (enclosing {:.3} mm) must be less than the strap width {strap_width:.3} mm (the stud passes through the strap)", &[format!("{}", what), format!("{:.3}", stud_diameter), format!("{:.3}", 2.0 * r), format!("{:.3}", strap_width)]));
                 }
                 if *heel_length >= *strap_length {
-                    return Err(format!(
-                        "{what} heel block length {heel_length:.3} mm must be less than the strap length {strap_length:.3} mm"
-                    ));
+                    return Err(camcraft_i18n::tf("{what} heel block length {heel_length:.3} mm must be less than the strap length {strap_length:.3} mm", &[format!("{}", what), format!("{:.3}", heel_length), format!("{:.3}", strap_length)]));
                 }
                 if *stud_offset - r <= 0.0 {
-                    return Err(format!("{what} stud from the toe {stud_offset:.3} mm puts the stud past the toe"));
+                    return Err(camcraft_i18n::tf("{what} stud from the toe {stud_offset:.3} mm puts the stud past the toe", &[format!("{}", what), format!("{:.3}", stud_offset)]));
                 }
                 if *stud_offset + r >= *strap_length - *heel_length {
-                    return Err(format!("{what} stud from the toe {stud_offset:.3} mm puts the stud into the heel block"));
+                    return Err(camcraft_i18n::tf("{what} stud from the toe {stud_offset:.3} mm puts the stud into the heel block", &[format!("{}", what), format!("{:.3}", stud_offset)]));
                 }
                 Ok(())
             }
@@ -301,7 +296,7 @@ impl Accessory {
         let keys: Vec<&str> = self.dims().iter().map(|d| d.0).collect();
         match self.dims_mut().into_iter().find(|d| d.key == key) {
             Some(d) => *d.value = v,
-            None => return Err(format!("a {kind} has no dimension \"{key}\" (one of {})", keys.join(", "))),
+            None => return Err(camcraft_i18n::tf("a {kind} has no dimension \"{key}\" (one of {})", &[format!("{}", kind), format!("{}", key), format!("{}", keys.join(", "))])),
         }
         Ok(self)
     }
@@ -351,7 +346,7 @@ pub fn fit_parallels(
     above: f64,
 ) -> Result<ParallelsFit, String> {
     if !above.is_finite() || above < 0.0 {
-        return Err(format!("the stock's height over the jaws must be zero or more (got {above} mm)"));
+        return Err(camcraft_i18n::tf("the stock's height over the jaws must be zero or more (got {above} mm)", &[format!("{}", above)]));
     }
     let inv = quat_conjugate(pose.rot);
     let (mut lo, mut hi) = (f64::MAX, f64::MIN);
@@ -371,16 +366,11 @@ pub fn fit_parallels(
     let tall = hi - lo;
     let height = jaw_height + above - tall;
     if height <= 0.0 {
-        return Err(format!(
-            "the stock is {tall:.3} mm tall: on the vise floor it already stands {:.3} mm over the jaws - no parallels fit under it",
-            tall - jaw_height
-        ));
+        return Err(camcraft_i18n::tf("the stock is {tall:.3} mm tall: on the vise floor it already stands {:.3} mm over the jaws - no parallels fit under it", &[format!("{:.3}", tall), format!("{:.3}", tall - jaw_height)]));
     }
     let spacing = opening - 2.0 * thickness;
     if spacing <= 0.0 {
-        return Err(format!(
-            "two {thickness:.3} mm parallels do not fit in the vise's {opening:.3} mm jaw opening"
-        ));
+        return Err(camcraft_i18n::tf("two {thickness:.3} mm parallels do not fit in the vise's {opening:.3} mm jaw opening", &[format!("{:.3}", thickness), format!("{:.3}", opening)]));
     }
     let drop = quat_rotate_point(pose.rot, Point3::new(0.0, 0.0, lo - height));
     let vise = Location { pos: Point3::new(pose.pos.x + drop.x, pose.pos.y + drop.y, pose.pos.z + drop.z), rot: pose.rot };

@@ -221,13 +221,10 @@ pub fn unapplied_script_warning(
             _ => String::new(),
         };
         let reason = match e.combined_into {
-            Some(first) => format!("because the program posted one file using setup '{first}'s options"),
-            None => format!("because the program posted with {chosen_label}"),
+            Some(first) => camcraft_i18n::tf("because the program posted one file using setup '{first}'s options", &[format!("{}", first)]),
+            None => camcraft_i18n::tf("because the program posted with {chosen_label}", &[format!("{}", chosen_label)]),
         };
-        format!(
-            "{prefix}stored script_options for {own_label} ({}) were not applied {reason}",
-            e.keys.join(", ")
-        )
+        camcraft_i18n::tf("{prefix}stored script_options for {own_label} ({}) were not applied {reason}", &[format!("{}", prefix), format!("{}", own_label), format!("{}", e.keys.join(", ")), format!("{}", reason)])
     };
     let all_same_doc = entries.len() == total_setups
         && entries.iter().all(|e| {
@@ -296,10 +293,7 @@ fn script_disagreement_problem(
     if differ.is_empty() {
         return None;
     }
-    Some(format!(
-        "setup '{here}' posts with other post script options ({}) than the active setup '{active}' - post the setups one at a time",
-        differ.join(", ")
-    ))
+    Some(camcraft_i18n::tf("setup '{here}' posts with other post script options ({}) than the active setup '{active}' - post the setups one at a time", &[format!("{}", here), format!("{}", differ.join(", ")), format!("{}", active)]))
 }
 
 /// Every non-active setup that disagrees with the active setup. Each
@@ -328,10 +322,7 @@ pub fn program_problems(world: &World) -> Vec<String> {
         let has = of(world, Some(&here));
         let differ = differing(&has, &want);
         if !differ.is_empty() {
-            out.push(format!(
-                "setup '{here}' posts with other post options ({}) than the active setup '{active}' - post the setups one at a time",
-                differ.join(", ")
-            ));
+            out.push(camcraft_i18n::tf("setup '{here}' posts with other post options ({}) than the active setup '{active}' - post the setups one at a time", &[format!("{}", here), format!("{}", differ.join(", ")), format!("{}", active)]));
         }
         if let Some(msg) = script_disagreement_problem(world, &active, &want, &here) {
             out.push(msg);

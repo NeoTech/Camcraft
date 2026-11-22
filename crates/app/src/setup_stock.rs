@@ -114,7 +114,7 @@ pub fn effective(world: &World, name: &str) -> Option<StockSource> {
 #[must_use]
 pub fn carry_refusal(world: &World, name: &str) -> Option<String> {
     let Some(prev) = previous(world, name) else {
-        return Some(format!("'{name}' is the first setup - there is no setup before it to take stock from"));
+        return Some(camcraft_i18n::tf("'{name}' is the first setup - there is no setup before it to take stock from", &[format!("{}", name)]));
     };
     crate::stock_sim::carry::carry_turn(world, &prev, name).err()
 }
@@ -147,6 +147,6 @@ pub struct Incoming {
 /// and a body with no material left.
 pub fn incoming(world: &World, name: &str) -> Result<Incoming, String> {
     let body = crate::stock_sim::incoming_body(world, name)?;
-    let (lo, hi) = body.bounds().ok_or_else(|| format!("no material reaches setup '{name}'"))?;
+    let (lo, hi) = body.bounds().ok_or_else(|| camcraft_i18n::tf("no material reaches setup '{name}'", &[format!("{}", name)]))?;
     Ok(Incoming { min: [lo.x, lo.y, lo.z], max: [hi.x, hi.y, hi.z], volume: body.volume() })
 }

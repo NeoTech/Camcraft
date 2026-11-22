@@ -85,9 +85,7 @@ pub(super) fn judge_about(path: &Toolpath, kind: &str, ax: &crate::multiaxis::ax
 }
 
 fn unjudged(kind: &str, why: &str) -> GenError {
-    GenError::Invalid(format!(
-        "{kind}: the first rapid from the turret's index position cannot be judged ({why}) - refused, never posted unjudged"
-    ))
+    GenError::Invalid(camcraft_i18n::tf("{kind}: the first rapid from the turret's index position cannot be judged ({why}) - refused, never posted unjudged", &[format!("{}", kind), format!("{}", why)]))
 }
 
 /// Refuse by name a rotary kind (`kind`, its label) whose first rapid,
@@ -121,18 +119,14 @@ pub(super) fn judge(path: &Toolpath, kind: &str, spindle: [f64; 2], tool: &Tool,
             LiveHit::Steel { along_mm, z_mm, .. } => ("a fixture that turns with the part (a chuck)", along_mm, z_mm),
         };
         let reach = if along.is_finite() && z.is_finite() {
-            format!("reaches out to {along:.3} from the spindle at Z{z:.3} there")
+            camcraft_i18n::tf("reaches out to {along:.3} from the spindle at Z{z:.3} there", &[format!("{:.3}", along), format!("{:.3}", z)])
         } else {
             "has a point that cannot be read".into()
         };
-        return Err(GenError::Invalid(format!(
-            "{kind}: the first rapid comes from the turret's index position (the top of the X and Z travel) to radius \
+        return Err(GenError::Invalid(camcraft_i18n::tf("{kind}: the first rapid comes from the turret's index position (the top of the X and Z travel) to radius \
              {r:.3} at Z{:.3}; the lathe post turns C to that point, then sends X and Z in one rapid, so the tool can \
              pass every radius from {r:.3} out, from Z{:.3} up, on the live-tool station, and {what} {reach} - raise \
-             the clearance height, or move it clear of that band",
-            at.z,
-            at.z - 0.5 * tool.diameter
-        )));
+             the clearance height, or move it clear of that band", &[format!("{}", kind), format!("{:.3}", r), format!("{:.3}", at.z), format!("{:.3}", r), format!("{:.3}", at.z - 0.5 * tool.diameter), format!("{}", what), format!("{}", reach)])));
     }
     Ok(())
 }

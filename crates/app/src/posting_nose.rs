@@ -62,21 +62,15 @@ pub fn nose_contacts(params: &OpParams, tool: &Tool) -> Option<&'static [Contact
 pub fn checked_orientation(params: &OpParams, tool_name: &str, tool: &Tool) -> Result<Option<u8>, String> {
     let Some(need) = nose_contacts(params, tool) else { return Ok(None) };
     let Some(q) = tool.lathe_orientation().filter(|q| orientation::is_valid(*q)) else {
-        return Err(format!("tool '{tool_name}' states no lathe orientation (1-9) - set it in the tool editor"));
+        return Err(camcraft_i18n::tf("tool '{tool_name}' states no lathe orientation (1-9) - set it in the tool editor", &[format!("{}", tool_name)]));
     };
     if need.iter().all(|c| orientation::covers(q, *c)) {
         return Ok(Some(q));
     }
     let needs: Vec<String> = need.iter().map(ToString::to_string).collect();
     let fit: Vec<String> = orientation::fitting(need).iter().map(ToString::to_string).collect();
-    Err(format!(
-        "a {} cut needs the {} nose contact{}, which call for orientation [{}]; tool '{tool_name}' is orientation {q} - \
-         set the tool's orientation to match how it is mounted, or pick a tool that is",
-        params.kind(),
-        needs.join(" and "),
-        if need.len() > 1 { "s" } else { "" },
-        fit.join(", "),
-    ))
+    Err(camcraft_i18n::tf("a {} cut needs the {} nose contact{}, which call for orientation [{}]; tool '{tool_name}' is orientation {q} - \
+         set the tool's orientation to match how it is mounted, or pick a tool that is", &[format!("{}", params.kind()), format!("{}", needs.join(" and ")), format!("{}", if need.len() > 1 { "s" } else { "" }), format!("{}", fit.join(", ")), format!("{}", tool_name), format!("{}", q)]))
 }
 
 /// Whether `params` posts a blade's tip edge (#641): grooving and
@@ -96,21 +90,17 @@ pub fn checked_blade_corner(params: &OpParams, tool_name: &str, tool: &Tool) -> 
         return Ok(None);
     }
     let Some(q) = tool.lathe_orientation() else {
-        return Err(format!("blade '{tool_name}' states no touched-off corner - set its lathe orientation in the tool editor"));
+        return Err(camcraft_i18n::tf("blade '{tool_name}' states no touched-off corner - set its lathe orientation in the tool editor", &[format!("{}", tool_name)]));
     };
     let Some(side) = orientation::blade_corner(q) else {
         let fit: Vec<String> = orientation::BLADE_FITTING.iter().map(ToString::to_string).collect();
-        return Err(format!(
-            "a {} plunges an OD blade toward the axis, touched off on a corner or the centre of its tip edge, which \
+        return Err(camcraft_i18n::tf("a {} plunges an OD blade toward the axis, touched off on a corner or the centre of its tip edge, which \
              call for orientation [{}]; blade '{tool_name}' is orientation {q} (an ID or face blade) - set the \
-             orientation to the corner it was touched off on, or pick a blade that is",
-            params.kind(),
-            fit.join(", "),
-        ));
+             orientation to the corner it was touched off on, or pick a blade that is", &[format!("{}", params.kind()), format!("{}", fit.join(", ")), format!("{}", tool_name), format!("{}", q)]));
     };
     let w = tool.width;
     if !w.is_finite() || w <= 0.0 {
-        return Err(format!("blade '{tool_name}' has no usable width to find its corner by"));
+        return Err(camcraft_i18n::tf("blade '{tool_name}' has no usable width to find its corner by", &[format!("{}", tool_name)]));
     }
     Ok(Some((q, side * w * 0.5)))
 }
@@ -128,7 +118,7 @@ pub fn posted_path<'a>(
 ) -> Result<(Cow<'a, Toolpath>, Option<u8>), String> {
     if let Some((q, dz)) = checked_blade_corner(params, tool_name, tool)? {
         let posted = crate::post::nose_tip::control_point_path(path, (0.0, dz), origin)
-            .map_err(|e| format!("the touched-off corner for orientation {q}: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("the touched-off corner for orientation {q}: {e}", &[format!("{}", q), format!("{}", e)]))?;
         return Ok((Cow::Owned(posted), Some(q)));
     }
     let Some(q) = checked_orientation(params, tool_name, tool)? else {
@@ -137,9 +127,9 @@ pub fn posted_path<'a>(
     let (ox, oz) = orientation::tip_offset(q).unwrap_or((0.0, 0.0));
     let r = tool.nose_radius;
     if !r.is_finite() || r < 0.0 {
-        return Err(format!("tool '{tool_name}' has no usable nose radius"));
+        return Err(camcraft_i18n::tf("tool '{tool_name}' has no usable nose radius", &[format!("{}", tool_name)]));
     }
     let posted = crate::post::nose_tip::control_point_path(path, (r * ox, r * oz), origin)
-        .map_err(|e| format!("the control point for orientation {q}: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("the control point for orientation {q}: {e}", &[format!("{}", q), format!("{}", e)]))?;
     Ok((Cow::Owned(posted), Some(q)))
 }

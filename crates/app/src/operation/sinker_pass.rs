@@ -34,7 +34,7 @@ fn condition_undersize(world: &World, setup: Option<&str>, op: &SinkerBurnOp) ->
     let c = super::sinker_op::condition(world, setup, op, &[ConditionField::Gap, ConditionField::Undersize])?;
     let id = op.condition.trim();
     c.undersize
-        .ok_or_else(|| format!("EDM condition {id:?} states no undersize - a {} burn reads it", op.pass.label()))
+        .ok_or_else(|| camcraft_i18n::tf("EDM condition {id:?} states no undersize - a {} burn reads it", &[format!("{:?}", id), format!("{}", op.pass.label())]))
 }
 
 /// Does `other` burn the same cavity at the same point as `op`?

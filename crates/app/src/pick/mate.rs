@@ -55,39 +55,39 @@ pub fn mate_datum(world: &World, g: &GeoSel, pose: Location) -> Result<MateDatum
             let v = features.verts.get(vi as usize).ok_or_else(|| gone(world, g))?;
             let p = place(*v);
             if !p.iter().all(|c| c.is_finite()) {
-                return Err(format!("{} is not a finite point - re-pick it", label()));
+                return Err(camcraft_i18n::tf("{} is not a finite point - re-pick it", &[format!("{}", label())]));
             }
             Ok(MateDatum::Point(p))
         }
         FeatureSel::Face(fid) => {
             let f = features.faces.iter().find(|f| f.id == *fid).ok_or_else(|| gone(world, g))?;
             if f.kind == feature::FaceKind::Degenerate {
-                return Err(format!("{} is degenerate (no usable plane) - pick another face", label()));
+                return Err(camcraft_i18n::tf("{} is degenerate (no usable plane) - pick another face", &[format!("{}", label())]));
             }
             let tris = model::facets_of(world, &e).ok_or_else(|| gone(world, g))?;
             if face_area(&tris, &f.facets) <= MIN_FACE_AREA_MM2 {
-                return Err(format!("{} has no area - pick a face with a surface", label()));
+                return Err(camcraft_i18n::tf("{} has no area - pick a face with a surface", &[format!("{}", label())]));
             }
             let n = outward_normal(world, g, local)?
-                .ok_or_else(|| format!("{} is not flat - pick a flat face or a vertex", label()))?;
+                .ok_or_else(|| camcraft_i18n::tf("{} is not flat - pick a flat face or a vertex", &[format!("{}", label())]))?;
             let c = facets_centroid(&tris, f.facets.iter().map(|&i| i as usize))
-                .ok_or_else(|| format!("{} has no area - pick a face with a surface", label()))?;
+                .ok_or_else(|| camcraft_i18n::tf("{} has no area - pick a face with a surface", &[format!("{}", label())]))?;
             let wn = quat_rotate_point(pose.rot, Point3::new(n[0], n[1], n[2]));
             let normal = [wn.x, wn.y, wn.z];
             let at = place(c);
             if !at.iter().chain(&normal).all(|v| v.is_finite()) {
-                return Err(format!("{} has no usable plane - re-pick it", label()));
+                return Err(camcraft_i18n::tf("{} has no usable plane - re-pick it", &[format!("{}", label())]));
             }
             Ok(MateDatum::Plane { at, normal })
         }
         FeatureSel::Patch(_) => {
-            Err(format!("{} is curved - pick a flat face or a vertex", label()))
+            Err(camcraft_i18n::tf("{} is curved - pick a flat face or a vertex", &[format!("{}", label())]))
         }
         FeatureSel::Chain(_) => {
-            Err(format!("{} is an edge - pick a flat face or a vertex", label()))
+            Err(camcraft_i18n::tf("{} is an edge - pick a flat face or a vertex", &[format!("{}", label())]))
         }
         FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-            Err(format!("{} is a DXF sketch pick - pick a flat face or a vertex", label()))
+            Err(camcraft_i18n::tf("{} is a DXF sketch pick - pick a flat face or a vertex", &[format!("{}", label())]))
         }
     }
 }

@@ -142,9 +142,7 @@ pub fn body_to_dto(b: &ToolBody) -> (Option<HolderRefDto>, Option<ToolBodyDto>) 
 /// tool - the file refuses by name rather than choose one.
 pub fn stated_body(holder: Option<&HolderRefDto>, body: Option<&ToolBodyDto>, tool: &str) -> Result<Option<ToolBody>, String> {
     match (holder, body) {
-        (Some(_), Some(_)) => Err(format!(
-            "tool '{tool}': it states both a library holder (\"holder\") and a body (\"body\") - a tool has one"
-        )),
+        (Some(_), Some(_)) => Err(camcraft_i18n::tf("tool '{tool}': it states both a library holder (\"holder\") and a body (\"body\") - a tool has one", &[format!("{}", tool)])),
         (Some(h), None) => h.to_body(tool).map(Some),
         (None, Some(b)) => b.to_body(tool).map(Some),
         (None, None) => Ok(None),
@@ -257,18 +255,13 @@ impl ToolBodyDto {
                 });
             }
             if total_facets != body.facets.len() {
-                return Err(format!(
-                    "tool '{tool}': modular piece facets ({total_facets}) do not match combined body facets ({})",
-                    body.facets.len()
-                ));
+                return Err(camcraft_i18n::tf("tool '{tool}': modular piece facets ({total_facets}) do not match combined body facets ({})", &[format!("{}", tool), format!("{}", total_facets), format!("{}", body.facets.len())]));
             }
             // Pieces rebuild the judged body after attachment/removal. Require
             // the same ordered geometry that was validated above, not merely
             // the same number of facets, so a saved piece cannot shrink it.
             if !pieces.iter().flat_map(|p| p.facets.iter()).eq(body.facets.iter()) {
-                return Err(format!(
-                    "tool '{tool}': modular piece coordinates do not match combined body facets"
-                ));
+                return Err(camcraft_i18n::tf("tool '{tool}': modular piece coordinates do not match combined body facets", &[format!("{}", tool)]));
             }
             body.pieces = pieces;
         }
@@ -278,10 +271,10 @@ impl ToolBodyDto {
     fn to_drawn_body(&self, tool: &str) -> Result<ToolBody, String> {
         if let Some(pts) = &self.spun {
             if self.lathe.is_some() || self.insert_zone.is_some() {
-                return Err(format!("tool '{tool}': a drawn holder profile is a spindle body, not a lathe one"));
+                return Err(camcraft_i18n::tf("tool '{tool}': a drawn holder profile is a spindle body, not a lathe one", &[format!("{}", tool)]));
             }
             let points = pts.iter().map(|p| SpunPoint { z: p[0], r: p[1], arc: p[2] }).collect();
-            let spun = SpunProfile::new(points).map_err(|e| format!("tool '{tool}': holder profile: {e}"))?;
+            let spun = SpunProfile::new(points).map_err(|e| camcraft_i18n::tf("tool '{tool}': holder profile: {e}", &[format!("{}", tool), format!("{}", e)]))?;
             return Ok(crate::tool_body::build_spun(spun));
         }
         let facets = dto_to_facets(self.facets.clone());
@@ -308,5 +301,5 @@ pub fn spun_to_dto(s: &SpunProfile) -> Vec<[f64; 3]> {
 /// (`cutter_profile::check`); a refusal names the tool.
 pub fn cutter_from_dto(tool: &crate::tools::Tool, pts: &[[f64; 3]], name: &str) -> Result<SpunProfile, String> {
     let points = pts.iter().map(|p| SpunPoint { z: p[0], r: p[1], arc: p[2] }).collect();
-    camcraft_tools::cutter_profile::check(tool, points).map_err(|e| format!("tool '{name}': cutter profile: {e}"))
+    camcraft_tools::cutter_profile::check(tool, points).map_err(|e| camcraft_i18n::tf("tool '{name}': cutter profile: {e}", &[format!("{}", name), format!("{}", e)]))
 }

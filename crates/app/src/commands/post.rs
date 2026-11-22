@@ -47,15 +47,13 @@ pub(crate) fn validate(next: &PostRef) -> Result<(), CommandError> {
     match next {
         PostRef::File(path) => {
             let text = std::fs::read_to_string(path)
-                .map_err(|e| CommandError::Invalid(format!("post script {path}: {e}")))?;
+                .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("post script {path}: {e}", &[format!("{}", path), format!("{}", e)])))?;
             engine::run(&text, &serde_json::Value::Null, "")
-                .map_err(|e| CommandError::Invalid(format!("post script {path} does not run: {e}")))?;
+                .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("post script {path} does not run: {e}", &[format!("{}", path), format!("{}", e)])))?;
         }
         PostRef::Named(name) => {
             if !posting::BUILTINS.iter().any(|(n, _)| n == name) {
-                return Err(CommandError::Invalid(format!(
-                    "built-in post {name} is not in the registry"
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("built-in post {name} is not in the registry", &[format!("{}", name)])));
             }
         }
         PostRef::Builtin => {}

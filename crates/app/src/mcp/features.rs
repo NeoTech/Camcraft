@@ -131,7 +131,7 @@ fn outward(w: &World, model: &str, fa: &feature::Face) -> Result<[f64; 3], Strin
     let sel = GeoSel { entity: model.to_owned(), feature: FeatureSel::Face(fa.id) };
     match outward_normal(w, &sel, model::transform_of) {
         Ok(Some(n)) => Ok(n),
-        Ok(None) => Err(format!("{} is not a flat face", crate::pick::geo_label(w, &sel))),
+        Ok(None) => Err(camcraft_i18n::tf("{} is not a flat face", &[format!("{}", crate::pick::geo_label(w, &sel))])),
         Err(why) => Err(why),
     }
 }
@@ -269,10 +269,10 @@ fn wanted_kinds(a: &Map<String, Value>, default: &[&'static str]) -> Result<Vec<
             .map(|v| {
                 v.as_str()
                     .and_then(|s| ALL_KINDS.iter().find(|k| **k == s).copied())
-                    .ok_or_else(|| format!("\"kinds\" entries are {}; got {v}", ALL_KINDS.join(", ")))
+                    .ok_or_else(|| camcraft_i18n::tf("\"kinds\" entries are {}; got {v}", &[format!("{}", ALL_KINDS.join(", ")), format!("{}", v)]))
             })
             .collect(),
-        Some(other) => Err(format!("\"kinds\" must be an array, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"kinds\" must be an array, got {other}", &[format!("{}", other)])),
     }
 }
 
@@ -283,7 +283,7 @@ fn limit_of(a: &Map<String, Value>) -> Result<usize, String> {
             .as_u64()
             .filter(|n| (1..=MAX_LIMIT as u64).contains(n))
             .map(|n| n as usize)
-            .ok_or_else(|| format!("\"limit\" must be a whole number from 1 to {MAX_LIMIT}, got {v}")),
+            .ok_or_else(|| camcraft_i18n::tf("\"limit\" must be a whole number from 1 to {MAX_LIMIT}, got {v}", &[format!("{}", MAX_LIMIT), format!("{}", v)])),
     }
 }
 
@@ -368,7 +368,7 @@ fn sketch_features(
 ) -> Result<Value, String> {
     let w = &env.world;
     let pose = crate::sketch::world_pose(w, &e)
-        .ok_or_else(|| format!("DXF profile '{name}' has no stock to lie on - set up stock first"))?;
+        .ok_or_else(|| camcraft_i18n::tf("DXF profile '{name}' has no stock to lie on - set up stock first", &[format!("{}", name)]))?;
     let kinds = wanted_kinds(a, &SKETCH_KINDS)?;
     let limit = limit_of(a)?;
     let mut out = json!({ "model": name, "kind": "sketch", "frame": "world", "truncated": false });
@@ -407,7 +407,7 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
         Some(e) if model::is_stock(w, &e) => e,
         _ => req_model(env, name)?,
     };
-    let tris = model::facets_of(w, &e).ok_or_else(|| format!("'{name}' has no geometry to pick from"))?;
+    let tris = model::facets_of(w, &e).ok_or_else(|| camcraft_i18n::tf("'{name}' has no geometry to pick from", &[format!("{}", name)]))?;
     let g = feature_graph_shared(&tris);
     let names = crate::pick::feature_names_of(w, &e);
     let f = &*g.features;

@@ -21,21 +21,21 @@ pub(super) fn check(file: &ProjectFile) -> Result<(), ProjectError> {
     for (&name, &to) in &links {
         let Some(to) = to else { continue };
         if !links.contains_key(to) {
-            return Err(corrupt(format!("setup '{name}' is placed relative to '{to}', which is not a setup")));
+            return Err(corrupt(camcraft_i18n::tf("setup '{name}' is placed relative to '{to}', which is not a setup", &[format!("{}", name), format!("{}", to)])));
         }
         // Walk up at most one step per setup: more is a loop.
         let mut at = Some(to);
         for _ in 0..links.len() {
             match at {
                 Some(n) if n == name => {
-                    return Err(corrupt(format!("setup '{name}' is placed relative to itself through a loop of links")));
+                    return Err(corrupt(camcraft_i18n::tf("setup '{name}' is placed relative to itself through a loop of links", &[format!("{}", name)])));
                 }
                 Some(n) => at = links.get(n).copied().flatten(),
                 None => break,
             }
         }
         if at.is_some() {
-            return Err(corrupt(format!("the setup links from '{name}' loop")));
+            return Err(corrupt(camcraft_i18n::tf("the setup links from '{name}' loop", &[format!("{}", name)])));
         }
     }
     Ok(())

@@ -84,9 +84,7 @@ fn check_with_cap(data: &[u8], cap: usize) -> Result<(), ImportError> {
                 || "a record without an entity id".to_string(),
                 |id| format!("entity #{id}"),
             );
-            Err(ImportError::Step(format!(
-                "record nests deeper than {cap} levels of parentheses at {at}, line {line}"
-            )))
+            Err(ImportError::Step(camcraft_i18n::tf("record nests deeper than {cap} levels of parentheses at {at}, line {line}", &[format!("{}", cap), format!("{}", at), format!("{}", line)])))
         }
     }
 }

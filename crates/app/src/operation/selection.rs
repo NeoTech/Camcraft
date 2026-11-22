@@ -115,25 +115,17 @@ pub(super) fn drive_chains(world: &World, setup: Option<&str>, items: &[GeoSel])
     let mut out: Vec<Vec<Point3>> = Vec::new();
     for g in items {
         let Some(entity) = model::find_by_name(world, &g.entity) else {
-            return Err(GenError::Invalid(format!(
-                "the selection names '{}', which is gone",
-                g.entity
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the selection names '{}', which is gone", &[format!("{}", g.entity)])));
         };
         let Some(features) = model::features_of(world, &entity) else {
-            return Err(GenError::Invalid(format!(
-                "'{}' has no geometry to select from",
-                g.entity
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
         };
         let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
         let label = crate::pick::geo_label(world, g);
         match g.feature {
             FeatureSel::Chain(cid) => {
                 let Some(c) = crate::model::resolve_chain(&features, cid) else {
-                    return Err(GenError::Invalid(format!(
-                        "{label} is no longer in the model: re-pick it"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)])));
                 };
                 let pts: Vec<Point3> = feature::chain_points(&features, &c)
                     .iter()
@@ -143,26 +135,18 @@ pub(super) fn drive_chains(world: &World, setup: Option<&str>, items: &[GeoSel])
                     // A one-point chain cannot carry a pass: the
                     // kernel's refusal would speak of drive curves
                     // while the pick is the one to blame - name it here.
-                    return Err(GenError::Invalid(format!(
-                        "{label} holds a single point - re-pick a real edge"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} holds a single point - re-pick a real edge", &[format!("{}", label)])));
                 }
                 out.push(pts);
             }
             FeatureSel::Face(_) | FeatureSel::Patch(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{label} is a face - Multi-Axis Contour machines the picked EDGE CHAINS where they stand; machine this face's boundary as a chain, or use 5-Axis Contour for the model's own pattern"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is a face - Multi-Axis Contour machines the picked EDGE CHAINS where they stand; machine this face's boundary as a chain, or use 5-Axis Contour for the model's own pattern", &[format!("{}", label)])));
             }
             FeatureSel::Vertex(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{label} is a point - Multi-Axis Contour machines picked EDGE CHAINS; pick the edges through it"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is a point - Multi-Axis Contour machines picked EDGE CHAINS; pick the edges through it", &[format!("{}", label)])));
             }
             FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{label} is a DXF sketch feature, not a 3D model edge chain"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is a DXF sketch feature, not a 3D model edge chain", &[format!("{}", label)])));
             }
         }
     }
@@ -285,46 +269,30 @@ pub(super) fn selection_geometry_in(
     if let Some(n) = &mut notes
         && stitched_runs > 0
     {
-        n.push(format!(
-            "{stitched_runs} open run{} stitched into {stitched_rings} ring{}",
-            if stitched_runs == 1 { "" } else { "s" },
-            if stitched_rings == 1 { "" } else { "s" },
-        ));
+        n.push(camcraft_i18n::tf("{stitched_runs} open run{} stitched into {stitched_rings} ring{}", &[format!("{}", stitched_runs), format!("{}", if stitched_runs == 1 { "" } else { "s" }), format!("{}", stitched_rings), format!("{}", if stitched_rings == 1 { "" } else { "s" })]));
     }
     // #1735: two open edges of a pocket-family pick are a band's walls.
     let band = open_band::of_selection(world, setup, items, params, frame, &stitched, &mut loops, notes.as_deref_mut())?;
     for (gi, g) in items.iter().enumerate() {
         let Some(entity) = model::find_by_name(world, &g.entity) else {
-            return Err(GenError::Invalid(format!(
-                "the selection names '{}', which is gone",
-                g.entity
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the selection names '{}', which is gone", &[format!("{}", g.entity)])));
         };
         let Some(features) = model::features_of(world, &entity) else {
-            return Err(GenError::Invalid(format!(
-                "'{}' has no geometry to select from",
-                g.entity
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
         };
         let loc = opframe.pose_in_setup(world, &entity).unwrap_or_default();
         let label = crate::pick::geo_label(world, g);
         match g.feature {
             FeatureSel::Vertex(_) => {
                 // A point bounds no region: refuse by name, never drop it.
-                return Err(GenError::Invalid(format!(
-                    "{label} is a point - a boundary needs faces or edge chains; pick those, or use the vertex as a height or origin reference"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is a point - a boundary needs faces or edge chains; pick those, or use the vertex as a height or origin reference", &[format!("{}", label)])));
             }
             FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{label} is a DXF sketch feature - only 2D Contour machines sketch picks"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{label} is a DXF sketch feature - only 2D Contour machines sketch picks", &[format!("{}", label)])));
             }
             FeatureSel::Face(fid) => {
                 let Some(f) = features.faces.iter().find(|f| f.id == fid) else {
-                    return Err(GenError::Invalid(format!(
-                        "{label} is no longer in the model: re-pick it"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)])));
                 };
                 let n = transform_point(
                     Point3::new(f.normal[0], f.normal[1], f.normal[2]),
@@ -334,16 +302,12 @@ pub(super) fn selection_geometry_in(
                 if facing && n.z.abs() < FACE_TILT_MAX_DEG.to_radians().cos() {
                     // #1510: a face level only in a tilted WCS says why.
                     if let Some(why) = crate::setup_wcs_tilt::setup_problem(world, setup) {
-                        return Err(GenError::Invalid(format!("{label} is not horizontal - a facing pass needs a floor on the machine, and {why}")));
+                        return Err(GenError::Invalid(camcraft_i18n::tf("{label} is not horizontal - a facing pass needs a floor on the machine, and {why}", &[format!("{}", label), format!("{}", why)])));
                     }
-                    return Err(GenError::Invalid(format!(
-                        "{label} is not horizontal - a facing pass needs a floor; machine its boundary with a 2D Contour instead"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is not horizontal - a facing pass needs a floor; machine its boundary with a 2D Contour instead", &[format!("{}", label)])));
                 }
                 if f.loops.iter().all(|l| matches!(l.kind, LoopKind::Open)) {
-                    return Err(GenError::Invalid(format!(
-                        "{label} is an open sheet; select its edge chain instead"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is an open sheet; select its edge chain instead", &[format!("{}", label)])));
                 }
                 for l in &f.loops {
                     if matches!(l.kind, LoopKind::Open) {
@@ -362,9 +326,7 @@ pub(super) fn selection_geometry_in(
             }
             FeatureSel::Chain(cid) => {
                 let Some(c) = crate::model::resolve_chain(&features, cid) else {
-                    return Err(GenError::Invalid(format!(
-                        "{label} is no longer in the model: re-pick it"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)])));
                 };
                 let xy: Vec<Point2> = feature::chain_points(&features, &c)
                     .iter()
@@ -394,9 +356,7 @@ pub(super) fn selection_geometry_in(
                         // no source footprint means nowhere to run to,
                         // said by name rather than dropped.
                         let Some(env) = &envelope else {
-                            return Err(GenError::Invalid(format!(
-                                "{label} is an open run and nothing bounds the plane around it - set up stock or close the pick into a chain"
-                            )));
+                            return Err(GenError::Invalid(camcraft_i18n::tf("{label} is an open run and nothing bounds the plane around it - set up stock or close the pick into a chain", &[format!("{}", label)])));
                         };
                         strips.push(extend_run_to_footprint(
                             &label,
@@ -410,10 +370,7 @@ pub(super) fn selection_geometry_in(
                         // and the name is the kind the user picked:
                         // Engrave is the trace's twin (M2.4 B), and a
                         // trace row's truth is this row's truth.
-                        return Err(GenError::Invalid(format!(
-                            "{label} is an open run - {} machines a closed boundary; use a 2D Contour or close the pick into a chain",
-                            params.kind().info().label
-                        )));
+                        return Err(GenError::Invalid(camcraft_i18n::tf("{label} is an open run - {} machines a closed boundary; use a 2D Contour or close the pick into a chain", &[format!("{}", label), format!("{}", params.kind().info().label)])));
                     }
                     continue;
                 }
@@ -421,9 +378,7 @@ pub(super) fn selection_geometry_in(
             }
             FeatureSel::Patch(pid) => {
                 let Some(rings) = feature::patch_rings(&features, pid) else {
-                    return Err(GenError::Invalid(format!(
-                        "{label} is no longer in the model: re-pick it"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)])));
                 };
                 // The Face arm's horizontal-tilt rule deliberately does not
                 // apply: a patch is exactly how one asks for a wall. The
@@ -448,9 +403,7 @@ pub(super) fn selection_geometry_in(
                     drew = true;
                 }
                 if !drew {
-                    return Err(GenError::Invalid(format!(
-                        "{label} bounds no closed ring - re-pick it"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{label} bounds no closed ring - re-pick it", &[format!("{}", label)])));
                 }
             }
         }
@@ -487,10 +440,7 @@ pub(super) fn selection_geometry_in(
         }
         if let Some(n) = &mut notes {
             if extended > 0 {
-                n.push(format!(
-                    "{extended} open run{} extended to the stock boundary",
-                    if extended == 1 { "" } else { "s" },
-                ));
+                n.push(camcraft_i18n::tf("{extended} open run{} extended to the stock boundary", &[format!("{}", extended), format!("{}", if extended == 1 { "" } else { "s" })]));
             }
             if flipped {
                 n.push("machining outside the run - the selection bounds air".into());

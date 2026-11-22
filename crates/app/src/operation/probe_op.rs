@@ -73,10 +73,7 @@ pub(super) fn probe_params(params: &OpParams, tool: &Tool, clearance_z: f64) -> 
         return Err(GenError::Invalid("not a probe operation".into()));
     };
     if tool.kind != ToolKind::Probe {
-        return Err(GenError::Invalid(format!(
-            "a probe operation mounts a touch probe, not a {}",
-            tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("a probe operation mounts a touch probe, not a {}", &[format!("{}", tool.kind)])));
     }
     if !(tolerance.is_finite() && *tolerance > 0.0) {
         return Err(GenError::Invalid("the probe tolerance must be positive".into()));

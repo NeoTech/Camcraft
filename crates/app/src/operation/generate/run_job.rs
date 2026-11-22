@@ -84,10 +84,7 @@ fn pocket_reach(job: &GenJob) -> Result<(), GenError> {
     for (name, bands) in [("shank", cutter.shank_bands()), ("holder", cutter.holder_bands())] {
         for (above, radius, len) in bands {
             if len > 0.0 && radius > cutter.radius && depth >= above {
-                return Err(GenError::Invalid(format!(
-                    "3D Pocket cannot prove {name} clearance for tool '{}': Bottom of Part Z is {:.3} mm below the material top, but its wider {name} starts {:.3} mm above the tip. Raise Bottom of Part Z above {:.3} mm or use a longer-reaching tool. This conservative reach check does not credit lateral clearance or previously removed stock.",
-                    job.tool_name, depth, above, top - above,
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("3D Pocket cannot prove {name} clearance for tool '{}': Bottom of Part Z is {:.3} mm below the material top, but its wider {name} starts {:.3} mm above the tip. Raise Bottom of Part Z above {:.3} mm or use a longer-reaching tool. This conservative reach check does not credit lateral clearance or previously removed stock.", &[format!("{}", name), format!("{}", job.tool_name), format!("{:.3}", depth), format!("{}", name), format!("{:.3}", above), format!("{:.3}", top - above)])));
             }
         }
     }
@@ -107,13 +104,9 @@ fn name_outside_entry_refusal(e: GenError, outside_stock: Option<bool>) -> GenEr
             || m.contains("too narrow")
         {
             if has_stock {
-                format!(
-                    "{m} - the setup stock leaves no room past the selection; enlarge the stock or set an Extension (Boundary)"
-                )
+                camcraft_i18n::tf("{m} - the setup stock leaves no room past the selection; enlarge the stock or set an Extension (Boundary)", &[format!("{}", m)])
             } else {
-                format!(
-                    "{m} - this setup has no stock, so Outside containment leaves a band one tool wide; set an Extension (Boundary) or add setup stock"
-                )
+                camcraft_i18n::tf("{m} - this setup has no stock, so Outside containment leaves a band one tool wide; set an Extension (Boundary) or add setup stock", &[format!("{}", m)])
             }
         } else {
             m

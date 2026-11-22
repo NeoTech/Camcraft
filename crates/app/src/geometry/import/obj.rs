@@ -50,10 +50,7 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
                     refs.push(resolve_ref(word, verts.len(), line)?);
                 }
                 if refs.len() < 3 {
-                    return Err(ImportError::Obj(format!(
-                        "line {line}: face has {} vertices",
-                        refs.len()
-                    )));
+                    return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: face has {} vertices", &[format!("{}", line), format!("{}", refs.len())])));
                 }
                 let v0 = refs[0];
                 // fan from v0 across the REST of the loop, in pairs
@@ -61,9 +58,7 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
                     let t = Triangle::new(verts[v0 as usize], verts[pair[0] as usize], verts[pair[1] as usize]);
                     let n = t.normal();
                     if n.x == 0.0 && n.y == 0.0 && n.z == 0.0 {
-                        return Err(ImportError::Obj(format!(
-                            "line {line}: degenerate triangle"
-                        )));
+                        return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: degenerate triangle", &[format!("{}", line)])));
                     }
                     if facets.len() >= MAX_FACETS {
                         return Err(ImportError::TooLarge);
@@ -86,14 +81,10 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
                 }
             }
             "p" | "l" => {
-                return Err(ImportError::Obj(format!(
-                    "line {line}: unsupported directive '{head}'"
-                )));
+                return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: unsupported directive '{head}'", &[format!("{}", line), format!("{}", head)])));
             }
             other => {
-                return Err(ImportError::Obj(format!(
-                    "line {line}: unknown directive '{other}'"
-                )));
+                return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: unknown directive '{other}'", &[format!("{}", line), format!("{}", other)])));
             }
         }
     }
@@ -109,16 +100,14 @@ fn read_point<'a>(tok: &mut impl Iterator<Item = &'a str>, line: usize) -> Resul
     for slot in xyz.iter_mut() {
         let word = tok
             .next()
-            .ok_or_else(|| ImportError::Obj(format!("line {line}: short vertex")))?;
+            .ok_or_else(|| ImportError::Obj(camcraft_i18n::tf("line {line}: short vertex", &[format!("{}", line)])))?;
         *slot = word
             .parse::<f64>()
-            .map_err(|_| ImportError::Obj(format!("line {line}: bad vertex value '{word}'")))?;
+            .map_err(|_| ImportError::Obj(camcraft_i18n::tf("line {line}: bad vertex value '{word}'", &[format!("{}", line), format!("{}", word)])))?;
     }
     let p = Point3::new(xyz[0], xyz[1], xyz[2]);
     if !p.is_finite() {
-        return Err(ImportError::Obj(format!(
-            "line {line}: non-finite vertex coordinate"
-        )));
+        return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: non-finite vertex coordinate", &[format!("{}", line)])));
     }
     Ok(p)
 }
@@ -128,16 +117,14 @@ fn resolve_ref(word: &str, nverts: usize, line: usize) -> Result<u32, ImportErro
     let first = word.split('/').next().unwrap_or(word); // split always yields >=1 item
     let idx: i64 = first
         .parse()
-        .map_err(|_| ImportError::Obj(format!("line {line}: bad vertex reference '{word}'")))?;
+        .map_err(|_| ImportError::Obj(camcraft_i18n::tf("line {line}: bad vertex reference '{word}'", &[format!("{}", line), format!("{}", word)])))?;
     let resolved = if idx < 0 {
         nverts as i64 + idx // negative indices count back from the end
     } else {
         idx - 1 // OBJ is 1-based
     };
     if resolved < 0 || resolved as usize >= nverts {
-        return Err(ImportError::Obj(format!(
-            "line {line}: vertex reference '{word}' out of range"
-        )));
+        return Err(ImportError::Obj(camcraft_i18n::tf("line {line}: vertex reference '{word}' out of range", &[format!("{}", line), format!("{}", word)])));
     }
     Ok(resolved as u32)
 }

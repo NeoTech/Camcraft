@@ -77,12 +77,7 @@ pub fn create_refusal(world: &World, info: &KindInfo) -> Option<String> {
     let hint = catalog_suggestion(&crate::tools::catalog(), info.tool_kinds)
         .map(|s| format!(" - {s}"))
         .unwrap_or_default();
-    Some(format!(
-        "No {} in {} tools - a {} operation cuts with one; add it to the tool library{hint}",
-        kinds_phrase(info.tool_kinds),
-        setup_words(world),
-        info.label
-    ))
+    Some(camcraft_i18n::tf("No {} in {} tools - a {} operation cuts with one; add it to the tool library{hint}", &[format!("{}", kinds_phrase(info.tool_kinds)), format!("{}", setup_words(world)), format!("{}", info.label), format!("{}", hint)]))
 }
 
 /// The everyday size a suggestion aims at when the refusal knows no
@@ -125,11 +120,7 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
                     .then_with(|| na.cmp(nb))
             })
     })?;
-    Some(format!(
-        "add '{name}' ({} mm {}) from the catalog?",
-        bought_size(tool),
-        tool.kind
-    ))
+    Some(camcraft_i18n::tf("add '{name}' ({} mm {}) from the catalog?", &[format!("{}", name), format!("{}", bought_size(tool)), format!("{}", tool.kind)]))
 }
 
 /// Why the named tool cannot cut this kind. `None` when it can, and
@@ -145,11 +136,7 @@ pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String
     if let Some(none_fit) = create_refusal(world, info) {
         return Some(none_fit);
     }
-    Some(format!(
-        "'{tool}' is a {kind}; a {} operation cuts with a {}",
-        info.label,
-        kinds_phrase(info.tool_kinds)
-    ))
+    Some(camcraft_i18n::tf("'{tool}' is a {kind}; a {} operation cuts with a {}", &[format!("{}", tool), format!("{}", kind), format!("{}", info.label), format!("{}", kinds_phrase(info.tool_kinds))]))
 }
 
 /// Why a tool's definition cannot change kind from `prev` to `next`:
@@ -173,13 +160,9 @@ pub fn retype_refusal(world: &World, tool: &str, prev: ToolKind, next: ToolKind)
     let more = match stranded.len().saturating_sub(1) {
         0 => String::new(),
         1 => String::from(" (and 1 more operation)"),
-        n => format!(" (and {n} more operations)"),
+        n => camcraft_i18n::tf(" (and {n} more operations)", &[format!("{}", n)]),
     };
-    Some(format!(
-        "'{tool}' cannot become a {next}: {first}{more} uses it, and a {} operation cuts with a {} - give it another tool first",
-        info.label,
-        kinds_phrase(info.tool_kinds)
-    ))
+    Some(camcraft_i18n::tf("'{tool}' cannot become a {next}: {first}{more} uses it, and a {} operation cuts with a {} - give it another tool first", &[format!("{}", tool), format!("{}", next), format!("{}", first), format!("{}", more), format!("{}", info.label), format!("{}", kinds_phrase(info.tool_kinds))]))
 }
 
 /// M10.1 C, the honest after-state: why an existing operation cannot be
@@ -193,15 +176,11 @@ pub fn retype_refusal(world: &World, tool: &str, prev: ToolKind, next: ToolKind)
 #[must_use]
 pub fn tool_problem(world: &World, op_name: &str, op: &Operation) -> Option<String> {
     let info = op.params.kind().info();
-    let wants = format!(
-        "a {} operation cuts with a {}",
-        info.label,
-        kinds_phrase(info.tool_kinds)
-    );
+    let wants = camcraft_i18n::tf("a {} operation cuts with a {}", &[format!("{}", info.label), format!("{}", kinds_phrase(info.tool_kinds))]);
     let tool = &op.tool;
     if !info.mounts_tool() {
         return (!tool.is_empty()).then(|| {
-            format!("{op_name} names tool '{tool}'; a {} operation mounts none", info.label)
+            camcraft_i18n::tf("{op_name} names tool '{tool}'; a {} operation mounts none", &[format!("{}", op_name), format!("{}", tool), format!("{}", info.label)])
         });
     }
     let Some(entity) = model::find_by_name(world, tool) else {
@@ -241,7 +220,7 @@ pub(super) type JobTool = (
 pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::machining2d::GenError> {
     use crate::machining2d::GenError;
     let Some(tool_entity) = model::find_by_name(world, &op.tool) else {
-        return Err(GenError::Invalid(format!("no tool named '{}'", op.tool)));
+        return Err(GenError::Invalid(camcraft_i18n::tf("no tool named '{}'", &[format!("{}", op.tool)])));
     };
     let Some(tool) = model::tool_of(world, &tool_entity) else {
         return Err(GenError::Invalid(format!("'{}' is not a tool", op.tool)));
@@ -257,10 +236,7 @@ pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::
     // op is refused by name rather than cut with it unjudged.
     let lathe_body = crate::tool_body_lathe::clearance_of(world, &tool_entity);
     if lathe_body.is_some() && op.params.kind().info().family() != super::Family::Turn {
-        return Err(GenError::Invalid(format!(
-            "tool '{}' carries a lathe-frame body, which only a turning operation judges - clear it or place a spindle body for this op",
-            op.tool
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("tool '{}' carries a lathe-frame body, which only a turning operation judges - clear it or place a spindle body for this op", &[format!("{}", op.tool)])));
     }
     Ok((tool, body, lathe_body, neck))
 }

@@ -44,10 +44,7 @@ pub fn setup_phrase(setup: Option<&str>) -> String {
 /// `what` ("the vise to", "the parallels under", ...).
 #[must_use]
 pub fn no_stock_message(setup: Option<&str>, what: &str) -> String {
-    format!(
-        "{} has no stock yet, so there is nothing to fit {what} - set the stock first (Stock page)",
-        setup_phrase(setup)
-    )
+    camcraft_i18n::tf("{} has no stock yet, so there is nothing to fit {what} - set the stock first (Stock page)", &[format!("{}", setup_phrase(setup)), format!("{}", what)])
 }
 
 /// Does `setup` (`None` - the implicit one) have a stock body to fit to?
@@ -60,10 +57,7 @@ pub fn has_stock(world: &World, setup: Option<&str>) -> bool {
 /// pose of its frame.
 pub fn fit(world: &World, params: &ViseParams, setup: Option<&str>) -> Result<(ViseParams, crate::schema::Location), FitRefusal> {
     let stock = model::stock_world_aabb_for(world, setup).ok_or_else(|| {
-        FitRefusal::NoStock(format!(
-            "{} - or place the vise by position instead",
-            no_stock_message(setup, "the vise to")
-        ))
+        FitRefusal::NoStock(camcraft_i18n::tf("{} - or place the vise by position instead", &[format!("{}", no_stock_message(setup, "the vise to"))]))
     })?;
     vise::fit_to_stock(params, &stock).map_err(FitRefusal::Refused)
 }

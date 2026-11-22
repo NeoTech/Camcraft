@@ -83,7 +83,7 @@ pub(super) fn noted(mut path: Toolpath, params: &OpParams, tool: &Tool, has_body
 /// Refuses by name when no spindle fits the part, or the path cannot
 /// tell the holder's side.
 pub(crate) fn body_axes(part: &[crate::geometry::Triangle], path: &Toolpath) -> Result<([f64; 3], [f64; 3]), String> {
-    let frame = Frame::about(part).map_err(|e| format!("no spindle fits the part ({e})"))?;
+    let frame = Frame::about(part).map_err(|e| camcraft_i18n::tf("no spindle fits the part ({e})", &[format!("{}", e)]))?;
     let sm = SignedMeridian::of(&frame, path);
     let (side, _) = sided_pieces(&sm, path, super::material::Z_TOL)?;
     let (dir, r) = sm.axes();
@@ -107,10 +107,10 @@ pub(super) fn judge(
     if params.kind().info().section != Section::Turning {
         return Ok(());
     }
-    let unjudged = |why: String| format!("the lathe holder body cannot be judged: {why}");
-    let profile = crate::stock_sim::lathe::profile_of(tool).ok_or_else(|| unjudged(format!("a {} cuts with no turning footprint", tool.kind)))?;
+    let unjudged = |why: String| camcraft_i18n::tf("the lathe holder body cannot be judged: {why}", &[format!("{}", why)]);
+    let profile = crate::stock_sim::lathe::profile_of(tool).ok_or_else(|| unjudged(camcraft_i18n::tf("a {} cuts with no turning footprint", &[format!("{}", tool.kind)])))?;
     profile.validate().map_err(|e| unjudged(e.to_string()))?;
-    let frame = Frame::about(cx.part).map_err(|e| unjudged(format!("no spindle fits the part ({e})")))?;
+    let frame = Frame::about(cx.part).map_err(|e| unjudged(camcraft_i18n::tf("no spindle fits the part ({e})", &[format!("{}", e)])))?;
     let part = Revolved::of(cx.part, &frame).ok_or_else(|| unjudged("the part has a non-finite vertex".into()))?;
     let stock = match cx.stock {
         Some(s) => Some(Revolved::of(s, &frame).ok_or_else(|| unjudged("the stock has a non-finite vertex".into()))?),
@@ -166,7 +166,7 @@ pub(super) fn judge(
 pub(super) fn sided_pieces(sm: &SignedMeridian, path: &Toolpath, tol: f64) -> Result<(f64, Vec<Vec<Seg>>), String> {
     let mut pieces = Vec::with_capacity(path.moves.len());
     for (i, m) in path.moves.iter().enumerate() {
-        pieces.push(pieces_of(m, sm, tol).ok_or_else(|| format!("move {i} leaves the turning plane"))?);
+        pieces.push(pieces_of(m, sm, tol).ok_or_else(|| camcraft_i18n::tf("move {i} leaves the turning plane", &[format!("{}", i)]))?);
     }
     sided(pieces)
 }

@@ -41,11 +41,7 @@ pub(super) fn open_pass(base: &Region, ctx: &AreaCtx, cp: &ContourParams) -> Res
     let c = &ctx.controls;
     let (run, d) = open_run(base, ctx, cp.stock_to_leave)?;
     let mut path = contour_along_chain(&run, cp)?;
-    path.notes.push(format!(
-        "contour: rides the open boundary {d:.3} mm to its {} side (tool centre), {} entering and leaving past its ends",
-        if *side == ChainSide::Inside { "Inside (A)" } else { "Outside (B)" },
-        if c.extension > 0.0 { "extended by the Boundary extension," } else { "its leads" },
-    ));
+    path.notes.push(camcraft_i18n::tf("contour: rides the open boundary {d:.3} mm to its {} side (tool centre), {} entering and leaving past its ends", &[format!("{:.3}", d), format!("{}", if *side == ChainSide::Inside { "Inside (A)" } else { "Outside (B)" }), format!("{}", if c.extension > 0.0 { "extended by the Boundary extension," } else { "its leads" })]));
     Ok(path)
 }
 
@@ -81,10 +77,7 @@ pub(super) fn open_run(base: &Region, ctx: &AreaCtx, stock_to_leave: f64) -> Res
         return Err(unreached("contour open boundary family"));
     }
     if let OpenGeom::Chains(cs) = geom {
-        return Err(GenError::Invalid(format!(
-            "a Contour rides one open chain - its open boundary spells {} separate chains; pick the edges between them or use a clearing kind to cut between them",
-            cs.len()
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("a Contour rides one open chain - its open boundary spells {} separate chains; pick the edges between them or use a clearing kind to cut between them", &[format!("{}", cs.len())])));
     }
     let OpenGeom::Chain(raw) = geom else {
         return Err(GenError::Invalid(
@@ -250,12 +243,8 @@ fn extended_ends(p: &[Point2], e0: f64, e1: f64) -> Vec<Point2> {
 /// `machining2d::offset_run_side` and formats the boundary refusal.
 fn offset_run(ext: &[Point2], d: f64, left: bool, unit: Unit) -> Result<Vec<Point2>, GenError> {
     crate::machining2d::offset_run_side(ext, d, left)?.ok_or_else(|| {
-        GenError::Invalid(format!(
-            "the open boundary's offset of {} {} folds onto itself (the chain comes back within twice \
-             the offset of itself) - pick a gentler chain or a smaller tool / offset",
-            crate::units::len(d, unit, 3),
-            unit.suffix()
-        ))
+        GenError::Invalid(camcraft_i18n::tf("the open boundary's offset of {} {} folds onto itself (the chain comes back within twice \
+             the offset of itself) - pick a gentler chain or a smaller tool / offset", &[format!("{}", crate::units::len(d, unit, 3)), format!("{}", unit.suffix())]))
     })
 }
 

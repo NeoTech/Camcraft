@@ -21,11 +21,11 @@ fn stock_turn(a: &Map<String, Value>) -> Result<[f64; 4], String> {
         (None, None) | (Some("z" | "Z"), None) => StockAxis::Z,
         (Some("x" | "X"), None) => StockAxis::X,
         (Some("y" | "Y"), None) => StockAxis::Y,
-        (Some(other), None) => return Err(format!("bad axis \"{other}\": give \"z\", \"x\" or \"y\"")),
+        (Some(other), None) => return Err(camcraft_i18n::tf("bad axis \"{other}\": give \"z\", \"x\" or \"y\"", &[format!("{}", other)])),
         (None, Some(v)) => {
             let ang = |k: &str| match v.get(k) {
                 None => Ok(0.0),
-                Some(n) => n.as_f64().ok_or_else(|| format!("angles_deg.{k} must be a number")),
+                Some(n) => n.as_f64().ok_or_else(|| camcraft_i18n::tf("angles_deg.{k} must be a number", &[format!("{}", k)])),
             };
             let angles = [ang("yaw")?, ang("pitch")?, ang("roll")?];
             return stock_axis_rot(StockAxis::Custom, angles).ok_or_else(|| "a stock angle is not a finite number".into());
@@ -46,7 +46,7 @@ pub(super) fn set_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
         (None, None, Some(m)) => Ok(StockShape::FromModel { source: m.to_owned() }),
         _ => Err("give exactly one stock shape".into()),
     }
-    .map_err(|e| format!("bad stock: {e}"))?;
+    .map_err(|e| camcraft_i18n::tf("bad stock: {e}", &[format!("{}", e)]))?;
     let at = crate::schema::Location { rot, ..Default::default() };
     let cmd = SetStock::new(&env.world, shape.clone(), at).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);

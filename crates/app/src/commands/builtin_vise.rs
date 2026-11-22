@@ -114,7 +114,7 @@ fn vise_def(world: &World, name: &str) -> Result<FixtureDef, CommandError> {
     let def = fixture::def_of(world, &entity)
         .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a fixture")))?;
     if def.vise.is_none() {
-        return Err(CommandError::Invalid(format!("'{name}' is not a built-in vise (an imported fixture has a fixed shape)")));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a built-in vise (an imported fixture has a fixed shape)", &[format!("{}", name)])));
     }
     Ok(def)
 }
@@ -150,7 +150,7 @@ impl SetVise {
         let entity = model::find_by_name(world, name).ok_or_else(|| CommandError::NotFound(name.to_owned()))?;
         let pose = model::transform_of(world, &entity).unwrap_or_default();
         let stock = model::stock_world_aabb_for(world, def.setup.as_deref())
-            .ok_or_else(|| CommandError::Invalid(format!("'{name}': its setup has no stock to open the jaws to")))?;
+            .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{name}': its setup has no stock to open the jaws to", &[format!("{}", name)])))?;
         let opening = params.opening_to_stock(&pose, &stock).map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
         Self::new(world, name, params.with_opening(opening))
     }

@@ -43,22 +43,16 @@ impl RepairModel {
             return Err(CommandError::NotFound(name.to_string()));
         };
         if !model::is_model(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data", &[format!("{}", name)])));
         }
         let Some(facets) = model::facets_of(world, &entity) else {
-            return Err(CommandError::Invalid(format!("'{name}' has no geometry to repair")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' has no geometry to repair", &[format!("{}", name)])));
         };
         if !weld_tol.is_finite() || weld_tol < 0.0 {
-            return Err(CommandError::Invalid(format!(
-                "weld tolerance must be a finite, non-negative length (got {weld_tol})"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("weld tolerance must be a finite, non-negative length (got {weld_tol})", &[format!("{}", weld_tol)])));
         }
         if max_hole_edges < 3 {
-            return Err(CommandError::Invalid(format!(
-                "largest hole to fill must be at least 3 edges (got {max_hole_edges})"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("largest hole to fill must be at least 3 edges (got {max_hole_edges})", &[format!("{}", max_hole_edges)])));
         }
         let mesh = Mesh::from_shared(facets);
         let named = |e: GeoError| CommandError::Invalid(format!("'{name}': {e}"));
@@ -66,10 +60,7 @@ impl RepairModel {
         let filled = repair::fill_holes(&welded.mesh, max_hole_edges).map_err(named)?;
         let report = welded.then(filled);
         if !report.changed() {
-            return Err(CommandError::Invalid(format!(
-                "nothing to repair in '{name}': {} vertices, {} triangles, no open edges",
-                report.vertices_after, report.triangles_after
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("nothing to repair in '{name}': {} vertices, {} triangles, no open edges", &[format!("{}", name), format!("{}", report.vertices_after), format!("{}", report.triangles_after)])));
         }
         let inner = UpdateModel::new(world, name, report.mesh.clone())?.keeping_fidelity();
         Ok(RepairModel {

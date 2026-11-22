@@ -153,21 +153,14 @@ fn control_refusal(
     match mch.as_ref() {
         Some(m) if m.coordinate_rotation == Some(true) => {
             if !m.inverted_axes().is_empty() {
-                return Some(format!(
-                    "{owner}: Control rotation (G68 / ROT) is not supported with inverted machine axes - choose Bake into XY"
-                ));
+                return Some(camcraft_i18n::tf("{owner}: Control rotation (G68 / ROT) is not supported with inverted machine axes - choose Bake into XY", &[format!("{}", owner)]));
             }
         }
         Some(m) => {
-            return Some(format!(
-                "{owner}: WcsRotation is Control (G68 / ROT), but mounted machine '{}' does not state controller.coordinate_rotation: true - choose Bake into XY or declare coordinate_rotation",
-                m.model
-            ));
+            return Some(camcraft_i18n::tf("{owner}: WcsRotation is Control (G68 / ROT), but mounted machine '{}' does not state controller.coordinate_rotation: true - choose Bake into XY or declare coordinate_rotation", &[format!("{}", owner), format!("{}", m.model)]));
         }
         None => {
-            return Some(format!(
-                "{owner}: WcsRotation is Control (G68 / ROT), which requires a mounted machine declaring controller.coordinate_rotation: true - choose Bake into XY"
-            ));
+            return Some(camcraft_i18n::tf("{owner}: WcsRotation is Control (G68 / ROT), which requires a mounted machine declaring controller.coordinate_rotation: true - choose Bake into XY", &[format!("{}", owner)]));
         }
     }
     let cps_ok = match explicit_cps {
@@ -178,9 +171,7 @@ fn control_refusal(
         },
     };
     if matches!(cps_ok, Ok(false)) {
-        return Some(format!(
-            "{owner}: WcsRotation is Control (G68 / ROT), but the post script does not declare wcsRotation = true - choose Bake into XY or use Fanuc, Haas, Mazak, Doosan DNM, or Sinumerik"
-        ));
+        return Some(camcraft_i18n::tf("{owner}: WcsRotation is Control (G68 / ROT), but the post script does not declare wcsRotation = true - choose Bake into XY or use Fanuc, Haas, Mazak, Doosan DNM, or Sinumerik", &[format!("{}", owner)]));
     }
     None
 }
@@ -223,8 +214,8 @@ fn rotated_wcs_problems_with(world: &World, explicit_cps: Option<&str>) -> Vec<S
         }
         let word = crate::setup::offset_name(world, setup, u32::try_from(slot).map_or(u32::MAX, |s| s.saturating_add(1)));
         let owner = match crate::setup::effective(world, setup) {
-            Some(s) => format!("setup {s}: its WCS ({word})"),
-            None => format!("the WCS ({word})"),
+            Some(s) => camcraft_i18n::tf("setup {s}: its WCS ({word})", &[format!("{}", s), format!("{}", word)]),
+            None => camcraft_i18n::tf("the WCS ({word})", &[format!("{}", word)]),
         };
         let prefix = match frame {
             OffsetFrame::Square => continue,
@@ -232,21 +223,17 @@ fn rotated_wcs_problems_with(world: &World, explicit_cps: Option<&str>) -> Vec<S
                 if explicit_cps.is_none()
                     && let Some(why) = unsupported_op_reason(&op, model::toolpath_of(world, &e))
                 {
-                    format!("{owner} is rotated {deg:.3} deg about Z; {why}")
+                    camcraft_i18n::tf("{owner} is rotated {deg:.3} deg about Z; {why}", &[format!("{}", owner), format!("{:.3}", deg), format!("{}", why)])
                 } else if let Some(why) = control_refusal(world, setup, &owner, explicit_cps) {
                     why
                 } else {
                     continue;
                 }
             }
-            OffsetFrame::Rotated { deg, axis } if explicit_cps.is_none() => format!(
-                "{owner} is rotated {deg:.3} deg about {axis}; posting a tilted work offset is not \
-                 supported - align WCS Z to machine +Z (use Part alignment on the Setup page) or post from an unrotated setup"
-            ),
-            OffsetFrame::NonFinite if explicit_cps.is_none() => format!(
-                "{owner} has a non-finite placement (origin or rotation) - re-place the \
-                 offset before posting"
-            ),
+            OffsetFrame::Rotated { deg, axis } if explicit_cps.is_none() => camcraft_i18n::tf("{owner} is rotated {deg:.3} deg about {axis}; posting a tilted work offset is not \
+                 supported - align WCS Z to machine +Z (use Part alignment on the Setup page) or post from an unrotated setup", &[format!("{}", owner), format!("{:.3}", deg), format!("{}", axis)]),
+            OffsetFrame::NonFinite if explicit_cps.is_none() => camcraft_i18n::tf("{owner} has a non-finite placement (origin or rotation) - re-place the \
+                 offset before posting", &[format!("{}", owner)]),
             _ => continue,
         };
         let entity = crate::setup::wcs_entity_name(world, setup);

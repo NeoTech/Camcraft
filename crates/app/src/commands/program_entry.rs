@@ -139,7 +139,7 @@ impl EditProgramEntry {
         let mut after = before.clone();
         change(&mut after);
         if after == before {
-            return Err(CommandError::Invalid(format!("'{key}' already reads that way")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{key}' already reads that way", &[format!("{}", key)])));
         }
         Ok(Self { name: key.to_owned(), before, after })
     }

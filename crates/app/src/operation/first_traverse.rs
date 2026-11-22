@@ -69,7 +69,7 @@ pub(super) fn turned_axis(params: &OpParams, mill: bool, job: Option<verify::Rot
     }
     job.or_else(|| crate::multiaxis::axis::fit(facets).ok().map(|a| verify::RotaryAxis { origin: a.origin, dir: [a.dir.x, a.dir.y, a.dir.z] }))
         .map(Some)
-        .ok_or_else(|| format!("{}: no rotary axis can be fitted to the part, so its first traverse cannot be judged", params.kind().info().label))
+        .ok_or_else(|| camcraft_i18n::tf("{}: no rotary axis can be fitted to the part, so its first traverse cannot be judged", &[format!("{}", params.kind().info().label)]))
 }
 
 /// The rotary inventory of `job.machine_rotaries` as [`Over::rotaries`].
@@ -310,7 +310,7 @@ pub(super) fn judge(path: &Toolpath, params: &OpParams, mill: bool, frame: Optio
             }
             let has_table = (0..over.fixtures.len()).any(is_table);
             if over.rotaries.is_some() && !work_turns && !has_table {
-                note = Some(format!("{TABLE_UNJUDGED_NOTE}: the machine does not state all of the X, Y and Z travel, so the first traverse is judged against the stock and the fixtures only"));
+                note = Some(camcraft_i18n::tf("{TABLE_UNJUDGED_NOTE}: the machine does not state all of the X, Y and Z travel, so the first traverse is judged against the stock and the fixtures only", &[format!("{}", TABLE_UNJUDGED_NOTE)]));
             }
             verify::first_traverse_low(path, over.stock_top, &steel, |p| f.z_local(p), Z_TOL).map(|w| in_user_frame(w, f))
         }

@@ -69,7 +69,7 @@ pub fn build(source: &str, place: LathePlacement, zone: Option<InsertZone>, plac
 /// lathe steel can, and only with a zone one of its inserts could fill.
 pub fn fits(tool: &Tool, zone: Option<&InsertZone>) -> Result<(), String> {
     if !(LATHE_HELD.contains(&tool.kind) || tool.kind == ToolKind::Bore) {
-        return Err(format!("a {} is no lathe steel - a lathe-frame body needs a turning, grooving, threading or form insert or a boring bar", tool.kind));
+        return Err(camcraft_i18n::tf("a {} is no lathe steel - a lathe-frame body needs a turning, grooving, threading or form insert or a boring bar", &[format!("{}", tool.kind)]));
     }
     zone.map_or(Ok(()), |z| z.check(zone_cap(tool)).map_err(|e| e.to_string()))
 }

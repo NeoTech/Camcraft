@@ -37,7 +37,7 @@ impl Endpoint {
         let scheme = match url.scheme() {
             "http" => Scheme::Http,
             "https" => Scheme::Https,
-            other => return Err(format!("endpoint scheme '{other}' is not http or https")),
+            other => return Err(camcraft_i18n::tf("endpoint scheme '{other}' is not http or https", &[format!("{}", other)])),
         };
         if !url.username().is_empty() || url.password().is_some() {
             return Err("endpoint must not carry a user name or password".into());
@@ -49,9 +49,9 @@ impl Endpoint {
             Some(url::Host::Domain(d)) => d.to_ascii_lowercase(),
             Some(url::Host::Ipv4(ip)) => ip.to_string(),
             Some(url::Host::Ipv6(ip)) => ip.to_string(),
-            None => return Err(format!("endpoint '{text}' has no host")),
+            None => return Err(camcraft_i18n::tf("endpoint '{text}' has no host", &[format!("{}", text)])),
         };
-        let port = url.port_or_known_default().ok_or_else(|| format!("endpoint '{text}' has no port"))?;
+        let port = url.port_or_known_default().ok_or_else(|| camcraft_i18n::tf("endpoint '{text}' has no port", &[format!("{}", text)]))?;
         let base_path = url.path().trim_end_matches('/').to_owned();
         Ok(Self { scheme, host, port, base_path })
     }
@@ -108,16 +108,10 @@ pub fn is_loopback_ip(ip: IpAddr) -> bool {
 pub fn admit(endpoint: &Endpoint, offline_only: bool) -> Result<(), String> {
     let local = endpoint.is_loopback();
     if offline_only && !local {
-        return Err(format!(
-            "offline-only mode blocks '{}': only localhost, 127.0.0.1 and [::1] are reachable",
-            endpoint.host
-        ));
+        return Err(camcraft_i18n::tf("offline-only mode blocks '{}': only localhost, 127.0.0.1 and [::1] are reachable", &[format!("{}", endpoint.host)]));
     }
     if !local && endpoint.scheme == Scheme::Http {
-        return Err(format!(
-            "plain http:// to '{}' is refused: off this machine a provider is reached over https:// only",
-            endpoint.host
-        ));
+        return Err(camcraft_i18n::tf("plain http:// to '{}' is refused: off this machine a provider is reached over https:// only", &[format!("{}", endpoint.host)]));
     }
     Ok(())
 }
@@ -130,7 +124,7 @@ pub fn admit_addrs(addrs: Vec<SocketAddr>, loopback_only: bool) -> Result<Vec<So
         return Err("the host resolved to no address".into());
     }
     if loopback_only && let Some(bad) = addrs.iter().find(|a| !is_loopback_ip(a.ip())) {
-        return Err(format!("refused: the host resolved to {} which is not loopback", bad.ip()));
+        return Err(camcraft_i18n::tf("refused: the host resolved to {} which is not loopback", &[format!("{}", bad.ip())]));
     }
     Ok(addrs)
 }

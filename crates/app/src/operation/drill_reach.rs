@@ -74,10 +74,8 @@ fn finite_or_zero(v: f64) -> f64 {
 fn holder(tool: &Tool, name: &str) -> Result<Option<(f64, f64)>, GenError> {
     let (hd, hl) = (tool.holder_d, tool.holder_len);
     if !(hd.is_finite() && hl.is_finite() && hd >= 0.0 && hl >= 0.0) {
-        return Err(GenError::Invalid(format!(
-            "tool {name}'s holder (dia. {hd}, length {hl}) is not a usable size - its clearance cannot be \
-             proven; set both to real sizes, or both to 0 for a tool with no holder modelled"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("tool {name}'s holder (dia. {hd}, length {hl}) is not a usable size - its clearance cannot be \
+             proven; set both to real sizes, or both to 0 for a tool with no holder modelled", &[format!("{}", name), format!("{}", hd), format!("{}", hl)])));
     }
     Ok((hd > 0.0 && hl > 0.0).then(|| (finite_or_zero(tool.flute_len) + finite_or_zero(tool.shank_len), 0.5 * hd)))
 }
@@ -118,14 +116,8 @@ fn stack_bands(tool: &Tool, body: Option<&BodyBands>, name: &str) -> Result<(Vec
 /// runs on a worker thread with no World to read.
 fn too_deep(what: &str, at: Point3, depth: f64, name: &str, flute: f64, fix: &str, unit: Unit) -> GenError {
     GenError::invalid_at(
-        format!(
-            "{what} is {} {} deep from the stock surface; tool {name}'s flute reaches {} {} - \
-             past it the shank feeds into uncut stock (a collision); {fix}",
-            units::len(depth, unit, 3),
-            unit.suffix(),
-            units::len(flute, unit, 3),
-            unit.suffix()
-        ),
+        camcraft_i18n::tf("{what} is {} {} deep from the stock surface; tool {name}'s flute reaches {} {} - \
+             past it the shank feeds into uncut stock (a collision); {fix}", &[format!("{}", what), format!("{}", units::len(depth, unit, 3)), format!("{}", unit.suffix()), format!("{}", name), format!("{}", units::len(flute, unit, 3)), format!("{}", unit.suffix()), format!("{}", fix)]),
         at,
     )
 }
@@ -158,12 +150,7 @@ pub(super) fn cross_reach(
         if depth.is_nan() || depth > flute + TOL {
             let o = w.origin;
             return Err(too_deep(
-                &format!(
-                    "cross hole {i} at ({}, {}, {})",
-                    units::len(o.x, unit, 3),
-                    units::len(o.y, unit, 3),
-                    units::len(o.z, unit, 3)
-                ),
+                &camcraft_i18n::tf("cross hole {i} at ({}, {}, {})", &[format!("{}", i), format!("{}", units::len(o.x, unit, 3)), format!("{}", units::len(o.y, unit, 3)), format!("{}", units::len(o.z, unit, 3))]),
                 o,
                 depth,
                 name,
@@ -221,7 +208,7 @@ pub(super) fn axial_reach(
             shank_fits(c, holes, top, depth, flute, tool, name, unit)?;
         } else if depth.is_nan() || depth > flute + TOL {
             return Err(too_deep(
-                &format!("hole at ({}, {})", units::len(xy.x, unit, 3), units::len(xy.y, unit, 3)),
+                &camcraft_i18n::tf("hole at ({}, {})", &[format!("{}", units::len(xy.x, unit, 3)), format!("{}", units::len(xy.y, unit, 3))]),
                 Point3::new(xy.x, xy.y, top),
                 depth,
                 name,
@@ -237,18 +224,9 @@ pub(super) fn axial_reach(
             let face = bottom_z + reach;
             if let Some(ht) = top_over(part, stock, xy.x, xy.y, hr, prior_at(hr)).filter(|&z| face < z - TOL) {
                 return Err(GenError::invalid_at(
-                    format!(
-                        "tool {name}'s {what} (dia. {}, {} {} above the tip) sinks to Z {} at the \
+                    camcraft_i18n::tf("tool {name}'s {what} (dia. {}, {} {} above the tip) sinks to Z {} at the \
                          hole at ({}, {}), below the material top {} around it - the holder feeds into \
-                         the stock (a collision); use a longer tool or a slimmer holder",
-                        units::len(2.0 * hr, unit, 3),
-                        units::len(reach, unit, 3),
-                        unit.suffix(),
-                        units::len(face, unit, 3),
-                        units::len(xy.x, unit, 3),
-                        units::len(xy.y, unit, 3),
-                        units::len(ht, unit, 3)
-                    ),
+                         the stock (a collision); use a longer tool or a slimmer holder", &[format!("{}", name), format!("{}", what), format!("{}", units::len(2.0 * hr, unit, 3)), format!("{}", units::len(reach, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(face, unit, 3)), format!("{}", units::len(xy.x, unit, 3)), format!("{}", units::len(xy.y, unit, 3)), format!("{}", units::len(ht, unit, 3))]),
                     Point3::new(xy.x, xy.y, top),
                 ));
             }
@@ -281,20 +259,9 @@ fn shank_fits(
     match hole_d {
         Some(hd) if depth.is_finite() && shank_d.is_finite() && shank_d <= hd + TOL => Ok(()),
         _ => Err(GenError::invalid_at(
-            format!(
-                "{:?} cycle at ({}, {}) is {} {} deep from the stock surface, past tool {name}'s \
+            camcraft_i18n::tf("{:?} cycle at ({}, {}) is {} {} deep from the stock surface, past tool {name}'s \
                  {} {} flute, and its shank dia. {} does not fit the dia. {} hole - the shank \
-                 feeds into the wall (a collision); use a tool with a longer flute or a slimmer shank",
-                c.kind,
-                units::len(c.xy.x, unit, 3),
-                units::len(c.xy.y, unit, 3),
-                units::len(depth, unit, 3),
-                unit.suffix(),
-                units::len(flute, unit, 3),
-                unit.suffix(),
-                units::len(shank_d, unit, 3),
-                hole_d.map_or_else(|| "(unknown)".to_string(), |d| units::len(d, unit, 3))
-            ),
+                 feeds into the wall (a collision); use a tool with a longer flute or a slimmer shank", &[format!("{:?}", c.kind), format!("{}", units::len(c.xy.x, unit, 3)), format!("{}", units::len(c.xy.y, unit, 3)), format!("{}", units::len(depth, unit, 3)), format!("{}", unit.suffix()), format!("{}", name), format!("{}", units::len(flute, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(shank_d, unit, 3)), format!("{}", hole_d.map_or_else(|| "(unknown)".to_string(), |d| units::len(d, unit, 3)))]),
             Point3::new(c.xy.x, c.xy.y, top),
         )),
     }
@@ -415,29 +382,16 @@ fn band_clear(cx: &Swept<'_>, i: usize, m: &crate::cl::Move, b: Band) -> Result<
     let (lo, hi) = zs.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), z| (lo.min(z), hi.max(z)));
     let (z0, z1) = (lo - across, hi + across);
     if !(z0.is_finite() && z1.is_finite()) {
-        return Err(GenError::Invalid(format!(
-            "cross-drill move {i}: tool {name}'s {what} position is not finite - its clearance cannot be proven"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("cross-drill move {i}: tool {name}'s {what} position is not finite - its clearance cannot be proven", &[format!("{}", i), format!("{}", name), format!("{}", what)])));
     }
     if let Some((tube, face)) = station::on_station(m.from, m.to, axis, reach, hr) {
         let Some(need) = station::reach_in(cx.mat, tube) else { return Ok(()) };
         if face.is_nan() || need.is_nan() || face < need - TOL {
             let (zl, zh) = (tube.line.z - tube.hz, tube.line.z + tube.hz);
-            return Err(GenError::Invalid(format!(
-                "cross-drill move {i}: tool {name}'s {what} (dia. {}, {} {} behind the tip) stands \
+            return Err(GenError::Invalid(camcraft_i18n::tf("cross-drill move {i}: tool {name}'s {what} (dia. {}, {} {} behind the tip) stands \
                  {} {} out along its hole's line, inside material {} {} out on that line at Z \
                  {} to {} - the holder feeds into the stock or part (a collision); use a tool with a \
-                 longer reach, or turn or face the material back first",
-                units::len(2.0 * hr, unit, 3),
-                units::len(reach, unit, 3),
-                unit.suffix(),
-                units::len(face, unit, 3),
-                unit.suffix(),
-                units::len(need, unit, 3),
-                unit.suffix(),
-                units::len(zl, unit, 3),
-                units::len(zh, unit, 3)
-            )));
+                 longer reach, or turn or face the material back first", &[format!("{}", i), format!("{}", name), format!("{}", what), format!("{}", units::len(2.0 * hr, unit, 3)), format!("{}", units::len(reach, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(face, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(need, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(zl, unit, 3)), format!("{}", units::len(zh, unit, 3))])));
         }
         return Ok(());
     }
@@ -446,20 +400,10 @@ fn band_clear(cx: &Swept<'_>, i: usize, m: &crate::cl::Move, b: Band) -> Result<
     let wide = wide + cx.grow;
     let got = holder_approach(m.from, m.to, axis, reach, hl, hr);
     if got.is_nan() || got < wide - TOL {
-        return Err(GenError::Invalid(format!(
-            "cross-drill move {i}: tool {name}'s {what} (dia. {}, {} {} behind the tip) passes \
+        return Err(GenError::Invalid(camcraft_i18n::tf("cross-drill move {i}: tool {name}'s {what} (dia. {}, {} {} behind the tip) passes \
              {} {} from the spindle, inside the stock's radius {} at Z {} to {} - \
              the holder sweeps the stock (a collision); use a longer tool, raise the clearance above the \
-             end face, or turn the bar to size first",
-            units::len(2.0 * hr, unit, 3),
-            units::len(reach, unit, 3),
-            unit.suffix(),
-            units::len(got, unit, 3),
-            unit.suffix(),
-            units::len(wide, unit, 3),
-            units::len(z0, unit, 3),
-            units::len(z1, unit, 3)
-        )));
+             end face, or turn the bar to size first", &[format!("{}", i), format!("{}", name), format!("{}", what), format!("{}", units::len(2.0 * hr, unit, 3)), format!("{}", units::len(reach, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(got, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(wide, unit, 3)), format!("{}", units::len(z0, unit, 3)), format!("{}", units::len(z1, unit, 3))])));
     }
     Ok(())
 }

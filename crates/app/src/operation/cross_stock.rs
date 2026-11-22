@@ -152,13 +152,8 @@ pub(super) fn to_raw_mouths(
             let (c, dc) = if h.dir.x.abs() >= h.dir.y.abs() { (h.origin.x, h.dir.x) } else { (h.origin.y, h.dir.y) };
             if c * dc > 0.0 {
                 return Err(GenError::invalid_at(
-                    format!(
-                        "cross hole at ({}, {}, {}) plunges away from the spindle - a cross \
-                         drill feeds toward the bar's axis; flip the hole's direction",
-                        units::len(h.origin.x, unit, 3),
-                        units::len(h.origin.y, unit, 3),
-                        units::len(h.origin.z, unit, 3)
-                    ),
+                    camcraft_i18n::tf("cross hole at ({}, {}, {}) plunges away from the spindle - a cross \
+                         drill feeds toward the bar's axis; flip the hole's direction", &[format!("{}", units::len(h.origin.x, unit, 3)), format!("{}", units::len(h.origin.y, unit, 3)), format!("{}", units::len(h.origin.z, unit, 3))]),
                     h.origin,
                 ));
             }
@@ -289,15 +284,9 @@ pub(super) fn rapids_clear(t: &Toolpath, st: &Standoff, tool: &Tool, unit: Unit)
                 }
                 let Some((got, need)) = short else { continue };
                 if got.is_nan() || got < need - tol {
-                    return Err(GenError::Invalid(format!(
-                        "cross-drill rapid {i} stops {} {} out along its hole's line, inside where \
+                    return Err(GenError::Invalid(camcraft_i18n::tf("cross-drill rapid {i} stops {} {} out along its hole's line, inside where \
                          the tool body meets the stock ({}, {}) - a rapid through material; raise \
-                         the clearance or retract height, or turn the bar to size first",
-                        units::len(got, unit, 3),
-                        unit.suffix(),
-                        units::len(need, unit, 3),
-                        unit.suffix()
-                    )));
+                         the clearance or retract height, or turn the bar to size first", &[format!("{}", i), format!("{}", units::len(got, unit, 3)), format!("{}", unit.suffix()), format!("{}", units::len(need, unit, 3)), format!("{}", unit.suffix())])));
                 }
                 continue;
             }
@@ -312,15 +301,9 @@ pub(super) fn rapids_clear(t: &Toolpath, st: &Standoff, tool: &Tool, unit: Unit)
             (approach(m.from, m.to), st.r + rim, "radius plus the tool's rim")
         };
         if got.is_nan() || got < need - tol {
-            return Err(GenError::Invalid(format!(
-                "cross-drill rapid {i} passes {} {} from the spindle, inside the stock's \
+            return Err(GenError::Invalid(camcraft_i18n::tf("cross-drill rapid {i} passes {} {} from the spindle, inside the stock's \
                  {what} ({}, {}) - a rapid through material; raise the clearance or \
-                 retract height, or turn the bar to size first",
-                units::len(got, unit, 3),
-                unit.suffix(),
-                units::len(need, unit, 3),
-                unit.suffix()
-            )));
+                 retract height, or turn the bar to size first", &[format!("{}", i), format!("{}", units::len(got, unit, 3)), format!("{}", unit.suffix()), format!("{}", what), format!("{}", units::len(need, unit, 3)), format!("{}", unit.suffix())])));
         }
     }
     Ok(())

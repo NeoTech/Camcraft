@@ -97,7 +97,7 @@ impl MachineEntry {
                 1 => String::new(),
                 n => format!(" (and {} more)", n - 1),
             };
-            return Some(format!("fails validation - {first}{more}"));
+            return Some(camcraft_i18n::tf("fails validation - {first}{more}", &[format!("{}", first), format!("{}", more)]));
         }
         if super::of(world).0 == self.source.mount_path() {
             return Some("it is already this setup's machine".to_owned());
@@ -146,7 +146,7 @@ impl MachineEntry {
             }
             Err(e) => {
                 let mut entry = Self::from_text(&file_name, MachineSource::File(path.to_path_buf()), "{}");
-                entry.refusals = vec![Refusal { key: "file".to_owned(), rule: format!("cannot be read ({e})") }];
+                entry.refusals = vec![Refusal { key: "file".to_owned(), rule: camcraft_i18n::tf("cannot be read ({e})", &[format!("{}", e)]) }];
                 entry
             }
         }
@@ -164,11 +164,11 @@ pub fn read_for_assign(source: &MachineSource) -> Result<(String, super::Machine
     let text: String = match source {
         MachineSource::Builtin(name) => posting::builtin_machine_text(name)?.to_owned(),
         MachineSource::File(path) => {
-            std::fs::read_to_string(path).map_err(|e| format!("machine file {}: {e}", path.display()))?
+            std::fs::read_to_string(path).map_err(|e| camcraft_i18n::tf("machine file {}: {e}", &[format!("{}", path.display()), format!("{}", e)]))?
         }
     };
     if let Some(first) = validate_text(&text).first() {
-        return Err(format!("{} fails validation - {first}", source.mount_path()));
+        return Err(camcraft_i18n::tf("{} fails validation - {first}", &[format!("{}", source.mount_path()), format!("{}", first)]));
     }
     let m = parse_mch(&text)?;
     Ok((source.mount_path(), m))

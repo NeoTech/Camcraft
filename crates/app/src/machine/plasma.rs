@@ -47,14 +47,8 @@ pub(super) fn check_plasma_ops(
     ops: &[(String, Entity)],
 ) -> Result<MachineCheck, String> {
     let mut out = MachineCheck::default();
-    out.notes.push(format!(
-        "{}: Z is the torch lifter - cutting depth and Z travel are not judged here (the control sets pierce and cut height); the through-cut is judged by the plasma laws at the post gate (cut order, cut crossing, kerf crossing, tip-up) and by the kerf and cover laws at generation - the 3D stock sim does not run for a torch",
-        machine.model
-    ));
-    out.notes.push(format!(
-        "{}: a plasma table has no spindle - rpm and spindle power are not judged",
-        machine.model
-    ));
+    out.notes.push(camcraft_i18n::tf("{}: Z is the torch lifter - cutting depth and Z travel are not judged here (the control sets pierce and cut height); the through-cut is judged by the plasma laws at the post gate (cut order, cut crossing, kerf crossing, tip-up) and by the kerf and cover laws at generation - the 3D stock sim does not run for a torch", &[format!("{}", machine.model)]));
+    out.notes.push(camcraft_i18n::tf("{}: a plasma table has no spindle - rpm and spindle power are not judged", &[format!("{}", machine.model)]));
 
     if let Some(slots) = machine.tool_count {
         let mut names: Vec<String> = Vec::new();
@@ -66,42 +60,36 @@ pub(super) fn check_plasma_ops(
             }
         }
         if names.len() > slots {
-            say(&mut out, format!("program calls {} tools, {} carries {slots} torch", names.len(), machine.model));
+            say(&mut out, camcraft_i18n::tf("program calls {} tools, {} carries {slots} torch", &[format!("{}", names.len()), format!("{}", machine.model), format!("{}", slots)]));
         }
     }
 
     for (name, e) in ops {
-        let op = model::operation_of(world, e).ok_or_else(|| format!("{name}: lost its operation"))?;
+        let op = model::operation_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         if !cuts_plasma(&op) {
             let kind = op.params.kind();
             say(
                 &mut out,
-                format!(
-                    "{name}: a {kind} operation is {} work - a plasma table cuts only plasma operations",
-                    family_word(kind.info().family())
-                ),
+                camcraft_i18n::tf("{name}: a {kind} operation is {} work - a plasma table cuts only plasma operations", &[format!("{}", name), format!("{}", kind), format!("{}", family_word(kind.info().family()))]),
             );
         }
         let tool_entity = model::find_by_name(world, &op.tool)
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         let tool = model::tool_of(world, &tool_entity)
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         // The spindle word: today every op posts its tool's rpm, so a
         // tool stating one asks the program for an S/M3 a torch has not.
         if tool.rpm > 0.0 {
             say(
                 &mut out,
-                format!(
-                    "{name}: tool {} states {:.0} rpm - a plasma table has no spindle to turn",
-                    op.tool, tool.rpm
-                ),
+                camcraft_i18n::tf("{name}: tool {} states {:.0} rpm - a plasma table has no spindle to turn", &[format!("{}", name), format!("{}", op.tool), format!("{:.0}", tool.rpm)]),
             );
         }
-        let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        let cache = model::toolpath_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         let (_, origin) = crate::posting::wcs_context(world, op.setup.as_deref());
         for (i, mv) in cache.path.moves.iter().enumerate() {
             if mv.rotary.is_some() || mv.axis.is_some_and(|a| !crate::cl::is_vertical(&a)) {
-                say(&mut out, format!("{name}: move {i} tilts or turns the tool - {} states no rotary axis", machine.model));
+                say(&mut out, camcraft_i18n::tf("{name}: move {i} tilts or turns the tool - {} states no rotary axis", &[format!("{}", name), format!("{}", i), format!("{}", machine.model)]));
             }
             // Feed: the X/Y share of the move only - a Z component is
             // the lifter's, which the control drives, not the program.
@@ -110,10 +98,7 @@ pub(super) fn check_plasma_ops(
                 if let Some(ceil) = machine.feed_ceiling(d)
                     && feed > ceil
                 {
-                    say(&mut out, format!(
-                        "{name}: move {i} feeds {feed:.0} mm/min, {} tops out at {ceil:.0}",
-                        slowest_axis(&machine.axes, ceil)
-                    ));
+                    say(&mut out, camcraft_i18n::tf("{name}: move {i} feeds {feed:.0} mm/min, {} tops out at {ceil:.0}", &[format!("{}", name), format!("{}", i), format!("{:.0}", feed), format!("{}", slowest_axis(&machine.axes, ceil)), format!("{:.0}", ceil)]));
                 }
             }
             for p in move_extremes(mv) {
@@ -122,10 +107,7 @@ pub(super) fn check_plasma_ops(
                     let Some((lo, hi)) = ax.travel else { continue };
                     let v = (w - origin[k]) * ax.direction.sign();
                     if v < lo || v > hi {
-                        say(&mut out, format!(
-                            "{name}: move {i} reaches {v:.3} in {}, the stroke is {lo:.3}..{hi:.3}",
-                            ax.name
-                        ));
+                        say(&mut out, camcraft_i18n::tf("{name}: move {i} reaches {v:.3} in {}, the stroke is {lo:.3}..{hi:.3}", &[format!("{}", name), format!("{}", i), format!("{:.3}", v), format!("{}", ax.name), format!("{:.3}", lo), format!("{:.3}", hi)]));
                     }
                 }
             }

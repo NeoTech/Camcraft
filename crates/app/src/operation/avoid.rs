@@ -36,37 +36,33 @@ pub(super) fn collect_items(
     for g in &dnt.picks {
         let desc = describe_sel(g);
         if matches!(g.feature, FeatureSel::Vertex(_)) {
-            return Err(GenError::Invalid(format!(
-                "{desc} is a vertex - 'Do not touch' protects faces or edge chains, not vertices"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{desc} is a vertex - 'Do not touch' protects faces or edge chains, not vertices", &[format!("{}", desc)])));
         }
         if matches!(g.feature, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
-            return Err(GenError::Invalid(format!(
-                "{desc} is a sketch pick - 'Do not touch' protects model faces or edge chains, not DXF sketch chains"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{desc} is a sketch pick - 'Do not touch' protects model faces or edge chains, not DXF sketch chains", &[format!("{}", desc)])));
         }
         if !cache.contains_key(g.entity.as_str()) {
             let entity = model::find_by_name(world, &g.entity).ok_or_else(|| {
-                GenError::Invalid(format!("'Do not touch' references '{}', which is gone", g.entity))
+                GenError::Invalid(camcraft_i18n::tf("'Do not touch' references '{}', which is gone", &[format!("{}", g.entity)]))
             })?;
             let facets = model::facets_of(world, &entity).ok_or_else(|| {
-                GenError::Invalid(format!("'{}' has no facets for 'Do not touch'", g.entity))
+                GenError::Invalid(camcraft_i18n::tf("'{}' has no facets for 'Do not touch'", &[format!("{}", g.entity)]))
             })?;
             let features = model::features_of(world, &entity).ok_or_else(|| {
-                GenError::Invalid(format!("'{}' has no selectable features for 'Do not touch'", g.entity))
+                GenError::Invalid(camcraft_i18n::tf("'{}' has no selectable features for 'Do not touch'", &[format!("{}", g.entity)]))
             })?;
             let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
             cache.insert(g.entity.as_str(), (facets, features, loc));
         }
         let Some((facets, features, loc)) = cache.get(g.entity.as_str()) else {
-            return Err(GenError::Invalid(format!("missing cached entity '{}'", g.entity)));
+            return Err(GenError::Invalid(camcraft_i18n::tf("missing cached entity '{}'", &[format!("{}", g.entity)])));
         };
         let mut tris = Vec::new();
         let mut edges = Vec::new();
         match g.feature {
             FeatureSel::Face(fid) => {
                 let fi = features.faces.iter().position(|f| f.id == fid).ok_or_else(|| {
-                    GenError::Invalid(format!("'Do not touch' {desc} is no longer in '{}' - re-pick it", g.entity))
+                    GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} is no longer in '{}' - re-pick it", &[format!("{}", desc), format!("{}", g.entity)]))
                 })?;
                 for (ti, tri) in facets.iter().enumerate() {
                     if features.facet_face.get(ti) == Some(&(fi as u32)) {
@@ -78,13 +74,13 @@ pub(super) fn collect_items(
                     }
                 }
                 if tris.is_empty() {
-                    return Err(GenError::Invalid(format!("'Do not touch' {desc} has no facets")));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} has no facets", &[format!("{}", desc)])));
                 }
             }
             FeatureSel::Patch(pid) => {
                 let patches = feature::patches(features);
                 let patch = patches.into_iter().find(|p| p.id == pid).ok_or_else(|| {
-                    GenError::Invalid(format!("'Do not touch' {desc} is no longer in '{}' - re-pick it", g.entity))
+                    GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} is no longer in '{}' - re-pick it", &[format!("{}", desc), format!("{}", g.entity)]))
                 })?;
                 let face_ids: HashSet<u64> = patch.faces.into_iter().collect();
                 let face_idxs: HashSet<u32> = features
@@ -104,19 +100,19 @@ pub(super) fn collect_items(
                     }
                 }
                 if tris.is_empty() {
-                    return Err(GenError::Invalid(format!("'Do not touch' {desc} has no facets")));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} has no facets", &[format!("{}", desc)])));
                 }
             }
             FeatureSel::Chain(cid) => {
                 let chain = feature::resolve_chain(features, cid).ok_or_else(|| {
-                    GenError::Invalid(format!("'Do not touch' {desc} is no longer in '{}' - re-pick it", g.entity))
+                    GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} is no longer in '{}' - re-pick it", &[format!("{}", desc), format!("{}", g.entity)]))
                 })?;
                 let pts: Vec<Point3> = feature::chain_points(features, &chain)
                     .into_iter()
                     .map(|p| to_job(loc, Point3::new(p[0], p[1], p[2]), frame))
                     .collect();
                 if pts.len() < 2 {
-                    return Err(GenError::Invalid(format!("'Do not touch' {desc} has fewer than 2 points")));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("'Do not touch' {desc} has fewer than 2 points", &[format!("{}", desc)])));
                 }
                 for w in pts.windows(2) {
                     edges.push(([w[0].x, w[0].y, w[0].z], [w[1].x, w[1].y, w[1].z]));
@@ -128,9 +124,7 @@ pub(super) fn collect_items(
                 }
             }
             FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(GenError::Invalid(format!(
-                    "{desc} cannot be protected - 'Do not touch' protects faces or edge chains"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{desc} cannot be protected - 'Do not touch' protects faces or edge chains", &[format!("{}", desc)])));
             }
         }
         out.push(AvoidItem { label: desc, tris, edges });
@@ -187,11 +181,7 @@ pub fn overlap_issue(
         }
         for c in &cut_picks {
             if p.entity == c.entity && !pf.is_disjoint(&patch_faces(c)) {
-                return Some(format!(
-                    "'Do not touch' item {} overlaps machining selection {} - remove it from one list",
-                    describe_sel(p),
-                    describe_sel(c)
-                ));
+                return Some(camcraft_i18n::tf("'Do not touch' item {} overlaps machining selection {} - remove it from one list", &[format!("{}", describe_sel(p)), format!("{}", describe_sel(c))]));
             }
         }
     }
@@ -232,16 +222,13 @@ pub fn verify_avoid(path: &Toolpath, spec: &AvoidSpec) -> (Vec<Warning>, Vec<Str
                 if let Warning::AvoidHit { part, short_mm, .. } = w
                     && noted.insert(label.clone())
                 {
-                    notes.push(format!(
-                        "'Do not touch' violated on {label} ({part:?}, {short_mm:.3} mm short of {:.2} mm clearance)",
-                        spec.clearance
-                    ));
+                    notes.push(camcraft_i18n::tf("'Do not touch' violated on {label} ({part:?}, {short_mm:.3} mm short of {:.2} mm clearance)", &[format!("{}", label), format!("{:?}", part), format!("{:.3}", short_mm), format!("{:.2}", spec.clearance)]));
                 }
                 warns.push(w);
             }
             (warns, notes)
         }
-        Err(e) => (Vec::new(), vec![format!("'Do not touch' verification failed: {e}")]),
+        Err(e) => (Vec::new(), vec![camcraft_i18n::tf("'Do not touch' verification failed: {e}", &[format!("{}", e)])]),
     }
 }
 
@@ -292,11 +279,7 @@ pub fn live_avoid_problems(world: &World) -> Vec<String> {
                     if let Warning::AvoidHit { at, part, short_mm, .. } = w
                         && seen.insert(label.clone())
                     {
-                        problems.push(format!(
-                            "{name}: violates 'Do not touch' {label} at move {} ({part:?}, {short_mm:.3} mm short of {:.2} mm clearance)",
-                            at + 1,
-                            spec.clearance
-                        ));
+                        problems.push(camcraft_i18n::tf("{name}: violates 'Do not touch' {label} at move {} ({part:?}, {short_mm:.3} mm short of {:.2} mm clearance)", &[format!("{}", name), format!("{}", label), format!("{}", at + 1), format!("{:?}", part), format!("{:.3}", short_mm), format!("{:.2}", spec.clearance)]));
                     }
                 }
             }

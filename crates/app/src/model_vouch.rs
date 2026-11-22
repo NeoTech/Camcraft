@@ -39,7 +39,7 @@ pub fn checked_by(by: &str) -> Result<String, String> {
         return Err("the name of who vouches must be one line of plain text".into());
     }
     if by.chars().count() > MAX_BY {
-        return Err(format!("the name of who vouches must be at most {MAX_BY} characters"));
+        return Err(camcraft_i18n::tf("the name of who vouches must be at most {MAX_BY} characters", &[format!("{}", MAX_BY)]));
     }
     Ok(by.to_string())
 }
@@ -77,7 +77,7 @@ pub fn set(world: &World, entity: &Entity, record: Option<FidelityVouched>) {
 /// The plain-words line the model page shows for a vouched mesh.
 #[must_use]
 pub fn summary(by: &str) -> String {
-    format!("Fidelity vouched for by {by}: gouge checks read this mesh as exact. Undo, or a fresh import, ends that.")
+    camcraft_i18n::tf("Fidelity vouched for by {by}: gouge checks read this mesh as exact. Undo, or a fresh import, ends that.", &[format!("{}", by)])
 }
 
 /// The same facts for MCP and the script API.

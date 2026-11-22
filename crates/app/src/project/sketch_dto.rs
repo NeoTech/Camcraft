@@ -109,29 +109,26 @@ pub(super) fn validate(dto: &EntityDto, kind: EntityKind) -> Result<(), ProjectE
         || LEGACY_WCS_NAMES.contains(&dto.name.as_str())
         || crate::setup::is_furniture_shape(&dto.name)
     {
-        return Err(corrupt(format!("'{}' is not a usable name for a DXF profile", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' is not a usable name for a DXF profile", &[format!("{}", dto.name)])));
     }
     if dto.facets.is_some() || dto.stock.is_some() || dto.tool.is_some() || dto.operation.is_some() || dto.setup.is_some() {
-        return Err(corrupt(format!("'{}' is a DXF profile, not a solid, tool, operation or setup", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' is a DXF profile, not a solid, tool, operation or setup", &[format!("{}", dto.name)])));
     }
     if dto.sketch.as_ref().is_some_and(|s| s.setup.as_deref().is_some_and(str::is_empty)) {
-        return Err(corrupt(format!("DXF profile '{}' names an empty setup", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("DXF profile '{}' names an empty setup", &[format!("{}", dto.name)])));
     }
     let at = Location { pos: Point3::new(dto.translation[0], dto.translation[1], dto.translation[2]), rot: dto.rotation };
     if crate::sketch::face_placement(at).is_none() {
-        return Err(corrupt(format!(
-            "DXF profile '{}' is placed off its stock face - a profile has no Z offset and no tilt",
-            dto.name
-        )));
+        return Err(corrupt(camcraft_i18n::tf("DXF profile '{}' is placed off its stock face - a profile has no Z offset and no tilt", &[format!("{}", dto.name)])));
     }
     Ok(())
 }
 
 /// Read one profile's payload into the component, chains made again.
 fn read(name: &str, dto: &SketchDto) -> Result<Sketch, ProjectError> {
-    let bad = |why: String| corrupt(format!("DXF profile '{name}': {why}"));
+    let bad = |why: String| corrupt(camcraft_i18n::tf("DXF profile '{name}': {why}", &[format!("{}", name), format!("{}", why)]));
     let Units::Known(applied) = Units::from_code(dto.unit) else {
-        return Err(bad(format!("unit code {} is not a unit", dto.unit)));
+        return Err(bad(camcraft_i18n::tf("unit code {} is not a unit", &[format!("{}", dto.unit)])));
     };
     let at = |p: [f64; 2]| Point2::new(p[0], p[1]);
     let mut primitives = Vec::with_capacity(dto.primitives.len().min(1 << 16));
@@ -143,7 +140,7 @@ fn read(name: &str, dto: &SketchDto) -> Result<Sketch, ProjectError> {
             }
             PrimitiveDto::Circle { layer, c, r } => (layer, Primitive::Circle { center: at(c), radius: r }),
         };
-        let layer = dto.layers.get(layer).ok_or_else(|| bad(format!("a primitive names layer {layer}, which the profile does not list")))?;
+        let layer = dto.layers.get(layer).ok_or_else(|| bad(camcraft_i18n::tf("a primitive names layer {layer}, which the profile does not list", &[format!("{}", layer)])))?;
         primitives.push(LayeredPrimitive { layer: layer.clone(), primitive });
     }
     let units = SourceUnits { stated: Units::from_code(dto.insunits), applied };
@@ -160,7 +157,7 @@ pub(super) fn read_all(entities: &[EntityDto]) -> Result<HashMap<String, Sketch>
         if let Some(sketch) = &dto.sketch
             && out.insert(dto.name.clone(), read(&dto.name, sketch)?).is_some()
         {
-            return Err(corrupt(format!("two DXF profiles are named '{}'", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("two DXF profiles are named '{}'", &[format!("{}", dto.name)])));
         }
     }
     Ok(out)

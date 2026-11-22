@@ -185,7 +185,7 @@ pub(super) fn carried_block(world: &World, chain: &Chain) -> Result<Option<(Poin
     }
     let origin = crate::setup::effective(world, chain.origin());
     let b = crate::model::stock_world_aabb_for(world, origin.as_deref()).ok_or_else(|| {
-        format!("setup '{}' has no stock to carry", origin.as_deref().unwrap_or_default())
+        camcraft_i18n::tf("setup '{}' has no stock to carry", &[format!("{}", origin.as_deref().unwrap_or_default())])
     })?;
     let mut pts: Vec<Point3> = (0..8)
         .map(|i| {

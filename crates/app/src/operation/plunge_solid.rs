@@ -115,8 +115,8 @@ pub(super) fn audit_bar(
         return Ok(());
     }
     let bar = crate::multiaxis::revolved_bar(facets, stock_facets)
-        .map_err(|e| GenError::Invalid(format!("{kind}: the bar the centre-cutting audit reads cannot be built: {e}")))?;
-    camcraft_motion::plunge_law::audit_bar(path, false, tool_r, &bar, &format!("{kind}'s entry descent"))
+        .map_err(|e| GenError::Invalid(camcraft_i18n::tf("{kind}: the bar the centre-cutting audit reads cannot be built: {e}", &[format!("{}", kind), format!("{}", e)])))?;
+    camcraft_motion::plunge_law::audit_bar(path, false, tool_r, &bar, &camcraft_i18n::tf("{kind}'s entry descent", &[format!("{}", kind)]))
 }
 
 /// The same law, audit-only, for a posed kind with no sloped entry to
@@ -136,5 +136,5 @@ pub(super) fn audit_posed(
     }
     let (top, footprint) = plunge_solid(stock_facets, material, frame);
     let solid = camcraft_motion::plunge_law::Solid { top, footprint: footprint.as_ref() };
-    camcraft_motion::plunge_law::audit(path, false, tool_r, &solid, &format!("{kind}'s entry descent"))
+    camcraft_motion::plunge_law::audit(path, false, tool_r, &solid, &camcraft_i18n::tf("{kind}'s entry descent", &[format!("{}", kind)]))
 }

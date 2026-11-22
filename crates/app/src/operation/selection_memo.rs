@@ -141,7 +141,7 @@ impl Answer {
     pub(super) fn fresh(world: &World, setup: Option<&str>, src: &SrcRef, params: &OpParams) -> Self {
         if super::wire_sketch::selected(src, params) {
             return match super::wire_sketch::pick(world, src) {
-                Ok((name, chain)) => Self { notes: vec![format!("Selected DXF chain {} on layer '{}' of '{name}'", chain.id, chain.layer)], refusal: None, inside: None },
+                Ok((name, chain)) => Self { notes: vec![camcraft_i18n::tf("Selected DXF chain {} on layer '{}' of '{name}'", &[format!("{}", chain.id), format!("{}", chain.layer), format!("{}", name)])], refusal: None, inside: None },
                 Err(why) => Self { notes: Vec::new(), refusal: Some(why), inside: None },
             };
         }

@@ -78,18 +78,18 @@ fn pitch(l: &[f64], axis: &str) -> Result<(f64, u32), String> {
         return Err(format!("no {axis} positions"));
     };
     if l.len() < 2 {
-        return Err(format!("they stand in a single {}", if axis == "X" { "column" } else { "row" }));
+        return Err(camcraft_i18n::tf("they stand in a single {}", &[format!("{}", if axis == "X" { "column" } else { "row" })]));
     }
     let gap = l.windows(2).map(|w| w[1] - w[0]).fold(f64::MAX, f64::min);
     let steps = ((last - first) / gap).round();
     if !(steps.is_finite() && steps >= 1.0) || steps > MAX_HOLES as f64 {
-        return Err(format!("their {axis} spacing is not regular{TURNED}"));
+        return Err(camcraft_i18n::tf("their {axis} spacing is not regular{TURNED}", &[format!("{}", axis), format!("{}", TURNED)]));
     }
     let p = (last - first) / steps;
     for x in l {
         let k = ((x - first) / p).round();
         if (x - (first + k * p)).abs() > ON_NODE {
-            return Err(format!("a hole at {axis} {x:.3} mm is off the {p:.3} mm pitch{TURNED}"));
+            return Err(camcraft_i18n::tf("a hole at {axis} {x:.3} mm is off the {p:.3} mm pitch{TURNED}", &[format!("{}", axis), format!("{:.3}", x), format!("{:.3}", p), format!("{}", TURNED)]));
         }
     }
     Ok((p, steps as u32 + 1))
@@ -103,7 +103,7 @@ fn lattice(group: &[Hole]) -> Result<Grid, String> {
     let (py, rows) = pitch(&ys, "Y")?;
     let nodes = u64::from(cols) * u64::from(rows);
     if nodes > MAX_HOLES {
-        return Err(format!("the lattice would hold {nodes} holes, more than {MAX_HOLES}{TURNED}"));
+        return Err(camcraft_i18n::tf("the lattice would hold {nodes} holes, more than {MAX_HOLES}{TURNED}", &[format!("{}", nodes), format!("{}", MAX_HOLES), format!("{}", TURNED)]));
     }
     let (x0, y0) = (xs[0], ys[0]);
     let mut filled = vec![false; nodes as usize];
@@ -113,7 +113,7 @@ fn lattice(group: &[Hole]) -> Result<Grid, String> {
         let k = (r as usize).saturating_mul(cols as usize).saturating_add(c as usize);
         match filled.get_mut(k) {
             Some(slot) if !*slot => *slot = true,
-            Some(_) => return Err(format!("two holes stand at {}", location_name(r as u32, c as u32))),
+            Some(_) => return Err(camcraft_i18n::tf("two holes stand at {}", &[format!("{}", location_name(r as u32, c as u32))])),
             None => return Err("a hole falls outside the lattice".into()),
         }
     }
@@ -129,7 +129,7 @@ fn lattice(group: &[Hole]) -> Result<Grid, String> {
     };
     let places = all().filter(|&(r, c)| stagger.is_none_or(|p| (r + c) % 2 == u32::from(p))).count();
     if (have as f64) < MIN_FILL * places as f64 {
-        return Err(format!("only {have} of the lattice's {places} places hold a hole{TURNED}"));
+        return Err(camcraft_i18n::tf("only {have} of the lattice's {places} places hold a hole{TURNED}", &[format!("{}", have), format!("{}", places), format!("{}", TURNED)]));
     }
     let missing = all()
         .filter(|&(r, c)| stagger.is_none_or(|p| (r + c) % 2 == u32::from(p)) && !at(r, c))
@@ -178,7 +178,7 @@ pub fn grid_from_facets(tris: &[Triangle]) -> Result<PlateDef, String> {
             Err(e) => {
                 if first_err.is_none() {
                     let d = 2.0 * g[0].radius;
-                    first_err = Some(format!("its {} holes of {d:.3} mm don't form a regular grid: {e}", g.len()));
+                    first_err = Some(camcraft_i18n::tf("its {} holes of {d:.3} mm don't form a regular grid: {e}", &[format!("{}", g.len()), format!("{:.3}", d), format!("{}", e)]));
                 }
             }
         }

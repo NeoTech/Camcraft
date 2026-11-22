@@ -88,14 +88,14 @@ fn rigid_alignment(world: &World, name: &str) -> Result<Location, String> {
         if crate::model::find_by_name(world, name).is_some() {
             format!("'{name}' is not a setup")
         } else {
-            format!("there is no setup named '{name}'")
+            camcraft_i18n::tf("there is no setup named '{name}'", &[format!("{}", name)])
         }
     })?;
     let Some(a) = def.part_alignment else { return Ok(Location::default()) };
     let [x, y, z, w] = a.rot;
     let norm = (x * x + y * y + z * z + w * w).sqrt();
     if !a.pos.is_finite() || !norm.is_finite() || (norm - 1.0).abs() > 1e-9 {
-        return Err(format!("setup '{name}' holds the part at a placement that is not a rigid transform"));
+        return Err(camcraft_i18n::tf("setup '{name}' holds the part at a placement that is not a rigid transform", &[format!("{}", name)]));
     }
     Ok(a)
 }
@@ -114,7 +114,7 @@ pub fn transform_between(world: &World, from: &str, to: &str) -> Result<Location
     let a_to = rigid_alignment(world, to)?;
     let t = compose(a_to, inverse(a_from));
     if !t.pos.is_finite() || t.rot.iter().any(|v| !v.is_finite()) {
-        return Err(format!("the transform from setup '{from}' to setup '{to}' is not finite"));
+        return Err(camcraft_i18n::tf("the transform from setup '{from}' to setup '{to}' is not finite", &[format!("{}", from), format!("{}", to)]));
     }
     Ok(t)
 }
@@ -184,10 +184,10 @@ fn unit(q: [f64; 4]) -> [f64; 4] {
 pub fn describe(world: &World, name: &str) -> Option<String> {
     let parent = relative_to(world, name)?;
     let Ok(t) = transform_between(world, &parent, name) else {
-        return Some(format!("placed relative to {parent} (the transform cannot be read)"));
+        return Some(camcraft_i18n::tf("placed relative to {parent} (the transform cannot be read)", &[format!("{}", parent)]));
     };
     if is_still(t) {
-        return Some(format!("Same as {parent}"));
+        return Some(camcraft_i18n::tf("Same as {parent}", &[format!("{}", parent)]));
     }
     let words = match setup_align::preset_of(t.rot) {
         Some(p) if p != setup_align::AlignPreset::AsModelled => p.label().to_owned(),

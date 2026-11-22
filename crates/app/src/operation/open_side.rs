@@ -79,7 +79,7 @@ pub(super) fn air_band_refusal(
         let (x0, x1) = (b.min.x.min(b.max.x) - t, b.max.x.max(b.min.x) + t);
         let (y0, y1) = (b.min.y.min(b.max.y) - t, b.max.y.max(b.min.y) + t);
         if ![x0, x1, y0, y1].iter().all(|v| v.is_finite()) {
-            return Err(GenError::Invalid(format!("the fixture '{name}' has a box that cannot be read, so the Adaptive air band cannot be judged against it")));
+            return Err(GenError::Invalid(camcraft_i18n::tf("the fixture '{name}' has a box that cannot be read, so the Adaptive air band cannot be judged against it", &[format!("{}", name)])));
         }
         let rect = Region::new(vec![Loop::new(vec![
             Point2::new(x0, y0),
@@ -88,7 +88,7 @@ pub(super) fn air_band_refusal(
             Point2::new(x0, y1),
         ])?])?;
         if !band.intersect(&rect)?.is_empty() {
-            return Err(GenError::Invalid(format!("{AIR_BAND_FIXTURE} '{name}' - move the fixture out of that band, or select the Offset rings strategy")));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{AIR_BAND_FIXTURE} '{name}' - move the fixture out of that band, or select the Offset rings strategy", &[format!("{}", AIR_BAND_FIXTURE), format!("{}", name)])));
         }
     }
     Ok(())

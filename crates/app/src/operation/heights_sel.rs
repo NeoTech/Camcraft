@@ -157,7 +157,7 @@ pub fn selection_heights_sane(
     }
     selection_z_range(world, setup, src)
         .err()
-        .map(|why| format!("a height is measured From: Selection, which does not resolve: {why}"))
+        .map(|why| camcraft_i18n::tf("a height is measured From: Selection, which does not resolve: {why}", &[format!("{}", why)]))
 }
 
 /// Ordering sanity on resolved values: an operation whose top is not

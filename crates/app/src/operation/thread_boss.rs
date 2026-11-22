@@ -72,13 +72,7 @@ pub(super) fn door(tool: &Tool, bosses: &[Hole], depth: Option<f64>, bottom: Opt
     // Float dust off the numbers a refusal names (0.6134 x 1.25 is not 0.76675 in binary).
     let mm = |v: f64| (v * 1e6).round() / 1e6;
     if let Some(x) = bosses.iter().find(|x| x.radius <= h) {
-        return Some(format!(
-            "the {} mm boss at ({}, {}) is thinner than the {} mm thread is deep - an external thread needs a core under its root",
-            x.radius * 2.0,
-            x.xy.x,
-            x.xy.y,
-            mm(h)
-        ));
+        return Some(camcraft_i18n::tf("the {} mm boss at ({}, {}) is thinner than the {} mm thread is deep - an external thread needs a core under its root", &[format!("{}", x.radius * 2.0), format!("{}", x.xy.x), format!("{}", x.xy.y), format!("{}", mm(h))]));
     }
     let bottom = bottom?;
     // What stands above the teeth and is wider than their roots meets
@@ -87,7 +81,7 @@ pub(super) fn door(tool: &Tool, bosses: &[Hole], depth: Option<f64>, bottom: Opt
     let root_r = tool.diameter * 0.5 - h;
     let wider = |d: f64, len: f64| len > 0.0 && d * 0.5 > root_r + GOUGE_TOL;
     let (reach, what) = if wider(tool.shank_d, tool.shank_len) {
-        (tool.flute_len, format!("its {} mm shank, wider than the tooth roots,", tool.shank_d))
+        (tool.flute_len, camcraft_i18n::tf("its {} mm shank, wider than the tooth roots,", &[format!("{}", tool.shank_d)]))
     } else if wider(tool.holder_d, tool.holder_len) {
         (tool.flute_len + tool.shank_len.max(0.0), "its holder".to_owned())
     } else {
@@ -96,13 +90,7 @@ pub(super) fn door(tool: &Tool, bosses: &[Hole], depth: Option<f64>, bottom: Opt
     bosses.iter().find_map(|x| {
         let long = x.entry_z - bottom.unwrap_or(x.floor_z);
         (long.is_finite() && long > reach + 1e-9).then(|| {
-            format!(
-                "the thread on the boss at ({}, {}) is {} mm long, but this thread mill reaches only {} mm down beside a boss before {what} meets it - state a higher bottom or mount a longer thread mill",
-                x.xy.x,
-                x.xy.y,
-                mm(long),
-                mm(reach)
-            )
+            camcraft_i18n::tf("the thread on the boss at ({}, {}) is {} mm long, but this thread mill reaches only {} mm down beside a boss before {what} meets it - state a higher bottom or mount a longer thread mill", &[format!("{}", x.xy.x), format!("{}", x.xy.y), format!("{}", mm(long)), format!("{}", mm(reach)), format!("{}", what)])
         })
     })
 }
@@ -133,10 +121,7 @@ pub(super) fn not_round(facets: &[Triangle], plan: &crate::machining2d::ThreadPa
         let (lo, hi) = (h.floor_z.min(h.top_z) - plan.tool_diameter, h.floor_z.max(h.top_z));
         let round = crate::verify::hole_is_round(facets, [h.xy.x, h.xy.y], h.radius + crate::verify::WALL_SAG, lo, hi);
         (!round).then(|| {
-            format!(
-                "the boss at ({:.3}, {:.3}) is not round - external thread milling needs a round boss (its flats would be cut inside the thread's minor circle)",
-                h.xy.x, h.xy.y
-            )
+            camcraft_i18n::tf("the boss at ({:.3}, {:.3}) is not round - external thread milling needs a round boss (its flats would be cut inside the thread's minor circle)", &[format!("{:.3}", h.xy.x), format!("{:.3}", h.xy.y)])
         })
     })
 }

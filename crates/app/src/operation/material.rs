@@ -74,7 +74,7 @@ pub(super) fn material_of(
             let name = crate::setup::stock_entity_name(world, setup);
             named_material(world, setup, &name, "no stock: set it up in Setup first")
         }
-        SrcRef::Entity(name) => named_material(world, setup, name, &format!("no entity named '{name}'")),
+        SrcRef::Entity(name) => named_material(world, setup, name, &camcraft_i18n::tf("no entity named '{name}'", &[format!("{}", name)])),
         SrcRef::Selection(items) => {
             // Union of the distinct selected entities (stock is a legal
             // pick): what the generators stand in and what verification
@@ -94,7 +94,7 @@ pub(super) fn material_of(
                     world,
                     setup,
                     &g.entity,
-                    &format!("the selection names '{}', which is gone", g.entity),
+                    &camcraft_i18n::tf("the selection names '{}', which is gone", &[format!("{}", g.entity)]),
                 )?;
                 file_tolerance &= m.excess == 0.0 || m.file_tolerance;
                 excess = excess.max(m.excess);
@@ -203,7 +203,7 @@ pub fn detect_holes(
     let is_drill = matches!(params, OpParams::Drill { .. });
     let holes: &mut Vec<_> = match &mut params {
         OpParams::Drill { holes, .. } | OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => holes,
-        _ => return Err(format!("'{name}' is not a drilling operation")),
+        _ => return Err(camcraft_i18n::tf("'{name}' is not a drilling operation", &[format!("{}", name)])),
     };
     let axial = holes_of(world, setup, src).map_err(|e| e.to_string())?;
     // #2601: report directed mouths on every machine. The generator's
@@ -241,9 +241,7 @@ pub(super) fn named_material(world: &World, setup: Option<&str>, name: &str, gon
     };
     if crate::sketch::is_sketch(world, &entity) {
         let Some(pose) = crate::sketch::world_pose(world, &entity) else {
-            return Err(GenError::Invalid(format!(
-                "DXF profile '{name}' has no stock to lie on - set up stock first"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("DXF profile '{name}' has no stock to lie on - set up stock first", &[format!("{}", name)])));
         };
         return Ok(Material { facets: Vec::new(), top: pose.pos.z, bodies: Vec::new(), excess: 0.0, file_tolerance: false });
     }
@@ -266,9 +264,7 @@ pub(super) fn usable(facets: Vec<Triangle>, top: f64, label: &str) -> Result<Mat
         .all(|t| t.a.is_finite() && t.b.is_finite() && t.c.is_finite())
         || !top.is_finite()
     {
-        return Err(GenError::Invalid(format!(
-            "'{label}' has no usable geometry to machine"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("'{label}' has no usable geometry to machine", &[format!("{}", label)])));
     }
     Ok(Material { facets, top, bodies: Vec::new(), excess: 0.0, file_tolerance: false })
 }
@@ -315,11 +311,9 @@ fn empty_at(facets: &[Triangle], z: f64) -> GenError {
         .filter(|v| v.is_finite())
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
     if lo <= hi {
-        GenError::Empty(format!(
-            "no material at z = {z:.3} - the source spans Z{lo:.3} to Z{hi:.3}; set Top of Part Z inside that span, or pick the face or edges to machine"
-        ))
+        GenError::Empty(camcraft_i18n::tf("no material at z = {z:.3} - the source spans Z{lo:.3} to Z{hi:.3}; set Top of Part Z inside that span, or pick the face or edges to machine", &[format!("{:.3}", z), format!("{:.3}", lo), format!("{:.3}", hi)]))
     } else {
-        GenError::Empty(format!("no material at z = {z:.3}"))
+        GenError::Empty(camcraft_i18n::tf("no material at z = {z:.3}", &[format!("{:.3}", z)]))
     }
 }
 

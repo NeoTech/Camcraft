@@ -418,7 +418,7 @@ impl FieldPlay {
                     self.cur.simulate_display(std::slice::from_ref(&sim))
                 },
             };
-            cut.map_err(|e| format!("playback could not cut {}: {e}", op.name))?;
+            cut.map_err(|e| camcraft_i18n::tf("playback could not cut {}: {e}", &[format!("{}", op.name), format!("{}", e)]))?;
             self.moves_cut = self.moves_cut.saturating_add(b - a);
         }
         Ok(())

@@ -95,7 +95,7 @@ pub fn save(path: &Path, entries: &[FixtureEntry]) -> Result<(), LibraryError> {
     use std::io::Write;
     let text = to_text(entries).map_err(LibraryError::Refused)?;
     let io = |e: std::io::Error| LibraryError::Io(format!("{}: {e}", path.display()));
-    let dir = path.parent().ok_or_else(|| LibraryError::Io(format!("{} has no folder", path.display())))?;
+    let dir = path.parent().ok_or_else(|| LibraryError::Io(camcraft_i18n::tf("{} has no folder", &[format!("{}", path.display())])))?;
     std::fs::create_dir_all(dir).map_err(io)?;
     let name = path.file_name().map_or_else(|| "fixtures".into(), |n| n.to_string_lossy().into_owned());
     let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
@@ -125,7 +125,7 @@ pub fn add_entries(path: &Path, new: Vec<FixtureEntry>, replace: bool) -> Result
     for (i, e) in new.iter().enumerate() {
         check_entry(e).map_err(LibraryError::Refused)?;
         if new[..i].iter().any(|o| o.name == e.name) {
-            return Err(LibraryError::Refused(format!("fixture '{}' is saved twice", e.name)));
+            return Err(LibraryError::Refused(camcraft_i18n::tf("fixture '{}' is saved twice", &[format!("{}", e.name)])));
         }
     }
     let mut lib = load(path)?;

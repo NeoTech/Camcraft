@@ -54,7 +54,7 @@ pub(super) fn render_tool_list(world: &World, ctx: Option<&str>, out: &mut Strin
                     out.push('\n');
                 }
             }
-            None => out.push_str(&format!("      (tool '{}' is no longer in the document)\n", row.tool)),
+            None => out.push_str(&camcraft_i18n::tf("      (tool '{}' is no longer in the document)\n", &[format!("{}", row.tool)])),
         }
     }
     // The total time speaks with tool_list's own voice (setup_minutes:

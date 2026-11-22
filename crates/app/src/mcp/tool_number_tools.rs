@@ -33,13 +33,13 @@ fn schema() -> Value {
 fn set_tool_number(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let tool = req_str(a, "tool")?;
     let next = match a.get("number") {
-        None => return Err(format!("\"number\" is required: an integer in {}", tool_numbers::RANGE_TEXT)),
+        None => return Err(camcraft_i18n::tf("\"number\" is required: an integer in {}", &[format!("{}", tool_numbers::RANGE_TEXT)])),
         Some(Value::Null) => None,
         Some(v) => {
             let n = v
                 .as_u64()
-                .ok_or_else(|| format!("\"number\" must be a positive integer in {}", tool_numbers::RANGE_TEXT))?;
-            Some(u32::try_from(n).map_err(|_| format!("tool number {n} is out of range - tool numbers run {}", tool_numbers::RANGE_TEXT))?)
+                .ok_or_else(|| camcraft_i18n::tf("\"number\" must be a positive integer in {}", &[format!("{}", tool_numbers::RANGE_TEXT)]))?;
+            Some(u32::try_from(n).map_err(|_| camcraft_i18n::tf("tool number {n} is out of range - tool numbers run {}", &[format!("{}", n), format!("{}", tool_numbers::RANGE_TEXT)]))?)
         }
     };
     let cmd = SetToolNumber::new(&env.world, tool, next).map_err(cmd_err)?;

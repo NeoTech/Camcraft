@@ -92,7 +92,7 @@ pub fn rise(world: &World, declared: Option<&str>) -> Rise {
         return if v.is_finite() && v > 0.0 {
             Rise::Stated(v)
         } else {
-            Rise::Refused(format!("the setup's stated nose_to_axis {v} is no length over zero"))
+            Rise::Refused(camcraft_i18n::tf("the setup's stated nose_to_axis {v} is no length over zero", &[format!("{}", v)]))
         };
     }
     match tallest(world, declared) {
@@ -127,13 +127,13 @@ fn tallest(world: &World, declared: Option<&str>) -> Result<Option<Stack>, Strin
 /// where it stands is unknown - refused by name.
 fn standing(world: &World, declared: Option<&str>, name: &str, e: &Entity, linked: Stack) -> Result<Stack, String> {
     let table = fixture::table_box(world, declared).ok_or_else(|| {
-        format!("the setup's machine states no table, so where rotary subplate '{name}' stands cannot be judged")
+        camcraft_i18n::tf("the setup's machine states no table, so where rotary subplate '{name}' stands cannot be judged", &[format!("{}", name)])
     })?;
     let b = model::entity_world_aabb(world, e)
-        .ok_or_else(|| format!("rotary subplate '{name}' has no posed geometry, so where it stands cannot be judged"))?;
+        .ok_or_else(|| camcraft_i18n::tf("rotary subplate '{name}' has no posed geometry, so where it stands cannot be judged", &[format!("{}", name)]))?;
     let over = b.max.z - table.max.z;
     if !over.is_finite() {
-        return Err(format!("rotary subplate '{name}' stands at a height that is not finite"));
+        return Err(camcraft_i18n::tf("rotary subplate '{name}' stands at a height that is not finite", &[format!("{}", name)]));
     }
     let gap = over - linked.thickness;
     if gap <= STAND_TOL {
@@ -154,49 +154,43 @@ fn standing(world: &World, declared: Option<&str>, name: &str, e: &Entity, linke
 /// the remedy it is.
 pub fn check_stated(world: &World, declared: Option<&str>, v: f64, machine: f64) -> Result<(), String> {
     if v > machine + STAND_TOL {
-        return Err(format!(
-            "the setup's stated nose_to_axis {v:.3} mm exceeds the machine's own {machine:.3} mm (the rotary on \
-             the bare table) - a raised rotary only comes nearer the nose"
-        ));
+        return Err(camcraft_i18n::tf("the setup's stated nose_to_axis {v:.3} mm exceeds the machine's own {machine:.3} mm (the rotary on \
+             the bare table) - a raised rotary only comes nearer the nose", &[format!("{:.3}", v), format!("{:.3}", machine)]));
     }
     if let Ok(Some(s)) = tallest(world, declared)
         && v > machine - s.thickness + STAND_TOL
     {
-        return Err(format!(
-            "the setup's stated nose_to_axis {v:.3} mm exceeds the machine's {machine:.3} mm less the {:.3} mm \
-             stack under the rotary ({})",
-            s.thickness,
-            s.describe()
-        ));
+        return Err(camcraft_i18n::tf("the setup's stated nose_to_axis {v:.3} mm exceeds the machine's {machine:.3} mm less the {:.3} mm \
+             stack under the rotary ({})", &[format!("{:.3}", v), format!("{:.3}", machine), format!("{:.3}", s.thickness), format!("{}", s.describe())]));
     }
     Ok(())
 }
 
 /// Subplate `name` (`t` thick) and every plate under it.
 fn stack_of(world: &World, name: &str, t: f64, mount: Option<&PlateMount>) -> Result<Stack, String> {
-    let unknown = |what: String| format!("rotary subplate '{name}' stands on {what}, so the rotary's rise is unknown");
+    let unknown = |what: String| camcraft_i18n::tf("rotary subplate '{name}' stands on {what}, so the rotary's rise is unknown", &[format!("{}", name), format!("{}", what)]);
     if !(t.is_finite() && t > 0.0) {
-        return Err(format!("rotary subplate '{name}' states no usable thickness ({t})"));
+        return Err(camcraft_i18n::tf("rotary subplate '{name}' states no usable thickness ({t})", &[format!("{}", name), format!("{}", t)]));
     }
     let mut layers = vec![(name.to_owned(), t)];
     let mut total = t;
     let mut next = mount.map(|m| m.plate.clone());
     while let Some(p) = next {
         if layers.len() > MAX_LAYERS || layers.iter().any(|(n, _)| *n == p) {
-            return Err(unknown(format!("a plate stack that loops back through '{p}'")));
+            return Err(unknown(camcraft_i18n::tf("a plate stack that loops back through '{p}'", &[format!("{}", p)])));
         }
         let def = model::find_by_name(world, &p)
             .and_then(|e| fixture::def_of(world, &e))
-            .ok_or_else(|| unknown(format!("plate '{p}', which is not in the document")))?;
+            .ok_or_else(|| unknown(camcraft_i18n::tf("plate '{p}', which is not in the document", &[format!("{}", p)])))?;
         let th = def
             .plate
             .plate
             .as_ref()
             .and_then(|g| g.params.as_ref())
             .map(|g| g.thickness)
-            .ok_or_else(|| unknown(format!("'{p}', a plate whose thickness is not stated (an imported plate)")))?;
+            .ok_or_else(|| unknown(camcraft_i18n::tf("'{p}', a plate whose thickness is not stated (an imported plate)", &[format!("{}", p)])))?;
         if !(th.is_finite() && th > 0.0) {
-            return Err(unknown(format!("'{p}', whose thickness {th} is no length over zero")));
+            return Err(unknown(camcraft_i18n::tf("'{p}', whose thickness {th} is no length over zero", &[format!("{}", p), format!("{}", th)])));
         }
         total += th;
         layers.push((p, th));
@@ -217,22 +211,14 @@ pub fn pins_fit(def: &PlateDef, m: &PlateMount, rider: &str, acc: Option<&Access
         return Ok(());
     };
     match &m.at {
-        MountAt::Hole(h) => Err(format!(
-            "'{rider}' is a rotary subplate, located by its two pin bores - place it on a dowel pair of '{}', not at hole {}",
-            m.plate,
-            h.trim().to_ascii_uppercase()
-        )),
+        MountAt::Hole(h) => Err(camcraft_i18n::tf("'{rider}' is a rotary subplate, located by its two pin bores - place it on a dowel pair of '{}', not at hole {}", &[format!("{}", rider), format!("{}", m.plate), format!("{}", h.trim().to_ascii_uppercase())])),
         MountAt::Dowels([a, b]) => {
             let g = def.dowel_lattice().map_err(|e| format!("plate '{}': {e}", m.plate))?;
             let (ax, ay) = g.locate(a).map_err(|e| format!("plate '{}': dowel {e}", m.plate))?;
             let (bx, by) = g.locate(b).map_err(|e| format!("plate '{}': dowel {e}", m.plate))?;
             let d = (bx - ax).hypot(by - ay);
             if (d - spacing).abs() > subplate::SPACING_TOL {
-                return Err(format!(
-                    "'{rider}' has its pin bores {spacing:.3} mm apart, but {} on '{}' are {d:.3} mm apart",
-                    m.at.label(),
-                    m.plate
-                ));
+                return Err(camcraft_i18n::tf("'{rider}' has its pin bores {spacing:.3} mm apart, but {} on '{}' are {d:.3} mm apart", &[format!("{}", rider), format!("{:.3}", spacing), format!("{}", m.at.label()), format!("{}", m.plate), format!("{:.3}", d)]));
             }
             Ok(())
         }

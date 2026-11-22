@@ -32,7 +32,7 @@ fn post_ref_from_key(key: &str) -> Option<PostRef> {
 fn check_finite(map: &BTreeMap<String, OptionValue>) -> Result<(), String> {
     for (k, v) in map {
         if !v.is_finite() {
-            return Err(format!("post option '{k}' must be a finite number"));
+            return Err(camcraft_i18n::tf("post option '{k}' must be a finite number", &[format!("{}", k)]));
         }
     }
     Ok(())
@@ -56,7 +56,7 @@ pub(crate) fn validate_post_map(map: &PostScriptOptions) -> Result<(), String> {
         if let Some(post) = post_ref_from_key(key) {
             if let PostRef::Named(ref name) = post {
                 if !posting::BUILTINS.iter().any(|(n, _)| n == name) {
-                    return Err(format!("built-in post '{name}' is not in the registry"));
+                    return Err(camcraft_i18n::tf("built-in post '{name}' is not in the registry", &[format!("{}", name)]));
                 }
                 validate_for_post(&post, ov)?;
             } else if posting::script_of(&post).is_ok() {
@@ -161,8 +161,8 @@ impl SetSetupPostScriptOptions {
         }
         if prev == next {
             return Err(CommandError::Invalid(match &next {
-                Some(_) => format!("setup '{setup}' already has those post script options"),
-                None => format!("setup '{setup}' already follows the document's post script options"),
+                Some(_) => camcraft_i18n::tf("setup '{setup}' already has those post script options", &[format!("{}", setup)]),
+                None => camcraft_i18n::tf("setup '{setup}' already follows the document's post script options", &[format!("{}", setup)]),
             }));
         }
         Ok(Self {

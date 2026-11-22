@@ -82,27 +82,17 @@ fn chain(
     role: &str,
 ) -> Result<Vec<Point3>, GenError> {
     let Some(entity) = model::find_by_name(world, &g.entity) else {
-        return Err(GenError::Invalid(format!(
-            "the Deburr edges {role} name '{}', which is gone",
-            g.entity
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the Deburr edges {role} name '{}', which is gone", &[format!("{}", role), format!("{}", g.entity)])));
     };
     let Some(features) = model::features_of(world, &entity) else {
-        return Err(GenError::Invalid(format!(
-            "'{}' has no geometry to select from",
-            g.entity
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
     };
     let label = crate::pick::geo_label(world, g);
     let FeatureSel::Chain(cid) = g.feature else {
-        return Err(GenError::Invalid(format!(
-            "{label} is not an edge chain - Deburr takes edge chains as the edges {role}"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{label} is not an edge chain - Deburr takes edge chains as the edges {role}", &[format!("{}", label), format!("{}", role)])));
     };
     let Some(c) = crate::model::resolve_chain(&features, cid) else {
-        return Err(GenError::Invalid(format!(
-            "{label} is no longer in the model: re-pick it"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in the model: re-pick it", &[format!("{}", label)])));
     };
     let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
     let pts: Vec<Point3> = feature::chain_points(&features, &c)
@@ -110,9 +100,7 @@ fn chain(
         .map(|p| transform_point(Point3::new(p[0], p[1], p[2]), loc.pos, loc.rot))
         .collect();
     if pts.len() < 2 {
-        return Err(GenError::Invalid(format!(
-            "{label} holds a single point - re-pick a real edge"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("{label} holds a single point - re-pick a real edge", &[format!("{}", label)])));
     }
     Ok(pts)
 }

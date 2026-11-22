@@ -30,7 +30,7 @@ fn set_model_link(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String
         Some(Value::String(p)) => SetModelSource::link(&env.world, name, Path::new(p)),
         Some(Value::Null) => SetModelSource::unlink(&env.world, name),
         None => return Err("give \"path\": a file to link to, or null to unlink".into()),
-        Some(other) => return Err(format!("\"path\" must be a string or null, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"path\" must be a string or null, got {other}", &[format!("{}", other)])),
     }
     .map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);

@@ -56,7 +56,7 @@ pub fn parse_calls(provider: Provider, response: &Value) -> Result<Vec<ToolCall>
         };
         schema_validation::arguments(name, &arguments)?;
         if !id.is_empty() && calls.iter().any(|c| c.id == id) {
-            return Err(format!("duplicate tool call id '{id}'"));
+            return Err(camcraft_i18n::tf("duplicate tool call id '{id}'", &[format!("{}", id)]));
         }
         calls.push(ToolCall {
             id,
@@ -71,7 +71,7 @@ fn array<'a>(value: &'a Value, field: &str) -> Result<&'a [Value], String> {
     match value {
         Value::Null => Ok(&[]),
         Value::Array(rows) => Ok(rows),
-        _ => Err(format!("provider {field} must be an array")),
+        _ => Err(camcraft_i18n::tf("provider {field} must be an array", &[format!("{}", field)])),
     }
 }
 
@@ -80,7 +80,7 @@ fn string<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
         .get(field)
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| format!("provider {field} must be a nonempty string"))
+        .ok_or_else(|| camcraft_i18n::tf("provider {field} must be a nonempty string", &[format!("{}", field)]))
 }
 
 /// A result block (Anthropic), message (Chat), input item (Responses) or part

@@ -56,7 +56,7 @@ fn tapping(v: Option<&Value>) -> String {
     match v {
         Some(Value::Bool(true)) => "yes".to_owned(),
         Some(Value::Bool(false)) => "no - tap cycles are refused".to_owned(),
-        None | Some(Value::Null) => format!("{UNSTATED} - not limited"),
+        None | Some(Value::Null) => camcraft_i18n::tf("{UNSTATED} - not limited", &[format!("{}", UNSTATED)]),
         Some(other) => other.to_string(),
     }
 }
@@ -89,7 +89,7 @@ pub(crate) fn groups(raw: &Value, m: &Machine, k: Option<Kind>, posts: &[&str]) 
         "Kind",
         match (declared, k) {
             (Some(w), _) => w.to_owned(),
-            (None, Some(k)) => format!("{} (inferred from the axes)", k.word()),
+            (None, Some(k)) => camcraft_i18n::tf("{} (inferred from the axes)", &[format!("{}", k.word())]),
             (None, None) => UNSTATED.to_owned(),
         },
     );
@@ -152,10 +152,7 @@ pub(crate) fn groups(raw: &Value, m: &Machine, k: Option<Kind>, posts: &[&str]) 
     g.row(
         "Live tool",
         match &m.live_tool {
-            Some(l) => format!(
-                "C on {}, C off {}, spindle on {}, spindle off {}",
-                l.c_axis_on, l.c_axis_off, l.spindle_on, l.spindle_off
-            ),
+            Some(l) => camcraft_i18n::tf("C on {}, C off {}, spindle on {}, spindle off {}", &[format!("{}", l.c_axis_on), format!("{}", l.c_axis_off), format!("{}", l.spindle_on), format!("{}", l.spindle_off)]),
             None => UNSTATED.to_owned(),
         },
     );

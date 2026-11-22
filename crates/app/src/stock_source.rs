@@ -122,9 +122,7 @@ pub fn void_note(world: &World) -> Option<String> {
 }
 
 fn void_text(source: &str) -> String {
-    format!(
-        "the raw-stock-only mark on '{source}' no longer matches the model (it was removed, or its geometry or placement changed) and was ignored - '{source}' is judged as the part; tick \"{RAW_STOCK_ONLY}\" again if it is still raw stock"
-    )
+    camcraft_i18n::tf("the raw-stock-only mark on '{source}' no longer matches the model (it was removed, or its geometry or placement changed) and was ignored - '{source}' is judged as the part; tick \"{RAW_STOCK_ONLY}\" again if it is still raw stock", &[format!("{}", source), format!("{}", source), format!("{}", RAW_STOCK_ONLY)])
 }
 
 /// The void note for setup context `setup`'s stock (the stock page).
@@ -197,9 +195,7 @@ pub fn nothing_judged(world: &World) -> Option<String> {
         return None;
     }
     let name = model::name_of(world, &skip).unwrap_or_default();
-    Some(format!(
-        "nothing is judged as the part: '{name}' is marked raw stock only and the document has no other model with a body - import the finished part, or untick \"{RAW_STOCK_ONLY}\" on the stock page"
-    ))
+    Some(camcraft_i18n::tf("nothing is judged as the part: '{name}' is marked raw stock only and the document has no other model with a body - import the finished part, or untick \"{RAW_STOCK_ONLY}\" on the stock page", &[format!("{}", name), format!("{}", RAW_STOCK_ONLY)]))
 }
 
 /// Is `at` inside the model's world bounds (1 mm slack)?
@@ -233,13 +229,9 @@ pub fn gouge_hint(world: &World, at: Option<Point3>) -> Option<String> {
             continue;
         }
         if ops.iter().any(|op| names(op, &source)) {
-            return marked.then(|| format!(
-                " - '{source}' is marked raw stock only, but an operation machines it, so it is judged as the part"
-            ));
+            return marked.then(|| camcraft_i18n::tf(" - '{source}' is marked raw stock only, but an operation machines it, so it is judged as the part", &[format!("{}", source)]));
         }
-        return Some(format!(
-            " - the cut is judged against '{source}', the model the stock is made from. If '{source}' is the finished part, the program cuts into it. Only if '{source}' is the raw casting or blank, not the finished part (which is its own model), tick \"{RAW_STOCK_ONLY}\" on the stock page"
-        ));
+        return Some(camcraft_i18n::tf(" - the cut is judged against '{source}', the model the stock is made from. If '{source}' is the finished part, the program cuts into it. Only if '{source}' is the raw casting or blank, not the finished part (which is its own model), tick \"{RAW_STOCK_ONLY}\" on the stock page", &[format!("{}", source), format!("{}", source), format!("{}", source), format!("{}", RAW_STOCK_ONLY)]));
     }
     None
 }

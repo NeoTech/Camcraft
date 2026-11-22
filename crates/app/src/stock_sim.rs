@@ -218,7 +218,7 @@ pub(crate) fn bull_corner(tool: &crate::tools::Tool) -> Result<Option<f64>, Stri
     }
     let (c, r) = (tool.corner_r, tool.diameter * 0.5);
     if !(c.is_finite() && r.is_finite() && c >= 0.0 && r > 0.0) {
-        return Err(format!("bull nose carries no sane corner (corner radius {c}, radius {r})"));
+        return Err(camcraft_i18n::tf("bull nose carries no sane corner (corner radius {c}, radius {r})", &[format!("{}", c), format!("{}", r)]));
     }
     Ok((c > 0.0).then_some(c.min(r)))
 }
@@ -256,7 +256,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
     let mut planned: Vec<Planned> = Vec::with_capacity(ops.len());
     for (name, e) in ops {
         let op = model::operation_of(world, e)
-            .ok_or_else(|| format!("{name}: lost its operation"))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         if wire::skips(&op) {
             continue;
         }
@@ -275,7 +275,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
         let rotary = rotary::rotary_plan(world, name, &op)?;
         let tool = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         // A touch probe removes no stock (#108): its stylus only ever
         // meets the part tangent, and the protected-move law in
         // `operation::probe_op` already convicted any other meeting -
@@ -289,7 +289,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
             continue;
         }
         let cache = model::toolpath_of(world, e)
-            .ok_or_else(|| format!("{name}: lost its toolpath"))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         // The cone's slope, cot of the half-angle from the axis -
         // the number the dexel / drill cone reads directly, so the sim and
         // the congruence door in `generate` see the same steel (#2441).
@@ -299,10 +299,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
                 if tan_half.is_finite() && tan_half > 0.0 && tool.tip_angle > 0.0 && tool.tip_angle < 180.0 {
                     (Some(1.0 / tan_half), false)
                 } else {
-                    return Err(format!(
-                        "{name}: chamfer mill {} carries no sane cone (tip angle {})",
-                        op.tool, tool.tip_angle
-                    ));
+                    return Err(camcraft_i18n::tf("{name}: chamfer mill {} carries no sane cone (tip angle {})", &[format!("{}", name), format!("{}", op.tool), format!("{}", tool.tip_angle)]));
                 }
             }
             crate::tools::ToolKind::Drill => {
@@ -313,10 +310,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
                     if tan_half.is_finite() && tan_half > 0.0 && tool.tip_angle > 0.0 && tool.tip_angle < 180.0 {
                         (Some(1.0 / tan_half), true)
                     } else {
-                        return Err(format!(
-                            "{name}: drill {} carries no sane point cone (tip angle {})",
-                            op.tool, tool.tip_angle
-                        ));
+                        return Err(camcraft_i18n::tf("{name}: drill {} carries no sane point cone (tip angle {})", &[format!("{}", name), format!("{}", op.tool), format!("{}", tool.tip_angle)]));
                     }
                 }
             }

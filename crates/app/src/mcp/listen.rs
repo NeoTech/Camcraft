@@ -210,7 +210,7 @@ pub fn port_from(args: &[String], env: Option<&str>) -> Result<Option<u16>, Stri
     text.trim()
         .parse::<u16>()
         .map(Some)
-        .map_err(|_| format!("MCP port must be a number from 0 to 65535, got '{text}'"))
+        .map_err(|_| camcraft_i18n::tf("MCP port must be a number from 0 to 65535, got '{text}'", &[format!("{}", text)]))
 }
 
 fn accept_loop(listener: &TcpListener, tx: &Sender<Request>, stop: &AtomicBool, wake: &Wake, idle: Duration) {

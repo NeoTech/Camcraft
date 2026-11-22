@@ -30,7 +30,7 @@ pub fn widened(chord_mm: f64, file_tolerance: bool) -> bool {
 /// chord, in the document's unit; `None` for any other chord.
 #[must_use]
 pub fn clause(world: &World, chord_mm: f64, file_tolerance: bool) -> Option<String> {
-    widened(chord_mm, file_tolerance).then(|| format!("checks on this model allow {}, not {}", len_bound(world, surface_bound(chord_mm)), len(world, DEV_TOL)))
+    widened(chord_mm, file_tolerance).then(|| camcraft_i18n::tf("checks on this model allow {}, not {}", &[format!("{}", len_bound(world, surface_bound(chord_mm))), format!("{}", len(world, DEV_TOL))]))
 }
 
 /// One header line for each widened part of the document: a model, or
@@ -48,11 +48,7 @@ pub fn program_notes(world: &World) -> Vec<String> {
                 Some(StockShape::FromModel { source }) => source,
                 _ => name,
             };
-            Some(format!(
-                "Reduced accuracy: model {shown} was checked to {}, not {}",
-                len_bound(world, surface_bound(chord)),
-                len(world, DEV_TOL)
-            ))
+            Some(camcraft_i18n::tf("Reduced accuracy: model {shown} was checked to {}, not {}", &[format!("{}", shown), format!("{}", len_bound(world, surface_bound(chord))), format!("{}", len(world, DEV_TOL))]))
         })
         .collect();
     lines.sort();

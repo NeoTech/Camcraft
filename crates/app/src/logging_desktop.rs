@@ -62,7 +62,7 @@ fn open_log() -> Result<Sink, String> {
         }
         OpenOptions::new().create(true).append(true).open(&path)
     })();
-    let sink = Arc::new(Mutex::new(opened.map_err(|err| format!("cannot open desktop log {}: {err}", path.display()))?));
+    let sink = Arc::new(Mutex::new(opened.map_err(|err| camcraft_i18n::tf("cannot open desktop log {}: {err}", &[format!("{}", path.display()), format!("{}", err)]))?));
     let file_sink = Arc::clone(&sink);
     let file = tracing_subscriber::fmt::layer()
         .with_ansi(false)
@@ -73,7 +73,7 @@ fn open_log() -> Result<Sink, String> {
         .with_writer(io::stderr)
         .with_filter(super::filter_from_env());
     if let Err(err) = tracing_subscriber::registry().with(terminal).with(file).try_init() {
-        report_write(&sink, format!("desktop tracing subscriber not installed: {err}\n").as_bytes());
+        report_write(&sink, camcraft_i18n::tf("desktop tracing subscriber not installed: {err}\n", &[format!("{}", err)]).as_bytes());
     }
     let panic_sink = Arc::clone(&sink);
     let previous = std::panic::take_hook();
@@ -82,8 +82,8 @@ fn open_log() -> Result<Sink, String> {
         report_write(&panic_sink, text.as_bytes());
         previous(info);
     }));
-    append(&sink, format!("CamCraft desktop startup (pid {}); log file: {}\n", std::process::id(), path.display()).as_bytes())
-        .map_err(|err| format!("cannot synchronize desktop log {}: {err}", path.display()))?;
+    append(&sink, camcraft_i18n::tf("CamCraft desktop startup (pid {}); log file: {}\n", &[format!("{}", std::process::id()), format!("{}", path.display())]).as_bytes())
+        .map_err(|err| camcraft_i18n::tf("cannot synchronize desktop log {}: {err}", &[format!("{}", path.display()), format!("{}", err)]))?;
     Ok(sink)
 }
 
@@ -98,10 +98,10 @@ pub fn init_desktop() {
 /// Crash dialogs and terminal failures share the same location and recovery hints.
 pub fn failure_message(message: &str) -> String {
     let location = match DESKTOP.get() {
-        Some(Err(err)) => format!("Log unavailable: {err}"),
-        _ => format!("Log file: {}", log_path().display()),
+        Some(Err(err)) => camcraft_i18n::tf("Log unavailable: {err}", &[format!("{}", err)]),
+        _ => camcraft_i18n::tf("Log file: {}", &[format!("{}", log_path().display())]),
     };
-    format!("{message}\n\n{location}\nTry --gpu-backend dx12, --gpu-backend vulkan or --gpu-backend gl.\nUse --gpu <adapter name> to choose an adapter.")
+    camcraft_i18n::tf("{message}\n\n{location}\nTry --gpu-backend dx12, --gpu-backend vulkan or --gpu-backend gl.\nUse --gpu <adapter name> to choose an adapter.", &[format!("{}", message), format!("{}", location)])
 }
 
 /// Persist a returned startup error with a forced backtrace, independent of filters.

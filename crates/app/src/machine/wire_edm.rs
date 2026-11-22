@@ -29,30 +29,24 @@ use crate::operation::Family;
 /// [`super::check_ops`] for a machine of kind wire EDM.
 pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, Entity)]) -> Result<MachineCheck, String> {
     let mut out = MachineCheck::default();
-    out.notes.push(format!(
-        "{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are judged at the post by the wire laws (#534)",
-        machine.model
-    ));
-    out.notes.push(format!(
-        "{}: a wire EDM has no spindle and no tool changer - rpm, feed and tool numbers are not judged (the control's generator sets the rate from the condition)",
-        machine.model
-    ));
+    out.notes.push(camcraft_i18n::tf("{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are judged at the post by the wire laws (#534)", &[format!("{}", machine.model)]));
+    out.notes.push(camcraft_i18n::tf("{}: a wire EDM has no spindle and no tool changer - rpm, feed and tool numbers are not judged (the control's generator sets the rate from the condition)", &[format!("{}", machine.model)]));
     for (name, e) in ops {
-        let op = model::operation_of(world, e).ok_or_else(|| format!("{name}: lost its operation"))?;
+        let op = model::operation_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         let kind = op.params.kind();
         let family = kind.info().family();
         if family != Family::WireEdm {
             say(
                 &mut out,
-                format!("{name}: a {kind} operation is {} work - a wire EDM cuts only wire EDM operations", family.work()),
+                camcraft_i18n::tf("{name}: a {kind} operation is {} work - a wire EDM cuts only wire EDM operations", &[format!("{}", name), format!("{}", kind), format!("{}", family.work())]),
             );
             continue;
         }
-        let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        let cache = model::toolpath_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         let (_, origin) = crate::posting::wcs_context(world, op.setup.as_deref());
         for (i, mv) in cache.path.moves.iter().enumerate() {
             if mv.rotary.is_some() {
-                say(&mut out, format!("{name}: move {i} turns a rotary axis - a wire EDM cut has none"));
+                say(&mut out, camcraft_i18n::tf("{name}: move {i} turns a rotary axis - a wire EDM cut has none", &[format!("{}", name), format!("{}", i)]));
             }
             let mut reach = move_extremes(mv);
             if let Some(a) = mv.axis.filter(|a| !crate::cl::is_vertical(a)) {
@@ -68,10 +62,7 @@ pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, E
                     let Some((lo, hi)) = ax.travel else { continue };
                     let v = (w - origin[k]) * ax.direction.sign();
                     if v < lo || v > hi {
-                        say(&mut out, format!(
-                            "{name}: move {i} reaches {v:.3} in {}, the stroke is {lo:.3}..{hi:.3}",
-                            ax.name
-                        ));
+                        say(&mut out, camcraft_i18n::tf("{name}: move {i} reaches {v:.3} in {}, the stroke is {lo:.3}..{hi:.3}", &[format!("{}", name), format!("{}", i), format!("{:.3}", v), format!("{}", ax.name), format!("{:.3}", lo), format!("{:.3}", hi)]));
                     }
                 }
             }
@@ -88,10 +79,7 @@ pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, E
 pub fn guide_planes(machine: &Machine, origin_z: f64) -> Result<(f64, f64), String> {
     match machine.edm.as_ref().map(|e| (e.lower_guide_z, e.upper_guide_z)) {
         Some((Some(lo), Some(hi))) if lo.is_finite() && hi.is_finite() && hi > lo => Ok((lo + origin_z, hi + origin_z)),
-        _ => Err(format!(
-            "machine {} states no edm.lower_guide_z and edm.upper_guide_z - a tapered wire's guide positions are read from them",
-            machine.model
-        )),
+        _ => Err(camcraft_i18n::tf("machine {} states no edm.lower_guide_z and edm.upper_guide_z - a tapered wire's guide positions are read from them", &[format!("{}", machine.model)])),
     }
 }
 
@@ -114,19 +102,13 @@ pub fn taper_door(machine: &Machine, taper_deg: f64) -> Result<(), String> {
     let a = taper_deg.abs();
     let edm = machine.edm.as_ref();
     let Some(max) = edm.and_then(|e| e.max_taper_deg) else {
-        return Err(format!(
-            "a {a:.3} degree taper is asked, and machine {} states no edm.max_taper_deg - a taper is cut only on a machine that states how far it leans; set the taper to 0",
-            machine.model
-        ));
+        return Err(camcraft_i18n::tf("a {a:.3} degree taper is asked, and machine {} states no edm.max_taper_deg - a taper is cut only on a machine that states how far it leans; set the taper to 0", &[format!("{:.3}", a), format!("{}", machine.model)]));
     };
     if a > max + 1e-9 {
-        return Err(format!(
-            "a {a:.3} degree taper is asked, and machine {} leans the wire at most {max:.3} degrees (edm.max_taper_deg)",
-            machine.model
-        ));
+        return Err(camcraft_i18n::tf("a {a:.3} degree taper is asked, and machine {} leans the wire at most {max:.3} degrees (edm.max_taper_deg)", &[format!("{:.3}", a), format!("{}", machine.model), format!("{:.3}", max)]));
     }
     if edm.and_then(|e| e.taper_angle).is_none() {
-        guide_planes(machine, 0.0).map_err(|e| format!("a {a:.3} degree taper is asked, and {e}; set the taper to 0"))?;
+        guide_planes(machine, 0.0).map_err(|e| camcraft_i18n::tf("a {a:.3} degree taper is asked, and {e}; set the taper to 0", &[format!("{:.3}", a), format!("{}", e)]))?;
     }
     Ok(())
 }
@@ -155,33 +137,25 @@ fn judge_pose(machine: &Machine, to: Point3, axis: [f64; 3], origin_z: f64) -> R
     let lean = axis[0].hypot(axis[1]).atan2(axis[2]).to_degrees();
     let edm = machine.edm.as_ref();
     match edm.and_then(|e| e.max_taper_deg) {
-        None => return Err(format!("leans the wire {lean:.3} degrees, and machine {} states no edm.max_taper_deg", machine.model)),
+        None => return Err(camcraft_i18n::tf("leans the wire {lean:.3} degrees, and machine {} states no edm.max_taper_deg", &[format!("{:.3}", lean), format!("{}", machine.model)])),
         Some(max) if lean > max + 1e-9 => {
-            return Err(format!("leans the wire {lean:.3} degrees, past machine {}'s {max:.3} degree maximum taper", machine.model));
+            return Err(camcraft_i18n::tf("leans the wire {lean:.3} degrees, past machine {}'s {max:.3} degree maximum taper", &[format!("{:.3}", lean), format!("{}", machine.model), format!("{:.3}", max)]));
         }
         Some(_) => {}
     }
     let (lo, hi) = guide_planes(machine, origin_z)?;
     if !(lo..=hi).contains(&to.z) {
-        return Err(format!(
-            "rides Z{:.3}, outside the guides' reach (Z{:.3} .. Z{:.3}) - the wire's programmed plane must stand between its guides",
-            to.z - origin_z,
-            lo - origin_z,
-            hi - origin_z
-        ));
+        return Err(camcraft_i18n::tf("rides Z{:.3}, outside the guides' reach (Z{:.3} .. Z{:.3}) - the wire's programmed plane must stand between its guides", &[format!("{:.3}", to.z - origin_z), format!("{:.3}", lo - origin_z), format!("{:.3}", hi - origin_z)]));
     }
     let (lower, uv) = guide_points(to, axis, (lo, hi))?;
     for (letter, w) in [("U", uv[0]), ("V", uv[1])] {
         let Some(ax) = machine.axes.iter().find(|a| a.name.eq_ignore_ascii_case(letter)) else {
-            return Err(format!(
-                "needs the upper guide {w:.3} mm off in {letter}, and machine {} states no {letter} axis",
-                machine.model
-            ));
+            return Err(camcraft_i18n::tf("needs the upper guide {w:.3} mm off in {letter}, and machine {} states no {letter} axis", &[format!("{:.3}", w), format!("{}", letter), format!("{}", machine.model), format!("{}", letter)]));
         };
         if let Some((min, max)) = ax.travel
             && !(min..=max).contains(&w)
         {
-            return Err(format!("needs {letter}{w:.3}, outside the {letter} stroke {min:.3}..{max:.3} (the upper guide's travel band)"));
+            return Err(camcraft_i18n::tf("needs {letter}{w:.3}, outside the {letter} stroke {min:.3}..{max:.3} (the upper guide's travel band)", &[format!("{}", letter), format!("{:.3}", w), format!("{}", letter), format!("{:.3}", min), format!("{:.3}", max)]));
         }
     }
     Ok(lower)

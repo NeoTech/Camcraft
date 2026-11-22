@@ -25,7 +25,7 @@ impl SetModelSource {
     /// refused by name.
     pub fn link(world: &World, name: &str, path: &Path) -> Result<Self, CommandError> {
         let prev = Self::model_source(world, name)?;
-        let source = crate::model_source::read(path).map_err(|e| CommandError::Invalid(format!("cannot link '{name}': {e}")))?;
+        let source = crate::model_source::read(path).map_err(|e| CommandError::Invalid(camcraft_i18n::tf("cannot link '{name}': {e}", &[format!("{}", name), format!("{}", e)])))?;
         Ok(SetModelSource { name: name.to_string(), source: Some(source), prev })
     }
 
@@ -34,7 +34,7 @@ impl SetModelSource {
     pub fn unlink(world: &World, name: &str) -> Result<Self, CommandError> {
         let prev = Self::model_source(world, name)?;
         if prev.is_none() {
-            return Err(CommandError::Invalid(format!("'{name}' is not linked to a file")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not linked to a file", &[format!("{}", name)])));
         }
         Ok(SetModelSource { name: name.to_string(), source: None, prev })
     }

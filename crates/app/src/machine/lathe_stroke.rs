@@ -74,7 +74,7 @@ pub(super) fn judge(
                     let inv = if ax.direction.is_standard() { "" } else { " (inverted axis)" };
                     say(
                         out,
-                        format!("{name}: move {i} reaches {v:.3} in {}{inv}, the stroke is {lo:.3}..{hi:.3}", ax.name),
+                        camcraft_i18n::tf("{name}: move {i} reaches {v:.3} in {}{inv}, the stroke is {lo:.3}..{hi:.3}", &[format!("{}", name), format!("{}", i), format!("{:.3}", v), format!("{}", ax.name), format!("{}", inv), format!("{:.3}", lo), format!("{:.3}", hi)]),
                     );
                 }
             }

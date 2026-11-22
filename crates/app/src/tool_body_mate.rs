@@ -21,10 +21,7 @@ pub(super) fn resolve<'a>(
 ) -> Result<(&'a BodyCsys, &'a BodyCsys), String> {
     let range = match target_piece {
         Some(idx) if idx >= existing.len() => {
-            return Err(format!(
-                "target piece index {idx} is out of range (tool '{tool_name}' has {} piece(s))",
-                existing.len()
-            ));
+            return Err(camcraft_i18n::tf("target piece index {idx} is out of range (tool '{tool_name}' has {} piece(s))", &[format!("{}", idx), format!("{}", tool_name), format!("{}", existing.len())]));
         }
         Some(idx) => idx..idx + 1,
         None => 0..existing.len(),
@@ -62,12 +59,10 @@ fn resolve_auto<'a>(
     incoming: &'a LoadedPiece,
 ) -> Result<(&'a BodyCsys, &'a BodyCsys), String> {
     if incoming.csys.is_empty() {
-        return Err(format!("piece '{}' has no named coordinate systems to mate by", incoming.source));
+        return Err(camcraft_i18n::tf("piece '{}' has no named coordinate systems to mate by", &[format!("{}", incoming.source)]));
     }
     if !range.clone().any(|i| !existing[i].csys.is_empty()) {
-        return Err(format!(
-            "tool '{tool_name}'s existing body has no named coordinate systems to mate onto (give an explicit placement)"
-        ));
+        return Err(camcraft_i18n::tf("tool '{tool_name}'s existing body has no named coordinate systems to mate onto (give an explicit placement)", &[format!("{}", tool_name)]));
     }
     let mut pairs: Vec<(usize, &'a BodyCsys, &'a BodyCsys)> = Vec::new();
     for i in range.clone() {
@@ -81,22 +76,13 @@ fn resolve_auto<'a>(
     }
     match pairs.as_slice() {
         [(_, tc, pc)] => Ok((*tc, *pc)),
-        [] => Err(format!(
-            "no complementary ISO 13399 MCS/CSW mating pair between tool '{tool_name}' ([{}]) and '{}' ([{}]); pass explicit target_csys and piece_csys",
-            describe_existing(existing, range),
-            incoming.source,
-            describe_list(&incoming.csys)
-        )),
+        [] => Err(camcraft_i18n::tf("no complementary ISO 13399 MCS/CSW mating pair between tool '{tool_name}' ([{}]) and '{}' ([{}]); pass explicit target_csys and piece_csys", &[format!("{}", tool_name), format!("{}", describe_existing(existing, range)), format!("{}", incoming.source), format!("{}", describe_list(&incoming.csys))])),
         many => {
             let opts: Vec<String> = many
                 .iter()
                 .map(|(i, tc, pc)| format!("piece[{i}].{} <-> {}", tc.name, pc.name))
                 .collect();
-            Err(format!(
-                "ambiguous ISO 13399 coordinate system mate ({} candidates: {}); specify target_piece, target_csys and piece_csys",
-                many.len(),
-                opts.join(", ")
-            ))
+            Err(camcraft_i18n::tf("ambiguous ISO 13399 coordinate system mate ({} candidates: {}); specify target_piece, target_csys and piece_csys", &[format!("{}", many.len()), format!("{}", opts.join(", "))]))
         }
     }
 }
@@ -129,16 +115,10 @@ fn find_target_by_name<'a>(
 ) -> Result<&'a BodyCsys, String> {
     match collect_target_matches(existing, range.clone(), |c| name_matches(&c.name, wanted)).as_slice() {
         [(_, c)] => Ok(*c),
-        [] => Err(format!(
-            "target coordinate system '{wanted}' not found on tool '{tool_name}' (available: [{}])",
-            describe_existing(existing, range)
-        )),
+        [] => Err(camcraft_i18n::tf("target coordinate system '{wanted}' not found on tool '{tool_name}' (available: [{}])", &[format!("{}", wanted), format!("{}", tool_name), format!("{}", describe_existing(existing, range))])),
         many => {
             let locs: Vec<String> = many.iter().map(|(i, c)| format!("piece[{i}].{}", c.name)).collect();
-            Err(format!(
-                "ambiguous target coordinate system '{wanted}' on tool '{tool_name}' ({}); specify target_piece",
-                locs.join(", ")
-            ))
+            Err(camcraft_i18n::tf("ambiguous target coordinate system '{wanted}' on tool '{tool_name}' ({}); specify target_piece", &[format!("{}", wanted), format!("{}", tool_name), format!("{}", locs.join(", "))]))
         }
     }
 }
@@ -147,14 +127,8 @@ fn find_piece_by_name<'a>(source: &str, csys: &'a [BodyCsys], wanted: &str) -> R
     let hits: Vec<&BodyCsys> = csys.iter().filter(|c| name_matches(&c.name, wanted)).collect();
     match hits.as_slice() {
         [c] => Ok(*c),
-        [] => Err(format!(
-            "piece coordinate system '{wanted}' not found on '{source}' (available: [{}])",
-            describe_list(csys)
-        )),
-        many => Err(format!(
-            "ambiguous piece coordinate system '{wanted}' on '{source}' ({} matches)",
-            many.len()
-        )),
+        [] => Err(camcraft_i18n::tf("piece coordinate system '{wanted}' not found on '{source}' (available: [{}])", &[format!("{}", wanted), format!("{}", source), format!("{}", describe_list(csys))])),
+        many => Err(camcraft_i18n::tf("ambiguous piece coordinate system '{wanted}' on '{source}' ({} matches)", &[format!("{}", wanted), format!("{}", source), format!("{}", many.len())])),
     }
 }
 
@@ -166,19 +140,10 @@ fn find_complementary_target<'a>(
 ) -> Result<&'a BodyCsys, String> {
     match collect_target_matches(existing, range.clone(), |c| is_complementary(c.role, pc.role)).as_slice() {
         [(_, c)] => Ok(*c),
-        [] => Err(format!(
-            "no complementary coordinate system on tool '{tool_name}' for '{}' ({}) (available: [{}])",
-            pc.name,
-            incoming_role_hint(pc.role),
-            describe_existing(existing, range)
-        )),
+        [] => Err(camcraft_i18n::tf("no complementary coordinate system on tool '{tool_name}' for '{}' ({}) (available: [{}])", &[format!("{}", tool_name), format!("{}", pc.name), format!("{}", incoming_role_hint(pc.role)), format!("{}", describe_existing(existing, range))])),
         many => {
             let locs: Vec<String> = many.iter().map(|(i, c)| format!("piece[{i}].{}", c.name)).collect();
-            Err(format!(
-                "ambiguous target coordinate system for '{}' ({}); specify target_piece and target_csys",
-                pc.name,
-                locs.join(", ")
-            ))
+            Err(camcraft_i18n::tf("ambiguous target coordinate system for '{}' ({}); specify target_piece and target_csys", &[format!("{}", pc.name), format!("{}", locs.join(", "))]))
         }
     }
 }
@@ -187,18 +152,10 @@ fn find_complementary_piece<'a>(source: &str, csys: &'a [BodyCsys], tc: &BodyCsy
     let hits: Vec<&BodyCsys> = csys.iter().filter(|c| is_complementary(tc.role, c.role)).collect();
     match hits.as_slice() {
         [c] => Ok(*c),
-        [] => Err(format!(
-            "no complementary coordinate system on '{source}' for '{}' (available: [{}])",
-            tc.name,
-            describe_list(csys)
-        )),
+        [] => Err(camcraft_i18n::tf("no complementary coordinate system on '{source}' for '{}' (available: [{}])", &[format!("{}", source), format!("{}", tc.name), format!("{}", describe_list(csys))])),
         many => {
             let names: Vec<&str> = many.iter().map(|c| c.name.as_str()).collect();
-            Err(format!(
-                "ambiguous piece coordinate system on '{source}' for '{}' ({}); specify piece_csys",
-                tc.name,
-                names.join(", ")
-            ))
+            Err(camcraft_i18n::tf("ambiguous piece coordinate system on '{source}' for '{}' ({}); specify piece_csys", &[format!("{}", source), format!("{}", tc.name), format!("{}", names.join(", "))]))
         }
     }
 }

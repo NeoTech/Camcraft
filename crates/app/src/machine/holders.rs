@@ -44,26 +44,24 @@ pub fn tooling_refusal(m: &Machine) -> Option<String> {
 pub fn edm_refusal(m: &Machine) -> Option<String> {
     for (k, t) in &m.edm_codes {
         if t.trim().is_empty() {
-            return Some(format!("edm.codes.{k} is blank - write the control's text or remove the code"));
+            return Some(camcraft_i18n::tf("edm.codes.{k} is blank - write the control's text or remove the code", &[format!("{}", k)]));
         }
         if t.contains('(') || t.contains(')') {
-            return Some(format!("edm.codes.{k} {t:?} holds a bracket - a code is a word the control executes, never commentary"));
+            return Some(camcraft_i18n::tf("edm.codes.{k} {t:?} holds a bracket - a code is a word the control executes, never commentary", &[format!("{}", k), format!("{:?}", t)]));
         }
     }
     if let Some(t) = m.edm_codes.get("condition")
         && !t.contains("{id}")
     {
-        return Some(format!(
-            "edm.codes.condition {t:?} states no {{id}} - the control would select no condition (write e.g. \"E{{id}}\")"
-        ));
+        return Some(camcraft_i18n::tf("edm.codes.condition {t:?} states no {{id}} - the control would select no condition (write e.g. \"E{{id}}\")", &[format!("{:?}", t)]));
     }
     let conds = m.edm.as_ref().map_or(&[][..], |e| e.conditions.as_slice());
     for (i, c) in conds.iter().enumerate() {
         if c.id.trim().is_empty() {
-            return Some(format!("EDM condition {} states no id - the control selects it by its id", i + 1));
+            return Some(camcraft_i18n::tf("EDM condition {} states no id - the control selects it by its id", &[format!("{}", i + 1)]));
         }
         if conds.iter().skip(i + 1).any(|d| d.id == c.id) {
-            return Some(format!("EDM condition id {:?} is stated twice", c.id));
+            return Some(camcraft_i18n::tf("EDM condition id {:?} is stated twice", &[format!("{:?}", c.id)]));
         }
     }
     None

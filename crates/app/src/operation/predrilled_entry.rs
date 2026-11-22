@@ -86,18 +86,11 @@ pub(super) fn proved_holes(drills: &[DrillAhead], tool_r: f64, prior: Option<&De
     for h in holes {
         let (x, y) = (h.at.x, h.at.y);
         if !(need.is_finite() && h.radius >= need - 1e-9) {
-            notes.push(format!(
-                "entry: the drilled hole at ({x:.3}, {y:.3}) is {:.3} mm across - under the {:.3} mm the {:.3} mm tool needs with {CLEARANCE:.3} mm clearance a side; not used",
-                h.radius * 2.0,
-                need * 2.0,
-                tool_r * 2.0
-            ));
+            notes.push(camcraft_i18n::tf("entry: the drilled hole at ({x:.3}, {y:.3}) is {:.3} mm across - under the {:.3} mm the {:.3} mm tool needs with {CLEARANCE:.3} mm clearance a side; not used", &[format!("{:.3}", x), format!("{:.3}", y), format!("{:.3}", h.radius * 2.0), format!("{:.3}", need * 2.0), format!("{:.3}", tool_r * 2.0), format!("{:.3}", CLEARANCE)]));
             continue;
         }
         let Some(dex) = prior else {
-            notes.push(format!(
-                "entry: the drilled hole at ({x:.3}, {y:.3}) cannot be proved open - the stock the program ahead leaves cannot be read; not used"
-            ));
+            notes.push(camcraft_i18n::tf("entry: the drilled hole at ({x:.3}, {y:.3}) cannot be proved open - the stock the program ahead leaves cannot be read; not used", &[format!("{:.3}", x), format!("{:.3}", y)]));
             continue;
         };
         match crate::verify::prior_surface(&Columns::of_grid(dex), h.at, need) {
@@ -106,9 +99,7 @@ pub(super) fn proved_holes(drills: &[DrillAhead], tool_r: f64, prior: Option<&De
                 let cone_floor = h.tip + need * h.cot;
                 out.push(PreHole { at: h.at, floor: top.max(cone_floor) });
             }
-            _ => notes.push(format!(
-                "entry: the drilled hole at ({x:.3}, {y:.3}) cannot be proved open - the stock grid is unreadable there; not used"
-            )),
+            _ => notes.push(camcraft_i18n::tf("entry: the drilled hole at ({x:.3}, {y:.3}) cannot be proved open - the stock grid is unreadable there; not used", &[format!("{:.3}", x), format!("{:.3}", y)])),
         }
     }
     (out, notes)

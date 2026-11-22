@@ -59,9 +59,7 @@ pub fn do_not_touch_unsupported(kind: OpType) -> Option<String> {
     if do_not_touch_applies(kind) {
         None
     } else {
-        Some(format!(
-            "'Do not touch' is supported on 2D Offset and 3D Pocket operations only so far - clear it on {kind}"
-        ))
+        Some(camcraft_i18n::tf("'Do not touch' is supported on 2D Offset and 3D Pocket operations only so far - clear it on {kind}", &[format!("{}", kind)]))
     }
 }
 
@@ -92,20 +90,14 @@ pub fn do_not_touch_overlap_issue(
         if let Some(SrcRef::Selection(sel)) = src
             && sel.iter().any(|s| s == g)
         {
-            return Some(format!(
-                "'Do not touch' item {} is also in the operation's machining selection - remove it from one list",
-                describe_sel(g)
-            ));
+            return Some(camcraft_i18n::tf("'Do not touch' item {} is also in the operation's machining selection - remove it from one list", &[format!("{}", describe_sel(g))]));
         }
         for eb in &area.extra {
             if eb.mode == BoundaryMode::Include
                 && let BoundaryShape::Picks(bps) = &eb.shape
                 && bps.iter().any(|s| s == g)
             {
-                return Some(format!(
-                    "'Do not touch' item {} is also in an Include machining boundary - remove it from one list",
-                    describe_sel(g)
-                ));
+                return Some(camcraft_i18n::tf("'Do not touch' item {} is also in an Include machining boundary - remove it from one list", &[format!("{}", describe_sel(g))]));
             }
         }
     }

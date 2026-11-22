@@ -33,7 +33,7 @@ use super::{EntityKind, ProjectError, ProjectFile, corrupt};
 use crate::schema::LEGACY_WCS_NAMES;
 
 fn word(slot: usize) -> String {
-    LEGACY_WCS_NAMES.get(slot).map_or_else(|| format!("work offset #{slot}"), |w| (*w).to_owned())
+    LEGACY_WCS_NAMES.get(slot).map_or_else(|| camcraft_i18n::tf("work offset #{slot}", &[format!("{}", slot)]), |w| (*w).to_owned())
 }
 
 /// Every `work_offset` slot a parameter JSON's heights name, in file
@@ -77,20 +77,14 @@ pub(super) fn settle(file: &mut ProjectFile, from: u32) -> Result<(), ProjectErr
         height_slots(&json, &mut heights);
         if from >= 52 {
             if !heights.is_empty() {
-                return Err(corrupt(format!(
-                    "operation '{}' names a work-offset slot on a height - since v52 the \
-                     setup's work offset is the only one",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("operation '{}' names a work-offset slot on a height - since v52 the \
+                     setup's work offset is the only one", &[format!("{}", dto.name)])));
             }
             continue;
         }
         if let Some(bad) = heights.iter().find(|i| **i >= LEGACY_WCS_NAMES.len()) {
-            return Err(corrupt(format!(
-                "operation '{}' measures a height from work offset #{bad} - the slots are G54 \
-                 to G59",
-                dto.name
-            )));
+            return Err(corrupt(camcraft_i18n::tf("operation '{}' measures a height from work offset #{bad} - the slots are G54 \
+                 to G59", &[format!("{}", dto.name), format!("{}", bad)])));
         }
         ops.push(OpSlots {
             label: op.label.clone().unwrap_or_else(|| dto.name.clone()),
@@ -116,7 +110,7 @@ fn lift(file: &mut ProjectFile, ops: &[OpSlots]) -> Result<(), ProjectError> {
         let pick = match dto.setup.as_ref().and_then(|s| s.work_offset.as_deref()) {
             None => None,
             Some(w) => Some(LEGACY_WCS_NAMES.iter().position(|s| *s == w).ok_or_else(|| {
-                corrupt(format!("setup '{}' picks unknown work offset {w:?}", dto.name))
+                corrupt(camcraft_i18n::tf("setup '{}' picks unknown work offset {w:?}", &[format!("{}", dto.name), format!("{:?}", w)]))
             })?),
         };
         setups.insert(dto.name.clone(), (i, pick));
@@ -145,7 +139,7 @@ fn lift(file: &mut ProjectFile, ops: &[OpSlots]) -> Result<(), ProjectError> {
                 .map(|(l, s)| format!("{l} ({})", s.iter().map(|i| word(*i)).collect::<Vec<_>>().join(", ")))
                 .collect::<Vec<_>>()
                 .join("; ");
-            let picked = pick.map(|p| format!(" (setup picks {})", word(p))).unwrap_or_default();
+            let picked = pick.map(|p| camcraft_i18n::tf(" (setup picks {})", &[format!("{}", word(p))])).unwrap_or_default();
             problems.push(format!(
                 "{}{picked}: {ops}",
                 name.as_ref().map_or_else(|| "the document (no setup)".to_owned(), |n| format!("setup {n}"))
@@ -155,12 +149,8 @@ fn lift(file: &mut ProjectFile, ops: &[OpSlots]) -> Result<(), ProjectError> {
         match name.as_ref().and_then(|n| setups.get(n)) {
             Some(&(idx, None)) if only != 0 => lifts.push((idx, only)),
             Some(_) => {}
-            None if only != 0 => problems.push(format!(
-                "the document has no setup to carry {} (operations: {}) - create a setup in the \
-                 release that wrote this file, save, and reopen",
-                word(only),
-                members.iter().map(|(l, _)| *l).collect::<Vec<_>>().join(", ")
-            )),
+            None if only != 0 => problems.push(camcraft_i18n::tf("the document has no setup to carry {} (operations: {}) - create a setup in the \
+                 release that wrote this file, save, and reopen", &[format!("{}", word(only)), format!("{}", members.iter().map(|(l, _)| *l).collect::<Vec<_>>().join(", "))])),
             None => {}
         }
     }

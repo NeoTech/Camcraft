@@ -179,7 +179,7 @@ fn post_per_op_with(
             .and_then(|e| crate::model::operation_of(world, &e))
             .and_then(|op| op.setup);
         let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
-        let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
+        let (label, cps) = script(&effective).ok_or_else(|| camcraft_i18n::tf("{name}: no post resolved for its setup", &[format!("{}", name)]))?;
         crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;
         match by_setup.iter_mut().find(|(s, ..)| *s == effective) {
             Some((_, ops, ..)) => ops.push(name.as_str()),
@@ -204,13 +204,13 @@ fn post_per_op_with(
     let mut report = crate::posting::verification_report_by(world, &voice);
     report.problems.splice(0..0, unserved);
     if !report.problems.is_empty() {
-        return Err(format!("post blocked - {}", report.problems.join("; ")));
+        return Err(camcraft_i18n::tf("post blocked - {}", &[format!("{}", report.problems.join("; "))]));
     }
     let mut files = Vec::with_capacity(streams.len());
     for (k, ((name, records), (setup, cps))) in streams.iter().zip(resolved).enumerate() {
         let index = k + 1;
         let id = super::document_program_id(world, index)?;
-        let ext = engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?;
+        let ext = engine::extension_of(&cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?;
         let ext = sanitise(&ext, "nc");
         // #2319: a missing or malformed default machine file refuses by name.
         let mch = posted_machine_for(&crate::machine::of_setup(world, setup.as_deref()))
@@ -228,13 +228,9 @@ fn post_per_op_with(
             extra,
         )?;
         let out = engine::run_program_with(&cps, &mch, &cnc::serialize(records), &options, &id)
-            .map_err(|e| format!("{name}: post engine: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("{name}: post engine: {e}", &[format!("{}", name), format!("{}", e)]))?;
         if !out.warnings.is_empty() {
-            return Err(format!(
-                "post blocked - {name}: {} warning(s): {}",
-                out.warnings.len(),
-                out.warnings.join("; ")
-            ));
+            return Err(camcraft_i18n::tf("post blocked - {name}: {} warning(s): {}", &[format!("{}", name), format!("{}", out.warnings.len()), format!("{}", out.warnings.join("; "))]));
         }
         let line_pos = viewer_map(records, &out);
         files.push(PostedFile {
@@ -261,12 +257,12 @@ fn post_per_op_with(
 pub(super) fn write_all(dir: &Path, program: &str, files: &[(&Path, &str)]) -> Result<(), String> {
     let scratch = dir.join(format!(".{}.camcraft-post-{}", sanitise(program, "program"), std::process::id()));
     if scratch.exists() {
-        std::fs::remove_dir_all(&scratch).map_err(|e| format!("cannot clear {}: {e}", scratch.display()))?;
+        std::fs::remove_dir_all(&scratch).map_err(|e| camcraft_i18n::tf("cannot clear {}: {e}", &[format!("{}", scratch.display()), format!("{}", e)]))?;
     }
-    std::fs::create_dir(&scratch).map_err(|e| format!("cannot write into {}: {e}", dir.display()))?;
+    std::fs::create_dir(&scratch).map_err(|e| camcraft_i18n::tf("cannot write into {}: {e}", &[format!("{}", dir.display()), format!("{}", e)]))?;
     let staged = files.iter().try_for_each(|(path, text)| {
-        let name = path.file_name().ok_or_else(|| format!("{}: no file name", path.display()))?;
-        std::fs::write(scratch.join(name), text.as_bytes()).map_err(|e| format!("cannot write {}: {e}", path.display()))
+        let name = path.file_name().ok_or_else(|| camcraft_i18n::tf("{}: no file name", &[format!("{}", path.display())]))?;
+        std::fs::write(scratch.join(name), text.as_bytes()).map_err(|e| camcraft_i18n::tf("cannot write {}: {e}", &[format!("{}", path.display()), format!("{}", e)]))
     });
     if let Err(err) = staged {
         let _ = std::fs::remove_dir_all(&scratch);
@@ -280,7 +276,7 @@ pub(super) fn write_all(dir: &Path, program: &str, files: &[(&Path, &str)]) -> R
                 let _ = std::fs::remove_file(done); // never a partial set
             }
             let _ = std::fs::remove_dir_all(&scratch);
-            return Err(format!("cannot write {}: {e}", path.display()));
+            return Err(camcraft_i18n::tf("cannot write {}: {e}", &[format!("{}", path.display()), format!("{}", e)]));
         }
         moved.push(path);
     }

@@ -83,7 +83,7 @@ impl SinkerBurnOp {
         if let Some(s) = self.layer
             && !(s.is_finite() && s > 0.0)
         {
-            return Some(format!("sinker burn: the layer step {s} must be a positive depth"));
+            return Some(camcraft_i18n::tf("sinker burn: the layer step {s} must be a positive depth", &[format!("{}", s)]));
         }
         self.wear_refusal()
     }
@@ -105,9 +105,7 @@ impl SinkerBurnOp {
             (Some(_), None) | (None, Some(_)) => Some(
                 "sinker burn: a measured electrode wear needs both the length lost and the depth burned while losing it".into(),
             ),
-            (Some(l), Some(o)) if !(l.is_finite() && l >= 0.0 && o.is_finite() && o > 0.0) => Some(format!(
-                "sinker burn: a measured electrode wear of {l} over {o} burned is not a length lost over a positive depth"
-            )),
+            (Some(l), Some(o)) if !(l.is_finite() && l >= 0.0 && o.is_finite() && o > 0.0) => Some(camcraft_i18n::tf("sinker burn: a measured electrode wear of {l} over {o} burned is not a length lost over a positive depth", &[format!("{}", l), format!("{}", o)])),
             (Some(l), Some(o)) => crate::sinker_wear::rate_refusal(&format!("measured {l} over {o}"), l / o),
         }
     }
@@ -133,9 +131,7 @@ impl SinkerBurnOp {
         let pass = self.pass.label();
         let stated = |v: f64| v.is_finite() && v > 0.0;
         if !stated(self.cavity_x) || !stated(self.cavity_y) {
-            return Some(format!(
-                "a sinker {pass} is judged against the finished cavity - state its X and Y size (both above 0)"
-            ));
+            return Some(camcraft_i18n::tf("a sinker {pass} is judged against the finished cavity - state its X and Y size (both above 0)", &[format!("{}", pass)]));
         }
         None
     }

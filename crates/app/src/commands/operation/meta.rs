@@ -21,7 +21,7 @@ impl RenameOperation {
         let entity = model::find_by_name(world, key)
             .ok_or_else(|| CommandError::NotFound(key.to_owned()))?;
         if !model::is_operation(world, &entity) {
-            return Err(CommandError::Invalid(format!("'{key}' is not an operation")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)])));
         }
         let label = label.trim();
         if label.is_empty() || label.len() > 120 || label.chars().any(char::is_control) {
@@ -142,13 +142,11 @@ impl MarkOperationReviewed {
         let entity = model::find_by_name(world, key)
             .ok_or_else(|| CommandError::NotFound(key.to_owned()))?;
         if !model::is_operation(world, &entity) {
-            return Err(CommandError::Invalid(format!("'{key}' is not an operation")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)])));
         }
         let before = model::operation_meta_of(world, &entity);
         if before.needs_review.is_empty() {
-            return Err(CommandError::Invalid(format!(
-                "operation '{key}' is not marked as needing review"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("operation '{key}' is not marked as needing review", &[format!("{}", key)])));
         }
         let after = OperationMeta {
             needs_review: Vec::new(),

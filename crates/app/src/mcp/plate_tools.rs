@@ -29,7 +29,7 @@ pub(super) const TOOLS: &[Tool] = &[
 const DIMS: [&str; 8] = ["length", "width", "thickness", "pitch_x", "pitch_y", "offset_x", "offset_y", "thread_diameter"];
 
 fn num(v: &Value, k: &str) -> Result<f64, String> {
-    v.as_f64().ok_or_else(|| format!("\"{k}\" must be a number of mm"))
+    v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"{k}\" must be a number of mm", &[format!("{}", k)]))
 }
 
 /// `p` with every override in `a` applied.
@@ -46,7 +46,7 @@ fn with_overrides(mut p: PlateParams, a: &Map<String, Value>) -> Result<PlatePar
                 "offset_x" => &mut p.offset_x,
                 "offset_y" => &mut p.offset_y,
                 "thread_diameter" => &mut p.thread_diameter,
-                other => return Err(format!("unknown plate dimension \"{other}\" (one of {})", DIMS.join(", "))),
+                other => return Err(camcraft_i18n::tf("unknown plate dimension \"{other}\" (one of {})", &[format!("{}", other), format!("{}", DIMS.join(", "))])),
             };
             *slot = num(v, k)?;
         }
@@ -58,7 +58,7 @@ fn with_overrides(mut p: PlateParams, a: &Map<String, Value>) -> Result<PlatePar
         None => {}
         Some(Value::Null | Value::Bool(false)) => p.dowels = None,
         Some(Value::Object(o)) => {
-            let f = |k: &str| o.get(k).ok_or_else(|| format!("dowels needs \"{k}\"")).and_then(|v| num(v, k));
+            let f = |k: &str| o.get(k).ok_or_else(|| camcraft_i18n::tf("dowels needs \"{k}\"", &[format!("{}", k)])).and_then(|v| num(v, k));
             p.dowels = Some(Dowels { pitch_x: f("pitch_x")?, pitch_y: f("pitch_y")?, offset_x: f("offset_x")?, offset_y: f("offset_y")?, diameter: f("diameter")? });
         }
         Some(_) => return Err("\"dowels\" must be an object or null".into()),
@@ -67,7 +67,7 @@ fn with_overrides(mut p: PlateParams, a: &Map<String, Value>) -> Result<PlatePar
         None => {}
         Some(Value::Null | Value::Bool(false)) => p.counterbore = None,
         Some(Value::Object(o)) => {
-            let f = |k: &str| o.get(k).ok_or_else(|| format!("counterbore needs \"{k}\"")).and_then(|v| num(v, k));
+            let f = |k: &str| o.get(k).ok_or_else(|| camcraft_i18n::tf("counterbore needs \"{k}\"", &[format!("{}", k)])).and_then(|v| num(v, k));
             p.counterbore = Some(Counterbore { diameter: f("diameter")?, depth: f("depth")? });
         }
         Some(_) => return Err("\"counterbore\" must be an object or null".into()),
@@ -100,7 +100,7 @@ fn add_fixture_plate(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
     let label = req_str(a, "preset")?;
     let row = plate::preset(label).ok_or_else(|| {
         let all: Vec<&str> = plate::PRESETS.iter().map(|s| s.label).collect();
-        format!("no built-in plate '{label}' (one of {})", all.join(", "))
+        camcraft_i18n::tf("no built-in plate '{label}' (one of {})", &[format!("{}", label), format!("{}", all.join(", "))])
     })?;
     let params = with_overrides(row.params(), a)?;
     let target = setup_or_active(env, a)?;

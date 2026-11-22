@@ -34,7 +34,7 @@ pub(super) const TOOLS: &[Tool] = &[
 ];
 
 fn view(env: &Env, name: &str) -> Result<Value, String> {
-    let e = model::find_by_name(&env.world, name).ok_or_else(|| format!("no tool named '{name}'"))?;
+    let e = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no tool named '{name}'", &[format!("{}", name)]))?;
     if model::tool_of(&env.world, &e).is_none() {
         return Err(format!("'{name}' is not a tool"));
     }
@@ -126,7 +126,7 @@ fn set_lathe_body(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String
 fn opt_str(a: &Map<String, Value>, key: &str) -> Result<Option<String>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => v.as_str().map(|s| Some(s.to_owned())).ok_or_else(|| format!("\"{key}\" must be a string")),
+        Some(v) => v.as_str().map(|s| Some(s.to_owned())).ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a string", &[format!("{}", key)])),
     }
 }
 
@@ -137,7 +137,7 @@ fn opt_usize(a: &Map<String, Value>, key: &str) -> Result<Option<usize>, String>
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
             .map(Some)
-            .ok_or_else(|| format!("\"{key}\" must be a non-negative integer")),
+            .ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a non-negative integer", &[format!("{}", key)])),
     }
 }
 
@@ -206,7 +206,7 @@ fn clear_body(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
 fn vec3(a: &Map<String, Value>, key: &str) -> Result<Option<[f64; 3]>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => three(v).map(Some).ok_or_else(|| format!("\"{key}\" must be [x, y, z] numbers")),
+        Some(v) => three(v).map(Some).ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be [x, y, z] numbers", &[format!("{}", key)])),
     }
 }
 

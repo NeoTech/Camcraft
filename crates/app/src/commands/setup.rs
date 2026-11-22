@@ -116,9 +116,7 @@ impl CreateSetup {
             return Err(CommandError::NameConflict(name.clone()));
         }
         if STOCK_NAME == name || LEGACY_WCS_NAMES.contains(&name.as_str()) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a name reserved for a setup's stock and work offsets"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a name reserved for a setup's stock and work offsets", &[format!("{}", name)])));
         }
         let materializing = setup::names(world).is_empty();
         if materializing && datum_from.is_some() {
@@ -328,17 +326,14 @@ impl SetOperationSetup {
         let entity = model::find_by_name(world, op_name)
             .ok_or_else(|| CommandError::NotFound(op_name.to_string()))?;
         let prev = model::operation_of(world, &entity)
-            .ok_or_else(|| CommandError::Invalid(format!("'{op_name}' is not an operation")))?;
+            .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{op_name}' is not an operation", &[format!("{}", op_name)])))?;
         if let Some(t) = target
             && !setup::exists(world, t)
         {
             return Err(CommandError::NotFound(t.to_string()));
         }
         if target == prev.setup.as_deref() {
-            return Err(CommandError::Invalid(format!(
-                "'{op_name}' already machines in {}",
-                target.map_or_else(|| "the first setup".to_string(), str::to_string)
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{op_name}' already machines in {}", &[format!("{}", op_name), format!("{}", target.map_or_else(|| "the first setup".to_string(), str::to_string))])));
         }
         // #1862: a DXF profile belongs to one setup - an operation on it
         // does not move to a different one, and a 3D kind does not move

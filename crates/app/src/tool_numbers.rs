@@ -79,7 +79,7 @@ pub fn assign(tools: Vec<(String, Option<u32>)>) -> Result<Vec<(String, u32)>, S
                 Some(n) => n,
                 None => {
                     let free = next_free_from(&taken).ok_or_else(|| {
-                        format!("tool '{name}' has no tool number and none of {RANGE_TEXT} is free - give it its own tool number")
+                        camcraft_i18n::tf("tool '{name}' has no tool number and none of {RANGE_TEXT} is free - give it its own tool number", &[format!("{}", name), format!("{}", RANGE_TEXT)])
                     })?;
                     taken.push(free);
                     free
@@ -112,9 +112,7 @@ pub fn clash(world: &World, used: &[String]) -> Option<String> {
             continue; // not a tool: the post names that refusal itself
         };
         if let Some((other, _)) = seen.iter().find(|(o, t)| *t == *number && *o != name.as_str()) {
-            return Some(format!(
-                "tools '{other}' and '{name}' would both post as T{number} - give one of them its own tool number"
-            ));
+            return Some(camcraft_i18n::tf("tools '{other}' and '{name}' would both post as T{number} - give one of them its own tool number", &[format!("{}", other), format!("{}", name), format!("{}", number)]));
         }
         if !seen.iter().any(|(o, _)| *o == name.as_str()) {
             seen.push((name.as_str(), *number));

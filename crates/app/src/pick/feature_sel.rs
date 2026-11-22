@@ -107,24 +107,17 @@ pub fn check_pickable(world: &World, g: &GeoSel) -> Result<(), String> {
                 if sketch.data.chains().find(*id).is_some() {
                     Ok(())
                 } else {
-                    Err(format!(
-                        "{} is no longer in DXF profile '{}'",
-                        super::geo_label(world, g),
-                        g.entity
-                    ))
+                    Err(camcraft_i18n::tf("{} is no longer in DXF profile '{}'", &[format!("{}", super::geo_label(world, g)), format!("{}", g.entity)]))
                 }
             }
             FeatureSel::SketchLayer(layer) => {
                 if sketch.data.layers().iter().any(|l| l == layer) {
                     Ok(())
                 } else {
-                    Err(format!("layer '{layer}' is not in DXF profile '{}'", g.entity))
+                    Err(camcraft_i18n::tf("layer '{layer}' is not in DXF profile '{}'", &[format!("{}", layer), format!("{}", g.entity)]))
                 }
             }
-            _ => Err(format!(
-                "'{}' is a DXF profile - pick a sketch chain or layer, not a {}",
-                g.entity, g.feature
-            )),
+            _ => Err(camcraft_i18n::tf("'{}' is a DXF profile - pick a sketch chain or layer, not a {}", &[format!("{}", g.entity), format!("{}", g.feature)])),
         };
     }
     let Some(graph) = graph_of(world, &g.entity) else { return Ok(()) };
@@ -134,24 +127,15 @@ pub fn check_pickable(world: &World, g: &GeoSel) -> Result<(), String> {
             if !known || graph.points.iter().any(|p| p.id == *id) {
                 return Ok(());
             }
-            Err(format!(
-                "{} is not a feature point - a point is a corner where model edges meet or the end \
-                 of an open edge, never a vertex along a smooth edge or inside a face",
-                super::geo_label(world, g)
-            ))
+            Err(camcraft_i18n::tf("{} is not a feature point - a point is a corner where model edges meet or the end \
+                 of an open edge, never a vertex along a smooth edge or inside a face", &[format!("{}", super::geo_label(world, g))]))
         }
         FeatureSel::Chain(id) => match crate::model::resolve_chain(&graph.features, *id) {
-            Some(c) if !is_feature_chain(&graph, &c) => Err(format!(
-                "{} runs along the mesh's own triangles, not a model edge - pick an edge where two \
-                 faces meet",
-                super::geo_label(world, g)
-            )),
+            Some(c) if !is_feature_chain(&graph, &c) => Err(camcraft_i18n::tf("{} runs along the mesh's own triangles, not a model edge - pick an edge where two \
+                 faces meet", &[format!("{}", super::geo_label(world, g))])),
             _ => Ok(()),
         },
         FeatureSel::Face(_) | FeatureSel::Patch(_) => Ok(()),
-        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => Err(format!(
-            "'{}' is a solid model, not a DXF profile",
-            g.entity
-        )),
+        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => Err(camcraft_i18n::tf("'{}' is a solid model, not a DXF profile", &[format!("{}", g.entity)])),
     }
 }

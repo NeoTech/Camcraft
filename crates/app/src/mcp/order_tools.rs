@@ -29,7 +29,7 @@ fn rename_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
     let label = req_str(a, "new_name")?;
     let cmd = RenameOperation::new(&env.world, &key, label).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
     Ok(json!({ "operation": key, "name": model::operation_label(&env.world, &key, &e) }))
 }
 
@@ -39,12 +39,12 @@ fn reorder_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
     let after = match opt_str(a, "place")? {
         Some("after") => true,
         Some("before") | None => false,
-        Some(other) => return Err(format!("\"place\" must be \"before\" or \"after\", got \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"place\" must be \"before\" or \"after\", got \"{other}\"", &[format!("{}", other)])),
     };
     let cmd = ReorderOperation::new(&env.world, &key, &target, after).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);
     let w = &env.world;
-    let e = model::find_by_name(w, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
+    let e = model::find_by_name(w, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
     let setup = program_entry::effective_setup(w, &e);
     // The setup's operations in program order (Pause / Home entries are
     // not operations and are left out of the answer).

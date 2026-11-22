@@ -81,10 +81,7 @@ pub fn align_321(world: &World, picks: &[GeoSel]) -> Result<Alignment, String> {
             }
             FeatureSel::Vertex(_) => set_origin(&mut origin, vertex(world, g)?)?,
             FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(format!(
-                    "{} is a DXF sketch feature and cannot set a 3-2-1 datum",
-                    super::geo_label(world, g)
-                ));
+                return Err(camcraft_i18n::tf("{} is a DXF sketch feature and cannot set a 3-2-1 datum", &[format!("{}", super::geo_label(world, g))]));
             }
         }
     }
@@ -187,7 +184,7 @@ pub(crate) fn outward_normal(
     let wn = [wn.x, wn.y, wn.z];
     let l = norm(wn);
     if !(l.is_finite() && l > 0.0) {
-        return Err(format!("{} has no usable plane - re-pick it", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} has no usable plane - re-pick it", &[format!("{}", super::geo_label(world, g))]));
     }
     Ok(Some(scale(wn, 1.0 / l)))
 }
@@ -233,7 +230,7 @@ pub(super) fn straight_edge(
     let features = model::features_of(world, &e).ok_or_else(|| gone(world, g))?;
     let c = crate::model::resolve_chain(&features, cid).ok_or_else(|| gone(world, g))?;
     if c.closed {
-        return Err(format!("{} is a closed loop - pick one straight edge {role}", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} is a closed loop - pick one straight edge {role}", &[format!("{}", super::geo_label(world, g)), format!("{}", role)]));
     }
     let loc = pose(world, &e).unwrap_or_default(); // #326: the caller's frame
     let pts: Vec<[f64; 3]> = feature::chain_points(&features, &c)
@@ -244,26 +241,26 @@ pub(super) fn straight_edge(
         })
         .collect();
     let (Some(&a), Some(&b)) = (pts.first(), pts.last()) else {
-        return Err(format!("{} holds no points - re-pick it", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} holds no points - re-pick it", &[format!("{}", super::geo_label(world, g))]));
     };
     let d = sub(b, a);
     let len = norm(d);
     if !(len.is_finite() && len > 0.0) {
-        return Err(format!("{} has no length - re-pick it", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} has no length - re-pick it", &[format!("{}", super::geo_label(world, g))]));
     }
     let u = scale(d, 1.0 / len);
     let tol = STRAIGHT_TOL_MM.max(len * STRAIGHT_TOL_REL);
     for p in &pts {
         let v = sub(*p, a);
         if norm(sub(v, scale(u, dot(v, u)))) > tol {
-            return Err(format!("{} is not straight - pick a straight edge {role}", super::geo_label(world, g)));
+            return Err(camcraft_i18n::tf("{} is not straight - pick a straight edge {role}", &[format!("{}", super::geo_label(world, g)), format!("{}", role)]));
         }
     }
     Ok((a, b))
 }
 
 pub(super) fn gone(world: &World, g: &GeoSel) -> String {
-    format!("{} is no longer in the model - re-pick it", super::geo_label(world, g))
+    camcraft_i18n::tf("{} is no longer in the model - re-pick it", &[format!("{}", super::geo_label(world, g))])
 }
 
 /// Unit quaternion `[x, y, z, w]` whose rotation takes the world axes onto

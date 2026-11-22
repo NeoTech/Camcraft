@@ -89,14 +89,12 @@ pub(super) fn note(path: &Toolpath, clearance: f64, stock_top: f64, tilted: bool
     let &(at, low) = hits.first()?;
     let more = match hits.len() - 1 {
         0 => String::new(),
-        n => format!(" (and {n} more rapid{})", if n == 1 { "" } else { "s" }),
+        n => camcraft_i18n::tf(" (and {n} more rapid{})", &[format!("{}", n), format!("{}", if n == 1 { "" } else { "s" })]),
     };
     let frame = if tilted { " (heights along the tilted tool axis)" } else { "" };
-    Some(format!(
-        "{CLEARANCE_STOCK_WARNING} rapid move {at} travels through stock at Z{low:.3}{more} - the clearance plane \
+    Some(camcraft_i18n::tf("{CLEARANCE_STOCK_WARNING} rapid move {at} travels through stock at Z{low:.3}{more} - the clearance plane \
          Z{clearance:.3} is inside the stock (top Z{stock_top:.3}) and nothing ahead has cut it there{frame}; \
-         raise Clearance above the stock top"
-    ))
+         raise Clearance above the stock top", &[format!("{}", CLEARANCE_STOCK_WARNING), format!("{}", at), format!("{:.3}", low), format!("{}", more), format!("{:.3}", clearance), format!("{:.3}", stock_top), format!("{}", frame)]))
 }
 
 /// Whether `kind`'s clearance is a world-Z plane its rapids traverse
@@ -194,13 +192,9 @@ pub fn creation_advice(
     }
     let unit = crate::units::of(world);
     let len = |v: f64| format!("{} {}", crate::geometry::units::len(v, unit, 3), unit.suffix());
-    Some(format!(
-        "Clearance Z {} is inside the stock (its top is Z {}) and no operation ahead cuts it down: rapids at the \
+    Some(camcraft_i18n::tf("Clearance Z {} is inside the stock (its top is Z {}) and no operation ahead cuts it down: rapids at the \
          clearance plane over the stock would travel through uncut stock, and the post is held for them - raise \
-         Clearance to the stock top or above",
-        len(clearance),
-        len(top),
-    ))
+         Clearance to the stock top or above", &[format!("{}", len(clearance)), format!("{}", len(top))]))
 }
 
 #[cfg(test)]

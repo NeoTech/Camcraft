@@ -124,7 +124,7 @@ pub fn plate_of(world: &World, name: &str) -> Result<PlateDef, CommandError> {
         .0
         .plate
         .plate
-        .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a fixture plate (add one, or detect an imported plate's grid)")))
+        .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a fixture plate (add one, or detect an imported plate's grid)", &[format!("{}", name)])))
 }
 
 /// Fixture `name`'s own mesh.
@@ -201,7 +201,7 @@ impl SetPlate {
     pub fn new(world: &World, name: &str, params: PlateParams) -> Result<Self, CommandError> {
         let (prev, at) = def_named(world, name)?;
         if prev.plate.plate.as_ref().and_then(|p| p.params.as_ref()).is_none() {
-            return Err(CommandError::Invalid(format!("'{name}' is not a built-in plate (an imported plate has a fixed shape)")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a built-in plate (an imported plate has a fixed shape)", &[format!("{}", name)])));
         }
         let def = params.def().map_err(CommandError::Invalid)?;
         let mesh = params.mesh().map_err(CommandError::Invalid)?;
@@ -264,14 +264,14 @@ impl PlaceOnPlate {
         let (prev, before) = def_named(world, name)?;
         let def = plate_of(world, plate)?;
         if name == plate {
-            return Err(CommandError::Invalid(format!("'{name}' cannot stand on itself")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' cannot stand on itself", &[format!("{}", name)])));
         }
         // The plate must not ride (transitively) on the fixture.
         let mut up = Some(plate.to_owned());
         let mut hops = 0usize;
         while let Some(p) = up {
             if p == name {
-                return Err(CommandError::Invalid(format!("'{plate}' stands on '{name}' - it cannot carry it")));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("'{plate}' stands on '{name}' - it cannot carry it", &[format!("{}", plate), format!("{}", name)])));
             }
             hops += 1;
             if hops > 1024 {
@@ -319,7 +319,7 @@ impl SetPlateGrid {
     pub fn detect(world: &World, name: &str) -> Result<Self, CommandError> {
         let (prev, _) = def_named(world, name)?;
         if prev.plate.plate.as_ref().is_some_and(|p| p.params.is_some()) {
-            return Err(CommandError::Invalid(format!("'{name}' is a built-in plate - its grid comes from its figures")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a built-in plate - its grid comes from its figures", &[format!("{}", name)])));
         }
         let def = detect::grid_from_facets(&facets(world, name)).map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
         let mut next = prev.clone();
@@ -331,11 +331,11 @@ impl SetPlateGrid {
     pub fn clear(world: &World, name: &str) -> Result<Self, CommandError> {
         let (prev, _) = def_named(world, name)?;
         if prev.plate.plate.is_none() {
-            return Err(CommandError::Invalid(format!("'{name}' is not a fixture plate")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a fixture plate", &[format!("{}", name)])));
         }
         let on = mount::riders(world, name);
         if !on.is_empty() {
-            return Err(CommandError::Invalid(format!("'{name}' still carries {} - place them elsewhere first", on.join(", "))));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' still carries {} - place them elsewhere first", &[format!("{}", name), format!("{}", on.join(", "))])));
         }
         let mut next = prev.clone();
         next.plate.plate = None;

@@ -129,7 +129,7 @@ impl Graded {
 /// model incomplete (a fixture, a tool body, a mesh-only import).
 #[must_use]
 pub(crate) fn open_refusal(hole: &str) -> ImportError {
-    ImportError::Step(format!("{hole} - the model would import with walls missing; re-export the model, or import an STL"))
+    ImportError::Step(camcraft_i18n::tf("{hole} - the model would import with walls missing; re-export the model, or import an STL", &[format!("{}", hole)]))
 }
 
 /// [`load_model`], with the fidelity the import achieved.

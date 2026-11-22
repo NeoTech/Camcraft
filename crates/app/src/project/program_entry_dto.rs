@@ -56,14 +56,14 @@ pub(super) fn validate(dto: &EntityDto, kind: EntityKind) -> Result<(), ProjectE
         return Err(corrupt("an entry must be named"));
     }
     if dto.facets.is_some() || dto.stock.is_some() || dto.tool.is_some() || dto.operation.is_some() || dto.setup.is_some() {
-        return Err(corrupt(format!("'{}' is an entry, not a solid, tool, operation or setup", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' is an entry, not a solid, tool, operation or setup", &[format!("{}", dto.name)])));
     }
     if let Some(e) = &dto.entry {
         if e.action == AfterOperation::None {
-            return Err(corrupt(format!("entry '{}' asks nothing (continue)", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("entry '{}' asks nothing (continue)", &[format!("{}", dto.name)])));
         }
         if e.setup.as_deref().is_some_and(str::is_empty) {
-            return Err(corrupt(format!("entry '{}' names an empty setup", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("entry '{}' names an empty setup", &[format!("{}", dto.name)])));
         }
     }
     Ok(())

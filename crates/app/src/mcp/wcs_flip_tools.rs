@@ -28,7 +28,7 @@ fn flag(a: &Map<String, Value>, key: &str) -> Result<Option<bool>, String> {
     match a.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Bool(b)) => Ok(Some(*b)),
-        Some(other) => Err(format!("\"{key}\" must be true or false, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be true or false, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -42,7 +42,7 @@ fn set_wcs_flip(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     if let Some(s) = named
         && !setup::exists(&env.world, s)
     {
-        return Err(format!("no setup named '{s}'"));
+        return Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)]));
     }
     let given = [flag(a, "x")?, flag(a, "y")?, flag(a, "z")?];
     if given.iter().all(Option::is_none) {

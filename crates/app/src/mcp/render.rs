@@ -50,7 +50,7 @@ fn edge(a: &Map<String, Value>, key: &str, default: u32) -> Result<u32, String> 
             .as_u64()
             .and_then(|n| u32::try_from(n).ok())
             .filter(|n| (MIN_EDGE..=MAX_EDGE).contains(n))
-            .ok_or_else(|| format!("\"{key}\" must be an integer from {MIN_EDGE} to {MAX_EDGE}, got {v}")),
+            .ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be an integer from {MIN_EDGE} to {MAX_EDGE}, got {v}", &[format!("{}", key), format!("{}", MIN_EDGE), format!("{}", MAX_EDGE), format!("{}", v)])),
     }
 }
 
@@ -63,15 +63,15 @@ pub(super) fn render_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Valu
     let view = match opt_str(a, "view")? {
         None | Some("iso") => ViewDir::Iso,
         Some("top") => ViewDir::Top,
-        Some(other) => return Err(format!("\"view\" must be \"iso\" or \"top\", got \"{other}\"")),
+        Some(other) => return Err(camcraft_i18n::tf("\"view\" must be \"iso\" or \"top\", got \"{other}\"", &[format!("{}", other)])),
     };
     let toolpath = match a.get("toolpath") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(b)) => *b,
-        Some(other) => return Err(format!("\"toolpath\" must be a boolean, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"toolpath\" must be a boolean, got {other}", &[format!("{}", other)])),
     };
     let w = &env.world;
-    let sim = crate::stock_sim::simulate_document(w).map_err(|e| format!("no stock simulation to render: {e}"))?;
+    let sim = crate::stock_sim::simulate_document(w).map_err(|e| camcraft_i18n::tf("no stock simulation to render: {e}", &[format!("{}", e)]))?;
     let floor = crate::model::stock_world_aabb_for(w, crate::setup::active(w).as_deref()).map(|b| b.min.z);
     let tris = scene(&sim.surface, floor, sim.dev.cell);
     if tris.is_empty() {
@@ -206,7 +206,7 @@ fn scene(s: &SimSurface, floor: Option<f64>, cell: f64) -> Vec<([Point3; 3], f32
 /// linearly across them (a display, not the post's arc).
 fn overlay_moves(w: &flecs_ecs::prelude::World) -> Result<Vec<(Point3, Point3, [u8; 3])>, String> {
     use crate::cl::MoveKind;
-    let planned = crate::stock_sim::plan_program(w).map_err(|e| format!("no toolpath to overlay: {e}"))?;
+    let planned = crate::stock_sim::plan_program(w).map_err(|e| camcraft_i18n::tf("no toolpath to overlay: {e}", &[format!("{}", e)]))?;
     let mut segs = Vec::new();
     for p in &planned {
         for m in &p.moves {

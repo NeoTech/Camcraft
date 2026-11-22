@@ -120,7 +120,7 @@ impl ApplyCuttingData {
             // suggested rpm, and the tool keeps the Vc and feed per rev
             // it now runs (its own max-rpm clamp stays as stated).
             let (feed, plunge) = crate::cutting_turn::turn_feeds_mut(&mut params).ok_or_else(|| {
-                CommandError::Invalid(format!("a {} operation has no turning feed to suggest", op.params.kind()))
+                CommandError::Invalid(camcraft_i18n::tf("a {} operation has no turning feed to suggest", &[format!("{}", op.params.kind())]))
             })?;
             *feed = s.feed;
             *plunge = plan.plunge_feed;
@@ -129,7 +129,7 @@ impl ApplyCuttingData {
             (params != op.params).then_some(params)
         } else {
             let feed = cutting::feed_mut(&mut params).ok_or_else(|| {
-                CommandError::Invalid(format!("a {} operation has no milling feed to suggest", op.params.kind()))
+                CommandError::Invalid(camcraft_i18n::tf("a {} operation has no milling feed to suggest", &[format!("{}", op.params.kind())]))
             })?;
             let moved = *feed != s.feed;
             *feed = s.feed;
@@ -139,12 +139,7 @@ impl ApplyCuttingData {
         let change = if next == tool { None } else { Some(ChangeTool::new(world, &op.tool, next)?) };
         if edit.is_none() && change.is_none() {
             let u = crate::units::of(world);
-            return Err(CommandError::Invalid(format!(
-                "{name} already runs the suggestion ({:.0} rpm, {} {})",
-                s.rpm,
-                crate::units::feed(s.feed, u),
-                u.feed_suffix()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{name} already runs the suggestion ({:.0} rpm, {} {})", &[format!("{}", name), format!("{:.0}", s.rpm), format!("{}", crate::units::feed(s.feed, u)), format!("{}", u.feed_suffix())])));
         }
         Ok(Self { edit, tool: change, suggestion: s })
     }

@@ -40,9 +40,7 @@ impl SetSetupStockSource {
             .try_get::<&SetupDef>(|d| d.stock_source)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a setup")))?;
         let Some(now) = setup_stock::effective(world, name) else {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is the first setup - it always starts from its own stock"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is the first setup - it always starts from its own stock", &[format!("{}", name)])));
         };
         if source == StockSource::FromPrevious
             && let Some(why) = setup_stock::carry_refusal(world, name)
@@ -50,10 +48,7 @@ impl SetSetupStockSource {
             return Err(CommandError::Invalid(why));
         }
         if now == source {
-            return Err(CommandError::Invalid(format!(
-                "setup '{name}' already uses that stock ({})",
-                setup_stock::describe(world, name).unwrap_or_default()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{name}' already uses that stock ({})", &[format!("{}", name), format!("{}", setup_stock::describe(world, name).unwrap_or_default())])));
         }
         Ok(SetSetupStockSource { setup: name.to_string(), prev, next: source })
     }

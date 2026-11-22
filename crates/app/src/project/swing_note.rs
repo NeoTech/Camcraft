@@ -35,12 +35,8 @@ pub(super) fn notes(file: &ProjectFile) -> Vec<String> {
                 .map(|a| a.name.as_str())
                 .collect();
             (!unknown.is_empty()).then(|| {
-                format!(
-                    "{owner}'s machine {} was saved before rotaries stated whether they turn the work: rotary {} \
-                     is not judged by the index-swing check - reload the machine so it is",
-                    m.model,
-                    unknown.join(", ")
-                )
+                camcraft_i18n::tf("{owner}'s machine {} was saved before rotaries stated whether they turn the work: rotary {} \
+                     is not judged by the index-swing check - reload the machine so it is", &[format!("{}", owner), format!("{}", m.model), format!("{}", unknown.join(", "))])
             })
         })
         .collect()

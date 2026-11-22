@@ -143,7 +143,7 @@ impl Server {
         }
         let reply = match serde_json::from_str::<Value>(text) {
             Ok(msg) => self.handle(&msg),
-            Err(e) => Some(rpc_error(Value::Null, PARSE_ERROR, &format!("parse error: {e}"))),
+            Err(e) => Some(rpc_error(Value::Null, PARSE_ERROR, &camcraft_i18n::tf("parse error: {e}", &[format!("{}", e)]))),
         };
         reply.map(|v| v.to_string())
     }
@@ -179,7 +179,7 @@ impl Server {
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tools::list() })),
             "tools/call" => self.call(&params),
-            other => Err((METHOD_NOT_FOUND, format!("method not found: {other}"))),
+            other => Err((METHOD_NOT_FOUND, camcraft_i18n::tf("method not found: {other}", &[format!("{}", other)]))),
         };
         Some(match answer {
             Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
@@ -206,7 +206,7 @@ impl Server {
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tools::call(env, name, &args)));
         let outcome = match run {
             Ok(r) => r,
-            Err(_) => Err(format!("{name}: internal error - the tool stopped unexpectedly (a bug; please report it)")),
+            Err(_) => Err(camcraft_i18n::tf("{name}: internal error - the tool stopped unexpectedly (a bug; please report it)", &[format!("{}", name)])),
         };
         Ok(match outcome {
             Ok(value) => tool_ok(value),
@@ -286,11 +286,11 @@ pub fn serve(mut input: impl BufRead, mut output: impl Write) -> std::io::Result
         }
         let reply = if !buf.ends_with(b"\n") && buf.len() > MAX_LINE_BYTES {
             skip_line(&mut input)?;
-            Some(parse_error(&format!("line longer than {MAX_LINE_BYTES} bytes")))
+            Some(parse_error(&camcraft_i18n::tf("line longer than {MAX_LINE_BYTES} bytes", &[format!("{}", MAX_LINE_BYTES)])))
         } else {
             match std::str::from_utf8(&buf) {
                 Ok(line) => server.handle_line(line),
-                Err(e) => Some(parse_error(&format!("the line is not UTF-8: {e}"))),
+                Err(e) => Some(parse_error(&camcraft_i18n::tf("the line is not UTF-8: {e}", &[format!("{}", e)]))),
             }
         };
         if let Some(reply) = reply {
@@ -301,7 +301,7 @@ pub fn serve(mut input: impl BufRead, mut output: impl Write) -> std::io::Result
 }
 
 fn parse_error(msg: &str) -> String {
-    rpc_error(Value::Null, PARSE_ERROR, &format!("parse error: {msg}")).to_string()
+    rpc_error(Value::Null, PARSE_ERROR, &camcraft_i18n::tf("parse error: {msg}", &[format!("{}", msg)])).to_string()
 }
 
 /// Drop input up to and including the next newline (or to the end),

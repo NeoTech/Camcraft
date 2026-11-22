@@ -49,7 +49,7 @@ pub(super) fn area_view(w: &World, a: &AreaControls) -> Value {
 /// Refuse a key the shape does not name: a typo must not read as done.
 fn only_keys(m: &Map<String, Value>, known: &[&str], what: &str) -> Result<(), String> {
     match m.keys().find(|k| !known.contains(&k.as_str())) {
-        Some(k) => Err(format!("{what} has no field \"{k}\" - fields: {}", known.join(", "))),
+        Some(k) => Err(camcraft_i18n::tf("{what} has no field \"{k}\" - fields: {}", &[format!("{}", what), format!("{}", k), format!("{}", known.join(", "))])),
         None => Ok(()),
     }
 }
@@ -58,20 +58,20 @@ fn word<'a>(m: &'a Map<String, Value>, key: &str, words: &[&str]) -> Result<Opti
     match m.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) if words.contains(&s.as_str()) => Ok(Some(s)),
-        Some(other) => Err(format!("\"{key}\" is one of {}, got {other}", words.join(", "))),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" is one of {}, got {other}", &[format!("{}", key), format!("{}", words.join(", ")), format!("{}", other)])),
     }
 }
 
 fn number(m: &Map<String, Value>, key: &str) -> Result<f64, String> {
     match m.get(key) {
         None | Some(Value::Null) => Ok(0.0),
-        Some(v) => v.as_f64().ok_or_else(|| format!("\"{key}\" must be a number in mm, got {v}")),
+        Some(v) => v.as_f64().ok_or_else(|| camcraft_i18n::tf("\"{key}\" must be a number in mm, got {v}", &[format!("{}", key), format!("{}", v)])),
     }
 }
 
 fn extra_of(env: &Env, v: &Value) -> Result<ExtraBoundary, String> {
     let Value::Object(m) = v else {
-        return Err(format!("an extra boundary is an object, got {v}"));
+        return Err(camcraft_i18n::tf("an extra boundary is an object, got {v}", &[format!("{}", v)]));
     };
     only_keys(m, &["mode", "from", "picks"], "an extra boundary")?;
     let mode = match word(m, "mode", &["include", "exclude"])? {
@@ -94,7 +94,7 @@ fn extra_of(env: &Env, v: &Value) -> Result<ExtraBoundary, String> {
 /// defaults, so `{}` is the identity (every control off).
 fn controls_of(env: &Env, v: &Value) -> Result<AreaControls, String> {
     let Value::Object(m) = v else {
-        return Err(format!("\"area\" must be an object, got {v}"));
+        return Err(camcraft_i18n::tf("\"area\" must be an object, got {v}", &[format!("{}", v)]));
     };
     only_keys(m, &["containment", "offset", "corner", "extension", "extra", "open"], "\"area\"")?;
     let containment = word(m, "containment", &["inside", "on", "outside"])?.map(|c| match c {
@@ -109,7 +109,7 @@ fn controls_of(env: &Env, v: &Value) -> Result<AreaControls, String> {
     let extra = match m.get("extra") {
         None | Some(Value::Null) => Vec::new(),
         Some(Value::Array(items)) => items.iter().map(|b| extra_of(env, b)).collect::<Result<_, _>>()?,
-        Some(other) => return Err(format!("\"extra\" must be an array of boundaries, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"extra\" must be an array of boundaries, got {other}", &[format!("{}", other)])),
     };
     let open = match m.get("open") {
         None | Some(Value::Null) => None,
@@ -122,7 +122,7 @@ fn controls_of(env: &Env, v: &Value) -> Result<AreaControls, String> {
             };
             Some(OpenBoundary { picks: picks_of(env, o.get("picks"), "open.picks")?, side })
         }
-        Some(other) => return Err(format!("\"open\" must be an object, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"open\" must be an object, got {other}", &[format!("{}", other)])),
     };
     Ok(AreaControls {
         containment,
@@ -142,8 +142,8 @@ fn controls_of(env: &Env, v: &Value) -> Result<AreaControls, String> {
 pub(super) fn set_operation_area(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let key = find_op(env, req_str(a, "operation")?)?;
     let mut area = controls_of(env, a.get("area").ok_or("\"area\" is required")?)?;
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     area.do_not_touch = op.area.do_not_touch;
     let cmd = EditOperationParams::with_area(&env.world, &key, op.params, area).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);

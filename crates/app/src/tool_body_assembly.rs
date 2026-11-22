@@ -44,13 +44,13 @@ impl BodyCsys {
             return Err("coordinate system name cannot be empty".into());
         }
         if !origin.iter().all(|v| v.is_finite()) {
-            return Err(format!("coordinate system '{trimmed}' has a non-finite origin"));
+            return Err(camcraft_i18n::tf("coordinate system '{trimmed}' has a non-finite origin", &[format!("{}", trimmed)]));
         }
-        let uz = unit(z).ok_or_else(|| format!("coordinate system '{trimmed}' has a zero or non-finite z axis"))?;
+        let uz = unit(z).ok_or_else(|| camcraft_i18n::tf("coordinate system '{trimmed}' has a zero or non-finite z axis", &[format!("{}", trimmed)]))?;
         // Project x normal to z so tiny serialization rounding recovers an exact frame.
         let zx = dot(uz, x);
         let x_perp = [x[0] - zx * uz[0], x[1] - zx * uz[1], x[2] - zx * uz[2]];
-        let ux = unit(x_perp).ok_or_else(|| format!("coordinate system '{trimmed}' has a zero or collinear x axis"))?;
+        let ux = unit(x_perp).ok_or_else(|| camcraft_i18n::tf("coordinate system '{trimmed}' has a zero or collinear x axis", &[format!("{}", trimmed)]))?;
         Ok(Self {
             role: CsysRole::classify(&trimmed),
             name: trimmed,
@@ -141,7 +141,7 @@ pub fn read_csys_if_step(path: &Path) -> Result<Vec<BodyCsys>, String> {
         return Ok(Vec::new());
     }
     let data = std::fs::read(path).map_err(|e| format!("I/O error: {e}"))?;
-    let report = step_csys::read_tool_csys(&data).map_err(|e| format!("coordinate systems unreadable: {e}"))?;
+    let report = step_csys::read_tool_csys(&data).map_err(|e| camcraft_i18n::tf("coordinate systems unreadable: {e}", &[format!("{}", e)]))?;
     Ok(report.systems.iter().map(BodyCsys::from_named).collect())
 }
 
@@ -153,7 +153,7 @@ pub fn transform_csys_spindle(csys: &[BodyCsys], axis: [f64; 3], offset: f64) ->
         return Err("the tool axis direction must be a finite, non-zero vector".into());
     }
     if !(offset.is_finite() && offset.abs() <= MAX_BODY_HEIGHT) {
-        return Err(format!("the tip offset must be a finite length within {MAX_BODY_HEIGHT} mm"));
+        return Err(camcraft_i18n::tf("the tip offset must be a finite length within {MAX_BODY_HEIGHT} mm", &[format!("{}", MAX_BODY_HEIGHT)]));
     }
     let a = [axis[0] / n, axis[1] / n, axis[2] / n];
     let helper = if a[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
@@ -212,9 +212,7 @@ pub fn attach_piece(
     place: &PiecePlace,
 ) -> Result<ToolBody, String> {
     if prev.spun.is_some() {
-        return Err(format!(
-            "tool '{tool_name}' carries a drawn holder profile - place a modelled piece first before attaching modular pieces"
-        ));
+        return Err(camcraft_i18n::tf("tool '{tool_name}' carries a drawn holder profile - place a modelled piece first before attaching modular pieces", &[format!("{}", tool_name)]));
     }
     let existing = pieces_of(prev);
     let placed_piece = match place {
@@ -225,7 +223,7 @@ pub fn attach_piece(
         }
         PiecePlace::Spindle { axis, offset } => {
             if matches!(prev.frame, BodyFrame::Lathe { .. }) {
-                return Err(format!("tool '{tool_name}' carries a lathe-frame body, not a spindle one"));
+                return Err(camcraft_i18n::tf("tool '{tool_name}' carries a lathe-frame body, not a spindle one", &[format!("{}", tool_name)]));
             }
             let facets = tool_body::place(&piece.facets, *axis, *offset)?;
             let csys = transform_csys_spindle(&piece.csys, *axis, *offset)?;
@@ -233,7 +231,7 @@ pub fn attach_piece(
         }
         PiecePlace::Lathe(lp) => {
             if matches!(prev.frame, BodyFrame::Spindle { .. }) {
-                return Err(format!("tool '{tool_name}' carries a spindle-frame body, not a lathe one"));
+                return Err(camcraft_i18n::tf("tool '{tool_name}' carries a spindle-frame body, not a lathe one", &[format!("{}", tool_name)]));
             }
             let facets = tool_body_lathe::place(&piece.facets, lp)?;
             let csys = transform_csys_lathe(&piece.csys, lp)?;
@@ -251,15 +249,10 @@ pub fn attach_piece(
 pub fn remove_piece(tool_name: &str, prev: &ToolBody, index: usize) -> Result<ToolBody, String> {
     let mut pieces = pieces_of(prev);
     if index >= pieces.len() {
-        return Err(format!(
-            "piece index {index} is out of range (tool '{tool_name}' has {} piece(s))",
-            pieces.len()
-        ));
+        return Err(camcraft_i18n::tf("piece index {index} is out of range (tool '{tool_name}' has {} piece(s))", &[format!("{}", index), format!("{}", tool_name), format!("{}", pieces.len())]));
     }
     if pieces.len() <= 1 {
-        return Err(format!(
-            "cannot remove the only piece of tool '{tool_name}' (use clear to remove the body)"
-        ));
+        return Err(camcraft_i18n::tf("cannot remove the only piece of tool '{tool_name}' (use clear to remove the body)", &[format!("{}", tool_name)]));
     }
     pieces.remove(index);
     rebuild_body(prev, pieces)

@@ -134,49 +134,45 @@ impl PlateParams {
         figs.push(("first-hole offset Y", self.offset_y));
         for (what, v) in figs {
             if !v.is_finite() {
-                return Err(format!("plate {what} must be a finite length (got {v})"));
+                return Err(camcraft_i18n::tf("plate {what} must be a finite length (got {v})", &[format!("{}", what), format!("{}", v)]));
             }
             if v <= 0.0 {
-                return Err(format!("plate {what} must be more than zero (got {v} mm)"));
+                return Err(camcraft_i18n::tf("plate {what} must be more than zero (got {v} mm)", &[format!("{}", what), format!("{}", v)]));
             }
         }
         let r = 0.5 * self.thread_diameter;
         for (axis, off, span) in [("X", self.offset_x, self.length), ("Y", self.offset_y, self.width)] {
             if off < r {
-                return Err(format!("plate first-hole offset {axis} {off:.3} mm puts the hole over the edge (thread radius {r:.3} mm)"));
+                return Err(camcraft_i18n::tf("plate first-hole offset {axis} {off:.3} mm puts the hole over the edge (thread radius {r:.3} mm)", &[format!("{}", axis), format!("{:.3}", off), format!("{:.3}", r)]));
             }
             if 2.0 * off > span {
-                return Err(format!("plate first-hole offset {axis} {off:.3} mm is more than half the plate ({span:.3} mm)"));
+                return Err(camcraft_i18n::tf("plate first-hole offset {axis} {off:.3} mm is more than half the plate ({span:.3} mm)", &[format!("{}", axis), format!("{:.3}", off), format!("{:.3}", span)]));
             }
         }
         if self.thread_diameter >= self.pitch_x.min(self.pitch_y) {
-            return Err(format!(
-                "plate thread diameter {:.3} mm must be smaller than the pitch {:.3} mm",
-                self.thread_diameter,
-                self.pitch_x.min(self.pitch_y)
-            ));
+            return Err(camcraft_i18n::tf("plate thread diameter {:.3} mm must be smaller than the pitch {:.3} mm", &[format!("{:.3}", self.thread_diameter), format!("{:.3}", self.pitch_x.min(self.pitch_y))]));
         }
         if self.thread.trim().is_empty() {
             return Err("plate thread needs a name (e.g. 3/8-16, M10)".into());
         }
         let holes = count(self.length, self.offset_x, self.pitch_x).saturating_mul(count(self.width, self.offset_y, self.pitch_y));
         if holes > MAX_HOLES {
-            return Err(format!("plate grid has {holes} holes, more than {MAX_HOLES}"));
+            return Err(camcraft_i18n::tf("plate grid has {holes} holes, more than {MAX_HOLES}", &[format!("{}", holes), format!("{}", MAX_HOLES)]));
         }
         if let Some(c) = &self.counterbore {
             for (what, v) in [("counterbore diameter", c.diameter), ("counterbore depth", c.depth)] {
                 if !(v.is_finite() && v > 0.0) {
-                    return Err(format!("plate {what} must be a length more than zero (got {v})"));
+                    return Err(camcraft_i18n::tf("plate {what} must be a length more than zero (got {v})", &[format!("{}", what), format!("{}", v)]));
                 }
             }
             if c.diameter <= self.thread_diameter {
-                return Err(format!("plate counterbore diameter {:.3} mm must be wider than the thread {:.3} mm", c.diameter, self.thread_diameter));
+                return Err(camcraft_i18n::tf("plate counterbore diameter {:.3} mm must be wider than the thread {:.3} mm", &[format!("{:.3}", c.diameter), format!("{:.3}", self.thread_diameter)]));
             }
             if c.diameter >= self.pitch_x.min(self.pitch_y) {
-                return Err(format!("plate counterbore diameter {:.3} mm must be smaller than the pitch", c.diameter));
+                return Err(camcraft_i18n::tf("plate counterbore diameter {:.3} mm must be smaller than the pitch", &[format!("{:.3}", c.diameter)]));
             }
             if c.depth >= self.thickness {
-                return Err(format!("plate counterbore depth {:.3} mm must be less than the thickness {:.3} mm", c.depth, self.thickness));
+                return Err(camcraft_i18n::tf("plate counterbore depth {:.3} mm must be less than the thickness {:.3} mm", &[format!("{:.3}", c.depth), format!("{:.3}", self.thickness)]));
             }
         }
         if let Some(d) = &self.dowels {
@@ -194,7 +190,7 @@ impl PlateParams {
             ("dowel diameter", d.diameter),
         ] {
             if !(v.is_finite() && v > 0.0) {
-                return Err(format!("plate {what} must be a length more than zero (got {v})"));
+                return Err(camcraft_i18n::tf("plate {what} must be a length more than zero (got {v})", &[format!("{}", what), format!("{}", v)]));
             }
         }
         let r = 0.5 * d.diameter;
@@ -202,11 +198,11 @@ impl PlateParams {
             return Err("plate dowel offset puts the first dowel hole off the plate".into());
         }
         if d.diameter >= d.pitch_x.min(d.pitch_y) {
-            return Err(format!("plate dowel diameter {:.3} mm must be smaller than the dowel pitch", d.diameter));
+            return Err(camcraft_i18n::tf("plate dowel diameter {:.3} mm must be smaller than the dowel pitch", &[format!("{:.3}", d.diameter)]));
         }
         let n = count(self.length, d.offset_x, d.pitch_x).saturating_mul(count(self.width, d.offset_y, d.pitch_y));
         if n > MAX_HOLES {
-            return Err(format!("plate dowel pattern has {n} holes, more than {MAX_HOLES}"));
+            return Err(camcraft_i18n::tf("plate dowel pattern has {n} holes, more than {MAX_HOLES}", &[format!("{}", n), format!("{}", MAX_HOLES)]));
         }
         // Clear of every tapped hole: the nearest lattice node to each
         // dowel, by rounding, is the only one that can touch it.
@@ -217,10 +213,7 @@ impl PlateParams {
             let r = ((y - g.y0) / g.pitch_y).round().clamp(0.0, f64::from(g.rows.saturating_sub(1)));
             let (hx, hy) = g.node(r as u32, c as u32);
             if (x - hx).hypot(y - hy) < clear {
-                return Err(format!(
-                    "plate dowel hole {name} runs into tapped hole {} - move the dowel pattern",
-                    location_name(r as u32, c as u32)
-                ));
+                return Err(camcraft_i18n::tf("plate dowel hole {name} runs into tapped hole {} - move the dowel pattern", &[format!("{}", name), format!("{}", location_name(r as u32, c as u32))]));
             }
         }
         Ok(())

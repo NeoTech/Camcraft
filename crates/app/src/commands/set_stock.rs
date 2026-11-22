@@ -53,17 +53,11 @@ impl SetStock {
         let active = crate::setup::active(world);
         let stock_name = crate::setup::stock_entity_name(world, active.as_deref());
         if !shape.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "stock parameters must be finite and positive: {shape:?}"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("stock parameters must be finite and positive: {shape:?}", &[format!("{:?}", shape)])));
         }
         if !shape.is_bounded() {
             let u = crate::units::of(world);
-            return Err(CommandError::Invalid(format!(
-                "stock dimensions exceed {} {}",
-                crate::units::len(MAX_STOCK_DIM, u, 0),
-                u.suffix()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("stock dimensions exceed {} {}", &[format!("{}", crate::units::len(MAX_STOCK_DIM, u, 0)), format!("{}", u.suffix())])));
         }
         let mut location = location;
         location.rot = normalize_quat(location.rot)
@@ -94,14 +88,12 @@ impl SetStock {
                     return Err(CommandError::NotFound(source.clone()));
                 };
                 if model::is_wcs(world, &entity) {
-                    return Err(CommandError::Invalid(format!(
-                        "'{source}' is a work offset, not a solid"
-                    )));
+                    return Err(CommandError::Invalid(camcraft_i18n::tf("'{source}' is a work offset, not a solid", &[format!("{}", source)])));
                 }
                 let tris = model::facets_of(world, &entity)
                     .filter(|f| !f.is_empty())
                     .ok_or_else(|| {
-                        CommandError::Invalid(format!("'{source}' has no geometry for stock"))
+                        CommandError::Invalid(camcraft_i18n::tf("'{source}' has no geometry for stock", &[format!("{}", source)]))
                     })?;
                 if location == Location::default() {
                     // Copy the source's placement too: same facets, same spot -
@@ -119,9 +111,7 @@ impl SetStock {
         let prev = match model::find_by_name(world, &stock_name) {
             Some(entity) => {
                 let prev_shape = model::stock_def_of(world, &entity).ok_or_else(|| {
-                    CommandError::Invalid(format!(
-                        "an entity named '{stock_name}' exists but is not stock"
-                    ))
+                    CommandError::Invalid(camcraft_i18n::tf("an entity named '{stock_name}' exists but is not stock", &[format!("{}", stock_name)]))
                 })?;
                 Some((
                     prev_shape,

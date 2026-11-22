@@ -231,7 +231,7 @@ pub fn load(path: &Path) -> (ViewPrefs, Option<String>) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ViewPrefs::default(), None),
         Err(e) => {
-            let why = format!("view settings not read ({}): {e} - starting with the defaults", path.display());
+            let why = camcraft_i18n::tf("view settings not read ({}): {e} - starting with the defaults", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             return (ViewPrefs::default(), Some(why));
         }
@@ -239,17 +239,13 @@ pub fn load(path: &Path) -> (ViewPrefs, Option<String>) {
     let disk: OnDisk = match serde_json::from_str(&text) {
         Ok(d) => d,
         Err(e) => {
-            let why = format!("view settings ignored ({}): not a view file ({e}) - starting with the defaults", path.display());
+            let why = camcraft_i18n::tf("view settings ignored ({}): not a view file ({e}) - starting with the defaults", &[format!("{}", path.display()), format!("{}", e)]);
             tracing::warn!("{why}");
             return (ViewPrefs::default(), Some(why));
         }
     };
     if disk.format != FORMAT {
-        let why = format!(
-            "view settings ignored ({}): format '{}' is not {FORMAT} - starting with the defaults",
-            path.display(),
-            disk.format
-        );
+        let why = camcraft_i18n::tf("view settings ignored ({}): format '{}' is not {FORMAT} - starting with the defaults", &[format!("{}", path.display()), format!("{}", disk.format), format!("{}", FORMAT)]);
         tracing::warn!("{why}");
         return (ViewPrefs::default(), Some(why));
     }
@@ -262,7 +258,7 @@ pub fn load(path: &Path) -> (ViewPrefs, Option<String>) {
 pub fn save(path: &Path, prefs: &ViewPrefs) -> Result<(), String> {
     let disk = OnDisk { format: FORMAT.to_owned(), view: prefs.clone() };
     let text = serde_json::to_string_pretty(&disk)
-        .map_err(|e| format!("view settings not serialised: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("view settings not serialised: {e}", &[format!("{}", e)]))?;
     super::machine::store::write_atomic(path, &text).map_err(|e| {
         let why = e.to_string();
         tracing::warn!("view settings {why} ({})", path.display());

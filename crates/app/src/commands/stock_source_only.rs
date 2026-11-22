@@ -31,7 +31,7 @@ impl SetStockSourceOnly {
         let stock_name = crate::setup::stock_entity_name(world, active.as_deref());
         let entity = model::find_by_name(world, &stock_name)
             .filter(|e| model::is_stock(world, e))
-            .ok_or_else(|| CommandError::Invalid(format!("no stock '{stock_name}' - set the stock first")))?;
+            .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("no stock '{stock_name}' - set the stock first", &[format!("{}", stock_name)])))?;
         let prev = entity
             .entity_view(world)
             .try_get::<&StockSourceOnly>(|f| f.clone());
@@ -43,15 +43,11 @@ impl SetStockSourceOnly {
                     // the model still prints the same.
                     let print = model::find_by_name(world, &source)
                         .and_then(|m| crate::stock_print::print_of(world, &m))
-                        .ok_or_else(|| CommandError::Invalid(format!(
-                            "the stock's source model '{source}' is not in the document or has no geometry"
-                        )))?;
+                        .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("the stock's source model '{source}' is not in the document or has no geometry", &[format!("{}", source)])))?;
                     Some(StockSourceOnly { source, print })
                 }
                 _ => {
-                    return Err(CommandError::Invalid(format!(
-                        "'{stock_name}' is not made from a model - only a from-model stock's source can be raw stock only"
-                    )));
+                    return Err(CommandError::Invalid(camcraft_i18n::tf("'{stock_name}' is not made from a model - only a from-model stock's source can be raw stock only", &[format!("{}", stock_name)])));
                 }
             }
         } else {

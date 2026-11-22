@@ -307,7 +307,7 @@ pub fn script_of(post: &PostRef) -> Result<(String, String), String> {
         PostRef::Named(name) => Ok((format!("{name} (built-in)"), builtin_post_text(&name)?.to_owned())),
         PostRef::File(path) => {
             let text = std::fs::read_to_string(&path)
-                .map_err(|e| format!("post script {path}: {e}"))?;
+                .map_err(|e| camcraft_i18n::tf("post script {path}: {e}", &[format!("{}", path), format!("{}", e)]))?;
             Ok((path, text))
         }
     }
@@ -419,12 +419,12 @@ pub(crate) fn json_map_to_overrides(val: &Value) -> Result<BTreeMap<String, Opti
     let mut out = BTreeMap::new();
     for (k, v) in map {
         if options::RESERVED_KEYS.contains(&k.as_str()) {
-            return Err(format!("post option '{k}' is reserved by host settings"));
+            return Err(camcraft_i18n::tf("post option '{k}' is reserved by host settings", &[format!("{}", k)]));
         }
         let ov: OptionValue = serde_json::from_value(v.clone())
-            .map_err(|_| format!("post option '{k}' must be a bool, number, or string"))?;
+            .map_err(|_| camcraft_i18n::tf("post option '{k}' must be a bool, number, or string", &[format!("{}", k)]))?;
         if !ov.is_finite() {
-            return Err(format!("post option '{k}' must be finite"));
+            return Err(camcraft_i18n::tf("post option '{k}' must be finite", &[format!("{}", k)]));
         }
         out.insert(k.clone(), ov);
     }
@@ -441,14 +441,11 @@ pub fn resolve_cps(cps: &str) -> Result<(PostRef, String), String> {
         .is_some_and(|e| e.eq_ignore_ascii_case("cps"))
     {
         let text = std::fs::read_to_string(cps)
-            .map_err(|e| format!("cannot read post script {cps}: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("cannot read post script {cps}: {e}", &[format!("{}", cps), format!("{}", e)]))?;
         return Ok((PostRef::File(cps.to_owned()), text));
     }
     let names: Vec<&str> = BUILTINS.iter().map(|(n, _)| *n).collect();
-    Err(format!(
-        "unknown built-in post '{cps}' - names: {}; or give a .cps file path",
-        names.join(", ")
-    ))
+    Err(camcraft_i18n::tf("unknown built-in post '{cps}' - names: {}; or give a .cps file path", &[format!("{}", cps), format!("{}", names.join(", "))]))
 }
 
 /// Resolve a built-in post name or `.cps` file path to its script text (#258).
@@ -497,13 +494,13 @@ pub fn parse_cli_post_options(
     for spec in specs {
         let (key, raw) = spec
             .split_once('=')
-            .ok_or_else(|| format!("--post-option expects key=value, got '{spec}'"))?;
+            .ok_or_else(|| camcraft_i18n::tf("--post-option expects key=value, got '{spec}'", &[format!("{}", spec)]))?;
         let key = key.trim();
         if key.is_empty() {
-            return Err(format!("--post-option key must not be empty in '{spec}'"));
+            return Err(camcraft_i18n::tf("--post-option key must not be empty in '{spec}'", &[format!("{}", spec)]));
         }
         if options::RESERVED_KEYS.contains(&key) {
-            return Err(format!("post option '{key}' is reserved by host settings"));
+            return Err(camcraft_i18n::tf("post option '{key}' is reserved by host settings", &[format!("{}", key)]));
         }
         out.insert(key.to_owned(), scalar_from_cli(raw));
     }
@@ -643,7 +640,7 @@ pub fn post_setup_unwritten(world: &World) -> Result<Posted, String> {
 fn write_program(out_path: &Path, posted: Posted) -> Result<Posted, String> {
     std::fs::write(out_path, posted.program.as_bytes()).map_err(|e| {
         let _ = std::fs::remove_file(out_path);
-        format!("cannot write {}: {e}", out_path.display())
+        camcraft_i18n::tf("cannot write {}: {e}", &[format!("{}", out_path.display()), format!("{}", e)])
     })?;
     Ok(posted)
 }
@@ -671,7 +668,7 @@ fn post_script_body_with(
     // the viewer (the PostView law: a verdict about an older world
     // must not release this one's metal).
     // #1174: the workholding clause reads the dialect of THIS script.
-    let voice = post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
+    let voice = post::dialect::work_voice(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?;
     let mut report = verification_report_by(world, &|_| voice);
     report.problems.splice(0..0, unserved);
     // #760: Control mode checks against the explicit script when invoked directly.
@@ -684,7 +681,7 @@ fn post_script_body_with(
     // word from different placements refuse here - per-op files are exempt.
     report.problems.extend(wcs_slot::shared_word_problems(world));
     if !report.problems.is_empty() {
-        return Err(format!("post blocked - {}", report.problems.join("; ")));
+        return Err(camcraft_i18n::tf("post blocked - {}", &[format!("{}", report.problems.join("; "))]));
     }
     let stream = cnc::serialize(&records);
     let id = document_program_id(world, 1)?;
@@ -697,13 +694,9 @@ fn post_script_body_with(
     // #2319: no mounted machine and a bad default file refuses by name.
     let mch = mounts::posted_machine_for(&machine)?;
     let out = engine::run_program_with(cps, &mch, &stream, &opts, &id)
-        .map_err(|e| format!("post engine: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?;
     if !out.warnings.is_empty() {
-        return Err(format!(
-            "post blocked - {} warning(s): {}",
-            out.warnings.len(),
-            out.warnings.join("; ")
-        ));
+        return Err(camcraft_i18n::tf("post blocked - {} warning(s): {}", &[format!("{}", out.warnings.len()), format!("{}", out.warnings.join("; "))]));
     }
     let ops = records
         .iter()
@@ -821,7 +814,7 @@ fn gated_ops(world: &World, stop_at_ungenerated: bool) -> Result<(OpList, OpList
         // since generation refuses it too - and a cache generated before
         // the tool went wrong never posts behind the warning.
         if let Some(why) = operation::tool_gate::tool_problem_of(world, e) {
-            return Err(format!("{why} - fix the tool before posting"));
+            return Err(camcraft_i18n::tf("{why} - fix the tool before posting", &[format!("{}", why)]));
         }
         if let Some(why) = review_problem_of(world, name, e) {
             return Err(why);
@@ -837,12 +830,10 @@ fn gated_ops(world: &World, stop_at_ungenerated: bool) -> Result<(OpList, OpList
         }
         match operation::status_of(world, e) {
             OpStatus::Never => {
-                return Err(format!("{name}: no toolpath yet - generate it first"))
+                return Err(camcraft_i18n::tf("{name}: no toolpath yet - generate it first", &[format!("{}", name)]))
             }
             OpStatus::Stale => {
-                return Err(format!(
-                    "{name}: inputs moved since generation - regenerate before posting"
-                ))
+                return Err(camcraft_i18n::tf("{name}: inputs moved since generation - regenerate before posting", &[format!("{}", name)]))
             }
             OpStatus::Ok => {}
         }
@@ -1014,10 +1005,7 @@ pub(crate) fn review_problem_of(world: &World, key: &str, entity: &Entity) -> Op
         return None;
     }
     let label = meta.label.unwrap_or_else(|| key.to_owned());
-    Some(format!(
-        "{label}: needs review before posting ({}) - inspect the operation and mark it reviewed",
-        meta.needs_review.join("; ")
-    ))
+    Some(camcraft_i18n::tf("{label}: needs review before posting ({}) - inspect the operation and mark it reviewed", &[format!("{}", label), format!("{}", meta.needs_review.join("; "))]))
 }
 
 /// Every unsuppressed operation still carrying migration `needs_review` notes (#1517).
@@ -1156,9 +1144,9 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
     let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
-            .ok_or_else(|| format!("{name}: lost its operation"))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         let cache = model::toolpath_of(world, e)
-            .ok_or_else(|| format!("{name}: lost its toolpath"))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         if let OpParams::WireContour(p) = &op.params {
             let after = afters.get(name).copied().unwrap_or_default();
             let mut records = wire::stream(world, name, e, &op, &cache, p, after)?;
@@ -1168,7 +1156,7 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         }
         let tool = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         let setup = op.setup.as_deref();
         let hs = operation::resolve_params(world, setup, Some(&op.src), &op.params)
             .map_err(|err| format!("{name}: {err}"))?;

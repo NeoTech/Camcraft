@@ -23,8 +23,6 @@ impl OpParams {
         if dwell.is_finite() && (0.0..=MAX_DWELL_S).contains(dwell) {
             return None;
         }
-        Some(format!(
-            "drilling dwell {dwell} s is not usable - give a dwell at the hole bottom from 0 to {MAX_DWELL_S} seconds"
-        ))
+        Some(camcraft_i18n::tf("drilling dwell {dwell} s is not usable - give a dwell at the hole bottom from 0 to {MAX_DWELL_S} seconds", &[format!("{}", dwell), format!("{}", MAX_DWELL_S)]))
     }
 }

@@ -60,9 +60,7 @@ pub(super) const LINE_FROM_ABOVE: &str = "projects to a line from above and boun
 
 /// `push_loop`'s refusal for one boundary named by `label`.
 pub(super) fn line_from_above(label: &str) -> GenError {
-    GenError::Invalid(format!(
-        "{label} {LINE_FROM_ABOVE}; select a horizontal face or a closed edge chain around the part"
-    ))
+    GenError::Invalid(camcraft_i18n::tf("{label} {LINE_FROM_ABOVE}; select a horizontal face or a closed edge chain around the part", &[format!("{}", label), format!("{}", LINE_FROM_ABOVE)]))
 }
 
 /// [`selection_notes`] plus the early-door refusal the same walk found,
@@ -300,7 +298,7 @@ mod tests {
             moves: vec![Move::new(MoveKind::Feed, Point3::new(0.0, 0.0, 0.0), Point3::new(5.0, 0.0, 0.0), Some(500.0))],
             ..Toolpath::default()
         };
-        let msg = format!("the pick {LINE_FROM_ABOVE}");
+        let msg = camcraft_i18n::tf("the pick {LINE_FROM_ABOVE}", &[format!("{}", LINE_FROM_ABOVE)]);
         let pocket = seeded(OpType::Pocket);
         let plain = door_refusal(&pocket, GenError::Invalid(msg.clone()));
         assert_eq!(plain.as_deref(), Some(msg.as_str()));

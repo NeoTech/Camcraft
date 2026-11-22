@@ -38,7 +38,7 @@ fn role_of(word: &str) -> Result<Role, String> {
         "x" => Ok(Role::X),
         "y" => Ok(Role::Y),
         "z" => Ok(Role::Z),
-        _ => Err(format!("\"role\" must be \"origin\", \"x\", \"y\" or \"z\", got \"{word}\"")),
+        _ => Err(camcraft_i18n::tf("\"role\" must be \"origin\", \"x\", \"y\" or \"z\", got \"{word}\"", &[format!("{}", word)])),
     }
 }
 
@@ -55,10 +55,10 @@ fn role_word(r: Role) -> &'static str {
 /// held to the one pick rule (#692) like every other MCP pick.
 fn role_pick(env: &Env, v: &Value) -> Result<(GeoSel, Role), String> {
     let Value::Object(m) = v else {
-        return Err(format!("a pick is an object {{\"model\", \"id\", \"role\"}}, got {v}"));
+        return Err(camcraft_i18n::tf("a pick is an object {{\"model\", \"id\", \"role\"}}, got {v}", &[format!("{}", v)]));
     };
     if let Some(k) = m.keys().find(|k| !["model", "id", "role"].contains(&k.as_str())) {
-        return Err(format!("a pick has \"model\", \"id\" and \"role\" only, not \"{k}\""));
+        return Err(camcraft_i18n::tf("a pick has \"model\", \"id\" and \"role\" only, not \"{k}\"", &[format!("{}", k)]));
     }
     let entity = req_str(m, "model")?;
     req_model(env, entity)?;
@@ -90,18 +90,16 @@ fn set_wcs_from_features(env: &mut Env, a: &Map<String, Value>) -> Result<Value,
     // greys Apply on an inactive setup's row the same way).
     if let Some(s) = opt_str(a, "setup")? {
         if !setup::exists(&env.world, s) {
-            return Err(format!("no setup named '{s}'"));
+            return Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)]));
         }
         if active.as_deref() != Some(s) {
-            return Err(format!(
-                "setup '{s}' is not the active setup - activate_setup it first to set its WCS from features"
-            ));
+            return Err(camcraft_i18n::tf("setup '{s}' is not the active setup - activate_setup it first to set its WCS from features", &[format!("{}", s)]));
         }
     }
     let picks: Vec<(GeoSel, Role)> = match a.get("picks") {
         Some(Value::Array(items)) => items.iter().map(|p| role_pick(env, p)).collect::<Result<_, _>>()?,
         None | Some(Value::Null) => return Err("\"picks\" is required".into()),
-        Some(other) => return Err(format!("\"picks\" must be an array of picks, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"picks\" must be an array of picks, got {other}", &[format!("{}", other)])),
     };
     let fit = align_roles(&env.world, &picks)?;
     let loc = wcs_location(&fit)?;

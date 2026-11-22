@@ -43,21 +43,17 @@ pub(super) fn previous_ops_refusal(world: &World, name: &str, setup: Option<&str
         if op.suppressed {
             // A suppressed cut is never made: it proves nothing.
             if model::toolpath_nonempty(world, &e) {
-                return Some(format!(
-                    "{head}: operation '{n}' ahead is suppressed, so its cut is not made - unsuppress it, or use the entered previous tool"
-                ));
+                return Some(camcraft_i18n::tf("{head}: operation '{n}' ahead is suppressed, so its cut is not made - unsuppress it, or use the entered previous tool", &[format!("{}", head), format!("{}", n)]));
             }
             continue;
         }
         match super::status_of(world, &e) {
             OpStatus::Ok => {}
             OpStatus::Never => {
-                return Some(format!("{head}: operation '{n}' ahead has no toolpath - generate the program in order"));
+                return Some(camcraft_i18n::tf("{head}: operation '{n}' ahead has no toolpath - generate the program in order", &[format!("{}", head), format!("{}", n)]));
             }
             OpStatus::Stale => {
-                return Some(format!(
-                    "{head}: the toolpath of operation '{n}' ahead is stale - regenerate the program in order"
-                ));
+                return Some(camcraft_i18n::tf("{head}: the toolpath of operation '{n}' ahead is stale - regenerate the program in order", &[format!("{}", head), format!("{}", n)]));
             }
         }
     }

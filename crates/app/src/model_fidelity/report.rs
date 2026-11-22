@@ -14,12 +14,9 @@ pub fn summary(world: &World, chord_mm: f64) -> String {
 #[must_use]
 pub fn summary_with_cause(world: &World, chord_mm: f64, file_tolerance: bool) -> String {
     if is_unknown(chord_mm) {
-        return format!("Fidelity unknown: {UNKNOWN_NOTE}");
+        return camcraft_i18n::tf("Fidelity unknown: {UNKNOWN_NOTE}", &[format!("{}", UNKNOWN_NOTE)]);
     }
-    let said = format!(
-        "Reduced fidelity: surfaces are approximated to within {}",
-        within(world, chord_mm)
-    );
+    let said = camcraft_i18n::tf("Reduced fidelity: surfaces are approximated to within {}", &[format!("{}", within(world, chord_mm))]);
     // #2996: a widened model says what its checks allow.
     match crate::fidelity_note::clause(world, chord_mm, file_tolerance) {
         Some(clause) => format!("{said}; {clause}"),
@@ -41,7 +38,7 @@ pub fn facts_with_cause(world: &World, chord_mm: f64, file_tolerance: bool) -> s
         return serde_json::json!({
             "fidelity_unknown": true,
             "promised_mm": step::CHORD_CAP,
-            "note": format!("Fidelity unknown: this model was {UNKNOWN_NOTE}. Its operations are refused at the post until then."),
+            "note": camcraft_i18n::tf("Fidelity unknown: this model was {UNKNOWN_NOTE}. Its operations are refused at the post until then.", &[format!("{}", UNKNOWN_NOTE)]),
         });
     }
     // #2996: a widened model's checks are looser than normal, not stricter.
@@ -53,10 +50,7 @@ pub fn facts_with_cause(world: &World, chord_mm: f64, file_tolerance: bool) -> s
     serde_json::json!({
         "approximation_mm": chord_mm,
         "promised_mm": step::CHORD_CAP,
-        "note": format!(
-            "{}. {checks}. Re-import with a larger STEP facet budget, or export the file again with a tighter tolerance, to clear this.",
-            summary_with_cause(world, chord_mm, file_tolerance)
-        ),
+        "note": camcraft_i18n::tf("{}. {checks}. Re-import with a larger STEP facet budget, or export the file again with a tighter tolerance, to clear this.", &[format!("{}", summary_with_cause(world, chord_mm, file_tolerance)), format!("{}", checks)]),
     })
 }
 

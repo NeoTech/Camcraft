@@ -111,7 +111,7 @@ fn check_kind(kind: FitKind) -> Result<(), String> {
     if let FitKind::Box(margin) | FitKind::Cylinder(margin) = kind
         && !(margin.is_finite() && margin >= 0.0)
     {
-        return Err(format!("stock fit refused: the margin must be zero or more (got {margin} mm)"));
+        return Err(camcraft_i18n::tf("stock fit refused: the margin must be zero or more (got {margin} mm)", &[format!("{}", margin)]));
     }
     Ok(())
 }
@@ -139,5 +139,5 @@ pub fn fit_command(world: &World, kind: FitKind) -> Result<(SetStock, StockShape
     let (shape, pos) = fitted_turned(world, active.as_deref(), kind, rot)?;
     SetStock::new(world, shape.clone(), Location { pos, rot })
         .map(|cmd| (cmd, shape))
-        .map_err(|e| format!("stock not fitted: {e}"))
+        .map_err(|e| camcraft_i18n::tf("stock not fitted: {e}", &[format!("{}", e)]))
 }

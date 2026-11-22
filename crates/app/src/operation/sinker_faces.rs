@@ -38,15 +38,12 @@ fn words(e: GenError) -> String {
 fn model_of(world: &World, picks: &[GeoSel]) -> Result<Option<String>, String> {
     let Some(first) = picks.first() else { return Ok(None) };
     if let Some(other) = picks.iter().find(|g| g.entity != first.entity) {
-        return Err(format!(
-            "electrode from faces: the picks are on different models ('{}' and '{}') - one cavity is cut in one part",
-            first.entity, other.entity
-        ));
+        return Err(camcraft_i18n::tf("electrode from faces: the picks are on different models ('{}' and '{}') - one cavity is cut in one part", &[format!("{}", first.entity), format!("{}", other.entity)]));
     }
     let name = &first.entity;
-    let e = model::find_by_name(world, name).ok_or_else(|| format!("electrode from faces: no model named '{name}'"))?;
+    let e = model::find_by_name(world, name).ok_or_else(|| camcraft_i18n::tf("electrode from faces: no model named '{name}'", &[format!("{}", name)]))?;
     if !model::is_model(world, &e) || model::is_fixture(world, &e) {
-        return Err(format!("electrode from faces: '{name}' is not a part - pick the faces of the part's cavity"));
+        return Err(camcraft_i18n::tf("electrode from faces: '{name}' is not a part - pick the faces of the part's cavity", &[format!("{}", name)]));
     }
     Ok(Some(name.clone()))
 }
@@ -64,21 +61,19 @@ fn faces_of(world: &World, setup: Option<&str>, g: &GeoSel) -> Result<Vec<Picked
         | FeatureSel::Vertex(_)
         | FeatureSel::SketchChain(_)
         | FeatureSel::SketchLayer(_) => {
-            return Err(format!(
-                "electrode from faces: {label} is not a face - an electrode is generated from the cavity's floor and wall faces"
-            ));
+            return Err(camcraft_i18n::tf("electrode from faces: {label} is not a face - an electrode is generated from the cavity's floor and wall faces", &[format!("{}", label)]));
         }
     };
     // #692: the one pick rule - an id is taken only if a click could land on it.
-    crate::pick::check_pickable(world, g).map_err(|why| format!("electrode from faces: {why}"))?;
-    let gone = || format!("electrode from faces: {label} is no longer in the model: re-pick it");
+    crate::pick::check_pickable(world, g).map_err(|why| camcraft_i18n::tf("electrode from faces: {why}", &[format!("{}", why)]))?;
+    let gone = || camcraft_i18n::tf("electrode from faces: {label} is no longer in the model: re-pick it", &[format!("{}", label)]);
     let e = model::find_by_name(world, &g.entity).ok_or_else(gone)?;
     let features = model::features_of(world, &e).ok_or_else(gone)?;
     let patch = feature::patches(&features).into_iter().find(|p| p.id == pid).ok_or_else(gone)?;
     let mut strips = Vec::with_capacity(patch.faces.len());
     for &fid in &patch.faces {
         let s = GeoSel { entity: g.entity.clone(), feature: FeatureSel::Face(fid) };
-        let strip = format!("{} (a strip of {label})", crate::pick::geo_label(world, &s));
+        let strip = camcraft_i18n::tf("{} (a strip of {label})", &[format!("{}", crate::pick::geo_label(world, &s)), format!("{}", label)]);
         strips.push(face_of(world, setup, &s, fid, strip)?);
     }
     welded_wall(&label, strips).map_err(words)
@@ -90,21 +85,19 @@ fn faces_of(world: &World, setup: Option<&str>, g: &GeoSel) -> Result<Vec<Picked
 fn face_of(world: &World, setup: Option<&str>, g: &GeoSel, fid: FaceId, label: String) -> Result<PickedFace, String> {
     let blank = |open: bool| PickedFace { label: label.clone(), normal: Point3::new(0.0, 0.0, 1.0), curved: false, open, outer: Vec::new() };
     // #692: the one pick rule - an id is taken only if a click could land on it.
-    crate::pick::check_pickable(world, g).map_err(|why| format!("electrode from faces: {why}"))?;
-    let gone = || format!("electrode from faces: {label} is no longer in the model: re-pick it");
+    crate::pick::check_pickable(world, g).map_err(|why| camcraft_i18n::tf("electrode from faces: {why}", &[format!("{}", why)]))?;
+    let gone = || camcraft_i18n::tf("electrode from faces: {label} is no longer in the model: re-pick it", &[format!("{}", label)]);
     let e = model::find_by_name(world, &g.entity).ok_or_else(gone)?;
     let features = model::features_of(world, &e).ok_or_else(gone)?;
     let f = features.faces.iter().find(|f| f.id == fid).ok_or_else(gone)?;
     if !matches!(f.kind, FaceKind::Planar) {
-        return Err(format!(
-            "electrode from faces: {label} is a degenerate face (zero-area or non-finite facets) - it bounds nothing"
-        ));
+        return Err(camcraft_i18n::tf("electrode from faces: {label} is a degenerate face (zero-area or non-finite facets) - it bounds nothing", &[format!("{}", label)]));
     }
     // The outside by the facets' winding; an open, inside-out or
     // non-manifold body is refused by name there (#366).
     let n = crate::pick::align::outward_normal(world, g, |w, entity| crate::setup_align::pose_in(w, entity, setup))
-        .map_err(|why| format!("electrode from faces: {why}"))?
-        .ok_or_else(|| format!("electrode from faces: {label} has no usable plane - re-pick it"))?;
+        .map_err(|why| camcraft_i18n::tf("electrode from faces: {why}", &[format!("{}", why)]))?
+        .ok_or_else(|| camcraft_i18n::tf("electrode from faces: {label} has no usable plane - re-pick it", &[format!("{}", label)]))?;
     let Some(outer) = f.loops.iter().find(|l| matches!(l.kind, LoopKind::Outer)) else {
         return Ok(blank(true));
     };
@@ -169,10 +162,7 @@ pub(crate) fn electrode_from_faces_in(
             "electrode from faces: the part's facets could not be read, so the cavity's column cannot be checked for a boss, a rib or an overhang - no electrode is made".to_owned()
         })?;
     if let Some(at) = standing_in(&electrode, &facets).map_err(words)? {
-        return Err(format!(
-            "electrode from faces: the part stands inside the cavity above its floor near ({:.3}, {:.3}, {:.3}) - a boss, a rib or an overhang is in the electrode's way, and an electrode shaped round it is not modelled",
-            at.x, at.y, at.z
-        ));
+        return Err(camcraft_i18n::tf("electrode from faces: the part stands inside the cavity above its floor near ({:.3}, {:.3}, {:.3}) - a boss, a rib or an overhang is in the electrode's way, and an electrode shaped round it is not modelled", &[format!("{:.3}", at.x), format!("{:.3}", at.y), format!("{:.3}", at.z)]));
     }
     Ok(electrode)
 }
@@ -189,24 +179,21 @@ pub fn condition_undersize(world: &World, setup: Option<&str>, id: &str) -> Resu
     let setup = setup.or(active.as_deref());
     let kind = crate::machine::kind_of_setup(world, setup);
     if kind != Kind::SinkerEdm {
-        return Err(format!(
-            "a sinker electrode's undersize is read from a sinker EDM's condition; the setup's machine is a {}",
-            kind.word()
-        ));
+        return Err(camcraft_i18n::tf("a sinker electrode's undersize is read from a sinker EDM's condition; the setup's machine is a {}", &[format!("{}", kind.word())]));
     }
     let mounted = crate::machine::of_setup(world, setup);
     let label = crate::setup_mount::machine_label(&mounted);
     let id = id.trim();
     if id.is_empty() {
-        return Err(format!("no EDM condition is named - name one of machine {label}'s conditions (its undersize sizes the electrode)"));
+        return Err(camcraft_i18n::tf("no EDM condition is named - name one of machine {label}'s conditions (its undersize sizes the electrode)", &[format!("{}", label)]));
     }
     let edm = mounted
         .1
         .as_ref()
         .and_then(|m| m.edm.as_ref())
-        .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
+        .ok_or_else(|| camcraft_i18n::tf("machine {label} states no EDM section, so no condition {id:?}", &[format!("{}", label), format!("{:?}", id)]))?;
     let c = edm.condition(&label, id, &[ConditionField::Undersize])?;
-    c.undersize.ok_or_else(|| format!("machine {label}: EDM condition {id:?} states no undersize"))
+    c.undersize.ok_or_else(|| camcraft_i18n::tf("machine {label}: EDM condition {id:?} states no undersize", &[format!("{}", label), format!("{:?}", id)]))
 }
 
 /// A warning by name for a stated undersize of 0 (review of #1156): the

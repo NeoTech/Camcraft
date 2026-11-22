@@ -33,9 +33,7 @@ pub(super) struct LiveWork<'a> {
 }
 
 fn unjudged(why: &str) -> GenError {
-    GenError::Invalid(format!(
-        "cross drill: the first rapid from the turret's index position cannot be judged ({why}) - refused, never posted unjudged"
-    ))
+    GenError::Invalid(camcraft_i18n::tf("cross drill: the first rapid from the turret's index position cannot be judged ({why}) - refused, never posted unjudged", &[format!("{}", why)]))
 }
 
 /// Refuse by name a cross drill whose first rapid, from the turret's
@@ -60,7 +58,7 @@ pub(super) fn judge(path: &Toolpath, origin: [f64; 3], tool: &Tool, work: &LiveW
         };
         let r = (at.x - origin[0]).hypot(at.y - origin[1]);
         let reach = if along.is_finite() && z.is_finite() {
-            format!("reaches out to {along:.3} from the spindle at Z{z:.3} there")
+            camcraft_i18n::tf("reaches out to {along:.3} from the spindle at Z{z:.3} there", &[format!("{:.3}", along), format!("{:.3}", z)])
         } else {
             "has a point that cannot be read".into()
         };

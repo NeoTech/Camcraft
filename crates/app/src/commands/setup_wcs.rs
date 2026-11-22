@@ -36,11 +36,7 @@ impl SetSetupWorkOffset {
             .ok_or_else(|| CommandError::Invalid(format!("'{setup}' is not a setup")))?;
         if let Some(i) = slot {
             if i > setup_offsets::MAX_SLOT {
-                return Err(CommandError::Invalid(format!(
-                    "work offset {} does not exist - offsets run 1 to {}",
-                    i.saturating_add(1),
-                    setup_offsets::MAX_SLOT + 1
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("work offset {} does not exist - offsets run 1 to {}", &[format!("{}", i.saturating_add(1)), format!("{}", setup_offsets::MAX_SLOT + 1)])));
             }
             // #931: the setup's own post bounds the offset, by name.
             let n = u32::try_from(i).map_or(u32::MAX, |i| i.saturating_add(1));
@@ -48,10 +44,7 @@ impl SetSetupWorkOffset {
         }
         if prev == slot {
             let n = u32::try_from(slot.unwrap_or(0)).map_or(u32::MAX, |i| i.saturating_add(1));
-            return Err(CommandError::Invalid(format!(
-                "setup '{setup}' already posts at {}",
-                setup_offsets::offset_name(world, Some(setup), n)
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{setup}' already posts at {}", &[format!("{}", setup), format!("{}", setup_offsets::offset_name(world, Some(setup), n))])));
         }
         Ok(SetSetupWorkOffset {
             setup: setup.to_string(),

@@ -61,8 +61,8 @@ pub fn axes_text(flip: [bool; 3]) -> String {
 fn owner_of(world: &World, declared: Option<&str>) -> String {
     let word = crate::setup::wcs_name(world, declared);
     match crate::setup::effective(world, declared) {
-        Some(s) => format!("setup '{s}': its WCS ({word})"),
-        None => format!("the WCS ({word})"),
+        Some(s) => camcraft_i18n::tf("setup '{s}': its WCS ({word})", &[format!("{}", s), format!("{}", word)]),
+        None => camcraft_i18n::tf("the WCS ({word})", &[format!("{}", word)]),
     }
 }
 
@@ -77,11 +77,11 @@ pub fn setup_problem(world: &World, declared: Option<&str>) -> Option<String> {
     }
     let n = flip.iter().filter(|f| **f).count();
     let axis = if n == 1 { "axis" } else { "axes" };
-    let what = format!("{} has its {} {axis} flipped", owner_of(world, declared), axes_text(flip));
+    let what = camcraft_i18n::tf("{} has its {} {axis} flipped", &[format!("{}", owner_of(world, declared)), format!("{}", axes_text(flip)), format!("{}", axis)]);
     if flip[2] {
         // #2474: the exact reason, in the post engine's own words.
         let why = crate::post::wcs_flip::Z_REASON;
-        return Some(format!("{what}; a flipped Z is not carried into the program yet: {why} - clear Flip Z on the WCS page"));
+        return Some(camcraft_i18n::tf("{what}; a flipped Z is not carried into the program yet: {why} - clear Flip Z on the WCS page", &[format!("{}", what), format!("{}", why)]));
     }
     let rotated = crate::setup::wcs_entity(world, declared)
         .and_then(|e| model::transform_of(world, &e))
@@ -90,19 +90,15 @@ pub fn setup_problem(world: &World, declared: Option<&str>) -> Option<String> {
             crate::posting::OffsetFrame::Square | crate::posting::OffsetFrame::Yaw { .. }
         ));
     if rotated {
-        return Some(format!(
-            "{what} and has a rotated or invalid placement; only a finite Z rotation is supported with \
-             flipped axes - clear the flip or correct the placement"
-        ));
+        return Some(camcraft_i18n::tf("{what} and has a rotated or invalid placement; only a finite Z rotation is supported with \
+             flipped axes - clear the flip or correct the placement", &[format!("{}", what)]));
     }
     let post = crate::setup_mount::post_of(world, declared);
     if let Ok((name, text)) = crate::posting::script_of(&post)
         && matches!(crate::post::dialect::translates_inverted_axes(&text), Ok(false))
     {
-        return Some(format!(
-            "{what}, and its post ({name}) is not verified for a mirrored program - choose a post that is \
-             (each built-in mill post is), or clear the flip on the WCS page"
-        ));
+        return Some(camcraft_i18n::tf("{what}, and its post ({name}) is not verified for a mirrored program - choose a post that is \
+             (each built-in mill post is), or clear the flip on the WCS page", &[format!("{}", what), format!("{}", name)]));
     }
     None
 }
@@ -184,7 +180,7 @@ fn problems(world: &World, only: Option<Option<&str>>) -> Vec<String> {
             None => match op_problem(&op, model::toolpath_of(world, &e)) {
                 Some(kind) => {
                     let axis = if flip.iter().filter(|f| **f).count() == 1 { "axis" } else { "axes" };
-                    format!("{} has its {} {axis} flipped; {kind}", owner_of(world, declared), axes_text(flip))
+                    camcraft_i18n::tf("{} has its {} {axis} flipped; {kind}", &[format!("{}", owner_of(world, declared)), format!("{}", axes_text(flip)), format!("{}", axis), format!("{}", kind)])
                 }
                 None => continue,
             },

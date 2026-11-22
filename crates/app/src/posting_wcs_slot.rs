@@ -91,20 +91,10 @@ pub(super) fn shared_word_problems_in(world: &World, only: Option<&[String]>) ->
         let here = placement(world, setup);
         match seen.iter().find(|(s, n, _)| *s == slot && *n != name) {
             Some((_, first, there)) if !same_zero(there, &here) => {
-                let line = format!(
-                    "setups {first} and {name} both post at {} from different placements \
+                let line = camcraft_i18n::tf("setups {first} and {name} both post at {} from different placements \
                      ({first}: X{:.3} Y{:.3} Z{:.3}, {name}: X{:.3} Y{:.3} Z{:.3}) - one program \
                      holds one {} register; pick another work offset for {name} on the Setups \
-                     page, or post one file per operation",
-                    word(world, setup, slot),
-                    there.pos.x,
-                    there.pos.y,
-                    there.pos.z,
-                    here.pos.x,
-                    here.pos.y,
-                    here.pos.z,
-                    word(world, setup, slot)
-                );
+                     page, or post one file per operation", &[format!("{}", first), format!("{}", name), format!("{}", word(world, setup, slot)), format!("{}", first), format!("{:.3}", there.pos.x), format!("{:.3}", there.pos.y), format!("{:.3}", there.pos.z), format!("{}", name), format!("{:.3}", here.pos.x), format!("{:.3}", here.pos.y), format!("{:.3}", here.pos.z), format!("{}", word(world, setup, slot)), format!("{}", name)]);
                 if !out.contains(&line) {
                     out.push(line);
                 }

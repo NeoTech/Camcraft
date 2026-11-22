@@ -143,13 +143,8 @@ pub fn problems(world: &World) -> Vec<String> {
             let cache = model::toolpath_of(world, e);
             let feed = judged_feed(&tool, &op.params, cache.as_ref().map(|c| &c.path))?;
             (feed > rated + SLACK).then(|| {
-                format!(
-                    "{name}: feeds {} {u}, above the {} {u} that tool {} states - lower the operation's feed, \
-                     or raise the tool's feed if its maker allows more",
-                    units::feed(feed, unit),
-                    units::feed(rated, unit),
-                    op.tool,
-                )
+                camcraft_i18n::tf("{name}: feeds {} {u}, above the {} {u} that tool {} states - lower the operation's feed, \
+                     or raise the tool's feed if its maker allows more", &[format!("{}", name), format!("{}", units::feed(feed, unit)), format!("{}", u), format!("{}", units::feed(rated, unit)), format!("{}", u), format!("{}", op.tool)])
             })
         })
         .collect()

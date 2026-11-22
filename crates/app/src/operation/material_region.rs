@@ -226,10 +226,8 @@ pub(super) fn drive_chains_of(world: &World, op: &Operation) -> Result<Vec<Vec<P
              or use 5-Axis Contour to machine the stock's own pattern"
                 .into(),
         )),
-        SrcRef::Entity(name) => Err(GenError::Invalid(format!(
-            "Multi-Axis Contour machines picked edge chains, not a whole entity ('{name}') - \
-             pick edges in its Geometry section, or use 5-Axis Contour for that model's pattern"
-        ))),
+        SrcRef::Entity(name) => Err(GenError::Invalid(camcraft_i18n::tf("Multi-Axis Contour machines picked edge chains, not a whole entity ('{name}') - \
+             pick edges in its Geometry section, or use 5-Axis Contour for that model's pattern", &[format!("{}", name)]))),
     }
 }
 

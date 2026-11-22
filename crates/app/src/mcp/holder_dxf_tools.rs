@@ -45,9 +45,7 @@ fn parse_unit(s: Option<&str>) -> Result<Option<Unit>, String> {
     match u.trim().to_ascii_lowercase().as_str() {
         "mm" | "millimetre" | "millimetres" | "millimeter" | "millimeters" => Ok(Some(Unit::Millimeters)),
         "in" | "inch" | "inches" => Ok(Some(Unit::Inches)),
-        other => Err(format!(
-            "\"units\" must be \"mm\" or \"inch\", got \"{other}\""
-        )),
+        other => Err(camcraft_i18n::tf("\"units\" must be \"mm\" or \"inch\", got \"{other}\"", &[format!("{}", other)])),
     }
 }
 
@@ -64,20 +62,18 @@ fn export_tool_holder_dxf(env: &mut Env, a: &Map<String, Value>) -> Result<Value
     let tool = req_str(a, "tool")?;
     let out_path = req_str(a, "path")?;
     let Some(entity) = model::find_by_name(&env.world, tool) else {
-        return Err(format!("tool \"{tool}\" not found"));
+        return Err(camcraft_i18n::tf("tool \"{tool}\" not found", &[format!("{}", tool)]));
     };
     if model::tool_of(&env.world, &entity).is_none() {
         return Err(format!("\"{tool}\" is not a tool"));
     }
     let Some(body) = tool_body::body_of(&env.world, &entity) else {
-        return Err(format!(
-            "tool \"{tool}\" has no holder body to export - attach a body, library holder or spun profile first"
-        ));
+        return Err(camcraft_i18n::tf("tool \"{tool}\" has no holder body to export - attach a body, library holder or spun profile first", &[format!("{}", tool)]));
     };
     let spun = tool_body_to_spun(&body)?;
     let dxf = tool_body_to_dxf(&body)?;
     std::fs::write(out_path, &dxf)
-        .map_err(|e| format!("failed to write DXF \"{out_path}\": {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("failed to write DXF \"{out_path}\": {e}", &[format!("{}", out_path), format!("{}", e)]))?;
     Ok(json!({
         "tool": tool,
         "path": out_path,
@@ -94,7 +90,7 @@ fn convert_tool_step_to_profile(env: &mut Env, a: &Map<String, Value>) -> Result
     if let Some(out) = dxf_out {
         let dxf = cmd.profile_dxf()?;
         std::fs::write(out, dxf)
-            .map_err(|e| format!("failed to write DXF \"{out}\": {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("failed to write DXF \"{out}\": {e}", &[format!("{}", out), format!("{}", e)]))?;
     }
     env.history.execute(&env.world, cmd);
     Ok(json!({

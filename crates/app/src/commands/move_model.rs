@@ -124,20 +124,14 @@ impl MoveModel {
         let entity =
             model::find_by_name(world, name).ok_or_else(|| CommandError::NotFound(name.into()))?;
         if model::is_fixture(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a fixture - the Fixtures page places it"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a fixture - the Fixtures page places it", &[format!("{}", name)])));
         }
         if model::is_wcs(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a work offset - the Work Offsets page places it"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a work offset - the Work Offsets page places it", &[format!("{}", name)])));
         }
         // #1862: a DXF profile lies on its stock face, not in the world.
         if crate::sketch::is_sketch(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a DXF profile - the Stock page places it on its stock face"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a DXF profile - the Stock page places it on its stock face", &[format!("{}", name)])));
         }
         let next = check_location(location, &format!("'{name}'"))?;
         let prev = model::transform_of(world, &entity).unwrap_or_default();
@@ -178,7 +172,7 @@ impl MoveModel {
                     let reshape = (sized != shape)
                         .then(|| {
                             let unbuilt = || {
-                                CommandError::Invalid(format!("the stock '{stock_name}' cannot be rebuilt round the moved part"))
+                                CommandError::Invalid(camcraft_i18n::tf("the stock '{stock_name}' cannot be rebuilt round the moved part", &[format!("{}", stock_name)]))
                             };
                             let old = model::facets_of(world, &entity)
                                 .or_else(|| stock::stock_mesh(&shape).map(Arc::from))

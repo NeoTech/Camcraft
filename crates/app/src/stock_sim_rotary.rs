@@ -89,7 +89,7 @@ pub(crate) fn rotary_plan(
     lift.map_err(|why| format!("{name}: {why}"))?;
     crate::fixture::rotary_axis_of(world, op)
         .map(Some)
-        .ok_or_else(|| format!("{name}: a rotary cut needs its body's fitted axis to chord the turn, and none fits - not judged"))
+        .ok_or_else(|| camcraft_i18n::tf("{name}: a rotary cut needs its body's fitted axis to chord the turn, and none fits - not judged", &[format!("{}", name)]))
 }
 
 /// Cut `op`'s moves `[a, a + moves.len())` of a rotary program through

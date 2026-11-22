@@ -31,17 +31,11 @@ impl OpParams {
         }
         let max = FINE_BORE_MAX_SHIFT_UM;
         if shift_x_um.unsigned_abs() > max.unsigned_abs() || shift_y_um.unsigned_abs() > max.unsigned_abs() {
-            return Some(format!(
-                "fine bore shift ({dx}, {dy}) mm is not usable - give at most {} mm on each axis",
-                f64::from(max) / 1000.0
-            ));
+            return Some(camcraft_i18n::tf("fine bore shift ({dx}, {dy}) mm is not usable - give at most {} mm on each axis", &[format!("{}", dx), format!("{}", dy), format!("{}", f64::from(max) / 1000.0)]));
         }
         let s = dx.hypot(dy);
         // A radius that is not a number is not "larger": refused too.
         let tight = holes.iter().find(|h| s.partial_cmp(&h.radius) != Some(std::cmp::Ordering::Less))?;
-        Some(format!(
-            "fine bore shift {s} mm is not smaller than the radius {} mm of the hole at ({}, {})",
-            tight.radius, tight.xy.x, tight.xy.y
-        ))
+        Some(camcraft_i18n::tf("fine bore shift {s} mm is not smaller than the radius {} mm of the hole at ({}, {})", &[format!("{}", s), format!("{}", tight.radius), format!("{}", tight.xy.x), format!("{}", tight.xy.y)]))
     }
 }

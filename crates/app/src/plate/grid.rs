@@ -95,16 +95,16 @@ impl Grid {
     /// node off the lattice, or a node with no hole).
     pub fn locate(&self, name: &str) -> Result<(f64, f64), String> {
         let (row, col) =
-            parse_location(name).ok_or_else(|| format!("'{name}' is not a grid location (letters for the row, then the column number, e.g. B3)"))?;
+            parse_location(name).ok_or_else(|| camcraft_i18n::tf("'{name}' is not a grid location (letters for the row, then the column number, e.g. B3)", &[format!("{}", name)]))?;
         if row >= self.rows || col >= self.cols {
-            return Err(format!("there is no location {} ({})", name.trim(), self.extent()));
+            return Err(camcraft_i18n::tf("there is no location {} ({})", &[format!("{}", name.trim()), format!("{}", self.extent())]));
         }
         let canon = location_name(row, col);
         if self.off_stagger(row, col) {
-            return Err(format!("location {canon} has no hole (the grid is staggered: every other place along a row)"));
+            return Err(camcraft_i18n::tf("location {canon} has no hole (the grid is staggered: every other place along a row)", &[format!("{}", canon)]));
         }
         if self.missing.contains(&canon) {
-            return Err(format!("location {canon} has no hole"));
+            return Err(camcraft_i18n::tf("location {canon} has no hole", &[format!("{}", canon)]));
         }
         Ok(self.node(row, col))
     }
@@ -142,16 +142,16 @@ impl Grid {
     pub fn check(&self, what: &str) -> Result<(), String> {
         for (k, v) in [("x", self.x0), ("y", self.y0)] {
             if !v.is_finite() {
-                return Err(format!("{what} first hole {k} must be finite"));
+                return Err(camcraft_i18n::tf("{what} first hole {k} must be finite", &[format!("{}", what), format!("{}", k)]));
             }
         }
         for (k, v) in [("pitch X", self.pitch_x), ("pitch Y", self.pitch_y), ("hole diameter", self.diameter)] {
             if !(v.is_finite() && v > 0.0) {
-                return Err(format!("{what} {k} must be a length more than zero (got {v})"));
+                return Err(camcraft_i18n::tf("{what} {k} must be a length more than zero (got {v})", &[format!("{}", what), format!("{}", k), format!("{}", v)]));
             }
         }
         if self.stagger.is_some_and(|p| p > 1) {
-            return Err(format!("{what} stagger must be 0 or 1"));
+            return Err(camcraft_i18n::tf("{what} stagger must be 0 or 1", &[format!("{}", what)]));
         }
         // Holes must not run into each other, and the pitch must stand
         // clear of the detection tolerance (#819 review): the nearest
@@ -162,19 +162,16 @@ impl Grid {
             Some(_) => (2.0 * self.pitch_x).min(2.0 * self.pitch_y).min(self.pitch_x.hypot(self.pitch_y)),
         };
         if self.pitch_x.min(self.pitch_y) <= 2.0 * super::detect::ON_NODE {
-            return Err(format!("{what} pitch must be more than {:.2} mm", 2.0 * super::detect::ON_NODE));
+            return Err(camcraft_i18n::tf("{what} pitch must be more than {:.2} mm", &[format!("{}", what), format!("{:.2}", 2.0 * super::detect::ON_NODE)]));
         }
         if near <= self.diameter {
-            return Err(format!(
-                "{what} holes of {:.3} mm would run into each other {near:.3} mm apart - the pitch must be more than the hole diameter",
-                self.diameter
-            ));
+            return Err(camcraft_i18n::tf("{what} holes of {:.3} mm would run into each other {near:.3} mm apart - the pitch must be more than the hole diameter", &[format!("{}", what), format!("{:.3}", self.diameter), format!("{:.3}", near)]));
         }
         if self.rows == 0 || self.cols == 0 {
-            return Err(format!("{what} has no holes"));
+            return Err(camcraft_i18n::tf("{what} has no holes", &[format!("{}", what)]));
         }
         if u64::from(self.rows) * u64::from(self.cols) > MAX_HOLES {
-            return Err(format!("{what} has more than {MAX_HOLES} holes"));
+            return Err(camcraft_i18n::tf("{what} has more than {MAX_HOLES} holes", &[format!("{}", what), format!("{}", MAX_HOLES)]));
         }
         Ok(())
     }

@@ -260,25 +260,17 @@ pub(super) fn notes(kind: &str, found: Marked, budget: f64, unit: Unit) -> Vec<S
 /// The note for a cut deeper than a mark: the budget by name.
 #[must_use]
 pub fn note(kind: &str, budget: f64, unit: Unit) -> String {
-    format!(
-        "{kind} cuts deeper than a mark: the cutter stands more than {} {} under the part's surface \
+    camcraft_i18n::tf("{kind} cuts deeper than a mark: the cutter stands more than {} {} under the part's surface \
          (the mark budget: the lesser of Top - Bottom and the cutter radius) - cut shallower, raise Top \
-         to the surface the line lies on, or model the groove",
-        units::len(budget, unit, 3),
-        unit.suffix()
-    )
+         to the surface the line lies on, or model the groove", &[format!("{}", kind), format!("{}", units::len(budget, unit, 3)), format!("{}", unit.suffix())])
 }
 
 /// The note for a breakthrough: the floor by name.
 #[must_use]
 pub fn through_note(kind: &str, unit: Unit) -> String {
-    format!(
-        "{kind} cuts through the part: under the cutter less than {} {} of the part is left on its underside \
+    camcraft_i18n::tf("{kind} cuts through the part: under the cutter less than {} {} of the part is left on its underside \
          (a mark is bounded by the part under it, less that floor) - cut shallower; a cut through the part is \
-         not a mark",
-        units::len(MARK_FLOOR, unit, 3),
-        unit.suffix()
-    )
+         not a mark", &[format!("{}", kind), format!("{}", units::len(MARK_FLOOR, unit, 3)), format!("{}", unit.suffix())])
 }
 
 #[cfg(test)]

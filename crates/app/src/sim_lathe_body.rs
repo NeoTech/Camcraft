@@ -107,10 +107,10 @@ impl LatheBodyCache {
             return Ok(Some((key.facets, *axes)));
         }
         self.built = None;
-        let path = model::toolpath_of(world, &e).ok_or_else(|| format!("{op}: its path went away"))?;
-        let part = crate::operation::source_facets(world, o.setup.as_deref(), &o.src).map_err(|e| format!("{op}: the lathe frame needs the op's source: {e}"))?;
-        let (radial, along) = crate::operation::lathe_body_axes(&part, &path.path).map_err(|e| format!("{op}: the lathe body has no frame: {e}"))?;
-        let axes = LatheAxes::new(radial, along).ok_or_else(|| format!("{op}: the lathe body's frame is not square"))?;
+        let path = model::toolpath_of(world, &e).ok_or_else(|| camcraft_i18n::tf("{op}: its path went away", &[format!("{}", op)]))?;
+        let part = crate::operation::source_facets(world, o.setup.as_deref(), &o.src).map_err(|e| camcraft_i18n::tf("{op}: the lathe frame needs the op's source: {e}", &[format!("{}", op), format!("{}", e)]))?;
+        let (radial, along) = crate::operation::lathe_body_axes(&part, &path.path).map_err(|e| camcraft_i18n::tf("{op}: the lathe body has no frame: {e}", &[format!("{}", op), format!("{}", e)]))?;
+        let axes = LatheAxes::new(radial, along).ok_or_else(|| camcraft_i18n::tf("{op}: the lathe body's frame is not square", &[format!("{}", op)]))?;
         self.built = Some((key.clone(), axes));
         Ok(Some((key.facets, axes)))
     }

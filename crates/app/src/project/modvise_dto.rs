@@ -29,13 +29,13 @@ pub fn params_from(v: Option<&Value>, model: &str, notes: &mut Vec<String>) -> O
             Ok(()) => Some(p),
             Err(why) => {
                 tracing::warn!(model, "mod vise jaw block parameters dropped on load, kept as plain steel: {why}");
-                notes.push(format!("fixture '{model}': mod vise jaw block parameters dropped on load, kept as plain steel: {why}"));
+                notes.push(camcraft_i18n::tf("fixture '{model}': mod vise jaw block parameters dropped on load, kept as plain steel: {why}", &[format!("{}", model), format!("{}", why)]));
                 None
             }
         },
         Err(why) => {
             tracing::warn!(model, "mod vise jaw block key not understood, dropped on load: {why}");
-            notes.push(format!("fixture '{model}': mod_jaw key not understood, dropped on load, kept as plain steel: {why}"));
+            notes.push(camcraft_i18n::tf("fixture '{model}': mod_jaw key not understood, dropped on load, kept as plain steel: {why}", &[format!("{}", model), format!("{}", why)]));
             None
         }
     }

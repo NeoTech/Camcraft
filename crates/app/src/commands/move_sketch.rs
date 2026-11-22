@@ -29,16 +29,13 @@ impl MoveSketch {
     pub fn new(world: &World, name: &str, x: f64, y: f64, angle_deg: f64) -> Result<Self, CommandError> {
         let entity = model::find_by_name(world, name).ok_or_else(|| CommandError::NotFound(name.to_owned()))?;
         if !sketch::is_sketch(world, &entity) {
-            return Err(CommandError::Invalid(format!("'{name}' is not a DXF profile")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a DXF profile", &[format!("{}", name)])));
         }
         if !(x.is_finite() && y.is_finite() && angle_deg.is_finite()) {
-            return Err(CommandError::Invalid(format!("'{name}' placement must be finite")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' placement must be finite", &[format!("{}", name)])));
         }
         if x.abs() > sketch::MAX_OFFSET || y.abs() > sketch::MAX_OFFSET {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' placement is more than {} mm from the stock origin",
-                sketch::MAX_OFFSET
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' placement is more than {} mm from the stock origin", &[format!("{}", name), format!("{}", sketch::MAX_OFFSET)])));
         }
         // One turn is every turn: keep the angle in (-180, 180].
         let angle = 180.0 - (180.0 - angle_deg).rem_euclid(360.0);

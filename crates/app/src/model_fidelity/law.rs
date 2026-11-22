@@ -46,14 +46,9 @@ pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
             crate::mesh_open::note_for(hole.as_deref())
         ));
     }
-    let said = format!(
-        "surfaces are approximated to within {}",
-        within(world, chord)
-    );
+    let said = camcraft_i18n::tf("surfaces are approximated to within {}", &[format!("{}", within(world, chord))]);
     if !fidelity_law::excess_aware(&op.params) {
-        return Some(format!(
-            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance"
-        ));
+        return Some(camcraft_i18n::tf("{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance", &[format!("{}", name), format!("{}", model), format!("{}", said)]));
     }
     // #2996: a kind whose laws also guard a holder, bar, shank or stylus
     // reads the strict law (`fidelity_law::widens`).
@@ -145,9 +140,6 @@ pub fn verdict_tol(world: &World) -> Result<f64, String> {
         ));
     }
     excess_floor_for(DEV_TOL, excess(chord), file_tolerance).ok_or_else(|| {
-        format!(
-            "model '{name}' was {TOO_COARSE} (surfaces are approximated to within {})",
-            within(world, chord)
-        )
+        camcraft_i18n::tf("model '{name}' was {TOO_COARSE} (surfaces are approximated to within {})", &[format!("{}", name), format!("{}", TOO_COARSE), format!("{}", within(world, chord))])
     })
 }

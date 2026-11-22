@@ -151,23 +151,17 @@ pub fn align_from_cylinder(
 fn axis_through(world: &World, rot: [f64; 4], g: &GeoSel) -> Result<[f64; 3], String> {
     let label = || super::geo_label(world, g);
     let e = model::find_by_name(world, &g.entity)
-        .ok_or_else(|| format!("{} is no longer in the model - re-pick it", label()))?;
+        .ok_or_else(|| camcraft_i18n::tf("{} is no longer in the model - re-pick it", &[format!("{}", label())]))?;
     let features = model::features_of(world, &e)
-        .ok_or_else(|| format!("'{}' carries no geometry - re-pick it", g.entity))?;
+        .ok_or_else(|| camcraft_i18n::tf("'{}' carries no geometry - re-pick it", &[format!("{}", g.entity)]))?;
     let tris = model::facets_of(world, &e)
-        .ok_or_else(|| format!("'{}' carries no geometry - re-pick it", g.entity))?;
+        .ok_or_else(|| camcraft_i18n::tf("'{}' carries no geometry - re-pick it", &[format!("{}", g.entity)]))?;
     let FeatureSel::Patch(pid) = g.feature else {
-        return Err(format!(
-            "{} is not a welded wall - pick the bore's or cylinder's curved wall",
-            label()
-        ));
+        return Err(camcraft_i18n::tf("{} is not a welded wall - pick the bore's or cylinder's curved wall", &[format!("{}", label())]));
     };
     let _patch = feature::patches(&features).into_iter().find(|p| p.id == pid);
     if _patch.is_none() {
-        return Err(format!(
-            "{} is no longer in the model - re-pick it",
-            label()
-        ));
+        return Err(camcraft_i18n::tf("{} is no longer in the model - re-pick it", &[format!("{}", label())]));
     }
     let patch_faces: Vec<_> = _patch.into_iter().flat_map(|p| p.faces.clone()).collect();
     // The wall's facet normals, in the model's own frame.
@@ -198,10 +192,7 @@ fn axis_through(world: &World, rot: [f64; 4], g: &GeoSel) -> Result<[f64; 3], St
     let a = cross(first, other);
     let l = norm(a);
     if !l.is_finite() || l <= 0.0 {
-        return Err(format!(
-            "{} does not wrap a curve - every facet of the pick lies one way; pick a fuller band of the bore's or cylinder's wall",
-            label()
-        ));
+        return Err(camcraft_i18n::tf("{} does not wrap a curve - every facet of the pick lies one way; pick a fuller band of the bore's or cylinder's wall", &[format!("{}", label())]));
     }
     let d = scale(a, 1.0 / l);
     // Every facet normal must be perpendicular to the axis: a mixed
@@ -209,10 +200,7 @@ fn axis_through(world: &World, rot: [f64; 4], g: &GeoSel) -> Result<[f64; 3], St
     for n in &normals {
         let dot = (n[0] * d[0] + n[1] * d[1] + n[2] * d[2]).abs();
         if dot > NORMAL_TOL {
-            return Err(format!(
-                "{} is not one cylinder wall - pick just the bore's or cylinder's curved wall",
-                label()
-            ));
+            return Err(camcraft_i18n::tf("{} is not one cylinder wall - pick just the bore's or cylinder's curved wall", &[format!("{}", label())]));
         }
     }
     // Into the world (the part's placement), then the reading frame.

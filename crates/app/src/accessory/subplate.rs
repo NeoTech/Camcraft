@@ -45,21 +45,16 @@ pub fn check(a: &Accessory) -> Result<(), String> {
     let what = "rotary subplate";
     let r = 0.5 * bore_diameter;
     if bore_diameter >= bore_spacing {
-        return Err(format!(
-            "{what} pin bore diameter {bore_diameter:.3} mm must be less than the bore spacing {bore_spacing:.3} mm"
-        ));
+        return Err(camcraft_i18n::tf("{what} pin bore diameter {bore_diameter:.3} mm must be less than the bore spacing {bore_spacing:.3} mm", &[format!("{}", what), format!("{:.3}", bore_diameter), format!("{:.3}", bore_spacing)]));
     }
     if bore_x < r {
-        return Err(format!("{what} first bore from the -X end {bore_x:.3} mm puts the bore over the edge"));
+        return Err(camcraft_i18n::tf("{what} first bore from the -X end {bore_x:.3} mm puts the bore over the edge", &[format!("{}", what), format!("{:.3}", bore_x)]));
     }
     if bore_x + bore_spacing + r > length {
-        return Err(format!(
-            "{what} second bore at {:.3} mm from the -X end runs off the {length:.3} mm length",
-            bore_x + bore_spacing
-        ));
+        return Err(camcraft_i18n::tf("{what} second bore at {:.3} mm from the -X end runs off the {length:.3} mm length", &[format!("{}", what), format!("{:.3}", bore_x + bore_spacing), format!("{:.3}", length)]));
     }
     if bore_y < r || bore_y + r > width {
-        return Err(format!("{what} bores from the -Y edge {bore_y:.3} mm put the bores off the {width:.3} mm width"));
+        return Err(camcraft_i18n::tf("{what} bores from the -Y edge {bore_y:.3} mm put the bores off the {width:.3} mm width", &[format!("{}", what), format!("{:.3}", bore_y), format!("{:.3}", width)]));
     }
     Ok(())
 }

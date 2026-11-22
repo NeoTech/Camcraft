@@ -151,7 +151,7 @@ pub fn field_view_with(world: &flecs_ecs::prelude::World, texels: f64) -> Result
         if let Some(u) = &p.undercut {
             stock
                 .simulate_undercut(&u.moves, &u.cutter, u.neck_len)
-                .map_err(|e| format!("the field view could not cut the program: {}: {e}", p.name))?;
+                .map_err(|e| camcraft_i18n::tf("the field view could not cut the program: {}: {e}", &[format!("{}", p.name), format!("{}", e)]))?;
             continue;
         }
         let op = SimOp { moves: &p.moves, radius: p.radius, ball: p.ball, cone: p.cone, corner: p.corner };
@@ -171,7 +171,7 @@ pub fn field_view_with(world: &flecs_ecs::prelude::World, texels: f64) -> Result
                 }
             }
         };
-        cut.map_err(|e| format!("the field view could not cut the program: {e}"))?;
+        cut.map_err(|e| camcraft_i18n::tf("the field view could not cut the program: {e}", &[format!("{}", e)]))?;
     }
     let (target, target_note, tol) = judged_target(world, cell);
     Ok(FieldView { stock, target: target.map(Arc::new), target_note, cell, tol, packed: None })
@@ -194,7 +194,7 @@ pub(crate) fn display_inputs(
     texels: f64,
 ) -> Result<(Vec<Triangle>, Vec<crate::stock_sim::Planned>, f64), String> {
     if !(texels.is_finite() && texels >= 1.0) {
-        return Err(format!("the field view needs a positive texel budget, not {texels}"));
+        return Err(camcraft_i18n::tf("the field view needs a positive texel budget, not {texels}", &[format!("{}", texels)]));
     }
     display_inputs_of(world, texels, plan_program(world)?, None)
 }
@@ -209,7 +209,7 @@ pub(crate) fn display_inputs_of(
     fallback_setup: Option<String>,
 ) -> Result<(Vec<Triangle>, Vec<crate::stock_sim::Planned>, f64), String> {
     if !(texels.is_finite() && texels >= 1.0) {
-        return Err(format!("the field view needs a positive texel budget, not {texels}"));
+        return Err(camcraft_i18n::tf("the field view needs a positive texel budget, not {texels}", &[format!("{}", texels)]));
     }
     // #541: the field eye has no box atom - said, never cut as a disc.
     if let Some(p) = planned.iter().find(|p| p.electrode.is_some()) {
@@ -227,7 +227,7 @@ pub(crate) fn display_inputs_of(
     let budget = ((sx * sy * sz).max(0.0) / texels).cbrt();
     let cell = auto_cell(if min_r.is_finite() { min_r } else { 1.0 }, sx, sy).max(budget);
     if !(cell.is_finite() && cell > 0.0) {
-        return Err(format!("the stock's extent gives no sane display cell ({cell})"));
+        return Err(camcraft_i18n::tf("the stock's extent gives no sane display cell ({cell})", &[format!("{}", cell)]));
     }
     Ok((stock_facets, planned, cell))
 }
@@ -236,7 +236,7 @@ pub(crate) fn display_inputs_of(
 pub(crate) fn build_stock(stock_facets: &[Triangle], cell: f64) -> Result<Stock, String> {
     let backend = Backend::Field { band: FIELD_BAND };
     Stock::from_facets(backend, &subdivide(stock_facets, cell), cell)
-        .map_err(|e| format!("the field view could not build the stock: {e}"))
+        .map_err(|e| camcraft_i18n::tf("the field view could not build the stock: {e}", &[format!("{}", e)]))
 }
 
 /// The model as a field at `cell`, or why it cannot be one.
@@ -268,7 +268,7 @@ pub(crate) fn build_target(part: &[Triangle], cell: f64) -> (Option<Stock>, Opti
     }
     match Stock::from_facets(Backend::Field { band: FIELD_BAND }, &subdivide(part, cell), cell) {
         Ok(t) => (Some(t), None),
-        Err(e) => (None, Some(format!("the model cannot be signed as a field: {e}"))),
+        Err(e) => (None, Some(camcraft_i18n::tf("the model cannot be signed as a field: {e}", &[format!("{}", e)]))),
     }
 }
 
@@ -278,7 +278,7 @@ pub(crate) fn build_target(part: &[Triangle], cell: f64) -> (Option<Stock>, Opti
 fn stock_facets(world: &flecs_ecs::prelude::World, setup: Option<&str>) -> Result<Vec<Triangle>, String> {
     let name = crate::setup::stock_entity_name(world, setup);
     let e = model::find_by_name(world, &name)
-        .ok_or_else(|| format!("no stock '{name}' - the eye draws material, not air"))?;
+        .ok_or_else(|| camcraft_i18n::tf("no stock '{name}' - the eye draws material, not air", &[format!("{}", name)]))?;
     let placed = model::transform_of(world, &e).unwrap_or_default();
     // #2177: the sim's own law - a square-turned stock is drawn as its
     // unturned twin (the same solid), an oblique one refused by name.

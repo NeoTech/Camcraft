@@ -131,10 +131,10 @@ pub fn check(p: &ViseParams, sc: &SelfCentering) -> Result<(), String> {
         ("base height", p.base_height),
     ] {
         if !v.is_finite() {
-            return Err(format!("vise {what} must be a finite length (got {v})"));
+            return Err(camcraft_i18n::tf("vise {what} must be a finite length (got {v})", &[format!("{}", what), format!("{}", v)]));
         }
         if v <= 0.0 {
-            return Err(format!("vise {what} must be more than zero (got {v} mm)"));
+            return Err(camcraft_i18n::tf("vise {what} must be more than zero (got {v} mm)", &[format!("{}", what), format!("{}", v)]));
         }
     }
     for (what, v) in [
@@ -146,61 +146,37 @@ pub fn check(p: &ViseParams, sc: &SelfCentering) -> Result<(), String> {
         ("grip step width", sc.grip_width),
     ] {
         if !v.is_finite() {
-            return Err(format!("vise {what} must be a finite length (got {v})"));
+            return Err(camcraft_i18n::tf("vise {what} must be a finite length (got {v})", &[format!("{}", what), format!("{}", v)]));
         }
         if v < 0.0 {
-            return Err(format!("vise {what} must not be negative (got {v} mm)"));
+            return Err(camcraft_i18n::tf("vise {what} must not be negative (got {v} mm)", &[format!("{}", what), format!("{}", v)]));
         }
     }
     if p.housing_length != 0.0 || p.housing_height != 0.0 {
-        return Err(format!(
-            "a self-centering vise has no screw housing: housing length and height must be 0 (got {} and {} mm)",
-            p.housing_length, p.housing_height
-        ));
+        return Err(camcraft_i18n::tf("a self-centering vise has no screw housing: housing length and height must be 0 (got {} and {} mm)", &[format!("{}", p.housing_length), format!("{}", p.housing_height)]));
     }
     if sc.min_opening >= p.max_opening {
-        return Err(format!(
-            "vise min opening {:.3} mm must be less than its max opening {:.3} mm",
-            sc.min_opening, p.max_opening
-        ));
+        return Err(camcraft_i18n::tf("vise min opening {:.3} mm must be less than its max opening {:.3} mm", &[format!("{:.3}", sc.min_opening), format!("{:.3}", p.max_opening)]));
     }
     if p.opening < sc.min_opening || p.opening > p.max_opening {
-        return Err(format!(
-            "vise jaw opening {:.3} mm is outside its clamping range {:.3}-{:.3} mm",
-            p.opening, sc.min_opening, p.max_opening
-        ));
+        return Err(camcraft_i18n::tf("vise jaw opening {:.3} mm is outside its clamping range {:.3}-{:.3} mm", &[format!("{:.3}", p.opening), format!("{:.3}", sc.min_opening), format!("{:.3}", p.max_opening)]));
     }
     if p.width < p.jaw_width {
-        return Err(format!(
-            "vise overall width {:.3} mm is narrower than its jaw width {:.3} mm",
-            p.width, p.jaw_width
-        ));
+        return Err(camcraft_i18n::tf("vise overall width {:.3} mm is narrower than its jaw width {:.3} mm", &[format!("{:.3}", p.width), format!("{:.3}", p.jaw_width)]));
     }
     if p.jaw_body_depth < p.jaw_thickness {
-        return Err(format!(
-            "vise jaw body depth {:.3} mm is less than its jaw thickness {:.3} mm",
-            p.jaw_body_depth, p.jaw_thickness
-        ));
+        return Err(camcraft_i18n::tf("vise jaw body depth {:.3} mm is less than its jaw thickness {:.3} mm", &[format!("{:.3}", p.jaw_body_depth), format!("{:.3}", p.jaw_thickness)]));
     }
     if (sc.lip_height > 0.0) != (sc.lip_depth > 0.0) {
-        return Err(format!(
-            "vise dovetail lip needs both a height and a depth, or neither (got lip height {} and lip depth {} mm)",
-            sc.lip_height, sc.lip_depth
-        ));
+        return Err(camcraft_i18n::tf("vise dovetail lip needs both a height and a depth, or neither (got lip height {} and lip depth {} mm)", &[format!("{}", sc.lip_height), format!("{}", sc.lip_depth)]));
     }
     if sc.lip_depth > p.jaw_body_depth {
-        return Err(format!(
-            "vise lip depth {:.3} mm is more than its jaw body depth {:.3} mm",
-            sc.lip_depth, p.jaw_body_depth
-        ));
+        return Err(camcraft_i18n::tf("vise lip depth {:.3} mm is more than its jaw body depth {:.3} mm", &[format!("{:.3}", sc.lip_depth), format!("{:.3}", p.jaw_body_depth)]));
     }
     check_grip(p, sc)?;
     let carry = p.max_opening + 2.0 * p.jaw_body_depth;
     if p.length < carry {
-        return Err(format!(
-            "vise overall length {:.3} mm must be at least the max opening and two jaw bodies ({carry:.3} mm) - the jaws ride on the body",
-            p.length
-        ));
+        return Err(camcraft_i18n::tf("vise overall length {:.3} mm must be at least the max opening and two jaw bodies ({carry:.3} mm) - the jaws ride on the body", &[format!("{:.3}", p.length), format!("{:.3}", carry)]));
     }
     Ok(())
 }
@@ -211,38 +187,22 @@ pub fn check(p: &ViseParams, sc: &SelfCentering) -> Result<(), String> {
 /// the stock - no vise closes that far).
 fn check_grip(p: &ViseParams, sc: &SelfCentering) -> Result<(), String> {
     if (sc.grip_depth > 0.0) != (sc.grip_width > 0.0) {
-        return Err(format!(
-            "vise grip step needs both a depth and a width, or neither (got grip step depth {} and grip step width {} mm)",
-            sc.grip_depth, sc.grip_width
-        ));
+        return Err(camcraft_i18n::tf("vise grip step needs both a depth and a width, or neither (got grip step depth {} and grip step width {} mm)", &[format!("{}", sc.grip_depth), format!("{}", sc.grip_width)]));
     }
     if !sc.has_grip() {
         return Ok(());
     }
     if sc.lip_height > 0.0 {
-        return Err(format!(
-            "a self-centering jaw is a dovetail or a grip jaw, not both: set the dovetail lip or the grip step to 0 (got lip height {} and grip step depth {} mm)",
-            sc.lip_height, sc.grip_depth
-        ));
+        return Err(camcraft_i18n::tf("a self-centering jaw is a dovetail or a grip jaw, not both: set the dovetail lip or the grip step to 0 (got lip height {} and grip step depth {} mm)", &[format!("{}", sc.lip_height), format!("{}", sc.grip_depth)]));
     }
     if sc.grip_depth >= p.jaw_height {
-        return Err(format!(
-            "vise grip step depth {:.3} mm must be less than its jaw height {:.3} mm",
-            sc.grip_depth, p.jaw_height
-        ));
+        return Err(camcraft_i18n::tf("vise grip step depth {:.3} mm must be less than its jaw height {:.3} mm", &[format!("{:.3}", sc.grip_depth), format!("{:.3}", p.jaw_height)]));
     }
     if sc.grip_width >= p.jaw_thickness {
-        return Err(format!(
-            "vise grip step width {:.3} mm must be less than its jaw thickness {:.3} mm",
-            sc.grip_width, p.jaw_thickness
-        ));
+        return Err(camcraft_i18n::tf("vise grip step width {:.3} mm must be less than its jaw thickness {:.3} mm", &[format!("{:.3}", sc.grip_width), format!("{:.3}", p.jaw_thickness)]));
     }
     if p.opening <= 2.0 * sc.grip_width {
-        return Err(format!(
-            "vise jaw opening {:.3} mm is not more than its two grip step widths ({:.3} mm): the ledges would meet under the stock",
-            p.opening,
-            2.0 * sc.grip_width
-        ));
+        return Err(camcraft_i18n::tf("vise jaw opening {:.3} mm is not more than its two grip step widths ({:.3} mm): the ledges would meet under the stock", &[format!("{:.3}", p.opening), format!("{:.3}", 2.0 * sc.grip_width)]));
     }
     Ok(())
 }
@@ -346,12 +306,12 @@ fn in_range(p: &ViseParams, sc: &SelfCentering, across: f64) -> Result<(), Strin
     if !across.is_finite() || across <= 0.0 {
         return Err("the stock has no width to clamp".into());
     }
-    let range = format!("the {} vise clamps {:.3}-{:.3} mm", p.base_name(), sc.min_opening, p.max_opening);
+    let range = camcraft_i18n::tf("the {} vise clamps {:.3}-{:.3} mm", &[format!("{}", p.base_name()), format!("{:.3}", sc.min_opening), format!("{:.3}", p.max_opening)]);
     if across > p.max_opening {
-        return Err(format!("the stock is {across:.3} mm across the jaws, wider than its clamping range: {range}"));
+        return Err(camcraft_i18n::tf("the stock is {across:.3} mm across the jaws, wider than its clamping range: {range}", &[format!("{:.3}", across), format!("{}", range)]));
     }
     if across < sc.min_opening {
-        return Err(format!("the stock is {across:.3} mm across the jaws, narrower than its clamping range: {range}"));
+        return Err(camcraft_i18n::tf("the stock is {across:.3} mm across the jaws, narrower than its clamping range: {range}", &[format!("{:.3}", across), format!("{}", range)]));
     }
     Ok(())
 }
@@ -390,9 +350,7 @@ pub fn opening_from_stock(p: &ViseParams, sc: &SelfCentering, pose: &Location, s
     }
     let off = 0.5 * (lo + hi);
     if off.abs() > CENTRE_TOL {
-        return Err(format!(
-            "the stock's centre is {off:.3} mm off the self-centering vise's centre along its jaws - the jaws clamp it centred; place the vise on the stock (Fit) first"
-        ));
+        return Err(camcraft_i18n::tf("the stock's centre is {off:.3} mm off the self-centering vise's centre along its jaws - the jaws clamp it centred; place the vise on the stock (Fit) first", &[format!("{:.3}", off)]));
     }
     let across = hi - lo;
     in_range(p, sc, across)?;

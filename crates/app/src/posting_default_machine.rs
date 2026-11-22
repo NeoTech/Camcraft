@@ -66,18 +66,18 @@ impl Default for KeptMachine {
 pub fn parse_default_machine(text: Result<&str, String>) -> Result<Value, String> {
     let file = DEFAULT_MCH_FILE.0;
     let advice = "mount a machine on the setup, or reinstall the file";
-    let text = text.map_err(|why| format!("the default machine file {file} cannot be read ({why}) - {advice}"))?;
+    let text = text.map_err(|why| camcraft_i18n::tf("the default machine file {file} cannot be read ({why}) - {advice}", &[format!("{}", file), format!("{}", why), format!("{}", advice)]))?;
     let v = serde_json::from_str::<Value>(text)
-        .map_err(|e| format!("the default machine file {file} is malformed ({e}) - {advice}"))?;
+        .map_err(|e| camcraft_i18n::tf("the default machine file {file} is malformed ({e}) - {advice}", &[format!("{}", file), format!("{}", e), format!("{}", advice)]))?;
     if !v.is_object() {
-        return Err(format!("the default machine file {file} is malformed (not a machine object) - {advice}"));
+        return Err(camcraft_i18n::tf("the default machine file {file} is malformed (not a machine object) - {advice}", &[format!("{}", file), format!("{}", advice)]));
     }
     let named = v.get("name").and_then(Value::as_str).is_some_and(|n| !n.trim().is_empty());
     if !named {
-        return Err(format!("the default machine file {file} is malformed (it has no machine name) - {advice}"));
+        return Err(camcraft_i18n::tf("the default machine file {file} is malformed (it has no machine name) - {advice}", &[format!("{}", file), format!("{}", advice)]));
     }
     if !v.pointer("/kinematics/static").is_some_and(Value::is_object) {
-        return Err(format!("the default machine file {file} is malformed (it has no kinematics.static section) - {advice}"));
+        return Err(camcraft_i18n::tf("the default machine file {file} is malformed (it has no kinematics.static section) - {advice}", &[format!("{}", file), format!("{}", advice)]));
     }
     Ok(v)
 }
@@ -137,7 +137,7 @@ pub(super) fn default_machine_problems(world: &World) -> Vec<String> {
             let named: Vec<&str> = bare.iter().map(String::as_str).filter(|n| !n.is_empty()).collect();
             let who = if named.is_empty() { "the setup".to_owned() } else { named.join(", ") };
             let operations: Vec<&str> = ops.iter().map(|(name, _)| name.as_str()).collect();
-            return vec![format!("machine of {who} for {}: {why}", operations.join(", "))];
+            return vec![camcraft_i18n::tf("machine of {who} for {}: {why}", &[format!("{}", who), format!("{}", operations.join(", ")), format!("{}", why)])];
         }
     };
     let m = default_limits(&v);
@@ -146,15 +146,10 @@ pub(super) fn default_machine_problems(world: &World) -> Vec<String> {
     match default_limit_check(world, &m, &ops) {
         Ok(c) if !c.is_ok() => {
             let more = if c.more > 0 { format!(" (+{} more)", c.more) } else { String::new() };
-            vec![format!(
-                "default machine {}: {} limit problem(s): {}{more} - {advice}",
-                m.model,
-                c.problems.len(),
-                c.problems.join("; ")
-            )]
+            vec![camcraft_i18n::tf("default machine {}: {} limit problem(s): {}{more} - {advice}", &[format!("{}", m.model), format!("{}", c.problems.len()), format!("{}", c.problems.join("; ")), format!("{}", more), format!("{}", advice)])]
         }
         Ok(_) => Vec::new(),
-        Err(err) => vec![format!("default machine: {err}")],
+        Err(err) => vec![camcraft_i18n::tf("default machine: {err}", &[format!("{}", err)])],
     }
 }
 
@@ -174,24 +169,24 @@ pub(super) fn default_limit_check(world: &World, m: &Machine, ops: &[(String, En
         }
     };
     for (name, e) in ops {
-        let op = model::operation_of(world, e).ok_or_else(|| format!("{name}: lost its operation"))?;
+        let op = model::operation_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its operation", &[format!("{}", name)]))?;
         let tool = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
-            .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: tool {} is not in the library", &[format!("{}", name), format!("{}", op.tool)]))?;
         let rpm = super::posted_rpm(&tool);
         if rpm > 0.0 {
             if let Some(hi) = m.spindle_max
                 && rpm > hi
             {
-                say(format!("{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0}", op.tool));
+                say(camcraft_i18n::tf("{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0}", &[format!("{}", name), format!("{}", op.tool), format!("{:.0}", rpm), format!("{:.0}", hi)]));
             }
             if let Some(lo) = m.spindle_min
                 && rpm < lo
             {
-                say(format!("{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0}", op.tool));
+                say(camcraft_i18n::tf("{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0}", &[format!("{}", name), format!("{}", op.tool), format!("{:.0}", rpm), format!("{:.0}", lo)]));
             }
         }
-        let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        let cache = model::toolpath_of(world, e).ok_or_else(|| camcraft_i18n::tf("{name}: lost its toolpath", &[format!("{}", name)]))?;
         for (i, mv) in cache.path.moves.iter().enumerate() {
             let Some(feed) = mv.feed else { continue };
             let d = [mv.to.x - mv.from.x, mv.to.y - mv.from.y, mv.to.z - mv.from.z];
@@ -199,7 +194,7 @@ pub(super) fn default_limit_check(world: &World, m: &Machine, ops: &[(String, En
                 && feed > ceil
             {
                 let axis = m.axes.iter().find(|a| a.feed == Some(ceil)).map_or("an axis", |a| a.name.as_str());
-                say(format!("{name}: move {i} feeds {feed:.0} mm/min, {axis} tops out at {ceil:.0}"));
+                say(camcraft_i18n::tf("{name}: move {i} feeds {feed:.0} mm/min, {axis} tops out at {ceil:.0}", &[format!("{}", name), format!("{}", i), format!("{:.0}", feed), format!("{}", axis), format!("{:.0}", ceil)]));
             }
         }
     }

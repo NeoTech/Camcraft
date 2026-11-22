@@ -59,7 +59,7 @@ pub fn solve(mates: &[(MateDatum, MateDatum)], offset: LocateOffset) -> Result<L
         return Err("pick at least one mate - a part face or point, then the fixture face or point it sits on".into());
     }
     if mates.len() > MAX_MATES {
-        return Err(format!("three mates fully locate a part (floor, jaw, stop) - remove the {} extra", mates.len() - MAX_MATES));
+        return Err(camcraft_i18n::tf("three mates fully locate a part (floor, jaw, stop) - remove the {} extra", &[format!("{}", mates.len() - MAX_MATES)]));
     }
     if !offset.is_finite() {
         return Err("the offset and turn must be finite numbers".into());
@@ -120,16 +120,14 @@ fn orient(mates: &[(MateDatum, MateDatum)]) -> Result<[f64; 4], String> {
         match spin {
             Spin::Free => {
                 rot = normalize_quat(quat_mul(shortest_arc(cur, target), rot))
-                    .ok_or_else(|| format!("mate {k}: the faces do not make a usable turn - re-pick them"))?;
+                    .ok_or_else(|| camcraft_i18n::tf("mate {k}: the faces do not make a usable turn - re-pick them", &[format!("{}", k)]))?;
                 spin = Spin::About(*nf);
             }
             Spin::About(axis) => {
                 let (ca, ta) = (dot(cur, axis), dot(target, axis));
                 if (ca - ta).abs() > NORMAL_TOL {
-                    return Err(format!(
-                        "mate {k}: the faces cannot meet face to face while the first face mate holds - they stand at \
-                         different angles to it; pick faces that match (a jaw square to the floor takes a side square to the bottom)"
-                    ));
+                    return Err(camcraft_i18n::tf("mate {k}: the faces cannot meet face to face while the first face mate holds - they stand at \
+                         different angles to it; pick faces that match (a jaw square to the floor takes a side square to the bottom)", &[format!("{}", k)]));
                 }
                 let c = sub(cur, scale(axis, ca));
                 let g = sub(target, scale(axis, ta));
@@ -138,7 +136,7 @@ fn orient(mates: &[(MateDatum, MateDatum)]) -> Result<[f64; 4], String> {
                     let h = 0.5 * theta;
                     let q = [axis[0] * h.sin(), axis[1] * h.sin(), axis[2] * h.sin(), h.cos()];
                     rot = normalize_quat(quat_mul(q, rot))
-                        .ok_or_else(|| format!("mate {k}: the faces do not make a usable turn - re-pick them"))?;
+                        .ok_or_else(|| camcraft_i18n::tf("mate {k}: the faces do not make a usable turn - re-pick them", &[format!("{}", k)]))?;
                     spin = Spin::Locked;
                 }
                 // Else parallel to the first face: no turn to take; its
@@ -146,9 +144,7 @@ fn orient(mates: &[(MateDatum, MateDatum)]) -> Result<[f64; 4], String> {
             }
             Spin::Locked => {
                 if norm(sub(cur, target)) > NORMAL_TOL {
-                    return Err(format!(
-                        "mate {k}: the faces cannot meet face to face - the earlier mates already fix the part's turn"
-                    ));
+                    return Err(camcraft_i18n::tf("mate {k}: the faces cannot meet face to face - the earlier mates already fix the part's turn", &[format!("{}", k)]));
                 }
             }
         }
@@ -191,21 +187,15 @@ fn refuse_repeats(mates: &[(MateDatum, MateDatum)]) -> Result<(), String> {
             } else {
                 continue;
             };
-            return Err(format!(
-                "mate {} picks the same {side} point or face as mate {} (coincident) - pick a distinct one",
-                j + 1,
-                i + 1
-            ));
+            return Err(camcraft_i18n::tf("mate {} picks the same {side} point or face as mate {} (coincident) - pick a distinct one", &[format!("{}", j + 1), format!("{}", side), format!("{}", i + 1)]));
         }
     }
     Ok(())
 }
 
 fn conflict(k: usize, what: &str, off: f64) -> String {
-    format!(
-        "mate {k}: the {what} cannot touch while the earlier mates hold - {off:.3} mm apart; \
-         check the picks, or their order (the floor first, then the jaw, then the stop)"
-    )
+    camcraft_i18n::tf("mate {k}: the {what} cannot touch while the earlier mates hold - {off:.3} mm apart; \
+         check the picks, or their order (the floor first, then the jaw, then the stop)", &[format!("{}", k), format!("{}", what), format!("{:.3}", off)])
 }
 
 /// The translation, pinned one direction at a time.

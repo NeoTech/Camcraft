@@ -45,7 +45,7 @@ pub(super) fn opt_nums<const N: usize>(a: &Map<String, Value>, key: &str) -> Res
         None | Some(Value::Null) => return Ok(None),
         Some(v) => v,
     };
-    let bad = || format!("\"{key}\" must be an array of {N} finite numbers, got {v}");
+    let bad = || camcraft_i18n::tf("\"{key}\" must be an array of {N} finite numbers, got {v}", &[format!("{}", key), format!("{}", N), format!("{}", v)]);
     let arr = v.as_array().filter(|x| x.len() == N).ok_or_else(bad)?;
     let mut out = [0.0; N];
     for (o, x) in out.iter_mut().zip(arr) {
@@ -69,7 +69,7 @@ pub(super) fn loc_view(loc: &Location) -> Value {
 /// the active one - `None` only on a document with no setups.
 pub(super) fn setup_or_active(env: &Env, a: &Map<String, Value>) -> Result<Option<String>, String> {
     match opt_str(a, "setup")? {
-        Some(s) if !setup::exists(&env.world, s) => Err(format!("no setup named '{s}'")),
+        Some(s) if !setup::exists(&env.world, s) => Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)])),
         Some(s) => Ok(Some(s.to_owned())),
         None => Ok(setup::active(&env.world)),
     }
@@ -91,7 +91,7 @@ fn add_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
 fn activate_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let name = req_str(a, "name")?;
     if setup::active(&env.world).as_deref() == Some(name) {
-        return Err(format!("setup '{name}' is already active"));
+        return Err(camcraft_i18n::tf("setup '{name}' is already active", &[format!("{}", name)]));
     }
     let cmd = ActivateSetup::new(&env.world, Some(name)).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -104,7 +104,7 @@ fn set_operation_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         None => return Err("\"setup\" is required (a declared setup, or null for the first position)".into()),
         Some(Value::Null) => None,
         Some(Value::String(s)) => Some(s.as_str()),
-        Some(other) => return Err(format!("\"setup\" must be a string or null, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"setup\" must be a string or null, got {other}", &[format!("{}", other)])),
     };
     let cmd = SetOperationSetup::new(&env.world, op, target).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -128,7 +128,7 @@ fn pick(span: (f64, f64), word: Option<&str>, axis: &str) -> Result<f64, String>
         Some("min") => Ok(span.0),
         Some("max") => Ok(span.1),
         Some("center") => Ok(0.5 * (span.0 + span.1)),
-        _ => Err(format!("\"stock_point.{axis}\" must be \"min\", \"center\" or \"max\"")),
+        _ => Err(camcraft_i18n::tf("\"stock_point.{axis}\" must be \"min\", \"center\" or \"max\"", &[format!("{}", axis)])),
     }
 }
 
@@ -146,7 +146,7 @@ fn set_wcs(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         }
         (None, Some(Value::Object(sp))) => {
             if let Some(k) = sp.keys().find(|k| !["x", "y", "z"].contains(&k.as_str())) {
-                return Err(format!("\"stock_point\" has no axis \"{k}\" - give x, y and z"));
+                return Err(camcraft_i18n::tf("\"stock_point\" has no axis \"{k}\" - give x, y and z", &[format!("{}", k)]));
             }
             let b = model::stock_world_aabb_for(w, active.as_deref())
                 .ok_or("the active setup has no stock to measure from - set_stock first")?;
@@ -158,7 +158,7 @@ fn set_wcs(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
                 pick((b.min.z, b.max.z), word("z"), "z")? + d[2],
             )
         }
-        (None, Some(other)) => return Err(format!("\"stock_point\" must be an object {{x, y, z}}, got {other}")),
+        (None, Some(other)) => return Err(camcraft_i18n::tf("\"stock_point\" must be an object {{x, y, z}}, got {other}", &[format!("{}", other)])),
         _ => return Err("give exactly one of \"origin\" or \"stock_point\"".into()),
     };
     // Omitted rotation keeps the WCS's current one (identity when unplaced).
@@ -218,15 +218,15 @@ fn set_program(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         None => {}
         Some(Value::Null) => next.number = None,
         Some(v) => {
-            let n = v.as_u64().ok_or_else(|| format!("\"number\" must be a whole number 1 to 9999 or null, got {v}"))?;
-            next.number = Some(u32::try_from(n).map_err(|_| format!("program number {n} is outside 1 to 9999"))?);
+            let n = v.as_u64().ok_or_else(|| camcraft_i18n::tf("\"number\" must be a whole number 1 to 9999 or null, got {v}", &[format!("{}", v)]))?;
+            next.number = Some(u32::try_from(n).map_err(|_| camcraft_i18n::tf("program number {n} is outside 1 to 9999", &[format!("{}", n)]))?);
         }
     }
     match a.get("comment") {
         None => {}
         Some(Value::Null) => next.comment = None,
         Some(Value::String(c)) => next.comment = Some(c.clone()),
-        Some(other) => return Err(format!("\"comment\" must be a string or null, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"comment\" must be a string or null, got {other}", &[format!("{}", other)])),
     }
     let cmd = SetProgramInfo::new(&env.world, next).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
@@ -242,7 +242,7 @@ fn set_setup_post(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String
         Some(Value::String(s)) if s.trim().is_empty() => return Err("\"post\" must not be empty (null clears it)".into()),
         Some(Value::String(s)) if s.trim().to_ascii_lowercase().ends_with(".cps") => Some(PostRef::File(s.trim().to_owned())),
         Some(Value::String(s)) => Some(PostRef::Named(s.trim().to_owned())),
-        Some(other) => return Err(format!("\"post\" must be a string or null, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"post\" must be a string or null, got {other}", &[format!("{}", other)])),
     };
     let name = setup_or_active(env, a)?
         .ok_or("no setup is declared - add_setup first (the document's post is select_post's)")?;
@@ -264,7 +264,7 @@ fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     let clear = match a.get("clear") {
         None | Some(Value::Null) | Some(Value::Bool(false)) => false,
         Some(Value::Bool(true)) => true,
-        Some(other) => return Err(format!("\"clear\" must be true or false, got {other}")),
+        Some(other) => return Err(camcraft_i18n::tf("\"clear\" must be true or false, got {other}", &[format!("{}", other)])),
     };
     if usize::from(builtin.is_some()) + usize::from(path.is_some()) + usize::from(clear) != 1 {
         return Err("give exactly one of \"builtin\", \"path\" or \"clear\": true".into());
@@ -272,11 +272,11 @@ fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     if let Some(b) = builtin
         && !crate::posting::MACHINES.iter().any(|(n, _)| *n == b)
     {
-        return Err(format!("no built-in machine named '{b}' - names: {}", machine_names().join(", ")));
+        return Err(camcraft_i18n::tf("no built-in machine named '{b}' - names: {}", &[format!("{}", b), format!("{}", machine_names().join(", "))]));
     }
     let w = &env.world;
     let target = match opt_str(a, "setup")? {
-        Some(s) if !setup::exists(w, s) => return Err(format!("no setup named '{s}'")),
+        Some(s) if !setup::exists(w, s) => return Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)])),
         s => s,
     };
     match target {

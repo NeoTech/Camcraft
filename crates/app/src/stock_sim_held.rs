@@ -94,9 +94,7 @@ fn default_engine() -> Backend {
 pub fn engine_note() -> Option<String> {
     match engine() {
         Backend::Column => None,
-        Backend::Field { band } => Some(format!(
-            "carried stock judged by the field engine (band {band}, development switch {CARRY_ENGINE_ENV}), not the shipped column engine"
-        )),
+        Backend::Field { band } => Some(camcraft_i18n::tf("carried stock judged by the field engine (band {band}, development switch {CARRY_ENGINE_ENV}), not the shipped column engine", &[format!("{}", band), format!("{}", CARRY_ENGINE_ENV)])),
     }
 }
 

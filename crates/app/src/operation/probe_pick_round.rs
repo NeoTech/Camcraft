@@ -27,9 +27,9 @@ fn vertical(n: Point3) -> bool {
 fn ring_circle(pts: &[Point3], what: &str) -> Result<(Point2, f64, f64), String> {
     let (lo, hi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), p| (l.min(p.z), h.max(p.z)));
     if !(hi.is_finite() && lo.is_finite()) || hi - lo > PICK_TOL {
-        return Err(format!("the picked {what} is not level - a bore or boss centre is found on a vertical round wall"));
+        return Err(camcraft_i18n::tf("the picked {what} is not level - a bore or boss centre is found on a vertical round wall", &[format!("{}", what)]));
     }
-    let not_round = || format!("the picked {what} is not a circle - a bore or boss centre needs a round wall");
+    let not_round = || camcraft_i18n::tf("the picked {what} is not a circle - a bore or boss centre needs a round wall", &[format!("{}", what)]);
     let ring = Loop::new(pts.iter().map(|p| Point2::new(p.x, p.y)).collect()).map_err(|_| not_round())?;
     let region = Region::new(vec![ring]).map_err(|_| not_round())?;
     let (c, r) = super::circle_of_region(&region, crate::units::Unit::Millimeters).map_err(|_| not_round())?;
@@ -52,14 +52,14 @@ fn side_of(cx: &PickCtx, faces: &[usize], c: Point2, what: &str) -> Result<Probe
         lean += f.area * (n.x * (m.x - c.x) + n.y * (m.y - c.y)).signum();
     }
     if walls == 0 {
-        return Err(format!("the picked {what} has no vertical wall - a bore or boss centre is touched on one"));
+        return Err(camcraft_i18n::tf("the picked {what} has no vertical wall - a bore or boss centre is touched on one", &[format!("{}", what)]));
     }
     if lean < 0.0 {
         Ok(ProbeMode::Bore)
     } else if lean > 0.0 {
         Ok(ProbeMode::Boss)
     } else {
-        Err(format!("the picked {what} faces neither into a hole nor out of a boss"))
+        Err(camcraft_i18n::tf("the picked {what} faces neither into a hole nor out of a boss", &[format!("{}", what)]))
     }
 }
 

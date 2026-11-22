@@ -38,15 +38,13 @@ impl SetWcsOrigin {
         let active = crate::setup::active(world);
         let label = crate::setup::wcs_label(world, active.as_deref());
         if !location.rot.iter().all(|v| v.is_finite()) {
-            return Err(CommandError::Invalid(format!(
-                "{label}: rotation must be finite (check the angle inputs)"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{label}: rotation must be finite (check the angle inputs)", &[format!("{}", label)])));
         }
         location.rot = normalize_quat(location.rot).ok_or_else(|| {
-            CommandError::Invalid(format!("{label}: rotation is degenerate (zero norm)"))
+            CommandError::Invalid(camcraft_i18n::tf("{label}: rotation is degenerate (zero norm)", &[format!("{}", label)]))
         })?;
         if !location.pos.is_finite() {
-            return Err(CommandError::Invalid(format!("{label}: origin must be finite")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{label}: origin must be finite", &[format!("{}", label)])));
         }
         let entity_name = crate::setup::wcs_entity_name(world, active.as_deref());
         let prev = match model::find_by_name(world, &entity_name) {
@@ -83,15 +81,13 @@ impl SetWcsOrigin {
         let mut location = location;
         let label = crate::setup::wcs_label(world, setup);
         if !location.rot.iter().all(|v| v.is_finite()) {
-            return Err(CommandError::Invalid(format!(
-                "{label}: rotation must be finite (check the angle inputs)"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{label}: rotation must be finite (check the angle inputs)", &[format!("{}", label)])));
         }
         location.rot = normalize_quat(location.rot).ok_or_else(|| {
-            CommandError::Invalid(format!("{label}: rotation is degenerate (zero norm)"))
+            CommandError::Invalid(camcraft_i18n::tf("{label}: rotation is degenerate (zero norm)", &[format!("{}", label)]))
         })?;
         if !location.pos.is_finite() {
-            return Err(CommandError::Invalid(format!("{label}: origin must be finite")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{label}: origin must be finite", &[format!("{}", label)])));
         }
         let entity_name = crate::setup::wcs_entity_name(world, setup);
         let prev = match model::find_by_name(world, &entity_name) {
@@ -170,7 +166,7 @@ pub fn place_setup_origin(world: &World, setup: &str, at: &OriginAt) -> Result<L
     }?;
     let pos = crate::geometry::Point3::new(pos[0], pos[1], pos[2]);
     if !pos.is_finite() {
-        return Err(CommandError::Invalid(format!("{label}: origin must be finite")));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("{label}: origin must be finite", &[format!("{}", label)])));
     }
     Ok(Location { pos, rot })
 }

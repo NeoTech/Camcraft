@@ -51,11 +51,11 @@ fn set_work_material(env: &mut Env, args: &Map<String, Value>) -> Result<Value, 
 
 fn material_arg(tool: &str, args: &Map<String, Value>) -> Result<Option<WorkMaterial>, String> {
     match args.get("material") {
-        None => Err(format!("{tool} needs \"material\" (a material word, or null to clear)")),
+        None => Err(camcraft_i18n::tf("{tool} needs \"material\" (a material word, or null to clear)", &[format!("{}", tool)])),
         Some(Value::Null) => Ok(None),
         Some(Value::String(w)) => WorkMaterial::from_word(w).map(Some).ok_or_else(|| {
             let words: Vec<&str> = WorkMaterial::ALL.iter().map(|m| m.word()).collect();
-            format!("unknown workpiece material '{w}' (one of {})", words.join(", "))
+            camcraft_i18n::tf("unknown workpiece material '{w}' (one of {})", &[format!("{}", w), format!("{}", words.join(", "))])
         }),
         Some(_) => Err("\"material\" must be a material word or null".to_owned()),
     }

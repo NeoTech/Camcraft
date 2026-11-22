@@ -28,7 +28,7 @@ pub(super) const TOOLS: &[Tool] = &[
 ];
 
 fn tool_of(env: &Env, name: &str) -> Result<(crate::tools::Tool, Option<SpunProfile>), String> {
-    let e = model::find_by_name(&env.world, name).ok_or_else(|| format!("no tool named '{name}'"))?;
+    let e = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no tool named '{name}'", &[format!("{}", name)]))?;
     let t = model::tool_of(&env.world, &e).ok_or_else(|| format!("'{name}' is not a tool"))?;
     Ok((t, tool_cutter::cutter_of(&env.world, &e)))
 }
@@ -74,7 +74,7 @@ fn set_params(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         Some(_) => return Err("\"params\" must be an object of numbers".to_owned()),
     };
     for (k, v) in params {
-        let x = v.as_f64().ok_or_else(|| format!("params.{k} must be a number"))?;
+        let x = v.as_f64().ok_or_else(|| camcraft_i18n::tf("params.{k} must be a number", &[format!("{}", k)]))?;
         match k.as_str() {
             "diameter" => next.diameter = x,
             "corner_r" => next.corner_r = x,
@@ -82,14 +82,14 @@ fn set_params(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
             "flute_len" => next.flute_len = x,
             "shank_d" => next.shank_d = x,
             "shank_len" => next.shank_len = x,
-            _ => return Err(format!("params.{k} is not a cutter parameter (one of {})", PARAMS.join(", "))),
+            _ => return Err(camcraft_i18n::tf("params.{k} is not a cutter parameter (one of {})", &[format!("{}", k), format!("{}", PARAMS.join(", "))])),
         }
     }
     let points = match a.get("neck") {
         None => drawn.as_ref().map(|s| cutter_fit::refit(&old, &next, s.points())),
         Some(Value::Null) => None,
         Some(Value::Object(m)) => {
-            let n = |k: &str| m.get(k).and_then(Value::as_f64).ok_or_else(|| format!("neck.{k} must be a number"));
+            let n = |k: &str| m.get(k).and_then(Value::as_f64).ok_or_else(|| camcraft_i18n::tf("neck.{k} must be a number", &[format!("{}", k)]));
             let neck = Neck { d: n("diameter")?, len: n("length")? };
             Some(cutter_fit::necked(&next, neck).map_err(|e| format!("tool '{name}': neck: {e}"))?)
         }
@@ -105,7 +105,7 @@ fn set_params(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
 fn read_points(v: &Value) -> Result<Vec<SpunPoint>, String> {
     let rows = v.as_array().ok_or("\"points\" must be an array of [z, r, arc] rows")?;
     if rows.len() > crate::spun::MAX_POINTS {
-        return Err(format!("\"points\" holds more than {} rows", crate::spun::MAX_POINTS));
+        return Err(camcraft_i18n::tf("\"points\" holds more than {} rows", &[format!("{}", crate::spun::MAX_POINTS)]));
     }
     rows.iter()
         .enumerate()
@@ -114,7 +114,7 @@ fn read_points(v: &Value) -> Result<Vec<SpunPoint>, String> {
             match n.as_deref() {
                 Some([z, r]) if row.as_array().is_some_and(|a| a.len() == 2) => Ok(SpunPoint::line(*z, *r)),
                 Some([z, r, arc]) if row.as_array().is_some_and(|a| a.len() == 3) => Ok(SpunPoint { z: *z, r: *r, arc: *arc }),
-                _ => Err(format!("point {} must be [z, r] or [z, r, arc] numbers", i + 1)),
+                _ => Err(camcraft_i18n::tf("point {} must be [z, r] or [z, r, arc] numbers", &[format!("{}", i + 1)])),
             }
         })
         .collect()

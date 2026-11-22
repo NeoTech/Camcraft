@@ -65,7 +65,7 @@ fn lost_key(patch: &Value, kept: &Value, path: &str) -> Option<String> {
 
 /// The MCP definition uses the same `edm.codes` path as machine files.
 pub(super) fn definition(machine: &Machine) -> Result<Value, String> {
-    let mut value = serde_json::to_value(machine).map_err(|e| format!("machine unreadable: {e}"))?;
+    let mut value = serde_json::to_value(machine).map_err(|e| camcraft_i18n::tf("machine unreadable: {e}", &[format!("{}", e)]))?;
     if let Some(codes) = value.as_object_mut().and_then(|m| m.remove("edm_codes")) {
         if !value["edm"].is_object() {
             value["edm"] = json!({});
@@ -82,16 +82,16 @@ fn from_definition(mut value: Value) -> Result<Machine, String> {
         let entries = codes.as_object().ok_or("patch refused: edm.codes must be an object")?;
         for (name, text) in entries {
             let Some(text) = text.as_str() else {
-                return Err(format!("patch refused: edm.codes.{name} must be control text"));
+                return Err(camcraft_i18n::tf("patch refused: edm.codes.{name} must be control text", &[format!("{}", name)]));
             };
             let entry = std::iter::once((name.clone(), text.to_owned())).collect();
             if !crate::machine::edm_codes::codes_sane(&entry) {
-                return Err(format!("patch refused: edm.codes.{name}: use a lowercase code name and nonblank printable ASCII text of at most 64 characters without parentheses"));
+                return Err(camcraft_i18n::tf("patch refused: edm.codes.{name}: use a lowercase code name and nonblank printable ASCII text of at most 64 characters without parentheses", &[format!("{}", name)]));
             }
         }
         value["edm_codes"] = codes;
     }
-    serde_json::from_value(value).map_err(|e| format!("patch refused: {e}"))
+    serde_json::from_value(value).map_err(|e| camcraft_i18n::tf("patch refused: {e}", &[format!("{}", e)]))
 }
 
 fn edit_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -101,9 +101,9 @@ fn edit_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     }
     let w = &env.world;
     let target = match opt_str(a, "setup")? {
-        Some(s) if !setup::exists(w, s) => return Err(format!("no setup named '{s}'")),
+        Some(s) if !setup::exists(w, s) => return Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)])),
         Some(s) if crate::setup_mount::own_machine(w, Some(s)).is_none() => {
-            return Err(format!("setup '{s}' follows the document's machine; edit that (omit setup) or give it its own first"));
+            return Err(camcraft_i18n::tf("setup '{s}' follows the document's machine; edit that (omit setup) or give it its own first", &[format!("{}", s)]));
         }
         s => s,
     };
@@ -114,19 +114,19 @@ fn edit_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     let next = from_definition(value)?;
     let kept = definition(&next)?;
     if let Some(k) = lost_key(patch, &kept, "") {
-        return Err(format!("patch refused: unknown key '{k}' (see get_job machine.definition for the keys)"));
+        return Err(camcraft_i18n::tf("patch refused: unknown key '{k}' (see get_job machine.definition for the keys)", &[format!("{}", k)]));
     }
     if let Some(r) = next.edm.as_ref().and_then(|e| e.refusal()) {
-        return Err(format!("patch refused: {r}"));
+        return Err(camcraft_i18n::tf("patch refused: {r}", &[format!("{}", r)]));
     }
     let k = machine::kind(Some(&next));
     // A kind edit cannot establish a work spindle; load its machine definition instead.
     let turning = |kind| matches!(kind, machine::Kind::Lathe | machine::Kind::MillTurn);
     if turning(k) && !turning(machine::kind(Some(&mounted))) {
-        return Err(format!("patch refused: kind: machine '{}' has no established turning capability; load a turning machine file instead", mounted.model));
+        return Err(camcraft_i18n::tf("patch refused: kind: machine '{}' has no established turning capability; load a turning machine file instead", &[format!("{}", mounted.model)]));
     }
     if next.edm.as_ref().is_some_and(|e| !e.fits(k)) {
-        return Err(format!("patch refused: edm: states a key this machine kind ({k:?}) does not take (a wire states no sinker key, a sinker no wire key, other kinds no edm section)"));
+        return Err(camcraft_i18n::tf("patch refused: edm: states a key this machine kind ({k:?}) does not take (a wire states no sinker key, a sinker no wire key, other kinds no edm section)", &[format!("{:?}", k)]));
     }
     if next == mounted {
         return Err("patch changes nothing".into());

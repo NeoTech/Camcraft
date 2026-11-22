@@ -170,10 +170,7 @@ fn converted(path: &Path, _budget: usize) -> Result<import::Graded, CommandError
 
 /// The refusal of a qualified native file where no converter can run.
 fn no_converter(path: &Path) -> String {
-    format!(
-        "importing .{} needs the desktop app with cadmpeg and a file on disk; export the part to STEP first",
-        native::extension(path)
-    )
+    camcraft_i18n::tf("importing .{} needs the desktop app with cadmpeg and a file on disk; export the part to STEP first", &[format!("{}", native::extension(path))])
 }
 
 /// The facet budget an import runs under, checked before any parsing.
@@ -195,11 +192,7 @@ fn checked_budget(path: &Path, facet_budget: Option<u64>) -> Result<usize, Comma
             let step = route == native::Route::Converted
                 || matches!(import::format_from_path(path), Ok(import::Format::Step));
             if !step {
-                return Err(CommandError::Invalid(format!(
-                    "a {} applies to STEP files only, not {}",
-                    step_budget::NAME,
-                    path.display()
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("a {} applies to STEP files only, not {}", &[format!("{}", step_budget::NAME), format!("{}", path.display())])));
             }
             step_budget::check(b).map_err(CommandError::Invalid)
         }

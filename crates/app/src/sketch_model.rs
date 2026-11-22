@@ -104,10 +104,7 @@ pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, param
         if let SrcRef::Selection(items) = src {
             for g in items {
                 if sketch::find(world, &g.entity).is_none() {
-                    return Some(format!(
-                        "'{}' is a DXF profile and cannot be combined with model features in '{}' in one operation",
-                        profiles[0], g.entity
-                    ));
+                    return Some(camcraft_i18n::tf("'{}' is a DXF profile and cannot be combined with model features in '{}' in one operation", &[format!("{}", profiles[0]), format!("{}", g.entity)]));
                 }
             }
             if matches!(params, OpParams::WireContour(_)) {
@@ -118,42 +115,27 @@ pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, param
                 params,
                 OpParams::Contour { .. } | OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. }
             ) {
-                return Some(format!(
-                    "'{}' is a DXF profile - an operation takes the whole profile as its source; picked chains of a profile are not supported yet",
-                    profiles[0]
-                ));
+                return Some(camcraft_i18n::tf("'{}' is a DXF profile - an operation takes the whole profile as its source; picked chains of a profile are not supported yet", &[format!("{}", profiles[0])]));
             }
         }
         if !admits(params) {
-            return Some(format!(
-                "a {kind} operation needs a solid model - '{}' is a DXF profile, a virtual model reference with no solid",
-                profiles[0]
-            ));
+            return Some(camcraft_i18n::tf("a {kind} operation needs a solid model - '{}' is a DXF profile, a virtual model reference with no solid", &[format!("{}", kind), format!("{}", profiles[0])]));
         }
         if let Some(t) = params.tilt() {
             let _ = t;
-            return Some(format!(
-                "a 3+2 tilted operation is not supported on DXF profile '{}' - reset orientation to World",
-                profiles[0]
-            ));
+            return Some(camcraft_i18n::tf("a 3+2 tilted operation is not supported on DXF profile '{}' - reset orientation to World", &[format!("{}", profiles[0])]));
         }
         for name in profiles {
             let home = sketch::find(world, &name).and_then(|(_, s)| crate::setup::effective(world, s.setup.as_deref()));
             if home != crate::setup::effective(world, declared) {
-                return Some(format!(
-                    "'{name}' is a DXF profile on the stock of {} - an operation cuts the profiles of its own setup only",
-                    home.map_or_else(|| "another setup".to_owned(), |s| format!("setup '{s}'"))
-                ));
+                return Some(camcraft_i18n::tf("'{name}' is a DXF profile on the stock of {} - an operation cuts the profiles of its own setup only", &[format!("{}", name), format!("{}", home.map_or_else(|| "another setup".to_owned(), |s| format!("setup '{s}'")))]));
             }
         }
     }
     if cuts_a_solid(params)
         && let Some(v) = of(world, declared)
     {
-        return Some(format!(
-            "a {kind} operation needs a solid model - the setup has only its stock and the DXF profile '{}', a virtual model reference with no solid",
-            v.profiles.first().map_or("", String::as_str)
-        ));
+        return Some(camcraft_i18n::tf("a {kind} operation needs a solid model - the setup has only its stock and the DXF profile '{}', a virtual model reference with no solid", &[format!("{}", kind), format!("{}", v.profiles.first().map_or("", String::as_str))]));
     }
     None
 }
@@ -164,18 +146,13 @@ pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, param
 pub fn checked_against(world: &World, op: &Operation) -> Option<String> {
     if crate::operation::wire_sketch::selected(&op.src, &op.params) {
         let (name, chain) = crate::operation::wire_sketch::pick(world, &op.src).ok()?;
-        return Some(format!("checked against the stock and selected DXF chain {} in '{name}' through the stock height", chain.id));
+        return Some(camcraft_i18n::tf("checked against the stock and selected DXF chain {} in '{name}' through the stock height", &[format!("{}", chain.id), format!("{}", name)]));
     }
     let profiles = source_profiles(world, &op.src);
     let name = profiles.first()?;
     let (_, profile) = sketch::find(world, name)?;
     let chains = profile.data.chains();
-    Some(format!(
-        "checked against the stock '{}' and the chains of the DXF profile '{name}' ({} closed, {} open) - there is no solid model",
-        crate::setup::stock_entity_name(world, op.setup.as_deref()),
-        chains.closed.len(),
-        chains.open.len(),
-    ))
+    Some(camcraft_i18n::tf("checked against the stock '{}' and the chains of the DXF profile '{name}' ({} closed, {} open) - there is no solid model", &[format!("{}", crate::setup::stock_entity_name(world, op.setup.as_deref())), format!("{}", name), format!("{}", chains.closed.len()), format!("{}", chains.open.len())]))
 }
 
 /// The generation door: an operation the profile law refuses, or a non-Contour
@@ -196,12 +173,9 @@ pub fn generation_problem(world: &World, op: &Operation) -> Option<String> {
             return None;
         }
         return source_profiles(world, &op.src).first().map(|name| {
-            format!(
-                "a {} operation on the DXF profile '{name}' needs one picked chain - pick one closed slot outline or one open centerline",
-                op.params.kind()
-            )
+            camcraft_i18n::tf("a {} operation on the DXF profile '{name}' needs one picked chain - pick one closed slot outline or one open centerline", &[format!("{}", op.params.kind()), format!("{}", name)])
         });
     }
     checked_against(world, op)
-        .map(|what| format!("this operation is {what}; a toolpath from the chains of a DXF profile is not generated yet"))
+        .map(|what| camcraft_i18n::tf("this operation is {what}; a toolpath from the chains of a DXF profile is not generated yet", &[format!("{}", what)]))
 }

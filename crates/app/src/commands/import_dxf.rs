@@ -56,9 +56,9 @@ impl ImportDxf {
     pub fn new(world: &World, setup: Option<&str>, path: &Path, options: &DxfOptions) -> Result<Self, CommandError> {
         check_extension(path)?;
         let cap = u64::try_from(dxf::Limits::default().max_bytes).unwrap_or(u64::MAX);
-        let read_err = |e: std::io::Error| CommandError::Dxf(format!("cannot read {}: {e}", path.display()));
+        let read_err = |e: std::io::Error| CommandError::Dxf(camcraft_i18n::tf("cannot read {}: {e}", &[format!("{}", path.display()), format!("{}", e)]));
         if std::fs::metadata(path).map_err(read_err)?.len() > cap {
-            return Err(CommandError::Dxf(format!("{} is larger than the {cap} byte limit", path.display())));
+            return Err(CommandError::Dxf(camcraft_i18n::tf("{} is larger than the {cap} byte limit", &[format!("{}", path.display()), format!("{}", cap)])));
         }
         let data = std::fs::read(path).map_err(read_err)?;
         Self::build(world, setup, path, &data, options)
@@ -88,10 +88,7 @@ impl ImportDxf {
         match sketch::stock_face(world, setup.as_deref()) {
             Ok(Some(_)) => {}
             Ok(None) => {
-                return Err(CommandError::Invalid(format!(
-                    "{} has no stock - make a stock first, then place the DXF profile on it",
-                    setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("{} has no stock - make a stock first, then place the DXF profile on it", &[format!("{}", setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'")))])));
             }
             Err(why) => return Err(CommandError::Invalid(why.into())),
         }
@@ -132,7 +129,7 @@ impl ImportDxf {
 fn check_extension(path: &Path) -> Result<(), CommandError> {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("dxf") => Ok(()),
-        _ => Err(CommandError::Dxf(format!("{} is not a .dxf file", path.display()))),
+        _ => Err(CommandError::Dxf(camcraft_i18n::tf("{} is not a .dxf file", &[format!("{}", path.display())]))),
     }
 }
 
@@ -143,7 +140,7 @@ fn profile_name(world: &World, path: &Path, stated: Option<&str>) -> Result<Stri
     let reserved = |n: &str| n.eq_ignore_ascii_case(STOCK_NAME) || LEGACY_WCS_NAMES.contains(&n) || crate::setup::is_furniture_shape(n);
     if let Some(name) = stated {
         if name.trim().is_empty() || reserved(name) {
-            return Err(CommandError::Invalid(format!("'{name}' is not a usable name for a DXF profile")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a usable name for a DXF profile", &[format!("{}", name)])));
         }
         if model::find_by_name(world, name).is_some() {
             return Err(CommandError::NameConflict(name.to_owned()));

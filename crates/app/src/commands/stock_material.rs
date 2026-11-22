@@ -35,10 +35,10 @@ impl SetStockMaterial {
         let stock_name = setup::stock_entity_name(world, active.as_deref());
         let entity = model::find_by_name(world, &stock_name)
             .filter(|e| model::is_stock(world, e))
-            .ok_or_else(|| CommandError::Invalid(format!("no stock '{stock_name}' - set the stock first")))?;
+            .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("no stock '{stock_name}' - set the stock first", &[format!("{}", stock_name)])))?;
         let prev = stock_material::of_entity(world, &entity);
         if prev == next {
-            return Err(CommandError::Invalid(format!("'{stock_name}' already states that workpiece material")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{stock_name}' already states that workpiece material", &[format!("{}", stock_name)])));
         }
         let material = next.or_else(|| crate::cutting::material_of(world));
         let here = setup::effective(world, active.as_deref());

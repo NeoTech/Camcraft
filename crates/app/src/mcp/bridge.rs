@@ -20,7 +20,7 @@ pub fn bridge(addr: &str, input: impl Read + Send + 'static, mut output: impl Wr
     let target = addr
         .to_socket_addrs()?
         .next()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("'{addr}' names no address")))?;
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, camcraft_i18n::tf("'{addr}' names no address", &[format!("{}", addr)])))?;
     let mut from_app = TcpStream::connect(target)?;
     let mut to_app = from_app.try_clone()?;
     // Detached on purpose: a blocked stdin read cannot be interrupted, and

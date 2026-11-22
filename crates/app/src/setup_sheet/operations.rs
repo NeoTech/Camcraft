@@ -169,7 +169,7 @@ fn render_wire(world: &World, op_setup: Option<&str>, tool_name: &str, params: &
             mm(c.wire_diameter),
             mm(c.gap)
         )),
-        Err(why) => out.push_str(&format!("      ! wire condition: {why}\n")),
+        Err(why) => out.push_str(&camcraft_i18n::tf("      ! wire condition: {why}\n", &[format!("{}", why)])),
     }
 }
 

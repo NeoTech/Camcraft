@@ -250,7 +250,7 @@ fn dir_through(world: &World, rot: [f64; 4], pick: &AxisPick, axis: InPlaneAxis)
     let d = if pick.flip { [-d.x, -d.y, -d.z] } else { [d.x, d.y, d.z] };
     let len = norm(d);
     if !len.is_finite() || len <= 0.0 {
-        return Err(format!("the {name} pick has no length - re-pick it"));
+        return Err(camcraft_i18n::tf("the {name} pick has no length - re-pick it", &[format!("{}", name)]));
     }
     Ok(scale(d, 1.0 / len))
 }
@@ -266,13 +266,11 @@ fn in_plane(world: &World, held: Location, pick: &AxisPick, axis: InPlaneAxis) -
     let len = norm(d);
     let flat = d[0].hypot(d[1]);
     if !(len.is_finite() && flat.is_finite()) || len <= 0.0 {
-        return Err(format!("the {name} pick has no length - re-pick it"));
+        return Err(camcraft_i18n::tf("the {name} pick has no length - re-pick it", &[format!("{}", name)]));
     }
     if flat < len * MIN_TILT_FROM_NORMAL_DEG.to_radians().sin() {
-        return Err(format!(
-            "the {name} pick runs (nearly) along the work plane's normal (Z) - pick an edge or two points \
-             that run across the plane"
-        ));
+        return Err(camcraft_i18n::tf("the {name} pick runs (nearly) along the work plane's normal (Z) - pick an edge or two points \
+             that run across the plane", &[format!("{}", name)]));
     }
     Ok([d[0] / flat, d[1] / flat])
 }
@@ -283,39 +281,33 @@ fn ends(world: &World, pick: &AxisPick, name: &str) -> Result<([f64; 3], [f64; 3
     for g in &pick.picks {
         let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(world, g))?;
         if !setup_align::is_part(world, &e) {
-            return Err(format!("'{}' is not the part - pick an edge or points of the model for {name}", g.entity));
+            return Err(camcraft_i18n::tf("'{}' is not the part - pick an edge or points of the model for {name}", &[format!("{}", g.entity), format!("{}", name)]));
         }
         if matches!(g.feature, FeatureSel::Face(_) | FeatureSel::Patch(_)) {
-            return Err(format!(
-                "{} is a face - a face sets no direction; pick a straight edge or two points for {name}",
-                super::geo_label(world, g)
-            ));
+            return Err(camcraft_i18n::tf("{} is a face - a face sets no direction; pick a straight edge or two points for {name}", &[format!("{}", super::geo_label(world, g)), format!("{}", name)]));
         }
     }
     let role = format!("for {name}");
     match pick.picks.as_slice() {
-        [] => Err(format!("pick a straight edge or two points for {name}")),
+        [] => Err(camcraft_i18n::tf("pick a straight edge or two points for {name}", &[format!("{}", name)])),
         [g] if matches!(g.feature, FeatureSel::Chain(_)) => straight_edge(world, g, model::transform_of, &role),
-        [g] => Err(format!(
-            "{} is one point - pick a second point for {name}, or a straight edge",
-            super::geo_label(world, g)
-        )),
+        [g] => Err(camcraft_i18n::tf("{} is one point - pick a second point for {name}, or a straight edge", &[format!("{}", super::geo_label(world, g)), format!("{}", name)])),
         // #692: either point may be a round edge's centre.
         [p, q] => {
             let pt = |g: &GeoSel| {
                 point(world, g).map_err(|why| match g.feature {
-                    FeatureSel::Chain(_) => format!("pick one straight edge, or two points, for {name}: {why}"),
+                    FeatureSel::Chain(_) => camcraft_i18n::tf("pick one straight edge, or two points, for {name}: {why}", &[format!("{}", name), format!("{}", why)]),
                     _ => why,
                 })
             };
             let (a, b) = (pt(p)?, pt(q)?);
             let gap = norm(sub(b, a));
             if p == q || !gap.is_finite() || gap <= COINCIDENT_MM {
-                return Err(format!("the two points for {name} coincide - pick two points apart"));
+                return Err(camcraft_i18n::tf("the two points for {name} coincide - pick two points apart", &[format!("{}", name)]));
             }
             Ok((a, b))
         }
-        _ => Err(format!("pick one straight edge, or two points, for {name}")),
+        _ => Err(camcraft_i18n::tf("pick one straight edge, or two points, for {name}", &[format!("{}", name)])),
     }
 }
 
@@ -357,7 +349,7 @@ pub(super) fn point(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
     let w = transform_point(Point3::new(v[0], v[1], v[2]), loc.pos, loc.rot);
     let out = [w.x, w.y, w.z];
     if !out.iter().all(|c| c.is_finite()) {
-        return Err(format!("{} is not a finite point - re-pick it", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} is not a finite point - re-pick it", &[format!("{}", super::geo_label(world, g))]));
     }
     Ok(out)
 }

@@ -45,7 +45,7 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
 /// 10M-facet stream must not allocate a facet tag it never reports.
 fn accepted(a: Point3, b: Point3, c: Point3, ctx: impl Fn() -> String) -> Result<Triangle, ImportError> {
     if !(a.is_finite() && b.is_finite() && c.is_finite()) {
-        return Err(ImportError::Stl(format!("{}: non-finite vertex", ctx())));
+        return Err(ImportError::Stl(camcraft_i18n::tf("{}: non-finite vertex", &[format!("{}", ctx())])));
     }
     let t = Triangle::new(a, b, c);
     let n = t.normal();
@@ -99,10 +99,7 @@ fn parse_binary(data: &[u8]) -> Result<Mesh, ImportError> {
     };
     let expect = HEADER_BYTES + COUNT_BYTES + body;
     if data.len() != expect {
-        return Err(ImportError::Stl(format!(
-            "size {} does not match declared {count} facets (expected {expect} bytes)",
-            data.len()
-        )));
+        return Err(ImportError::Stl(camcraft_i18n::tf("size {} does not match declared {count} facets (expected {expect} bytes)", &[format!("{}", data.len()), format!("{}", count), format!("{}", expect)])));
     }
     if count == 0 {
         return Err(ImportError::Empty);
@@ -117,7 +114,7 @@ fn parse_binary(data: &[u8]) -> Result<Mesh, ImportError> {
         }
         // normal may be zero (writers often skip it) but must not be NaN
         if !p[..3].iter().all(|v| v.is_finite()) {
-            return Err(ImportError::Stl(format!("facet {i}: non-finite normal")));
+            return Err(ImportError::Stl(camcraft_i18n::tf("facet {i}: non-finite normal", &[format!("{}", i)])));
         }
         facets.push(accepted(
             Point3::new(p[3] as f64, p[4] as f64, p[5] as f64),
@@ -186,10 +183,7 @@ pub(super) fn parse_stream<R: Read + Seek>(
     };
     let expect = HEADER_BYTES + COUNT_BYTES + body;
     if size.is_some_and(|s| s != expect as u64) {
-        return Err(ImportError::Stl(format!(
-            "size {} does not match declared {count} facets (expected {expect} bytes)",
-            size.unwrap_or(0)
-        )));
+        return Err(ImportError::Stl(camcraft_i18n::tf("size {} does not match declared {count} facets (expected {expect} bytes)", &[format!("{}", size.unwrap_or(0)), format!("{}", count), format!("{}", expect)])));
     }
     if count == 0 {
         return Err(ImportError::Empty);
@@ -202,7 +196,7 @@ pub(super) fn parse_stream<R: Read + Seek>(
     for i in 0..count {
         if let Err(e) = src.read_exact(&mut rec) {
             if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                return Err(ImportError::Stl(format!("file ended inside facet {i}")));
+                return Err(ImportError::Stl(camcraft_i18n::tf("file ended inside facet {i}", &[format!("{}", i)])));
             }
             return Err(ImportError::Io(e));
         }
@@ -216,7 +210,7 @@ pub(super) fn parse_stream<R: Read + Seek>(
         };
         // normal may be zero (writers often skip it) but must not be NaN
         if !(f(0).is_finite() && f(1).is_finite() && f(2).is_finite()) {
-            return Err(ImportError::Stl(format!("facet {i}: non-finite normal")));
+            return Err(ImportError::Stl(camcraft_i18n::tf("facet {i}: non-finite normal", &[format!("{}", i)])));
         }
         facets.push(accepted(
             Point3::new(f(3) as f64, f(4) as f64, f(5) as f64),
@@ -290,7 +284,7 @@ impl AsciiFsm {
         match word {
             "solid" => {
                 if !matches!(self.state, State::Start) {
-                    return Err(ImportError::Stl(format!("line {line}: nested solid")));
+                    return Err(ImportError::Stl(camcraft_i18n::tf("line {line}: nested solid", &[format!("{}", line)])));
                 }
                 self.state = State::InSolid;
             }
@@ -323,14 +317,11 @@ impl AsciiFsm {
             "endloop" => {}
             "endfacet" => {
                 if !matches!(self.state, State::InFacet) {
-                    return Err(ImportError::Stl(format!("line {line}: stray endfacet")));
+                    return Err(ImportError::Stl(camcraft_i18n::tf("line {line}: stray endfacet", &[format!("{}", line)])));
                 }
                 let (Some(a), Some(b), Some(c)) = (self.verts[0], self.verts[1], self.verts[2])
                 else {
-                    return Err(ImportError::Stl(format!(
-                        "line {line}: facet has {} vertices",
-                        self.vi
-                    )));
+                    return Err(ImportError::Stl(camcraft_i18n::tf("line {line}: facet has {} vertices", &[format!("{}", line), format!("{}", self.vi)])));
                 };
                 self.facets
                     .push(accepted(a, b, c, || format!("line {line}: facet"))?);
@@ -342,9 +333,7 @@ impl AsciiFsm {
             }
             "endsolid" => return Ok(true),
             other => {
-                return Err(ImportError::Stl(format!(
-                    "line {line}: unknown token '{other}'"
-                )));
+                return Err(ImportError::Stl(camcraft_i18n::tf("line {line}: unknown token '{other}'", &[format!("{}", line), format!("{}", other)])));
             }
         }
         Ok(false)

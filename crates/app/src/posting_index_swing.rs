@@ -276,30 +276,21 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         let (letter, line, nose, stacked) = match verdict(&m) {
             None => continue,
             Some(Verdict::Unlined(r)) => {
-                out.push(format!(
-                    "{name}: {} turns the work on rotary {r} but states no axis vector for it, and {r} is no \
+                out.push(camcraft_i18n::tf("{name}: {} turns the work on rotary {r} but states no axis vector for it, and {r} is no \
                      RS-274 rotary letter - whether its index swings the work under the tool cannot be judged \
-                     (state its \"axis\" in the machine file)",
-                    m.model
-                ));
+                     (state its \"axis\" in the machine file)", &[format!("{}", name), format!("{}", m.model), format!("{}", r), format!("{}", r)]));
                 continue;
             }
             Some(Verdict::Leaning(r)) => {
-                out.push(format!(
-                    "{name}: {} turns the work on rotary {r} about a line that is neither level nor vertical \
+                out.push(camcraft_i18n::tf("{name}: {} turns the work on rotary {r} about a line that is neither level nor vertical \
                      (or no direction at all) - its index swing is not judged, so the post is refused (state a \
-                     level or vertical \"axis\" for {r} in the machine file)",
-                    m.model
-                ));
+                     level or vertical \"axis\" for {r} in the machine file)", &[format!("{}", name), format!("{}", m.model), format!("{}", r), format!("{}", r)]));
                 continue;
             }
             Some(Verdict::OffOrigin(r)) => {
-                out.push(format!(
-                    "{name}: {} turns the work on rotary {r}, whose stated pivot or offset moves its line off the \
+                out.push(camcraft_i18n::tf("{name}: {} turns the work on rotary {r}, whose stated pivot or offset moves its line off the \
                      WCS origin - its index swing is not judged, so the post is refused (the clause reads only a \
-                     line through the WCS origin)",
-                    m.model
-                ));
+                     line through the WCS origin)", &[format!("{}", name), format!("{}", m.model), format!("{}", r)]));
                 continue;
             }
             Some(Verdict::Judged { letter, line, nose, stacked }) => (letter, line, nose, stacked),
@@ -317,23 +308,19 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
                     _ => Ok(()),
                 };
                 if let Err(why) = checked {
-                    out.push(format!(
-                        "{name}: {why} - the {letter}{a:.3} index swing is not judged (correct the setup's \
-                         nose_to_axis, or the machine file's)"
-                    ));
+                    out.push(camcraft_i18n::tf("{name}: {why} - the {letter}{a:.3} index swing is not judged (correct the setup's \
+                         nose_to_axis, or the machine file's)", &[format!("{}", name), format!("{}", why), format!("{}", letter), format!("{:.3}", a)]));
                     continue;
                 }
-                (Ok(v), format!(" (the setup's stated nose_to_axis {v:.3} mm)"))
+                (Ok(v), camcraft_i18n::tf(" (the setup's stated nose_to_axis {v:.3} mm)", &[format!("{:.3}", v)]))
             }
             Rise::Stack(s) => (
                 nose.map(|n| n - s.thickness),
-                format!(" (nose_to_axis less the {:.3} mm stack under the rotary: {})", s.thickness, s.describe()),
+                camcraft_i18n::tf(" (nose_to_axis less the {:.3} mm stack under the rotary: {})", &[format!("{:.3}", s.thickness), format!("{}", s.describe())]),
             ),
             Rise::Refused(why) => {
-                out.push(format!(
-                    "{name}: {why} - the {letter}{a:.3} index swing is not judged (state the plate's thickness, or \
-                     the setup's nose_to_axis)"
-                ));
+                out.push(camcraft_i18n::tf("{name}: {why} - the {letter}{a:.3} index swing is not judged (state the plate's thickness, or \
+                     the setup's nose_to_axis)", &[format!("{}", name), format!("{}", why), format!("{}", letter), format!("{:.3}", a)]));
                 continue;
             }
         };
@@ -341,27 +328,19 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         let nose = match nose.and_then(finite) {
             Ok(n) => n,
             Err(Nose::NotFinite(r)) => {
-                out.push(format!(
-                    "{name}: {} turns the work on {r} with a nose_to_axis that is no finite number - the \
-                     tool's clearance over the part swept by the {letter}{a:.3} index cannot be judged",
-                    m.model
-                ));
+                out.push(camcraft_i18n::tf("{name}: {} turns the work on {r} with a nose_to_axis that is no finite number - the \
+                     tool's clearance over the part swept by the {letter}{a:.3} index cannot be judged", &[format!("{}", name), format!("{}", m.model), format!("{}", r), format!("{}", letter), format!("{:.3}", a)]));
                 continue;
             }
             Err(Nose::Unstated(r)) => {
-                out.push(format!(
-                    "{name}: {} turns the work on {r} but states no nose_to_axis - the tool's clearance \
-                     over the part swept by the {letter}{a:.3} index cannot be judged",
-                    m.model
-                ));
+                out.push(camcraft_i18n::tf("{name}: {} turns the work on {r} but states no nose_to_axis - the tool's clearance \
+                     over the part swept by the {letter}{a:.3} index cannot be judged", &[format!("{}", name), format!("{}", m.model), format!("{}", r), format!("{}", letter), format!("{:.3}", a)]));
                 continue;
             }
         };
         if !from.is_empty() && nose <= 0.0 {
-            out.push(format!(
-                "{name}: the effective nose_to_axis is {nose:.3} mm{from} - the {letter} centerline is at or above \
-                 the spindle nose, so the {letter}{a:.3} index swing is not judged"
-            ));
+            out.push(camcraft_i18n::tf("{name}: the effective nose_to_axis is {nose:.3} mm{from} - the {letter} centerline is at or above \
+                 the spindle nose, so the {letter}{a:.3} index swing is not judged", &[format!("{}", name), format!("{:.3}", nose), format!("{}", from), format!("{}", letter), format!("{}", letter), format!("{:.3}", a)]));
             continue;
         }
         // A lost tool is the machine clause's refusal, by name, already.
@@ -370,7 +349,7 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         let tool = match crate::tool_body::judged(world, &tool_e, tool) {
             Ok((t, _)) => t,
             Err(why) => {
-                out.push(format!("{name}: tool {}: {why} - the {letter} index clearance cannot be judged", op.tool));
+                out.push(camcraft_i18n::tf("{name}: tool {}: {why} - the {letter} index clearance cannot be judged", &[format!("{}", name), format!("{}", op.tool), format!("{}", why), format!("{}", letter)]));
                 continue;
             }
         };
@@ -382,14 +361,10 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         let tip = nose - len;
         let clearance = tip - swept;
         if !(clearance.is_finite() && clearance >= MARGIN_MM) {
-            out.push(format!(
-                "{name}: the {letter}{a:.3} index turns the work under the tool - at the safe Z the tip of \
+            out.push(camcraft_i18n::tf("{name}: the {letter}{a:.3} index turns the work under the tool - at the safe Z the tip of \
                  {} ({len:.3} mm long) is {tip:.3} mm above the {letter} centerline, the stock, part and \
                  turning fixtures sweep {swept:.3} mm{}, a clearance of {clearance:.3} mm against the \
-                 {MARGIN_MM:.1} mm needed{from}",
-                op.tool,
-                if stacked { " (from the WCS origin: more than one rotary turns the work)" } else { "" }
-            ));
+                 {MARGIN_MM:.1} mm needed{from}", &[format!("{}", name), format!("{}", letter), format!("{:.3}", a), format!("{}", op.tool), format!("{:.3}", len), format!("{:.3}", tip), format!("{}", letter), format!("{:.3}", swept), format!("{}", if stacked { " (from the WCS origin: more than one rotary turns the work)" } else { "" }), format!("{:.3}", clearance), format!("{:.1}", MARGIN_MM), format!("{}", from)]));
         }
     }
     out

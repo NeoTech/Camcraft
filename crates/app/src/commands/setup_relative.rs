@@ -49,12 +49,10 @@ impl SetSetupRelative {
             return Err(CommandError::NotFound(parent.to_string()));
         }
         if parent == name {
-            return Err(CommandError::Invalid(format!("setup '{name}' cannot be placed relative to itself")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{name}' cannot be placed relative to itself", &[format!("{}", name)])));
         }
         if setup_relative::links_back_to(world, parent, name) {
-            return Err(CommandError::Invalid(format!(
-                "'{parent}' is already placed relative to '{name}' - linking back would make a loop"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{parent}' is already placed relative to '{name}' - linking back would make a loop", &[format!("{}", parent), format!("{}", name)])));
         }
         let rot = setup_relative::rotation(deg).map_err(CommandError::Invalid)?;
         let next = setup_relative::relative_alignment(world, parent, rot).map_err(CommandError::Invalid)?;
@@ -65,7 +63,7 @@ impl SetSetupRelative {
             Some(AlignPartToSetup::new(world, name, next)?)
         };
         if align.is_none() && prev_link.as_deref() == Some(parent) {
-            return Err(CommandError::Invalid(format!("setup '{name}' already sits that way relative to '{parent}'")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{name}' already sits that way relative to '{parent}'", &[format!("{}", name), format!("{}", parent)])));
         }
         Ok(SetSetupRelative { setup: name.to_string(), prev_link, next_link: Some(parent.to_string()), align })
     }
@@ -74,7 +72,7 @@ impl SetSetupRelative {
     pub fn unlink(world: &World, name: &str) -> Result<Self, CommandError> {
         let prev_link = held_link(world, name)?;
         if prev_link.is_none() {
-            return Err(CommandError::Invalid(format!("setup '{name}' is not placed relative to another setup")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{name}' is not placed relative to another setup", &[format!("{}", name)])));
         }
         Ok(SetSetupRelative { setup: name.to_string(), prev_link, next_link: None, align: None })
     }

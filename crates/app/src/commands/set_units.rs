@@ -24,9 +24,7 @@ impl SetUnits {
     pub fn new(world: &World, next: Unit) -> Result<Self, CommandError> {
         let prev = units::of(world);
         if prev == next {
-            return Err(CommandError::Invalid(format!(
-                "the document is already in {next:?}"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("the document is already in {next:?}", &[format!("{:?}", next)])));
         }
         Ok(Self { prev, next })
     }

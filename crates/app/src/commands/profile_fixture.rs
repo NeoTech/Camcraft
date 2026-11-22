@@ -135,14 +135,10 @@ impl SetFixtureProfile {
         let prev = fixture::def_of(world, &entity)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a fixture")))?;
         if crate::step_source::of(world, &entity).is_some() {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' keeps its imported STEP solid; derive a profile for reference instead of replacing STEP geometry"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' keeps its imported STEP solid; derive a profile for reference instead of replacing STEP geometry", &[format!("{}", name)])));
         }
         if prev.vise.is_some() || prev.mod_jaw.is_some() || prev.accessory.is_some() || prev.plate.plate.is_some() {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a parametric vise/accessory/plate; edit its own parameters instead"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a parametric vise/accessory/plate; edit its own parameters instead", &[format!("{}", name)])));
         }
         let mesh = profile.mesh().map_err(CommandError::Invalid)?;
         let update = UpdateModel::new(world, name, mesh)?;
@@ -206,18 +202,14 @@ fn target_fixture(world: &World, name: &str) -> Result<(FixtureDef, std::sync::A
     // smaller than the real steel (PR #2101 review).
     if crate::step_source::of(world, &entity).is_none() {
         return Err(CommandError::Invalid(if def.profile.is_some() {
-            format!(
-                "'{name}' is generated from its own profile; edit that profile instead of deriving a reference profile"
-            )
+            camcraft_i18n::tf("'{name}' is generated from its own profile; edit that profile instead of deriving a reference profile", &[format!("{}", name)])
         } else {
-            format!(
-                "'{name}' has no STEP source; a reference profile is derived only from an imported STEP fixture"
-            )
+            camcraft_i18n::tf("'{name}' has no STEP source; a reference profile is derived only from an imported STEP fixture", &[format!("{}", name)])
         }));
     }
     let facets = model::facets_of(world, &entity)
         .filter(|f| !f.is_empty())
-        .ok_or_else(|| CommandError::Invalid(format!("'{name}' has no mesh facets to derive from")))?;
+        .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("'{name}' has no mesh facets to derive from", &[format!("{}", name)])))?;
     Ok((def, facets))
 }
 

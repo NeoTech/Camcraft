@@ -105,10 +105,7 @@ fn fit_under_stock(
     above: f64,
 ) -> Result<(Accessory, Location, Option<MoveFixture>), CommandError> {
     let Accessory::Parallels { thickness, length, .. } = *params else {
-        return Err(CommandError::Invalid(format!(
-            "only parallels fit under the stock in a vise, not a {}",
-            params.label().to_lowercase()
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("only parallels fit under the stock in a vise, not a {}", &[format!("{}", params.label().to_lowercase())])));
     };
     let entity = model::find_by_name(world, vise).ok_or_else(|| CommandError::NotFound(vise.to_owned()))?;
     let vp = fixture::def_of(world, &entity)
@@ -117,15 +114,13 @@ fn fit_under_stock(
     // A grip jaw's frame z = 0 is its ledge, not the floor: a fit from
     // the floor would stand the stock clear of the jaws (#1274 review).
     if vp.seat_height() > 0.0 {
-        return Err(CommandError::Invalid(format!(
-            "'{vise}' is a grip-jaw vise: it seats the stock on its steps, parallels do not go under it"
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'{vise}' is a grip-jaw vise: it seats the stock on its steps, parallels do not go under it", &[format!("{}", vise)])));
     }
     let pose = model::transform_of(world, &entity).unwrap_or_default();
     let stock = model::stock_world_aabb_for(world, setup)
         .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup, "the parallels under")))?;
     let fit = accessory::fit_parallels(&pose, vp.jaw_height, vp.opening, &stock, thickness, above)
-        .map_err(|e| CommandError::Invalid(format!("parallels in '{vise}': {e}")))?;
+        .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("parallels in '{vise}': {e}", &[format!("{}", vise), format!("{}", e)])))?;
     let fitted = Accessory::Parallels { height: fit.height, thickness, length, spacing: fit.spacing };
     let lift = MoveFixture::locating(world, vise, fit.vise)?;
     Ok((fitted, fit.parallels, Some(lift)))
@@ -138,15 +133,12 @@ fn fit_on_stock(
     setup: Option<&str>,
 ) -> Result<(Accessory, Location, Option<MoveFixture>), CommandError> {
     if !accessory::chuck::is_chuck(params) {
-        return Err(CommandError::Invalid(format!(
-            "only a lathe chuck fits on the stock, not a {}",
-            params.label().to_lowercase()
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("only a lathe chuck fits on the stock, not a {}", &[format!("{}", params.label().to_lowercase())])));
     }
     let stock = model::stock_world_aabb_for(world, setup)
         .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup, "the chuck on")))?;
     let (fit, at) = accessory::chuck::fit_to_stock(params, &stock)
-        .map_err(|e| CommandError::Invalid(format!("{} on the stock: {e}", params.label())))?;
+        .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("{} on the stock: {e}", &[format!("{}", params.label()), format!("{}", e)])))?;
     Ok((fit, Location { pos: at, rot: IDENTITY_Q }, None))
 }
 
@@ -182,11 +174,7 @@ impl SetAccessory {
         let prev = accessory_def(world, name)?;
         let was = prev.accessory.as_ref().map_or("", Accessory::kind);
         if was != params.kind() {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is a {}; it cannot become a {}",
-                accessory::label_of(was).to_lowercase(),
-                params.label().to_lowercase()
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a {}; it cannot become a {}", &[format!("{}", name), format!("{}", accessory::label_of(was).to_lowercase()), format!("{}", params.label().to_lowercase())])));
         }
         let facets = params.mesh().map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
         if let Some(m) = &prev.plate.mount
@@ -212,9 +200,7 @@ pub fn accessory_def(world: &World, name: &str) -> Result<FixtureDef, CommandErr
     let def = fixture::def_of(world, &entity)
         .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a fixture")))?;
     if def.accessory.is_none() {
-        return Err(CommandError::Invalid(format!(
-            "'{name}' is not a built-in accessory (an imported fixture has a fixed shape)"
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a built-in accessory (an imported fixture has a fixed shape)", &[format!("{}", name)])));
     }
     Ok(def)
 }

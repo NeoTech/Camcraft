@@ -574,7 +574,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         threading: match file.post_options.as_ref().and_then(|o| o.threading.as_deref()) {
             None | Some("g32") => crate::schema::ThreadingOutput::G32Passes,
             Some("g76") => crate::schema::ThreadingOutput::G76Cycle,
-            Some(other) => return Err(corrupt(format!("unknown threading output {other:?}"))),
+            Some(other) => return Err(corrupt(camcraft_i18n::tf("unknown threading output {other:?}", &[format!("{:?}", other)]))),
         },
         // The top-level switches (#110, #111): an absent key is off.
         skip_stops: file.skip_stops,
@@ -586,19 +586,19 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             None => crate::schema::EndUnits::Leave,
             Some("inch") => crate::schema::EndUnits::Inch,
             Some("mm") => crate::schema::EndUnits::Millimeters,
-            Some(other) => return Err(corrupt(format!("unknown end units {other:?}"))),
+            Some(other) => return Err(corrupt(camcraft_i18n::tf("unknown end units {other:?}", &[format!("{:?}", other)]))),
         },
         // #1532: an absent key is the default pause between setups.
         between_setups: match file.post_options.as_ref().and_then(|o| o.between_setups.as_deref()) {
             None => crate::schema::BetweenSetups::default(),
             Some(w) => crate::schema::BetweenSetups::from_word(w)
-                .ok_or_else(|| corrupt(format!("unknown between-setups choice {w:?}")))?,
+                .ok_or_else(|| corrupt(camcraft_i18n::tf("unknown between-setups choice {w:?}", &[format!("{:?}", w)])))?,
         },
         // #760: an absent key is the default bake into XY.
         wcs_rotation: match file.post_options.as_ref().and_then(|o| o.wcs_rotation.as_deref()) {
             None => crate::schema::WcsRotationOutput::default(),
             Some(w) => crate::schema::WcsRotationOutput::from_word(w)
-                .ok_or_else(|| corrupt(format!("unknown wcs-rotation choice {w:?}")))?,
+                .ok_or_else(|| corrupt(camcraft_i18n::tf("unknown wcs-rotation choice {w:?}", &[format!("{:?}", w)])))?,
         },
     };
     let mut doc_script = crate::schema::PostScriptOptions {
@@ -625,7 +625,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     let doc_units = match file.units.as_deref() {
         None | Some("mm") => Unit::Millimeters,
         Some("in") => Unit::Inches,
-        Some(other) => return Err(corrupt(format!("unknown units {other:?}"))),
+        Some(other) => return Err(corrupt(camcraft_i18n::tf("unknown units {other:?}", &[format!("{:?}", other)]))),
     };
     // Whole-file validation BEFORE any world write: a corrupt entity deeper
     // in the list must not leave a half-loaded document behind.
@@ -642,7 +642,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             // machine's condition (including its wire diameter) unchanged.
             op.stamp = None;
             op.cache = None;
-            notes.push(format!("operation '{}': legacy Wire Contour has no wire tool; assign a wire tool before generating or posting", dto.name));
+            notes.push(camcraft_i18n::tf("operation '{}': legacy Wire Contour has no wire tool; assign a wire tool before generating or posting", &[format!("{}", dto.name)]));
         }
     }
     super::setup_links::check(&file)?;
@@ -656,7 +656,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         if let Some(op) = &dto.operation {
             let label = op.label.as_deref().unwrap_or(&dto.name);
             if !labels.insert(label) || (label != dto.name && keys.contains(label)) {
-                return Err(corrupt(format!("operation label '{label}' conflicts with another operation")));
+                return Err(corrupt(camcraft_i18n::tf("operation label '{label}' conflicts with another operation", &[format!("{}", label)])));
             }
         }
     }
@@ -664,7 +664,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // index-swing clause cannot judge; say so by name.
     notes.extend(super::swing_note::notes(&file));
     if let Some(r) = file.machine.as_ref().and_then(|m| crate::machine::tooling_refusal(&m.machine)) {
-        return Err(corrupt(format!("machine definition {r}")));
+        return Err(corrupt(camcraft_i18n::tf("machine definition {r}", &[format!("{}", r)])));
     }
     if let Some(m) = &file.machine
         && !m.machine.is_sane()
@@ -678,7 +678,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     let material = match file.material.as_deref() {
         None => None,
         Some(w) => Some(crate::tools::WorkMaterial::from_word(w).ok_or_else(|| {
-            corrupt(format!("unknown workpiece material {w:?}"))
+            corrupt(camcraft_i18n::tf("unknown workpiece material {w:?}", &[format!("{:?}", w)]))
         })?),
     };
     if file.active_setup.as_deref().is_some_and(str::is_empty) {
@@ -818,8 +818,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                         Some(print) if model_names.contains(source) => {
                             entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone(), print });
                         }
-                        Some(_) => notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name)),
-                        None => notes.push(format!("'{}' was marked raw stock only without the fingerprint of '{source}' it was set on - read as unmarked; tick \"{}\" again if it is raw stock", dto.name, crate::stock_source::RAW_STOCK_ONLY)),
+                        Some(_) => notes.push(camcraft_i18n::tf("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", &[format!("{}", dto.name), format!("{}", source)])),
+                        None => notes.push(camcraft_i18n::tf("'{}' was marked raw stock only without the fingerprint of '{source}' it was set on - read as unmarked; tick \"{}\" again if it is raw stock", &[format!("{}", dto.name), format!("{}", source), format!("{}", crate::stock_source::RAW_STOCK_ONLY)])),
                     }
                 }
             }
@@ -835,7 +835,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 Some(sketch) => {
                     entity.entity_view(world).set(sketch);
                 }
-                None => return Err(corrupt(format!("'{}' is a DXF profile without its drawing", dto.name))),
+                None => return Err(corrupt(camcraft_i18n::tf("'{}' is a DXF profile without its drawing", &[format!("{}", dto.name)]))),
             },
             EntityKind::Tool => {
                 // validate_kind already refused a missing or insane one.
@@ -903,7 +903,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 let work_offset = match sdto.work_offset.as_deref() {
                     None => None,
                     Some(w) => Some(super::work_offset_pick(w).ok_or_else(|| {
-                        corrupt(format!("setup '{}' picks unknown work offset {w:?}", dto.name))
+                        corrupt(camcraft_i18n::tf("setup '{}' picks unknown work offset {w:?}", &[format!("{}", dto.name), format!("{:?}", w)]))
                     })?),
                 };
                 // #326: a turned part must be a rigid transform; anything
@@ -911,7 +911,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 let part_alignment = match &sdto.part_alignment {
                     None => None,
                     Some(a) => Some(a.to_location().ok_or_else(|| {
-                        corrupt(format!("setup '{}' holds the part at a placement that is not a rigid transform", dto.name))
+                        corrupt(camcraft_i18n::tf("setup '{}' holds the part at a placement that is not a rigid transform", &[format!("{}", dto.name)]))
                     })?),
                 };
                 // #343: the setup's own machine, sanity-checked like the
@@ -924,7 +924,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 let stock_source = match sdto.stock_source.as_deref() {
                     None => None,
                     Some(w) => Some(crate::setup_stock::StockSource::from_word(w).ok_or_else(|| {
-                        corrupt(format!("setup '{}' takes its stock from '{w}', which is no stock source", dto.name))
+                        corrupt(camcraft_i18n::tf("setup '{}' takes its stock from '{w}', which is no stock source", &[format!("{}", dto.name), format!("{}", w)]))
                     })?),
                 };
                 // #389: an unspellable own thread output is a corrupt file.
@@ -957,7 +957,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     wcs: match sdto.wcs {
                         WcsDto::One(w) => w,
                         WcsDto::Slots(_) => {
-                            return Err(corrupt(format!("setup '{}' still lists work offset slots", dto.name)));
+                            return Err(corrupt(camcraft_i18n::tf("setup '{}' still lists work offset slots", &[format!("{}", dto.name)])));
                         }
                     },
                     datum_from: sdto.datum_from,
@@ -992,7 +992,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // #819: a place on a plate the file does not hold is dropped, never
     // left for the next plate of that name to pick up.
     for name in crate::plate::mount::drop_dangling(world) {
-        notes.push(format!("fixture '{name}': plate location dropped on load: no such plate"));
+        notes.push(camcraft_i18n::tf("fixture '{name}': plate location dropped on load: no such plate", &[format!("{}", name)]));
     }
     Ok(notes)
 }

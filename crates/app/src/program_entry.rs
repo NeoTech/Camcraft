@@ -158,10 +158,7 @@ pub fn posted_afters(
             if ops.first().is_some_and(|(n, _)| muted.contains(n)) {
                 continue;
             }
-            return Err(format!(
-                "{name}: a {} entry before the first posted operation has no operation to follow - move it after one, or suppress it",
-                action_label(entry.action)
-            ));
+            return Err(camcraft_i18n::tf("{name}: a {} entry before the first posted operation has no operation to follow - move it after one, or suppress it", &[format!("{}", name), format!("{}", action_label(entry.action))]));
         };
         if muted.contains(op) {
             continue; // the gap's op skips pauses and homes: the entry is muted
@@ -174,11 +171,7 @@ pub fn posted_afters(
             None => {
                 let label = model::find_by_name(world, op)
                     .map_or_else(|| op.clone(), |oe| model::operation_label(world, op, &oe));
-                return Err(format!(
-                    "{name}: {label} already ends with {} - the post writes one after-action per gap, and {} after it would need a second; remove one of them",
-                    action_label(now),
-                    action_label(entry.action)
-                ));
+                return Err(camcraft_i18n::tf("{name}: {label} already ends with {} - the post writes one after-action per gap, and {} after it would need a second; remove one of them", &[format!("{}", name), format!("{}", label), format!("{}", action_label(now)), format!("{}", action_label(entry.action))]));
             }
         }
     }

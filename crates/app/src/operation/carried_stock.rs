@@ -213,12 +213,10 @@ impl Overhang {
         let side = [d0.x - b0.x, d0.y - b0.y, b1.x - d1.x, b1.y - d1.y].into_iter().fold(0.0, f64::max);
         let above = (b1.z - d1.z).max(0.0);
         let (from, to) = (&self.origin, &self.to);
-        let overhang = format!("from setup '{from}' into setup '{to}': up to {side:.2} mm beside it, {above:.2} mm above its top");
+        let overhang = camcraft_i18n::tf("from setup '{from}' into setup '{to}': up to {side:.2} mm beside it, {above:.2} mm above its top", &[format!("{}", from), format!("{}", to), format!("{:.2}", side), format!("{:.2}", above)]);
         match self.engaged_by(path, r) {
-            Some(i) => format!(
-                "{CARRIED_OUTSIDE_DECLARED} ({overhang}; feed move {i} reaches it) - enlarge setup '{to}'s stock to cover what setup '{from}' leaves"
-            ),
-            None => format!("{CARRIED_OUTSIDE_NOTED} ({overhang}) - rapids, entries and links were judged against both"),
+            Some(i) => camcraft_i18n::tf("{CARRIED_OUTSIDE_DECLARED} ({overhang}; feed move {i} reaches it) - enlarge setup '{to}'s stock to cover what setup '{from}' leaves", &[format!("{}", CARRIED_OUTSIDE_DECLARED), format!("{}", overhang), format!("{}", i), format!("{}", to), format!("{}", from)]),
+            None => camcraft_i18n::tf("{CARRIED_OUTSIDE_NOTED} ({overhang}) - rapids, entries and links were judged against both", &[format!("{}", CARRIED_OUTSIDE_NOTED), format!("{}", overhang)]),
         }
     }
 }

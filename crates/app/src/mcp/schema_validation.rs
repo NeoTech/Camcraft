@@ -8,9 +8,9 @@ pub(super) fn arguments(name: &str, args: &Value) -> Result<(), String> {
     let tool = tools::list()
         .into_iter()
         .find(|t| t["name"].as_str() == Some(name))
-        .ok_or_else(|| format!("unknown tool '{name}'"))?;
+        .ok_or_else(|| camcraft_i18n::tf("unknown tool '{name}'", &[format!("{}", name)]))?;
     if !args.is_object() {
-        return Err(format!("{name}.arguments must be an object"));
+        return Err(camcraft_i18n::tf("{name}.arguments must be an object", &[format!("{}", name)]));
     }
     validate(&tool["inputSchema"], args, &format!("{name}.arguments"))
 }
@@ -20,11 +20,11 @@ fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String> {
         return Ok(());
     }
     if schema == &Value::Bool(false) {
-        return Err(format!("{path} is not allowed"));
+        return Err(camcraft_i18n::tf("{path} is not allowed", &[format!("{}", path)]));
     }
     let fields = schema
         .as_object()
-        .ok_or_else(|| format!("{path}: invalid tool schema"))?;
+        .ok_or_else(|| camcraft_i18n::tf("{path}: invalid tool schema", &[format!("{}", path)]))?;
     // New validation keywords must be implemented before they can authorize a local edit.
     for key in fields.keys() {
         if !matches!(
@@ -49,7 +49,7 @@ fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String> {
                 | "$comment"
                 | "examples"
         ) {
-            return Err(format!("{path}: unsupported schema keyword '{key}'"));
+            return Err(camcraft_i18n::tf("{path}: unsupported schema keyword '{key}'", &[format!("{}", path), format!("{}", key)]));
         }
     }
     if let Some(types) = fields.get("type") {
@@ -59,13 +59,13 @@ fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String> {
             _ => false,
         };
         if !valid {
-            return Err(format!("{path} must have type {types}"));
+            return Err(camcraft_i18n::tf("{path} must have type {types}", &[format!("{}", path), format!("{}", types)]));
         }
     }
     if let Some(choices) = fields.get("enum").and_then(Value::as_array)
         && !choices.contains(value)
     {
-        return Err(format!("{path} must be one of {}", Value::Array(choices.clone())));
+        return Err(camcraft_i18n::tf("{path} must be one of {}", &[format!("{}", path), format!("{}", Value::Array(choices.clone()))]));
     }
     for key in ["anyOf", "oneOf", "allOf"] {
         if let Some(branches) = fields.get(key).and_then(Value::as_array) {
@@ -76,7 +76,7 @@ fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String> {
                 _ => passed == branches.len(),
             };
             if !valid {
-                return Err(format!("{path} does not satisfy {key}"));
+                return Err(camcraft_i18n::tf("{path} does not satisfy {key}", &[format!("{}", path), format!("{}", key)]));
             }
         }
     }

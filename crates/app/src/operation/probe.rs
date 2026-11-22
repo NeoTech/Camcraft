@@ -105,10 +105,7 @@ pub(crate) fn probe_problems(world: &World) -> Vec<String> {
     // would make it a wrong one.
     for a in asks.iter().skip(1) {
         if !shares(&a.src, a.setup.as_deref(), &asks[0]) {
-            return vec![format!(
-                "probe asks on {} and {} measure different parts - one final, one verdict: post the programs apart (M5.3 D)",
-                asks[0].name, a.name
-            )];
+            return vec![camcraft_i18n::tf("probe asks on {} and {} measure different parts - one final, one verdict: post the programs apart (M5.3 D)", &[format!("{}", asks[0].name), format!("{}", a.name)])];
         }
     }
     let head = &asks[0];
@@ -120,7 +117,7 @@ pub(crate) fn probe_problems(world: &World) -> Vec<String> {
         // blocks: a judge that cannot measure never reports
         // silence (law (b), everywhere).
         Err(err) => {
-            return vec![format!("probe ask on {}: the part is unresolvable: {err}", head.name)];
+            return vec![camcraft_i18n::tf("probe ask on {}: the part is unresolvable: {err}", &[format!("{}", head.name), format!("{}", err)])];
         }
     };
     // The legs, in program order: every blade cut of this part. The
@@ -136,17 +133,12 @@ pub(crate) fn probe_problems(world: &World) -> Vec<String> {
             continue;
         }
         let Some(cache) = model::toolpath_of(world, e) else {
-            return vec![format!(
-                "{name}: a blade of this part lost its toolpath - the composed part is unmeasurable"
-            )];
+            return vec![camcraft_i18n::tf("{name}: a blade of this part lost its toolpath - the composed part is unmeasurable", &[format!("{}", name)])];
         };
         let Some(tool) = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
         else {
-            return vec![format!(
-                "{name}: the blade's width is the tool's - '{}' is not in the library, and the composed part is unmeasurable",
-                op.tool
-            )];
+            return vec![camcraft_i18n::tf("{name}: the blade's width is the tool's - '{}' is not in the library, and the composed part is unmeasurable", &[format!("{}", name), format!("{}", op.tool)])];
         };
         legs.push((name.clone(), cache.path.moves.len(), cache.path, tool.width));
     }
@@ -154,10 +146,7 @@ pub(crate) fn probe_problems(world: &World) -> Vec<String> {
         // Asked for a measurement of a part no blade cuts - the
         // asking Part op itself is always a leg, so this is the
         // lost-operation case; name it rather than judge nothing.
-        return vec![format!(
-            "probe ask on {}: the program cuts this part with no blade - nothing to measure",
-            head.name
-        )];
+        return vec![camcraft_i18n::tf("probe ask on {}: the program cuts this part with no blade - nothing to measure", &[format!("{}", head.name)])];
     }
     let refs: Vec<BladeLeg> = legs
         .iter()
@@ -182,20 +171,13 @@ pub(crate) fn probe_problems(world: &World) -> Vec<String> {
                 } else {
                     ("left standing on the part", rest_mm)
                 };
-                out.push(format!(
-                    "probe ask {budget:.4} mm ({}): {mm:.4} mm {word} by {blamed} at move {mv} - the part as machined cannot measure to it; run the pass that takes the steel off, or re-run the named op to hold the ask, then post again",
-                    asked.join(", ")
-                ));
+                out.push(camcraft_i18n::tf("probe ask {budget:.4} mm ({}): {mm:.4} mm {word} by {blamed} at move {mv} - the part as machined cannot measure to it; run the pass that takes the steel off, or re-run the named op to hold the ask, then post again", &[format!("{:.4}", budget), format!("{}", asked.join(", ")), format!("{:.4}", mm), format!("{}", word), format!("{}", blamed), format!("{}", mv)]));
             }
             // The scan's own refusal: no frame, no measurement, no
             // post. The per-op verdicts speak any first-cut gouge
             // this composes; this line is the ask's, and the ask
             // deserves its own verdict.
-            Warning::Gouge { at } => out.push(format!(
-                "probe ask {:.4} mm ({}): the composed part is unmeasurable (no frame at move {at}) - a judge that cannot measure never posts",
-                budget,
-                asked.join(", ")
-            )),
+            Warning::Gouge { at } => out.push(camcraft_i18n::tf("probe ask {:.4} mm ({}): the composed part is unmeasurable (no frame at move {at}) - a judge that cannot measure never posts", &[format!("{:.4}", budget), format!("{}", asked.join(", ")), format!("{}", at)])),
             _ => {}
         }
     }

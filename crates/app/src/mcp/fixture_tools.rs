@@ -78,7 +78,7 @@ fn locate_part(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         Some("stock") => (
             LocateBody::Stock,
             fixture_locate::stock_of(&env.world, steel)
-                .ok_or_else(|| format!("the setup of '{steel}' has no stock to locate - set the stock first"))?,
+                .ok_or_else(|| camcraft_i18n::tf("the setup of '{steel}' has no stock to locate - set the stock first", &[format!("{}", steel)]))?,
         ),
         Some(other) => return Err(format!("\"body\" is \"part\" or \"stock\", not \"{other}\"")),
     };
@@ -96,7 +96,7 @@ fn locate_part(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         .iter()
         .map(|v| match v {
             Value::Object(m) => Ok(Mate { part: side(m, "part", &held)?, fixture: side(m, "fixture", steel)? }),
-            other => Err(format!("a mate is an object {{\"part\", \"fixture\"}}, got {other}")),
+            other => Err(camcraft_i18n::tf("a mate is an object {{\"part\", \"fixture\"}}, got {other}", &[format!("{}", other)])),
         })
         .collect::<Result<Vec<_>, String>>()?;
     let [dx, dy, dz] = opt_nums::<3>(a, "offset")?.unwrap_or([0.0; 3]);

@@ -54,7 +54,7 @@ impl SetToolBody {
         default_unit: Option<Unit>,
     ) -> Result<Self, CommandError> {
         let bytes = std::fs::read(path)
-            .map_err(|e| CommandError::Invalid(format!("tool '{name}': DXF unreadable: {e}")))?;
+            .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("tool '{name}': DXF unreadable: {e}", &[format!("{}", name), format!("{}", e)])))?;
         let source = path
             .file_name()
             .and_then(|s| s.to_str())
@@ -123,7 +123,7 @@ impl SetToolBody {
     pub fn profile_dxf(&self) -> Result<String, String> {
         match &self.next {
             Some(body) => tool_body_to_dxf(body),
-            None => Err(format!("tool '{}' clears its holder body", self.name)),
+            None => Err(camcraft_i18n::tf("tool '{}' clears its holder body", &[format!("{}", self.name)])),
         }
     }
 }

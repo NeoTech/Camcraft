@@ -22,14 +22,14 @@ pub(super) fn edit_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
     let Some(Value::Object(patch)) = a.get("patch") else {
         return Err("\"patch\" must be an object of tool fields".into());
     };
-    let entity = model::find_by_name(&env.world, name).ok_or_else(|| format!("no tool named '{name}'"))?;
+    let entity = model::find_by_name(&env.world, name).ok_or_else(|| camcraft_i18n::tf("no tool named '{name}'", &[format!("{}", name)]))?;
     let prev = model::tool_of(&env.world, &entity).ok_or_else(|| format!("'{name}' is not a tool"))?;
     if let Some(k) = NOT_HERE.iter().find(|k| patch.contains_key(**k)) {
-        return Err(format!("bad tool patch: \"{k}\" is not edited by edit_tool - tool {name} keeps its {k}"));
+        return Err(camcraft_i18n::tf("bad tool patch: \"{k}\" is not edited by edit_tool - tool {name} keeps its {k}", &[format!("{}", k), format!("{}", name), format!("{}", k)]));
     }
     let mut def = project::tool_to_json(&prev);
     merge(&mut def, &Value::Object(patch.clone()));
-    let next = project::tool_from_json(&def).map_err(|e| format!("bad tool patch: {e}"))?;
+    let next = project::tool_from_json(&def).map_err(|e| camcraft_i18n::tf("bad tool patch: {e}", &[format!("{}", e)]))?;
     // serde drops keys it does not know; a dropped edit reads as done.
     let Value::Object(back) = project::tool_to_json(&next) else {
         return Err("the patched tool could not be read back".into());
@@ -45,7 +45,7 @@ pub(super) fn edit_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
         checked.remove("outline");
     }
     if let Some(path) = lost(&checked, &back, "") {
-        return Err(format!("bad tool patch: unknown field {path} - a tool definition has no field \"{path}\""));
+        return Err(camcraft_i18n::tf("bad tool patch: unknown field {path} - a tool definition has no field \"{path}\"", &[format!("{}", path), format!("{}", path)]));
     }
     let cmd = ChangeTool::new(&env.world, name, next).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);

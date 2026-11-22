@@ -28,7 +28,7 @@ pub(super) const TOOLS: &[Tool] = &[Tool {
 fn num(v: Option<&Value>, k: &str) -> Result<f64, String> {
     v.and_then(Value::as_f64)
         .filter(|x| x.is_finite())
-        .ok_or_else(|| format!("\"box\" needs a finite number \"{k}\" (mm)"))
+        .ok_or_else(|| camcraft_i18n::tf("\"box\" needs a finite number \"{k}\" (mm)", &[format!("{}", k)]))
 }
 
 fn pick_in_box(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -43,30 +43,30 @@ fn pick_in_box(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let mode = match opt_str(a, "mode")?.unwrap_or("window") {
         "window" => BoxMode::Window,
         "crossing" => BoxMode::Crossing,
-        m => return Err(format!("unknown mode '{m}' - \"window\" or \"crossing\"")),
+        m => return Err(camcraft_i18n::tf("unknown mode '{m}' - \"window\" or \"crossing\"", &[format!("{}", m)])),
     };
     let (kinds, what) = match opt_str(a, "kind")?.unwrap_or("chains") {
         "chains" => (PickKinds::EDGES, "edge chain"),
         "faces" => (PickKinds::FACES, "face"),
-        k => return Err(format!("unknown kind '{k}' - \"chains\" or \"faces\"")),
+        k => return Err(camcraft_i18n::tf("unknown kind '{k}' - \"chains\" or \"faces\"", &[format!("{}", k)])),
     };
     let replace = match a.get("replace") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(r)) => *r,
-        Some(v) => return Err(format!("\"replace\" must be true or false, got {v}")),
+        Some(v) => return Err(camcraft_i18n::tf("\"replace\" must be true or false, got {v}", &[format!("{}", v)])),
     };
     let through = match a.get("through") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(t)) => *t,
-        Some(v) => return Err(format!("\"through\" must be true or false, got {v}")),
+        Some(v) => return Err(camcraft_i18n::tf("\"through\" must be true or false, got {v}", &[format!("{}", v)])),
     };
     let found = box_select_top(&env.world, corners, mode, kinds, through);
     if found.is_empty() {
         let seen = if through { "" } else { "visible " };
-        return Err(format!("no {seen}{what} in the box - nothing picked, nothing changed"));
+        return Err(camcraft_i18n::tf("no {seen}{what} in the box - nothing picked, nothing changed", &[format!("{}", seen), format!("{}", what)]));
     }
-    let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
-    let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
+    let e = model::find_by_name(&env.world, &key).ok_or_else(|| camcraft_i18n::tf("no operation named '{key}'", &[format!("{}", key)]))?;
+    let op = model::operation_of(&env.world, &e).ok_or_else(|| camcraft_i18n::tf("'{key}' is not an operation", &[format!("{}", key)]))?;
     let mut items: Vec<GeoSel> = match (&op.src, replace) {
         (SrcRef::Selection(items), false) => items.clone(),
         _ => Vec::new(),
@@ -79,7 +79,7 @@ fn pick_in_box(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     }
     let added = items.len() - before;
     if added == 0 && !replace {
-        return Err(format!("every {what} in the box is already picked in '{key}' - nothing changed"));
+        return Err(camcraft_i18n::tf("every {what} in the box is already picked in '{key}' - nothing changed", &[format!("{}", what), format!("{}", key)]));
     }
     kind_door(&env.world, op.params.kind().info().label, &op.params, &items)?;
     let cmd = SetOperationGeometry::new(&env.world, &key, items).map_err(|e| e.to_string())?;

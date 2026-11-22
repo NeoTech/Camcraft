@@ -58,13 +58,13 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
     if let Some(name) = registry_name(cps) {
         return Ok(super::post_serves(name, kind));
     }
-    if let Some(kinds) = declared_serves(cps).map_err(|e| format!("post engine: {e}"))? {
+    if let Some(kinds) = declared_serves(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))? {
         return Ok(kinds.contains(&kind));
     }
-    if crate::post::js::Script::load(cps).map_err(|e| format!("post engine: {e}"))?.voices_wire_edm() {
+    if crate::post::js::Script::load(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))?.voices_wire_edm() {
         return Ok(kind == Kind::WireEdm);
     }
-    let turning = work_voice(cps).map_err(|e| format!("post engine: {e}"))? == WorkVoice::WorkSpindle;
+    let turning = work_voice(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))? == WorkVoice::WorkSpindle;
     Ok(match kind {
         Kind::Lathe => turning,
         Kind::MillTurn => true,
@@ -80,7 +80,7 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
 /// for the tool spindle.
 fn unturned<'a>(world: &World, ops: &[&'a str], kind: Kind, cps: &str) -> Result<Vec<&'a str>, String> {
     if !matches!(kind, Kind::Lathe | Kind::MillTurn)
-        || work_voice(cps).map_err(|e| format!("post engine: {e}"))? == WorkVoice::WorkSpindle
+        || work_voice(cps).map_err(|e| camcraft_i18n::tf("post engine: {e}", &[format!("{}", e)]))? == WorkVoice::WorkSpindle
     {
         return Ok(Vec::new());
     }
@@ -110,7 +110,7 @@ pub(super) fn refusal(
     let who = if setups.iter().all(String::is_empty) { "the setup".to_owned() } else { setups.join(", ") };
     let post = match (registry_name(cps), label) {
         (Some(name), _) => format!("post {name}"),
-        (None, Some(path)) => format!("post script {path}"),
+        (None, Some(path)) => camcraft_i18n::tf("post script {path}", &[format!("{}", path)]),
         (None, None) => "the given post script".to_owned(),
     };
     if serves(cps, kind)? {
@@ -118,28 +118,16 @@ pub(super) fn refusal(
         if turned.is_empty() {
             return Ok(None);
         }
-        return Ok(Some(format!(
-            "{who} ({}): {post} is not a turning post - on {}, a {} machine, these sections turn the work, and a \
+        return Ok(Some(camcraft_i18n::tf("{who} ({}): {post} is not a turning post - on {}, a {} machine, these sections turn the work, and a \
              milling post would write them for the tool spindle; give the setup a post that serves turning, or move \
-             them to a setup that does, or suppress them",
-            turned.join(", "),
-            crate::setup_mount::machine_label(machine),
-            kind.label()
-        )));
+             them to a setup that does, or suppress them", &[format!("{}", who), format!("{}", turned.join(", ")), format!("{}", post), format!("{}", crate::setup_mount::machine_label(machine)), format!("{}", kind.label())])));
     }
-    Ok(Some(format!(
-        "{who} ({}): {post} does not serve {}, a {} machine - it would write a program that machine cannot run; \
-         give the setup a post that serves {}, or suppress its operations{}",
-        ops.join(", "),
-        crate::setup_mount::machine_label(machine),
-        kind.label(),
-        kind.label(),
-        if registry_name(cps).is_some() {
+    Ok(Some(camcraft_i18n::tf("{who} ({}): {post} does not serve {}, a {} machine - it would write a program that machine cannot run; \
+         give the setup a post that serves {}, or suppress its operations{}", &[format!("{}", who), format!("{}", ops.join(", ")), format!("{}", post), format!("{}", crate::setup_mount::machine_label(machine)), format!("{}", kind.label()), format!("{}", kind.label()), format!("{}", if registry_name(cps).is_some() {
             String::new()
         } else {
-            format!(" (a script of your own states the kinds it serves: serves = [\"{}\"];)", kind.word())
-        }
-    )))
+            camcraft_i18n::tf(" (a script of your own states the kinds it serves: serves = [\"{}\"];)", &[format!("{}", kind.word())])
+        })])))
 }
 
 #[cfg(test)]

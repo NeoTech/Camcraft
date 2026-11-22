@@ -125,7 +125,7 @@ impl JawParams {
     /// "fixed jaw block" / "adjustable jaw block", as refusals say it.
     #[must_use]
     pub fn what(&self) -> String {
-        format!("{} jaw block", self.side.word())
+        camcraft_i18n::tf("{} jaw block", &[format!("{}", self.side.word())])
     }
 
     /// The body's centre across (local X): the bolt pattern's mid-span.
@@ -150,31 +150,31 @@ impl JawParams {
         let what = self.what();
         for (fig, v) in self.named() {
             if !v.is_finite() {
-                return Err(format!("{what} {fig} must be a finite length (got {v})"));
+                return Err(camcraft_i18n::tf("{what} {fig} must be a finite length (got {v})", &[format!("{}", what), format!("{}", fig), format!("{}", v)]));
             }
             if v <= 0.0 {
-                return Err(format!("{what} {fig} must be more than zero (got {v} mm)"));
+                return Err(camcraft_i18n::tf("{what} {fig} must be more than zero (got {v} mm)", &[format!("{}", what), format!("{}", fig), format!("{}", v)]));
             }
         }
         for (fig, v) in [("face offset", self.face_offset), ("slot travel", self.slot_travel), ("slide", self.slide)] {
             if !v.is_finite() {
-                return Err(format!("{what} {fig} must be finite (got {v})"));
+                return Err(camcraft_i18n::tf("{what} {fig} must be finite (got {v})", &[format!("{}", what), format!("{}", fig), format!("{}", v)]));
             }
         }
         if self.slot_travel < 0.0 || self.slide < 0.0 {
-            return Err(format!("{what} slot travel and slide must not be negative"));
+            return Err(camcraft_i18n::tf("{what} slot travel and slide must not be negative", &[format!("{}", what)]));
         }
         if self.side == JawSide::Fixed && (self.slot_travel > 0.0 || self.slide > 0.0) {
-            return Err(format!("a {what} has no slot travel (got {:.3} mm)", self.slot_travel.max(self.slide)));
+            return Err(camcraft_i18n::tf("a {what} has no slot travel (got {:.3} mm)", &[format!("{}", what), format!("{:.3}", self.slot_travel.max(self.slide))]));
         }
         if self.slide > self.slot_travel + TOL {
-            return Err(format!("{what} slide {:.3} mm is past its slot travel {:.3} mm", self.slide, self.slot_travel));
+            return Err(camcraft_i18n::tf("{what} slide {:.3} mm is past its slot travel {:.3} mm", &[format!("{}", what), format!("{:.3}", self.slide), format!("{:.3}", self.slot_travel)]));
         }
         if self.bolts.is_empty() || self.bolts.len() > MAX_FOOTPRINT || self.pins.len() > MAX_FOOTPRINT {
-            return Err(format!("{what} needs 1 to {MAX_FOOTPRINT} bolts and at most {MAX_FOOTPRINT} pins"));
+            return Err(camcraft_i18n::tf("{what} needs 1 to {MAX_FOOTPRINT} bolts and at most {MAX_FOOTPRINT} pins", &[format!("{}", what), format!("{}", MAX_FOOTPRINT), format!("{}", MAX_FOOTPRINT)]));
         }
         if !self.bolts.iter().any(|b| b[0] == 0.0 && b[1] == 0.0) {
-            return Err(format!("{what} needs its anchor bolt at [0, 0] (the grid hole it is placed on)"));
+            return Err(camcraft_i18n::tf("{what} needs its anchor bolt at [0, 0] (the grid hole it is placed on)", &[format!("{}", what)]));
         }
         let r = 0.5 * self.bolt_diameter;
         let xc = self.centre_x();
@@ -185,16 +185,11 @@ impl JawParams {
         for (kind, pts) in [("bolt", &self.bolts), ("pin", &self.pins)] {
             for p in pts.iter() {
                 if !(p[0].is_finite() && p[1].is_finite()) {
-                    return Err(format!("{what} {kind} position must be finite"));
+                    return Err(camcraft_i18n::tf("{what} {kind} position must be finite", &[format!("{}", what), format!("{}", kind)]));
                 }
                 let inside = (p[0] - xc).abs() + r <= half + TOL && p[1] - r >= rear + self.slot_travel - TOL && p[1] + r <= front + TOL;
                 if !inside {
-                    return Err(format!(
-                        "{what} {kind} at [{:.3}, {:.3}] mm is not inside the body{} - check the face offset, body length and slot travel",
-                        p[0],
-                        p[1],
-                        if self.slot_travel > 0.0 { " at every slide" } else { "" }
-                    ));
+                    return Err(camcraft_i18n::tf("{what} {kind} at [{:.3}, {:.3}] mm is not inside the body{} - check the face offset, body length and slot travel", &[format!("{}", what), format!("{}", kind), format!("{:.3}", p[0]), format!("{:.3}", p[1]), format!("{}", if self.slot_travel > 0.0 { " at every slide" } else { "" })]));
                 }
             }
         }
@@ -218,6 +213,6 @@ impl JawParams {
     #[must_use]
     pub fn base_name(&self) -> String {
         let s = self.size.trim();
-        if s.is_empty() { format!("Mod vise {}", self.side.word()) } else { format!("Mod vise {} {s}", self.side.word()) }
+        if s.is_empty() { camcraft_i18n::tf("Mod vise {}", &[format!("{}", self.side.word())]) } else { camcraft_i18n::tf("Mod vise {} {s}", &[format!("{}", self.side.word()), format!("{}", s)]) }
     }
 }

@@ -31,7 +31,7 @@ impl ClearToolpath {
         let prev_operation = model::operation_of(world, &entity)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not an operation")))?;
         let prev_cache = model::toolpath_of(world, &entity).ok_or_else(|| {
-            CommandError::Invalid(format!("'{name}' has no generated toolpath to clear"))
+            CommandError::Invalid(camcraft_i18n::tf("'{name}' has no generated toolpath to clear", &[format!("{}", name)]))
         })?;
         Ok(ClearToolpath { name: name.to_string(), prev_operation, prev_cache })
     }

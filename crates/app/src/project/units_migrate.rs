@@ -40,25 +40,15 @@ pub(super) fn settle(file: &mut ProjectFile) -> Vec<String> {
         Some(u) if u == shown_inch => Vec::new(),
         Some(u) => {
             file.units = u.then(|| "in".to_owned());
-            vec![format!(
-                "the document displayed {} but its programs posted in {} (from the machine file); a document's unit is now \
-                 its programs' unit too, so it opens in {} and posts exactly as before",
-                word(shown_inch),
-                word(u),
-                word(u)
-            )]
+            vec![camcraft_i18n::tf("the document displayed {} but its programs posted in {} (from the machine file); a document's unit is now \
+                 its programs' unit too, so it opens in {} and posts exactly as before", &[format!("{}", word(shown_inch)), format!("{}", word(u)), format!("{}", word(u))])]
         }
         None => setups
             .iter()
             .filter(|(_, s)| *s != shown_inch)
             .map(|(name, s)| {
-                format!(
-                    "setup '{name}' posted in {} (from its machine file); every program is now written in the document's \
-                     unit ({}) - set the document's units to {} to post it as before",
-                    word(*s),
-                    word(shown_inch),
-                    word(*s)
-                )
+                camcraft_i18n::tf("setup '{name}' posted in {} (from its machine file); every program is now written in the document's \
+                     unit ({}) - set the document's units to {} to post it as before", &[format!("{}", name), format!("{}", word(*s)), format!("{}", word(shown_inch)), format!("{}", word(*s))])
             })
             .collect(),
     }

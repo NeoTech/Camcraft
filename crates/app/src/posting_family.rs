@@ -26,11 +26,7 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
         if let Some(op) = model::operation_of(world, e) {
             let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
             if !op.params.kind().info().admits(machine) {
-                return Err(format!(
-                    "{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation",
-                    op.params.kind(),
-                    machine.label()
-                ));
+                return Err(camcraft_i18n::tf("{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation", &[format!("{}", name), format!("{}", op.params.kind()), format!("{}", machine.label())]));
             }
             // #1453: no post currently declares a left-hand tapping cycle.
             if op.params.kind().info().mounts_tool()
@@ -39,7 +35,7 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
                 && tool.kind == crate::tools::ToolKind::Tap
                 && tool.thread_hand == crate::tools::ThreadHand::Left
             {
-                return Err(format!("{name}: left-hand tap {} is not supported by posting", op.tool));
+                return Err(camcraft_i18n::tf("{name}: left-hand tap {} is not supported by posting", &[format!("{}", name), format!("{}", op.tool)]));
             }
             // #532/#533: an op that mounts no tool posts only as its own
             // kind's section - the Wire Contour's (`posting_wire`), whose
@@ -47,10 +43,7 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
             // tool-less kind is refused by name, never posted (and before
             // any tool is read: it has none).
             if !op.params.kind().info().mounts_tool() && !matches!(op.params, OpParams::WireContour(_)) {
-                return Err(format!(
-                    "{name}: a {} operation has no post section yet - nothing is posted",
-                    op.params.kind()
-                ));
+                return Err(camcraft_i18n::tf("{name}: a {} operation has no post section yet - nothing is posted", &[format!("{}", name), format!("{}", op.params.kind())]));
             }
         }
     }

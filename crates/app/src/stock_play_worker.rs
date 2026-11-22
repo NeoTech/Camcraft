@@ -144,7 +144,7 @@ impl PlayWorker {
         let handle = std::thread::Builder::new()
             .name("camcraft-playback".into())
             .spawn(move || run(&inner, seed, budget))
-            .map_err(|e| format!("playback worker would not start: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("playback worker would not start: {e}", &[format!("{}", e)]))?;
         Ok(PlayWorker { shared, index, handle: Some(handle), shown: AtomicUsize::new(usize::MAX), shown_frac: AtomicU64::new(0) })
     }
 

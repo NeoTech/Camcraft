@@ -66,20 +66,14 @@ impl InsertText {
             None => crate::setup::active(world),
         };
         if sketch::face_frame(world, setup.as_deref()).is_none() {
-            return Err(CommandError::Invalid(format!(
-                "{} has no stock - make a stock first, then place the text on it",
-                setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{} has no stock - make a stock first, then place the text on it", &[format!("{}", setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'")))])));
         }
         let TextOptions { x, y, angle_deg, .. } = *options;
         if !(x.is_finite() && y.is_finite() && angle_deg.is_finite()) {
             return Err(CommandError::Invalid("the text placement must be finite".to_owned()));
         }
         if x.abs() > sketch::MAX_OFFSET || y.abs() > sketch::MAX_OFFSET {
-            return Err(CommandError::Invalid(format!(
-                "the text placement is more than {} mm from the stock origin",
-                sketch::MAX_OFFSET
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("the text placement is more than {} mm from the stock origin", &[format!("{}", sketch::MAX_OFFSET)])));
         }
         let spec = TextSpec { text: &options.text, height: options.height, letter_spacing: options.letter_spacing };
         let data = stroke_text::sketch(&spec).map_err(|e| CommandError::Invalid(e.to_string()))?;
@@ -109,7 +103,7 @@ fn text_name(world: &World, text: &str, stated: Option<&str>) -> Result<String, 
     let reserved = |n: &str| n.eq_ignore_ascii_case(STOCK_NAME) || LEGACY_WCS_NAMES.contains(&n) || crate::setup::is_furniture_shape(n);
     if let Some(name) = stated {
         if name.trim().is_empty() || reserved(name) {
-            return Err(CommandError::Invalid(format!("'{name}' is not a usable name for a text profile")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a usable name for a text profile", &[format!("{}", name)])));
         }
         if model::find_by_name(world, name).is_some() {
             return Err(CommandError::NameConflict(name.to_owned()));

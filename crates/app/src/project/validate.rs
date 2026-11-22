@@ -9,27 +9,24 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
     // wearing it would be a file describing a CAM concept that has no
     // world representation.
     if dto.fixture.is_some() && !matches!(kind, EntityKind::Model) {
-        return Err(corrupt(format!(
-            "'{}' wears a fixture tag but is not a model",
-            dto.name
-        )));
+        return Err(corrupt(camcraft_i18n::tf("'{}' wears a fixture tag but is not a model", &[format!("{}", dto.name)])));
     }
     super::program_entry_dto::validate(dto, kind)?; // #155
     super::sketch_dto::validate(dto, kind)?; // #1862
     // #1720: a flip rides a WCS row and nothing else.
     if dto.flip.is_some() && !matches!(kind, EntityKind::Wcs) {
-        return Err(corrupt(format!("'{}' records a flipped axis but is not a WCS", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' records a flipped axis but is not a WCS", &[format!("{}", dto.name)])));
     }
     // #1054: a recorded STEP facet budget rides a model row only, inside
     // the bounds an import would accept.
     if let Some(b) = dto.facet_budget {
         if !matches!(kind, EntityKind::Model) {
-            return Err(corrupt(format!("'{}' records a STEP facet budget but is not a model", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("'{}' records a STEP facet budget but is not a model", &[format!("{}", dto.name)])));
         }
         crate::geometry::import::step_budget::check(b).map_err(|e| corrupt(format!("'{}': {e}", dto.name)))?;
     }
     if dto.step_source.is_some() && !matches!(kind, EntityKind::Model) {
-        return Err(corrupt(format!("'{}' records STEP source but is not a model", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' records STEP source but is not a model", &[format!("{}", dto.name)])));
     }
     // #2463: a source rides a model row only, with a path and a digest.
     if let Some(src) = &dto.source {
@@ -39,10 +36,10 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
     // beside a recorded chord - one entity cannot both know and not know.
     if dto.fidelity_unknown {
         if !matches!(kind, EntityKind::Model | EntityKind::Stock) {
-            return Err(corrupt(format!("'{}' marks a mesh fidelity unknown but is not a model or stock", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("'{}' marks a mesh fidelity unknown but is not a model or stock", &[format!("{}", dto.name)])));
         }
         if dto.coarse_mm.is_some() {
-            return Err(corrupt(format!("'{}' records a chord error and an unknown fidelity at once", dto.name)));
+            return Err(corrupt(camcraft_i18n::tf("'{}' records a chord error and an unknown fidelity at once", &[format!("{}", dto.name)])));
         }
     }
     // #1610: a hole is said of a mesh of unknown fidelity only - a model,
@@ -50,10 +47,10 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
     let copy = matches!(kind, EntityKind::Stock)
         && dto.stock.as_ref().is_some_and(|s| matches!(s.to_shape(), StockShape::FromModel { .. }));
     if dto.mesh_open.is_some() && !(dto.fidelity_unknown && (matches!(kind, EntityKind::Model) || copy)) {
-        return Err(corrupt(format!("'{}' names a mesh hole but is not a model marked fidelity unknown, or a stock copied from one", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' names a mesh hole but is not a model marked fidelity unknown, or a stock copied from one", &[format!("{}", dto.name)])));
     }
     if dto.file_tolerance && (dto.coarse_mm.is_none() || dto.fidelity_unknown || !(matches!(kind, EntityKind::Model) || copy)) {
-        return Err(corrupt(format!("'{}' records a file tolerance without a known model chord", dto.name)));
+        return Err(corrupt(camcraft_i18n::tf("'{}' records a file tolerance without a known model chord", &[format!("{}", dto.name)])));
     }
     // #1339: a vouch is a model's, and never rides beside a flag.
     if let Some(vouch) = &dto.fidelity_vouched {
@@ -68,47 +65,33 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 || dto.operation.is_some()
                 || dto.setup.is_some()
             {
-                return Err(corrupt(format!(
-                    "'{}' is a model carrying setup or CAM parameters",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is a model carrying setup or CAM parameters", &[format!("{}", dto.name)])));
             }
             if dto
                 .fixture
                 .as_ref()
                 .is_some_and(|f| f.setup.as_deref().is_some_and(str::is_empty))
             {
-                return Err(corrupt(format!(
-                    "'{}' is tagged a fixture of an empty setup name",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is tagged a fixture of an empty setup name", &[format!("{}", dto.name)])));
             }
         }
         EntityKind::Stock => {
             if dto.tool.is_some() || dto.operation.is_some() || dto.setup.is_some() {
-                return Err(corrupt(format!(
-                    "'{}' is stock carrying tool, operation or setup parameters",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is stock carrying tool, operation or setup parameters", &[format!("{}", dto.name)])));
             }
             // v21: setup furniture may live under a private name - the
             // two shapes are exactly what `setup::stock_entity_name`
             // resolves (the implicit-setup law's legacy name, or the
             // "{SetupN}/Stock" a declared setup points at by default).
             if dto.name != STOCK_NAME && !dto.name.ends_with("/Stock") {
-                return Err(corrupt(format!(
-                    "a stock entity must be named '{STOCK_NAME}' or a setup's \"<setup>/Stock\", found '{}'",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("a stock entity must be named '{STOCK_NAME}' or a setup's \"<setup>/Stock\", found '{}'", &[format!("{}", STOCK_NAME), format!("{}", dto.name)])));
             }
             let Some(stock) = &dto.stock else {
                 return Err(corrupt("stock entity without parameters"));
             };
             let shape = stock.to_shape();
             if !shape.is_sane() || !shape.is_bounded() {
-                return Err(corrupt(format!(
-                    "stock parameters are not usable: {stock:?}"
-                )));
+                return Err(corrupt(camcraft_i18n::tf("stock parameters are not usable: {stock:?}", &[format!("{:?}", stock)])));
             }
             match (&shape, &dto.facets) {
                 // Parametric stock is regenerated, never stored as floats;
@@ -135,10 +118,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                     LEGACY_WCS_NAMES.contains(&last) || last == crate::setup::WCS_SUFFIX
                 });
             if !name_ok {
-                return Err(corrupt(format!(
-                    "'{}' is not a WCS name (expected G54, a setup's \"<setup>/WCS\", or an older \"<setup>/<slot>\")",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is not a WCS name (expected G54, a setup's \"<setup>/WCS\", or an older \"<setup>/<slot>\")", &[format!("{}", dto.name)])));
             }
             if dto.facets.is_some()
                 || dto.stock.is_some()
@@ -155,18 +135,12 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 || !dto.rotation.iter().all(|v| v.is_finite())
                 || crate::geometry::normalize_quat(dto.rotation).is_none()
             {
-                return Err(corrupt(format!(
-                    "WCS '{}' has a non-finite or degenerate placement (origin or rotation)",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("WCS '{}' has a non-finite or degenerate placement (origin or rotation)", &[format!("{}", dto.name)])));
             }
         }
         EntityKind::Tool => {
             if is_furniture_name(&dto.name) {
-                return Err(corrupt(format!(
-                    "'{}' is reserved for the setup's stock or work offsets, not a tool",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is reserved for the setup's stock or work offsets, not a tool", &[format!("{}", dto.name)])));
             }
             if dto.name.is_empty() {
                 return Err(corrupt("a tool entity must be named"));
@@ -190,11 +164,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
             if let Some(n) = tool.number
                 && !crate::tool_numbers::valid(n)
             {
-                return Err(corrupt(format!(
-                    "tool '{}' has number {n}; tool numbers run {}",
-                    dto.name,
-                    crate::tool_numbers::RANGE_TEXT
-                )));
+                return Err(corrupt(camcraft_i18n::tf("tool '{}' has number {n}; tool numbers run {}", &[format!("{}", dto.name), format!("{}", n), format!("{}", crate::tool_numbers::RANGE_TEXT)])));
             }
             // #368: a body is a body this build's envelope law accepts,
             // on a tool it fits - or the file refuses by name.
@@ -221,10 +191,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 || dto.tool.is_some()
                 || dto.setup.is_some()
             {
-                return Err(corrupt(format!(
-                    "'{}' is an operation, not a solid, tool or setup",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is an operation, not a solid, tool or setup", &[format!("{}", dto.name)])));
             }
             let Some(op) = &dto.operation else {
                 return Err(corrupt("operation entity without a definition"));
@@ -232,34 +199,31 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
             // Legacy Wire Contours stored no tool. Keep that recoverable state;
             // generation and posting still require an explicit wire tool.
             if op.tool.is_empty() && !matches!(op.params.to_params(), OpParams::WireContour(_)) {
-                return Err(corrupt(format!("'{}' names no tool", dto.name)));
+                return Err(corrupt(camcraft_i18n::tf("'{}' names no tool", &[format!("{}", dto.name)])));
             }
             if op.label.as_deref().is_some_and(|s| s.trim().is_empty() || s.len() > 120 || s.chars().any(char::is_control)) {
-                return Err(corrupt(format!("'{}' has an invalid operation label", dto.name)));
+                return Err(corrupt(camcraft_i18n::tf("'{}' has an invalid operation label", &[format!("{}", dto.name)])));
             }
             if op.needs_review.iter().any(|s| s.trim().is_empty() || s.len() > 240 || s.chars().any(char::is_control)) {
-                return Err(corrupt(format!("'{}' has an invalid needs_review note", dto.name)));
+                return Err(corrupt(camcraft_i18n::tf("'{}' has an invalid needs_review note", &[format!("{}", dto.name)])));
             }
             if op.setup.as_deref().is_some_and(str::is_empty) {
-                return Err(corrupt(format!("'{}' names an empty setup", dto.name)));
+                return Err(corrupt(camcraft_i18n::tf("'{}' names an empty setup", &[format!("{}", dto.name)])));
             }
             if let SrcDto::Entity { name } = &op.src
                 && name.is_empty()
             {
-                return Err(corrupt(format!(
-                    "'{}' has an empty geometry source",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' has an empty geometry source", &[format!("{}", dto.name)])));
             }
             if !op.area.do_not_touch.is_default() {
                 let cl = op.area.do_not_touch.clearance;
                 if !cl.is_finite() || cl < 0.0 || cl > crate::operation::AREA_DISTANCE_MAX {
-                    return Err(corrupt(format!("'{}' has invalid Do not touch clearance", dto.name)));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' has invalid Do not touch clearance", &[format!("{}", dto.name)])));
                 }
                 if op.area.do_not_touch.items.iter().any(|g| {
                     g.entity.is_empty() || matches!(g.feature, FeatureSelDto::Vertex { .. })
                 }) {
-                    return Err(corrupt(format!("'{}' has invalid Do not touch pick", dto.name)));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' has invalid Do not touch pick", &[format!("{}", dto.name)])));
                 }
                 let ctrl = op.area.to_controls();
                 let params = op.params.to_params();
@@ -286,54 +250,31 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                             || matches!(&g.feature, FeatureSelDto::SketchLayer { layer } if layer.is_empty())
                     }))
             {
-                return Err(corrupt(format!(
-                    "'{}' has an empty or half-named geometry selection",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' has an empty or half-named geometry selection", &[format!("{}", dto.name)])));
             }
             let params = op.params.to_params();
             if let Some(why) = params.named_refusal() {
                 return Err(corrupt(format!("'{}': {why}", dto.name)));
             }
             if !params.is_sane() {
-                return Err(corrupt(format!(
-                    "operation parameters are not usable for a {} operation '{}'",
-                    params.kind(),
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("operation parameters are not usable for a {} operation '{}'", &[format!("{}", params.kind()), format!("{}", dto.name)])));
             }
             if !op.area.to_controls().is_sane_for(&params) {
-                return Err(corrupt(format!(
-                    "the Boundary settings of '{}' are not usable for a {} operation",
-                    dto.name,
-                    params.kind()
-                )));
+                return Err(corrupt(camcraft_i18n::tf("the Boundary settings of '{}' are not usable for a {} operation", &[format!("{}", dto.name), format!("{}", params.kind())])));
             }
             if let Some(cache) = &op.cache {
                 let path = cl_path(&cache.moves, &cache.cycles);
                 if path.is_empty() {
-                    return Err(corrupt(format!(
-                        "'{}' carries a cached path with no moves",
-                        dto.name
-                    )));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' carries a cached path with no moves", &[format!("{}", dto.name)])));
                 }
                 if !path.all_finite() {
-                    return Err(corrupt(format!(
-                        "'{}' cache has non-finite moves",
-                        dto.name
-                    )));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' cache has non-finite moves", &[format!("{}", dto.name)])));
                 }
                 if !path.is_chained() {
-                    return Err(corrupt(format!(
-                        "'{}' cache is not a linked path",
-                        dto.name
-                    )));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' cache is not a linked path", &[format!("{}", dto.name)])));
                 }
                 if path.cycles.iter().any(|c| c.first_move >= path.moves.len()) {
-                    return Err(corrupt(format!(
-                        "'{}' cache has a cycle pointing past the end of its chain",
-                        dto.name
-                    )));
+                    return Err(corrupt(camcraft_i18n::tf("'{}' cache has a cycle pointing past the end of its chain", &[format!("{}", dto.name)])));
                 }
             }
         }
@@ -346,10 +287,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 || dto.tool.is_some()
                 || dto.operation.is_some()
             {
-                return Err(corrupt(format!(
-                    "'{}' is a setup, not a solid, tool or operation",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' is a setup, not a solid, tool or operation", &[format!("{}", dto.name)])));
             }
             let Some(s) = &dto.setup else {
                 return Err(corrupt("setup entity without a definition"));
@@ -363,10 +301,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 WcsDto::Slots(l) => l.iter().any(String::is_empty),
             };
             if s.stock.is_empty() || wcs_empty {
-                return Err(corrupt(format!(
-                    "'{}' has an empty stock or work-offset name",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("'{}' has an empty stock or work-offset name", &[format!("{}", dto.name)])));
             }
         }
     }

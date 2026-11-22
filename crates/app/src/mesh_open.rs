@@ -90,9 +90,7 @@ pub fn note_for(hole: Option<&str>) -> String {
 }
 
 fn incomplete(hole: &str) -> String {
-    format!(
-        "imported incomplete - {hole} - so it has walls missing and no gouge check against it can be trusted; {ADVICE}"
-    )
+    camcraft_i18n::tf("imported incomplete - {hole} - so it has walls missing and no gouge check against it can be trusted; {ADVICE}", &[format!("{}", hole), format!("{}", ADVICE)])
 }
 
 /// The plain-words line the model page and the import status show for a
@@ -101,7 +99,7 @@ fn incomplete(hole: &str) -> String {
 #[must_use]
 pub fn summary(world: &World, entity: &Entity, chord_mm: f64) -> String {
     match hole_of(world, entity) {
-        Some(hole) => format!("Incomplete: {hole}. Its operations are refused at the post; {ADVICE}."),
+        Some(hole) => camcraft_i18n::tf("Incomplete: {hole}. Its operations are refused at the post; {ADVICE}.", &[format!("{}", hole), format!("{}", ADVICE)]),
         None => crate::model_fidelity::summary_with_cause(world, chord_mm, crate::model_fidelity::file_tolerance_of(world, entity)),
     }
 }

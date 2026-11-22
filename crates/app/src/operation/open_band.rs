@@ -50,10 +50,7 @@ fn refuse(msg: String) -> GenError {
 /// The refusal of record for ONE open run in a pocket-family selection
 /// (the text every kind has always given; a band needs two).
 pub(super) fn mid_edge(label: &str, params: &OpParams) -> GenError {
-    refuse(format!(
-        "{label} is an open run - a {} cannot end mid-edge; select a closed chain - Ctrl+click the remaining edges, or Shift+click to take the whole loop",
-        params.kind().info().label
-    ))
+    refuse(camcraft_i18n::tf("{label} is an open run - a {} cannot end mid-edge; select a closed chain - Ctrl+click the remaining edges, or Shift+click to take the whole loop", &[format!("{}", label), format!("{}", params.kind().info().label)]))
 }
 
 fn band_kind(params: &OpParams) -> bool {
@@ -90,16 +87,10 @@ fn walls(
     let kind = params.kind().info().label;
     let stock_name = crate::setup::stock_entity_name(world, setup);
     if let Some(r) = runs.iter().find(|r| r.entity == stock_name) {
-        return Err(refuse(format!(
-            "an open edge of the stock '{}' is picked - an open-edge band needs two wall edges of the part; pick the part's edges",
-            r.entity
-        )));
+        return Err(refuse(camcraft_i18n::tf("an open edge of the stock '{}' is picked - an open-edge band needs two wall edges of the part; pick the part's edges", &[format!("{}", r.entity)])));
     }
     if runs.iter().map(|r| r.items.len()).sum::<usize>() != items.len() {
-        return Err(refuse(format!(
-            "the selection mixes {} open edges with closed boundaries - a {kind} takes closed boundaries, or two opposite open edges alone; remove one kind",
-            runs.len()
-        )));
+        return Err(refuse(camcraft_i18n::tf("the selection mixes {} open edges with closed boundaries - a {kind} takes closed boundaries, or two opposite open edges alone; remove one kind", &[format!("{}", runs.len()), format!("{}", kind)])));
     }
     let unit = crate::units::of(world);
     let z = |v: f64| crate::units::len(v, unit, 3);
@@ -108,20 +99,11 @@ fn walls(
         let lo = r.zs.iter().copied().fold(f64::INFINITY, f64::min);
         let hi = r.zs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         if !(hi - lo).is_finite() || hi - lo > LEVEL_TOL {
-            return Err(refuse(format!(
-                "a picked open edge of '{}' is not level (it runs from Z {} to Z {}) - an open-edge band needs two level edges at one height",
-                r.entity,
-                z(lo),
-                z(hi)
-            )));
+            return Err(refuse(camcraft_i18n::tf("a picked open edge of '{}' is not level (it runs from Z {} to Z {}) - an open-edge band needs two level edges at one height", &[format!("{}", r.entity), format!("{}", z(lo)), format!("{}", z(hi))])));
         }
         match level {
             Some(l) if (l - lo).abs() > LEVEL_TOL => {
-                return Err(refuse(format!(
-                    "the picked open edges are at different heights (Z {} and Z {}) - an open-edge band needs both walls at one height; pick the two top edges of the slot",
-                    z(l),
-                    z(lo)
-                )));
+                return Err(refuse(camcraft_i18n::tf("the picked open edges are at different heights (Z {} and Z {}) - an open-edge band needs both walls at one height; pick the two top edges of the slot", &[format!("{}", z(l)), format!("{}", z(lo))])));
             }
             _ => level = Some(lo),
         }
@@ -130,10 +112,7 @@ fn walls(
     match (welded.pop(), welded.pop(), welded.len()) {
         (Some(b), Some(a), 0) => Ok(Some((a, Some(b)))),
         (Some(a), None, _) => Ok(Some((a, None))),
-        (_, _, more) => Err(refuse(format!(
-            "the picked open edges spell {} separate runs - an open-edge band has exactly two walls; pick two edges that face each other",
-            more + 2
-        ))),
+        (_, _, more) => Err(refuse(camcraft_i18n::tf("the picked open edges spell {} separate runs - an open-edge band has exactly two walls; pick two edges that face each other", &[format!("{}", more + 2)]))),
     }
 }
 
@@ -259,9 +238,7 @@ pub(super) fn band(a: &[Point2], b: &[Point2], stock: &Region, extend: f64) -> R
     let (cross, dot) = (ca.1.0 * cb.1.1 - ca.1.1 * cb.1.0, ca.1.0 * cb.1.0 + ca.1.1 * cb.1.1);
     let angle = cross.abs().atan2(dot.abs()).to_degrees();
     if angle.is_nan() || angle > FACING_MAX_DEG {
-        return Err(refuse(format!(
-            "the two picked open edges do not face each other (they stand at {angle:.0} degrees to each other; the limit is {FACING_MAX_DEG:.0}) - pick two opposite edges"
-        )));
+        return Err(refuse(camcraft_i18n::tf("the two picked open edges do not face each other (they stand at {angle:.0} degrees to each other; the limit is {FACING_MAX_DEG:.0}) - pick two opposite edges", &[format!("{:.0}", angle), format!("{:.0}", FACING_MAX_DEG)])));
     }
     // Each wall must run alongside the other for some of its length.
     let alongside = |c: &(Point2, (f64, f64), f64), other: &[Point2]| {
@@ -321,9 +298,7 @@ pub(super) fn band(a: &[Point2], b: &[Point2], stock: &Region, extend: f64) -> R
     }
     let pieces = band.loops().iter().filter(|l| l.is_ccw()).count();
     if pieces != 1 {
-        return Err(refuse(format!(
-            "the stock outline closes the band between the two picked open edges in {pieces} separate pieces - there is more than one way to close it; pick a closed chain around the area"
-        )));
+        return Err(refuse(camcraft_i18n::tf("the stock outline closes the band between the two picked open edges in {pieces} separate pieces - there is more than one way to close it; pick a closed chain around the area", &[format!("{}", pieces)])));
     }
     Ok(band)
 }

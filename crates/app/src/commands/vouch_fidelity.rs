@@ -48,25 +48,16 @@ impl VouchModelFidelity {
             return Err(CommandError::NotFound(name.to_string()));
         };
         if !model::is_model(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data; vouch for the model its mesh came from"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data; vouch for the model its mesh came from", &[format!("{}", name)])));
         }
         let Some(chord) = model_fidelity::chord_of(world, &entity) else {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' is not marked fidelity unknown: there is nothing to vouch for"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not marked fidelity unknown: there is nothing to vouch for", &[format!("{}", name)])));
         };
         if !is_unknown(chord) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' has a recorded fidelity ({}); only a mesh of unknown fidelity can be vouched for - re-import it with a larger STEP facet budget, or export the file again with a tighter tolerance",
-                model_fidelity::summary(world, chord)
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' has a recorded fidelity ({}); only a mesh of unknown fidelity can be vouched for - re-import it with a larger STEP facet budget, or export the file again with a tighter tolerance", &[format!("{}", name), format!("{}", model_fidelity::summary(world, chord))])));
         }
         if let Some(hole) = crate::mesh_open::hole_of(world, &entity) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' was imported incomplete - {hole}: a mesh with walls missing cannot be vouched for; re-export the model, or import an STL"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' was imported incomplete - {hole}: a mesh with walls missing cannot be vouched for; re-export the model, or import an STL", &[format!("{}", name), format!("{}", hole)])));
         }
         let copies = model::named_entities(world)
             .into_iter()
@@ -96,7 +87,7 @@ impl VouchModelFidelity {
     /// What the history says of this step: the model and who vouched.
     #[must_use]
     pub fn label(&self) -> String {
-        format!("Vouch for the mesh of '{}' (by {})", self.name, self.record.by)
+        camcraft_i18n::tf("Vouch for the mesh of '{}' (by {})", &[format!("{}", self.name), format!("{}", self.record.by)])
     }
 
     /// Execute as one labelled undo step, so the history names who vouched.

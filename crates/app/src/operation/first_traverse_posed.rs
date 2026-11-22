@@ -82,11 +82,7 @@ pub(super) fn turn_of(params: &OpParams, mill: bool, rotaries: Option<&[AxisLimi
     let origin = Point3::new(wcs_origin[0], wcs_origin[1], wcs_origin[2]);
     // #3127: the sphere and the line both pass through the WCS origin.
     let off = |a: &AxisLimits| {
-        format!(
-            "{}: the work-turning rotary {} states a pivot or offset that moves its line off the WCS origin, so the first traverse over the work it turns cannot be judged",
-            params.kind().info().label,
-            a.name
-        )
+        camcraft_i18n::tf("{}: the work-turning rotary {} states a pivot or offset that moves its line off the WCS origin, so the first traverse over the work it turns cannot be judged", &[format!("{}", params.kind().info().label), format!("{}", a.name)])
     };
     if turning.len() >= 2 {
         if let Some(a) = turning.iter().find(|a| off_origin(a)) {
@@ -105,11 +101,7 @@ pub(super) fn turn_of(params: &OpParams, mill: bool, rotaries: Option<&[AxisLimi
     match (rotary_line(a), stated) {
         (RotaryLine::Vertical, _) => Ok(None),
         (RotaryLine::Horizontal(dir), _) | (RotaryLine::Leaning, Some(dir)) => Ok(Some(PosedTurn::Line { origin, dir })),
-        (RotaryLine::Leaning | RotaryLine::Unknown, _) => Err(format!(
-            "{}: the work-turning rotary {} states no usable axis line, so the first traverse over the work it turns cannot be judged",
-            params.kind().info().label,
-            a.name
-        )),
+        (RotaryLine::Leaning | RotaryLine::Unknown, _) => Err(camcraft_i18n::tf("{}: the work-turning rotary {} states no usable axis line, so the first traverse over the work it turns cannot be judged", &[format!("{}", params.kind().info().label), format!("{}", a.name)])),
     }
 }
 

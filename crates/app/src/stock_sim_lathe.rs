@@ -131,23 +131,20 @@ pub(crate) fn lathe_plan(
         return Ok(None);
     }
     let Some(profile) = profile_of(tool) else {
-        return Err(format!(
-            "{name}: a turning op cut by a {} - a milling/drilling tool on the lathe has no revolved solid the field can sweep - not simulated",
-            tool.kind
-        ));
+        return Err(camcraft_i18n::tf("{name}: a turning op cut by a {} - a milling/drilling tool on the lathe has no revolved solid the field can sweep - not simulated", &[format!("{}", name), format!("{}", tool.kind)]));
     };
     // The footprint's own gate, said here by the op's name rather than
     // deep in the field walk.
     if let LatheProfile::Nose { radius } = profile
         && !(radius.is_finite() && radius > 0.0)
     {
-        return Err(format!("{name}: the insert carries no sane nose radius ({radius}) - not simulated"));
+        return Err(camcraft_i18n::tf("{name}: the insert carries no sane nose radius ({radius}) - not simulated", &[format!("{}", name), format!("{}", radius)]));
     }
-    profile.validate().map_err(|e| format!("{name}: {e} - not simulated"))?;
+    profile.validate().map_err(|e| camcraft_i18n::tf("{name}: {e} - not simulated", &[format!("{}", name), format!("{}", e)]))?;
     let facets = crate::operation::source_facets(world, op.setup.as_deref(), &op.src)
-        .map_err(|e| format!("{name}: the lathe frame needs the op's source: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("{name}: the lathe frame needs the op's source: {e}", &[format!("{}", name), format!("{}", e)]))?;
     let frame = crate::turning::profile::Frame::about(&facets)
-        .map_err(|e| format!("{name}: no spindle fits the op's source, so its turn has no frame to cut in: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("{name}: no spindle fits the op's source, so its turn has no frame to cut in: {e}", &[format!("{}", name), format!("{}", e)]))?;
     let (o, p) = (frame.point(0.0, 0.0), frame.point(0.0, 1.0));
     let axis = LatheAxis::new(o, [p.x - o.x, p.y - o.y, p.z - o.z]).map_err(|e| format!("{name}: {e}"))?;
     // A helix about the spindle (the Threading kernel's half-turn

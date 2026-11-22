@@ -67,7 +67,7 @@ pub fn load_aligned(path: &Path) -> Result<LoadedBody, String> {
                     let csys = report.systems.iter().map(crate::tool_body_assembly::BodyCsys::from_named).collect();
                     (report.align_tool_body(), csys)
                 }
-                Err(e) => (Err(format!("coordinate systems unreadable: {e}")), Vec::new()),
+                Err(e) => (Err(camcraft_i18n::tf("coordinate systems unreadable: {e}", &[format!("{}", e)])), Vec::new()),
             },
             Err(e) => (Err(format!("I/O error: {e}")), Vec::new()),
         }
@@ -98,7 +98,7 @@ pub fn preview(model: &[Triangle], axis: [f64; 3], offset: f64) -> Result<ToolBo
 /// kinds and a holder reaching into the flutes). Builds no facets, so
 /// the editor can run it every frame while the table is edited.
 pub fn spun_preview(tool: &Tool, points: &[SpunPoint]) -> Result<SpunProfile, String> {
-    let spun = SpunProfile::new(points.to_vec()).map_err(|e| format!("holder profile: {e}"))?;
+    let spun = SpunProfile::new(points.to_vec()).map_err(|e| camcraft_i18n::tf("holder profile: {e}", &[format!("{}", e)]))?;
     let probe = ToolBody {
         source: tool_body::SPUN_SOURCE.to_owned(),
         facets: std::sync::Arc::from(Vec::new()),

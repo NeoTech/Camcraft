@@ -132,12 +132,9 @@ pub(super) fn r_plane_clear(
     // the top is unknown); a non-finite one is dropped by `invalid_at`.
     let z = if top.is_finite() { top } else { c.entry_z };
     Err(GenError::invalid_at(
-        format!(
-            "R plane Z {:.3} is below the {what} top Z {top:.3} over the hole at ({:.3}, {:.3}) - the rapid down to R \
+        camcraft_i18n::tf("R plane Z {:.3} is below the {what} top Z {top:.3} over the hole at ({:.3}, {:.3}) - the rapid down to R \
              would cross uncut stock (a collision); raise Top of Part Z (the R plane) to the {what} top or above \
-             (an earlier operation's removal counts only once that operation is generated, upright, in this setup)",
-            c.r_z, c.xy.x, c.xy.y
-        ),
+             (an earlier operation's removal counts only once that operation is generated, upright, in this setup)", &[format!("{:.3}", c.r_z), format!("{}", what), format!("{:.3}", top), format!("{:.3}", c.xy.x), format!("{:.3}", c.xy.y), format!("{}", what)]),
         Point3::new(c.xy.x, c.xy.y, z),
     ))
 }

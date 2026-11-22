@@ -126,9 +126,7 @@ pub(super) struct AreaApplied {
 }
 
 fn empty_after(step: &str) -> GenError {
-    GenError::Empty(format!(
-        "the Boundary settings leave no area to machine after the {step} - relax them"
-    ))
+    GenError::Empty(camcraft_i18n::tf("the Boundary settings leave no area to machine after the {step} - relax them", &[format!("{}", step)]))
 }
 
 fn check(r: Region, step: &str) -> Result<Region, GenError> {

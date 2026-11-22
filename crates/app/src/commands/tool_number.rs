@@ -56,16 +56,10 @@ impl SetToolNumber {
             return Err(CommandError::Invalid(format!("'{name}' is not a tool")));
         }
         let Some(n) = next else {
-            return Err(CommandError::Invalid(format!(
-                "tool '{name}' must keep a tool number - tool numbers run {}",
-                tool_numbers::RANGE_TEXT
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}' must keep a tool number - tool numbers run {}", &[format!("{}", name), format!("{}", tool_numbers::RANGE_TEXT)])));
         };
         if !tool_numbers::valid(n) {
-            return Err(CommandError::Invalid(format!(
-                "tool number {n} is out of range - tool numbers run {}",
-                tool_numbers::RANGE_TEXT
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool number {n} is out of range - tool numbers run {}", &[format!("{}", n), format!("{}", tool_numbers::RANGE_TEXT)])));
         }
         let taken = model::named_entities(world).into_iter().find(|(other, e)| {
             other != name
@@ -73,15 +67,11 @@ impl SetToolNumber {
                 && !exclusive_different_machines(world, name, other)
         });
         if let Some((other, _)) = taken {
-            return Err(CommandError::Invalid(format!(
-                "tool number {n} is already '{other}''s"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool number {n} is already '{other}''s", &[format!("{}", n), format!("{}", other)])));
         }
         let prev = model::tool_number_of(world, &entity);
         if prev == Some(n) {
-            return Err(CommandError::Invalid(format!(
-                "'{name}' already has that tool number"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' already has that tool number", &[format!("{}", name)])));
         }
         Ok(Self {
             name: name.to_string(),

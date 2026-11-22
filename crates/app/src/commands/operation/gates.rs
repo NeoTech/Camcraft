@@ -34,7 +34,7 @@ fn src_exists(world: &World, setup: Option<&str>, src: &SrcRef) -> Result<(), Co
             match model::find_by_name(world, &name) {
                 Some(e) if model::is_stock(world, &e) => Ok(()),
                 Some(_) => {
-                    Err(CommandError::Invalid(format!("'{name}' exists but is not stock")))
+                    Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' exists but is not stock", &[format!("{}", name)])))
                 }
                 None => Err(CommandError::Invalid("no stock: set up stock first".into())),
             }
@@ -44,22 +44,16 @@ fn src_exists(world: &World, setup: Option<&str>, src: &SrcRef) -> Result<(), Co
                 return Err(CommandError::Invalid("empty geometry source name".into()));
             }
             match model::find_by_name(world, name) {
-                Some(e) if model::is_wcs(world, &e) => Err(CommandError::Invalid(format!(
-                    "'{name}' is a work offset, not a solid"
-                ))),
+                Some(e) if model::is_wcs(world, &e) => Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a work offset, not a solid", &[format!("{}", name)]))),
                 // A source is stock or one of the user's parts - never a
                 // tool, an operation, a setup, the stock entity by name,
                 // or workholding (a fixture is a model the collision
                 // checker guards, not geometry to machine).
-                Some(e) if model::is_fixture(world, &e) => Err(CommandError::Invalid(format!(
-                    "'{name}' is a fixture - workholding is checked for collisions, not machined"
-                ))),
+                Some(e) if model::is_fixture(world, &e) => Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a fixture - workholding is checked for collisions, not machined", &[format!("{}", name)]))),
                 // #1862: a DXF profile is a source by the profile law
                 // (`sketch_gate`), not a model.
                 Some(e) if crate::sketch::is_sketch(world, &e) => Ok(()),
-                Some(e) if !model::is_model(world, &e) => Err(CommandError::Invalid(format!(
-                    "'{name}' is not a model - an operation's source is the stock or a part"
-                ))),
+                Some(e) if !model::is_model(world, &e) => Err(CommandError::Invalid(camcraft_i18n::tf("'{name}' is not a model - an operation's source is the stock or a part", &[format!("{}", name)]))),
                 Some(_) => Ok(()),
                 None => Err(CommandError::NotFound(name.clone())),
             }
@@ -81,10 +75,7 @@ fn src_exists(world: &World, setup: Option<&str>, src: &SrcRef) -> Result<(), Co
                 }
                 match model::find_by_name(world, &g.entity) {
                     Some(e) if model::is_wcs(world, &e) => {
-                        return Err(CommandError::Invalid(format!(
-                            "'{}' is a work offset, not a solid",
-                            g.entity
-                        )));
+                        return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' is a work offset, not a solid", &[format!("{}", g.entity)])));
                     }
                     Some(_) => {}
                     None => return Err(CommandError::NotFound(g.entity.clone())),
@@ -153,53 +144,31 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
     // #669: a plasma table cuts only the plasma family (#670); the
     // refusal names the table's rule, not a mill to mount.
     if machine == crate::machine::Kind::Plasma {
-        return Err(CommandError::Invalid(format!(
-            "a {} operation is {} work; the setup's machine is a plasma table, which cuts only plasma operations (a Plasma Profile)",
-            params.kind(),
-            family.work(),
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation is {} work; the setup's machine is a plasma table, which cuts only plasma operations (a Plasma Profile)", &[format!("{}", params.kind()), format!("{}", family.work())])));
     }
     // #532: wire EDM work needs a wire EDM, and a wire EDM cuts only it.
     if family == Family::WireEdm || machine == crate::machine::Kind::WireEdm {
-        return Err(CommandError::Invalid(format!(
-            "a {} operation is {} work; the setup's machine is a {} - {}",
-            params.kind(),
-            family.work(),
-            machine.label(),
-            if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" },
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation is {} work; the setup's machine is a {} - {}", &[format!("{}", params.kind()), format!("{}", family.work()), format!("{}", machine.label()), format!("{}", if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" })])));
     }
     // #1291: an unmounted setup reads as a mill (the kind_of law), so
     // the words must not call it one - they say no machine is mounted.
     let mounted = crate::machine::of_setup(world, context).1.is_some();
     let clause = if mounted {
-        format!("the setup's machine is a {}", machine.word())
+        camcraft_i18n::tf("the setup's machine is a {}", &[format!("{}", machine.word())])
     } else {
         "the setup has no machine mounted".to_owned()
     };
     // #670: plasma work needs a plasma table - no mill or lathe (nor a
     // mill-turn) strikes an arc.
     if family == Family::Plasma {
-        return Err(CommandError::Invalid(format!(
-            "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
-            params.kind(),
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation is plasma cutting work; {clause} - mount a plasma table first", &[format!("{}", params.kind()), format!("{}", clause)])));
     }
     // #541: sinker work needs a sinker EDM - nothing else feeds an
     // electrode.
     if family == Family::Sinker {
-        return Err(CommandError::Invalid(format!(
-            "a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first",
-            params.kind(),
-            machine.word(),
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first", &[format!("{}", params.kind()), format!("{}", machine.word())])));
     }
-    Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
-        params.kind(),
-        family.work(),
-        family.machine(),
-    )))
+    Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first", &[format!("{}", params.kind()), format!("{}", family.work()), format!("{}", clause), format!("{}", family.machine())])))
 }
 
 /// The sinker side burn's door (#545): its numbers, and against a named
@@ -282,10 +251,7 @@ pub(super) fn heights_gate(
         return Err(CommandError::Invalid(why));
     }
     if !operation::depth_sane(world, setup, Some(src), params) {
-        return Err(CommandError::Invalid(format!(
-            "a {} operation must cut downward: its top height resolves below its bottom height (check the From references)",
-            params.kind()
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("a {} operation must cut downward: its top height resolves below its bottom height (check the From references)", &[format!("{}", params.kind())])));
     }
     if let Some(why) = operation::microlift_sane(world, setup, Some(src), params) {
         return Err(CommandError::Invalid(why));

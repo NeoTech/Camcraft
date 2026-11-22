@@ -67,7 +67,7 @@ pub fn spun_to_dxf(profile: &SpunProfile) -> Result<String, String> {
             primitive: segment_to_dxf(w[0], w[1])?,
         });
     }
-    write(&doc).map_err(|e| format!("DXF export failed: {e}"))
+    write(&doc).map_err(|e| camcraft_i18n::tf("DXF export failed: {e}", &[format!("{}", e)]))
 }
 
 fn segment_to_dxf(a: SpunPoint, b: SpunPoint) -> Result<Primitive, String> {
@@ -111,7 +111,7 @@ pub fn tool_body_to_spun(body: &ToolBody) -> Result<SpunProfile, String> {
     }
     match &body.frame {
         BodyFrame::Spindle { profile, .. } => SpunProfile::conservative_from_bands(profile.bands())
-            .map_err(|e| format!("holder profile conversion failed: {e}")),
+            .map_err(|e| camcraft_i18n::tf("holder profile conversion failed: {e}", &[format!("{}", e)])),
         BodyFrame::Lathe { .. } => {
             Err("a lathe-frame holder body has no revolved spindle half-profile".into())
         }
@@ -139,7 +139,7 @@ pub fn placed_mesh_to_spun_profile(tris: &[Triangle]) -> Result<SpunProfile, Str
         .collect();
     let hp = HolderProfile::envelope(&raw).map_err(|e| e.to_string())?;
     SpunProfile::conservative_from_bands(hp.bands())
-        .map_err(|e| format!("conservative half-profile conversion failed: {e}"))
+        .map_err(|e| camcraft_i18n::tf("conservative half-profile conversion failed: {e}", &[format!("{}", e)]))
 }
 
 /// Read a STEP file, require an unambiguous ISO 13399 alignment (#370), and

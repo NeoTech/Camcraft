@@ -767,7 +767,7 @@ impl<'de> Deserialize<'de> for ChainIdDto {
         let s = String::deserialize(d)?;
         crate::geometry::sketch_chains::parse_chain_id_hex(&s)
             .map(ChainIdDto)
-            .ok_or_else(|| serde::de::Error::custom(format!("invalid sketch chain id '{s}' - expected 32 lowercase hex digits")))
+            .ok_or_else(|| serde::de::Error::custom(camcraft_i18n::tf("invalid sketch chain id '{s}' - expected 32 lowercase hex digits", &[format!("{}", s)])))
     }
 }
 

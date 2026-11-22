@@ -47,10 +47,7 @@ impl PendingCall {
 
     pub fn authorize(self, confirmed: bool) -> Result<ToolCall, String> {
         if self.confirmation && !confirmed {
-            return Err(format!(
-                "{} requires user confirmation before execution",
-                self.call.name
-            ));
+            return Err(camcraft_i18n::tf("{} requires user confirmation before execution", &[format!("{}", self.call.name)]));
         }
         Ok(self.call)
     }
@@ -92,7 +89,7 @@ pub fn parse_prompt(text: &str) -> Result<PendingCall, String> {
     } else {
         trimmed
     };
-    let proposal: Proposal = serde_json::from_str(json).map_err(|e| format!("prompt JSON: {e}"))?;
+    let proposal: Proposal = serde_json::from_str(json).map_err(|e| camcraft_i18n::tf("prompt JSON: {e}", &[format!("{}", e)]))?;
     schema_validation::arguments(&proposal.tool, &proposal.arguments)?;
     let read_only = is_read_only_tool(&proposal.tool);
     Ok(PendingCall {
@@ -107,10 +104,7 @@ pub fn parse_prompt(text: &str) -> Result<PendingCall, String> {
 
 #[must_use]
 pub fn prompt_context(project: &Value) -> Value {
-    let instructions = format!(
-        "{}\n\nReturn exactly one JSON object: {{\"tool\":\"name\",\"arguments\":{{}}}}. Use only the listed tools. Mutating edits require user confirmation before execution.",
-        super::catalog::RULES
-    );
+    let instructions = camcraft_i18n::tf("{}\n\nReturn exactly one JSON object: {{\"tool\":\"name\",\"arguments\":{{}}}}. Use only the listed tools. Mutating edits require user confirmation before execution.", &[format!("{}", super::catalog::RULES)]);
     json!({"instructions":instructions,"project":project,"tools":tools::list()})
 }
 

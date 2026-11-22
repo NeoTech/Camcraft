@@ -121,26 +121,20 @@ pub struct SheetJob {
 pub fn invalid(job: &SheetJob) -> Option<String> {
     for (name, v) in [("length", job.length), ("width", job.width), ("thickness", job.thickness)] {
         if !v.is_finite() || v <= 0.0 {
-            return Some(format!("the sheet {name} must be a positive size in mm, got {v}"));
+            return Some(camcraft_i18n::tf("the sheet {name} must be a positive size in mm, got {v}", &[format!("{}", name), format!("{}", v)]));
         }
     }
     if !job.allowance.is_finite() || job.allowance < 0.0 {
-        return Some(format!("the through-cut allowance must be 0 mm or more, got {}", job.allowance));
+        return Some(camcraft_i18n::tf("the through-cut allowance must be 0 mm or more, got {}", &[format!("{}", job.allowance)]));
     }
     if job.allowance > MAX_ALLOWANCE {
-        return Some(format!(
-            "a through-cut allowance of {} mm cuts into the spoilboard past its sacrificial skin (at most {MAX_ALLOWANCE} mm)",
-            job.allowance
-        ));
+        return Some(camcraft_i18n::tf("a through-cut allowance of {} mm cuts into the spoilboard past its sacrificial skin (at most {MAX_ALLOWANCE} mm)", &[format!("{}", job.allowance), format!("{}", MAX_ALLOWANCE)]));
     }
     if !job.clamp_clearance.is_finite() || job.clamp_clearance < 0.0 {
-        return Some(format!("the clamp clearance must be 0 mm or more, got {}", job.clamp_clearance));
+        return Some(camcraft_i18n::tf("the clamp clearance must be 0 mm or more, got {}", &[format!("{}", job.clamp_clearance)]));
     }
     if job.clamp_clearance > MAX_CLAMP_CLEARANCE {
-        return Some(format!(
-            "a clamp clearance of {} mm is past any clamp (at most {MAX_CLAMP_CLEARANCE} mm)",
-            job.clamp_clearance
-        ));
+        return Some(camcraft_i18n::tf("a clamp clearance of {} mm is past any clamp (at most {MAX_CLAMP_CLEARANCE} mm)", &[format!("{}", job.clamp_clearance), format!("{}", MAX_CLAMP_CLEARANCE)]));
     }
     None
 }
@@ -197,7 +191,7 @@ pub fn program_problems(world: &World) -> Vec<String> {
         let (_, wcs) = crate::posting::wcs_context(world, Some(&s));
         let Some(b) = model::stock_world_aabb_for(world, Some(&s)) else {
             if !judged.contains(&s) {
-                out.push(format!("setup '{s}': states a sheet job but has no stock - run the sheet job again"));
+                out.push(camcraft_i18n::tf("setup '{s}': states a sheet job but has no stock - run the sheet job again", &[format!("{}", s)]));
                 judged.push(s);
             }
             continue;
@@ -216,11 +210,7 @@ pub fn program_problems(world: &World) -> Vec<String> {
 fn setup_drift(s: &str, job: &SheetJob, bottom: f64, top: f64, wcs_z: f64) -> Vec<String> {
     let mut out = Vec::new();
     if ((top - bottom) - job.thickness).abs() > TOL {
-        out.push(format!(
-            "setup '{s}': the stock is {:.3} mm thick, but the sheet job states a {:.3} mm sheet - run the sheet job again",
-            top - bottom,
-            job.thickness
-        ));
+        out.push(camcraft_i18n::tf("setup '{s}': the stock is {:.3} mm thick, but the sheet job states a {:.3} mm sheet - run the sheet job again", &[format!("{}", s), format!("{:.3}", top - bottom), format!("{:.3}", job.thickness)]));
         return out; // the Z zero below is measured on the wrong sheet
     }
     let want = match job.z_zero {
@@ -228,14 +218,10 @@ fn setup_drift(s: &str, job: &SheetJob, bottom: f64, top: f64, wcs_z: f64) -> Ve
         SheetZero::Spoilboard => bottom,
     };
     if (wcs_z - want).abs() > TOL {
-        out.push(format!(
-            "setup '{s}': Z zero is no longer at the {} the sheet job states ({:.3} mm off) - run the sheet job again",
-            match job.z_zero {
+        out.push(camcraft_i18n::tf("setup '{s}': Z zero is no longer at the {} the sheet job states ({:.3} mm off) - run the sheet job again", &[format!("{}", s), format!("{}", match job.z_zero {
                 SheetZero::Top => "sheet top",
                 SheetZero::Spoilboard => "spoilboard",
-            },
-            wcs_z - want
-        ));
+            }), format!("{:.3}", wcs_z - want)]));
     }
     out
 }
@@ -248,25 +234,14 @@ fn path_problems(label: &str, s: &str, job: &SheetJob, moves: &[Move], bottom: f
     let mut out = Vec::new();
     let deepest = moves.iter().flat_map(|m| [m.from.z, m.to.z]).fold(f64::INFINITY, f64::min);
     if deepest < floor - TOL {
-        out.push(format!(
-            "{label}: cuts to Z{:.3}, {:.3} mm into the spoilboard, past setup '{s}''s through-cut allowance of {:.3} mm (floor Z{:.3}) - raise the operation's bottom height or state a larger allowance",
-            deepest - wcs_z,
-            bottom - deepest,
-            job.allowance,
-            floor - wcs_z
-        ));
+        out.push(camcraft_i18n::tf("{label}: cuts to Z{:.3}, {:.3} mm into the spoilboard, past setup '{s}''s through-cut allowance of {:.3} mm (floor Z{:.3}) - raise the operation's bottom height or state a larger allowance", &[format!("{}", label), format!("{:.3}", deepest - wcs_z), format!("{:.3}", bottom - deepest), format!("{}", s), format!("{:.3}", job.allowance), format!("{:.3}", floor - wcs_z)]));
     }
     let across = |m: &&Move| {
         m.kind == MoveKind::Rapid && ((m.to.x - m.from.x).abs() > TOL || (m.to.y - m.from.y).abs() > TOL)
     };
     let low = moves.iter().filter(across).map(|m| m.from.z.min(m.to.z)).reduce(f64::min);
     if let Some(low) = low.filter(|z| *z < clamp - TOL) {
-        out.push(format!(
-            "{label}: rapids across at Z{:.3}, below setup '{s}''s clamp plane Z{:.3} (sheet top plus {:.3} mm clamp clearance) - raise the operation's clearance and retract heights",
-            low - wcs_z,
-            clamp - wcs_z,
-            job.clamp_clearance
-        ));
+        out.push(camcraft_i18n::tf("{label}: rapids across at Z{:.3}, below setup '{s}''s clamp plane Z{:.3} (sheet top plus {:.3} mm clamp clearance) - raise the operation's clearance and retract heights", &[format!("{}", label), format!("{:.3}", low - wcs_z), format!("{}", s), format!("{:.3}", clamp - wcs_z), format!("{:.3}", job.clamp_clearance)]));
     }
     out
 }

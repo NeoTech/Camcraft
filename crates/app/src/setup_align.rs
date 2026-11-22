@@ -428,11 +428,11 @@ fn verified_for_machine(kind: crate::machine::Kind, params: &crate::operation::O
 pub fn generation_problem(world: &World, op: &crate::schema::Operation) -> Option<String> {
     let setup = crate::setup::effective(world, op.setup.as_deref())?;
     stored(world, &setup)?;
-    let head = format!("setup '{setup}' holds the part turned (part alignment)");
+    let head = camcraft_i18n::tf("setup '{setup}' holds the part turned (part alignment)", &[format!("{}", setup)]);
     let kind = crate::machine::kind_of_setup(world, Some(&setup));
     let name = crate::stock_sim::machine_kind_name(kind);
     if kind == crate::machine::Kind::Waterjet {
-        return Some(format!("{head} - an aligned part is not supported yet on a {name} machine"));
+        return Some(camcraft_i18n::tf("{head} - an aligned part is not supported yet on a {name} machine", &[format!("{}", head), format!("{}", name)]));
     }
     if !verified_for_machine(kind, &op.params) {
         let label = op.params.kind().info().label;
@@ -442,12 +442,10 @@ pub fn generation_problem(world: &World, op: &crate::schema::Operation) -> Optio
                  2D Adaptive, 2D Offset, Trace, Engrave, 2D Chamfer, Circular, Slot, Trochoidal Slot, Drill, Bore, Thread, Probe, Deburr, 3D Pocket, 3D Finish, 5-Axis Contour, 5-Axis Parallel, Swarf, Advanced Swarf, Rotary Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough, 5-Axis Flow and Multi-Axis Contour are); set the setup's part alignment back to As modelled, or machine it in another setup"
             ));
         }
-        return Some(format!(
-            "{head} - {label} is not supported yet in an aligned setup on a {name} machine; set the setup's part alignment back to As modelled, or machine it in another setup"
-        ));
+        return Some(camcraft_i18n::tf("{head} - {label} is not supported yet in an aligned setup on a {name} machine; set the setup's part alignment back to As modelled, or machine it in another setup", &[format!("{}", head), format!("{}", label), format!("{}", name)]));
     }
     if op.params.tilt().is_some() {
-        return Some(format!("{head} - a tilted plane is not supported yet in an aligned setup"));
+        return Some(camcraft_i18n::tf("{head} - a tilted plane is not supported yet in an aligned setup", &[format!("{}", head)]));
     }
     // #1743 (3D) / #2210 (2D): the area controls of every verified kind
     // resolve in the setup frame - `boundary_ctx` reads the picks

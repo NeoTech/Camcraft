@@ -99,13 +99,13 @@ pub struct Pocket {
 /// # Errors
 /// A name that is no model, or a model with no usable geometry.
 pub fn pockets_of(world: &World, name: &str) -> Result<Vec<Pocket>, String> {
-    let e = model::find_by_name(world, name).ok_or_else(|| format!("no model named '{name}'"))?;
+    let e = model::find_by_name(world, name).ok_or_else(|| camcraft_i18n::tf("no model named '{name}'", &[format!("{}", name)]))?;
     if !model::is_model(world, &e) {
         return Err(format!("'{name}' is not a model"));
     }
-    let tris = model::facets_of(world, &e).ok_or_else(|| format!("'{name}' has no geometry"))?;
+    let tris = model::facets_of(world, &e).ok_or_else(|| camcraft_i18n::tf("'{name}' has no geometry", &[format!("{}", name)]))?;
     if tris.is_empty() {
-        return Err(format!("'{name}' has no geometry"));
+        return Err(camcraft_i18n::tf("'{name}' has no geometry", &[format!("{}", name)]));
     }
     // #718: "up" and "leans into" are read straight off the facet winding,
     // so a body whose outside cannot be trusted is refused first - an
@@ -119,7 +119,7 @@ pub fn pockets_of(world: &World, name: &str) -> Result<Vec<Pocket>, String> {
     let loc = model::transform_of(world, &e).unwrap_or_default();
     let mesh = walls::Mesh::new(&tris, &loc);
     if mesh.usable == 0 {
-        return Err(format!("'{name}' has no usable facets (every one degenerate or non-finite)"));
+        return Err(camcraft_i18n::tf("'{name}' has no usable facets (every one degenerate or non-finite)", &[format!("{}", name)]));
     }
     let features = model::features_of_local(&tris);
     let mut out = Vec::new();

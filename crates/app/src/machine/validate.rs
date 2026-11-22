@@ -92,7 +92,7 @@ pub(crate) fn head_parts(v: &Value) -> Vec<&Value> {
 pub fn validate_text(text: &str) -> Vec<Refusal> {
     let v: Value = match serde_json::from_str(text) {
         Ok(v) => v,
-        Err(e) => return vec![Refusal::new("file", format!("not readable JSON ({e})"))],
+        Err(e) => return vec![Refusal::new("file", camcraft_i18n::tf("not readable JSON ({e})", &[format!("{}", e)]))],
     };
     if !v.is_object() {
         return vec![Refusal::new("file", "must be one machine object { ... }")];
@@ -117,7 +117,7 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
         && !n.is_null()
         && n.as_u64().is_none_or(|n| n == 0)
     {
-        out.push(Refusal::new("tooling.number_of_tools", format!("{n} must be a whole number above 0")));
+        out.push(Refusal::new("tooling.number_of_tools", camcraft_i18n::tf("{n} must be a whole number above 0", &[format!("{}", n)])));
     }
     // #828: the spindle mount and default holder, each refusal by name.
     out.extend(super::tooling_refusals(&v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
@@ -141,7 +141,7 @@ fn general(v: &Value, out: &mut Vec<Refusal>) {
     match g.and_then(|g| g.get("kind")) {
         None | Some(Value::Null) => {}
         Some(Value::String(w)) if w.is_empty() || Kind::from_word(w).is_some() => {}
-        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm"))),
+        Some(other) => out.push(Refusal::new("general.kind", camcraft_i18n::tf("{other} is not mill, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm", &[format!("{}", other)]))),
     }
 }
 
@@ -150,12 +150,12 @@ fn units(v: &Value, out: &mut Vec<Refusal>) {
     match u.and_then(|u| u.get("length")) {
         None | Some(Value::Null) => {}
         Some(Value::String(s)) if matches!(s.as_str(), "mm" | "inch" | "inches") => {}
-        Some(other) => out.push(Refusal::new("units.length", format!("{other} is not mm or inch"))),
+        Some(other) => out.push(Refusal::new("units.length", camcraft_i18n::tf("{other} is not mm or inch", &[format!("{}", other)]))),
     }
     match u.and_then(|u| u.get("angle")) {
         None | Some(Value::Null) => {}
         Some(Value::String(s)) if matches!(s.as_str(), "degrees" | "degree" | "deg") => {}
-        Some(other) => out.push(Refusal::new("units.angle", format!("{other} is not degrees"))),
+        Some(other) => out.push(Refusal::new("units.angle", camcraft_i18n::tf("{other} is not degrees", &[format!("{}", other)]))),
     }
 }
 
@@ -184,7 +184,7 @@ fn axis_rules(axes: &[(String, &Value, bool)], out: &mut Vec<Refusal>) {
                         out.push(Refusal::new(format!("{name} axis"), "states the zero direction"));
                     }
                 }
-                _ => out.push(Refusal::new(format!("{name} axis"), format!("{a} must be three finite numbers"))),
+                _ => out.push(Refusal::new(format!("{name} axis"), camcraft_i18n::tf("{a} must be three finite numbers", &[format!("{}", a)]))),
             }
         }
     }
@@ -195,7 +195,7 @@ fn travel(key: &str, t: &Value, out: &mut Vec<Refusal>) {
     let hi = t.get("max").and_then(Value::as_f64).filter(|x| x.is_finite());
     match (lo, hi) {
         (Some(lo), Some(hi)) if lo < hi => {}
-        (Some(lo), Some(hi)) => out.push(Refusal::new(key, format!("min {lo} must be below max {hi}"))),
+        (Some(lo), Some(hi)) => out.push(Refusal::new(key, camcraft_i18n::tf("min {lo} must be below max {hi}", &[format!("{}", lo), format!("{}", hi)]))),
         _ => out.push(Refusal::new(key, "min and max must both be numbers")),
     }
 }
@@ -208,7 +208,7 @@ fn positive(key: &str, x: &Value, out: &mut Vec<Refusal>) {
         return;
     }
     if !x.as_f64().is_some_and(|x| x.is_finite() && x > 0.0) {
-        out.push(Refusal::new(key, format!("{x} must be a number above 0 (leave the key out when unstated)")));
+        out.push(Refusal::new(key, camcraft_i18n::tf("{x} must be a number above 0 (leave the key out when unstated)", &[format!("{}", x)])));
     }
 }
 
@@ -220,18 +220,18 @@ fn spindle(sp: Option<&Value>, out: &mut Vec<Refusal>) {
         }
     }
     if let Some(x) = sp.get("rigid_tapping").filter(|x| !x.is_null() && !x.is_boolean()) {
-        out.push(Refusal::new("spindle.rigid_tapping", format!("{x} must be true or false")));
+        out.push(Refusal::new("spindle.rigid_tapping", camcraft_i18n::tf("{x} must be true or false", &[format!("{}", x)])));
     }
     // #1445: the oriented spindle stop that a fine-bore cycle needs.
     if let Some(x) = sp.get("orientation").filter(|x| !x.is_null() && !x.is_boolean()) {
-        out.push(Refusal::new("spindle.orientation", format!("{x} must be true or false")));
+        out.push(Refusal::new("spindle.orientation", camcraft_i18n::tf("{x} must be true or false", &[format!("{}", x)])));
     }
     let lo = sp.get("min_speed").and_then(Value::as_f64);
     let hi = sp.get("max_speed").and_then(Value::as_f64);
     if let (Some(lo), Some(hi)) = (lo, hi)
         && lo > hi
     {
-        out.push(Refusal::new("spindle", format!("min_speed {lo} must not exceed max_speed {hi}")));
+        out.push(Refusal::new("spindle", camcraft_i18n::tf("min_speed {lo} must not exceed max_speed {hi}", &[format!("{}", lo), format!("{}", hi)])));
     }
     if let Some(ranges) = sp.get("ranges").filter(|r| !r.is_null()) {
         let Some(arr) = ranges.as_array() else {
@@ -239,12 +239,12 @@ fn spindle(sp: Option<&Value>, out: &mut Vec<Refusal>) {
             return;
         };
         for (i, r) in arr.iter().enumerate() {
-            let key = format!("spindle range {}", i + 1);
+            let key = camcraft_i18n::tf("spindle range {}", &[format!("{}", i + 1)]);
             let lo = r.get("min_speed").and_then(Value::as_f64).filter(|x| x.is_finite() && *x > 0.0);
             let hi = r.get("max_speed").and_then(Value::as_f64).filter(|x| x.is_finite() && *x > 0.0);
             match (lo, hi) {
                 (Some(lo), Some(hi)) if lo < hi => {}
-                (Some(lo), Some(hi)) => out.push(Refusal::new(key, format!("min_speed {lo} must be below max_speed {hi}"))),
+                (Some(lo), Some(hi)) => out.push(Refusal::new(key, camcraft_i18n::tf("min_speed {lo} must be below max_speed {hi}", &[format!("{}", lo), format!("{}", hi)]))),
                 _ => out.push(Refusal::new(key, "min_speed and max_speed must both be numbers above 0")),
             }
         }
@@ -263,7 +263,7 @@ fn station(ts: Option<&Value>, out: &mut Vec<Refusal>) {
         if stated != words.len() {
             out.push(Refusal::new(
                 "live_tool",
-                format!("states {stated} of the 4 words (c_axis_on, c_axis_off, spindle_on, spindle_off) - all four or none"),
+                camcraft_i18n::tf("states {stated} of the 4 words (c_axis_on, c_axis_off, spindle_on, spindle_off) - all four or none", &[format!("{}", stated)]),
             ));
         }
         // Each stated word is written as a block of its own: it must be
@@ -272,7 +272,7 @@ fn station(ts: Option<&Value>, out: &mut Vec<Refusal>) {
             if let Some(w) = lt.get(k).and_then(Value::as_str).filter(|w| !w.trim().is_empty())
                 && let Err(why) = m_word(w.trim())
             {
-                out.push(Refusal::new(format!("live_tool.{k}"), format!("code \"{w}\" is not an M word like M8 ({why})")));
+                out.push(Refusal::new(format!("live_tool.{k}"), camcraft_i18n::tf("code \"{w}\" is not an M word like M8 ({why})", &[format!("{}", w), format!("{}", why)])));
             }
         }
     }
@@ -333,10 +333,10 @@ fn coolants(list: Option<&Value>, out: &mut Vec<Refusal>) {
             Some(Value::Number(n)) if n.as_u64().is_some_and(|n| n <= u64::from(M_WORD_MAX)) => {}
             Some(Value::String(s)) => {
                 if let Err(why) = m_word(s.trim()) {
-                    out.push(Refusal::new(key, format!("code \"{s}\" is not an M word like M8 ({why})")));
+                    out.push(Refusal::new(key, camcraft_i18n::tf("code \"{s}\" is not an M word like M8 ({why})", &[format!("{}", s), format!("{}", why)])));
                 }
             }
-            Some(other) => out.push(Refusal::new(key, format!("code {other} is not an M word like M8"))),
+            Some(other) => out.push(Refusal::new(key, camcraft_i18n::tf("code {other} is not an M word like M8", &[format!("{}", other)]))),
         }
     }
 }
@@ -348,7 +348,7 @@ fn controller(v: &Value, out: &mut Vec<Refusal>) {
     {
         out.push(Refusal::new(
             "controller.coordinate_rotation",
-            format!("{x} must be true or false"),
+            camcraft_i18n::tf("{x} must be true or false", &[format!("{}", x)]),
         ));
     }
     let Some(parts) = v.pointer("/controller/synced_configuration/parts").filter(|p| !p.is_null()) else {
@@ -398,7 +398,7 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     };
     for l in need {
         if !has_linear(l) {
-            out.push(Refusal::new(format!("{l} axis"), format!("required for a {} machine", k.word())));
+            out.push(Refusal::new(format!("{l} axis"), camcraft_i18n::tf("required for a {} machine", &[format!("{}", k.word())])));
         }
     }
     // #669: the plasma rules, the same list the reader refuses on.

@@ -55,14 +55,12 @@ pub fn setup_problem(world: &World, declared: Option<&str>) -> Option<String> {
     // #931: the setup's post names its offset (display only).
     let word = crate::setup::wcs_name(world, declared);
     let owner = match crate::setup::effective(world, declared) {
-        Some(s) => format!("setup '{s}': its WCS ({word})"),
-        None => format!("the WCS ({word})"),
+        Some(s) => camcraft_i18n::tf("setup '{s}': its WCS ({word})", &[format!("{}", s), format!("{}", word)]),
+        None => camcraft_i18n::tf("the WCS ({word})", &[format!("{}", word)]),
     };
-    Some(format!(
-        "{owner} has its Z axis tilted {deg:.3} deg off the machine's Z - the tool always cuts along \
+    Some(camcraft_i18n::tf("{owner} has its Z axis tilted {deg:.3} deg off the machine's Z - the tool always cuts along \
          the machine's Z, so this would machine the part as it lies, not as the WCS shows; turn the \
-         part with the setup's Part alignment instead and keep the WCS Z pointing up"
-    ))
+         part with the setup's Part alignment instead and keep the WCS Z pointing up", &[format!("{}", owner), format!("{:.3}", deg)]))
 }
 
 /// #760 / #1542: refuse a 3-2-1 alignment on a milling setup when the
@@ -77,9 +75,6 @@ pub fn align_321_tilt_problem(world: &World, declared: Option<&str>, axis_z: [f6
     if !(angle.is_finite() && angle > TILT_TOL_RAD) {
         return None;
     }
-    Some(format!(
-        "3-2-1 WCS Z would tilt {:.1} deg off the machine's Z - on a mill the tool always cuts along \
-         machine +Z; turn the part with Part alignment on the Setup page instead",
-        angle.to_degrees()
-    ))
+    Some(camcraft_i18n::tf("3-2-1 WCS Z would tilt {:.1} deg off the machine's Z - on a mill the tool always cuts along \
+         machine +Z; turn the part with Part alignment on the Setup page instead", &[format!("{:.1}", angle.to_degrees())]))
 }

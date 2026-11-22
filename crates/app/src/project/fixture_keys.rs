@@ -24,7 +24,7 @@ fn read<T: DeserializeOwned>(v: Option<&Value>, model: &str, key: &str, notes: &
     match serde_json::from_value::<T>(v?.clone()) {
         Ok(t) => Some(t),
         Err(why) => {
-            notes.push(format!("fixture '{model}': {key} key not understood, dropped on load, kept as plain steel: {why}"));
+            notes.push(camcraft_i18n::tf("fixture '{model}': {key} key not understood, dropped on load, kept as plain steel: {why}", &[format!("{}", model), format!("{}", key), format!("{}", why)]));
             None
         }
     }
@@ -36,7 +36,7 @@ fn lawful<T>(t: Option<T>, check: impl Fn(&T) -> Result<(), String>, model: &str
     match check(&t) {
         Ok(()) => Some(t),
         Err(why) => {
-            notes.push(format!("fixture '{model}': {what} parameters dropped on load, kept as plain steel: {why}"));
+            notes.push(camcraft_i18n::tf("fixture '{model}': {what} parameters dropped on load, kept as plain steel: {why}", &[format!("{}", model), format!("{}", what), format!("{}", why)]));
             None
         }
     }

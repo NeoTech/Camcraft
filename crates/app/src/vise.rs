@@ -102,36 +102,24 @@ impl ViseParams {
         }
         for (what, v) in self.named() {
             if !v.is_finite() {
-                return Err(format!("vise {what} must be a finite length (got {v})"));
+                return Err(camcraft_i18n::tf("vise {what} must be a finite length (got {v})", &[format!("{}", what), format!("{}", v)]));
             }
             if v <= 0.0 {
-                return Err(format!("vise {what} must be more than zero (got {v} mm)"));
+                return Err(camcraft_i18n::tf("vise {what} must be more than zero (got {v} mm)", &[format!("{}", what), format!("{}", v)]));
             }
         }
         if self.opening > self.max_opening {
-            return Err(format!(
-                "vise jaw opening {:.3} mm is over the max opening {:.3} mm",
-                self.opening, self.max_opening
-            ));
+            return Err(camcraft_i18n::tf("vise jaw opening {:.3} mm is over the max opening {:.3} mm", &[format!("{:.3}", self.opening), format!("{:.3}", self.max_opening)]));
         }
         if self.width < self.jaw_width {
-            return Err(format!(
-                "vise overall width {:.3} mm is narrower than its jaw width {:.3} mm",
-                self.width, self.jaw_width
-            ));
+            return Err(camcraft_i18n::tf("vise overall width {:.3} mm is narrower than its jaw width {:.3} mm", &[format!("{:.3}", self.width), format!("{:.3}", self.jaw_width)]));
         }
         if self.jaw_body_depth < self.jaw_thickness {
-            return Err(format!(
-                "vise jaw body depth {:.3} mm is less than its jaw thickness {:.3} mm",
-                self.jaw_body_depth, self.jaw_thickness
-            ));
+            return Err(camcraft_i18n::tf("vise jaw body depth {:.3} mm is less than its jaw thickness {:.3} mm", &[format!("{:.3}", self.jaw_body_depth), format!("{:.3}", self.jaw_thickness)]));
         }
         let carry = 2.0 * self.jaw_body_depth + self.max_opening + self.housing_length;
         if self.length <= carry {
-            return Err(format!(
-                "vise overall length {:.3} mm must be more than two jaw bodies, the max opening and the housing ({carry:.3} mm)",
-                self.length
-            ));
+            return Err(camcraft_i18n::tf("vise overall length {:.3} mm must be more than two jaw bodies, the max opening and the housing ({carry:.3} mm)", &[format!("{:.3}", self.length), format!("{:.3}", carry)]));
         }
         Ok(())
     }
@@ -197,11 +185,7 @@ pub fn fit_to_stock(p: &ViseParams, stock: &Aabb) -> Result<(ViseParams, Locatio
         return Err("the stock has no width to clamp".into());
     }
     if across > p.max_opening {
-        return Err(format!(
-            "the stock is {across:.3} mm across the jaws; the {} vise opens {:.3} mm at most",
-            p.base_name(),
-            p.max_opening
-        ));
+        return Err(camcraft_i18n::tf("the stock is {across:.3} mm across the jaws; the {} vise opens {:.3} mm at most", &[format!("{:.3}", across), format!("{}", p.base_name()), format!("{:.3}", p.max_opening)]));
     }
     let fitted = p.with_opening(across);
     fitted.check()?;
@@ -231,9 +215,7 @@ pub fn opening_from_stock(pose: &Location, stock: &Aabb) -> Result<f64, String> 
         return Err("the stock box is not finite".into());
     }
     if hi > FACE_TOL {
-        return Err(format!(
-            "the stock reaches {hi:.3} mm into the fixed jaw - place the vise against the stock first"
-        ));
+        return Err(camcraft_i18n::tf("the stock reaches {hi:.3} mm into the fixed jaw - place the vise against the stock first", &[format!("{:.3}", hi)]));
     }
     if lo >= -FACE_TOL {
         return Err("the stock is not in front of the fixed jaw".into());

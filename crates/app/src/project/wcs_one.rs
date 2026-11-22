@@ -40,10 +40,7 @@ pub(super) fn settle(file: &mut ProjectFile, from: u32) -> Result<Vec<String>, P
             if let Some(s) = &dto.setup
                 && matches!(s.wcs, WcsDto::Slots(_))
             {
-                return Err(corrupt(format!(
-                    "setup '{}' lists work offset slots - since v54 a setup names its one WCS",
-                    dto.name
-                )));
+                return Err(corrupt(camcraft_i18n::tf("setup '{}' lists work offset slots - since v54 a setup names its one WCS", &[format!("{}", dto.name)])));
             }
         }
         return Ok(Vec::new());
@@ -62,16 +59,14 @@ pub(super) fn settle(file: &mut ProjectFile, from: u32) -> Result<Vec<String>, P
         let slot = match s.work_offset.as_deref() {
             None => 0,
             Some(w) => LEGACY_WCS_NAMES.iter().position(|x| *x == w).ok_or_else(|| {
-                corrupt(format!("setup '{name}' picks unknown work offset {w:?}"))
+                corrupt(camcraft_i18n::tf("setup '{name}' picks unknown work offset {w:?}", &[format!("{}", name), format!("{:?}", w)]))
             })?,
         };
         let list = match &s.wcs {
             WcsDto::Slots(l) => l.clone(),
             WcsDto::One(w) if w.is_empty() => Vec::new(),
             WcsDto::One(_) => {
-                return Err(corrupt(format!(
-                    "setup '{name}' names one WCS in a v{from} file - that shape arrived in v54"
-                )));
+                return Err(corrupt(camcraft_i18n::tf("setup '{name}' names one WCS in a v{from} file - that shape arrived in v54", &[format!("{}", name), format!("{}", from)])));
             }
         };
         let posted = list
@@ -99,7 +94,7 @@ pub(super) fn settle(file: &mut ProjectFile, from: u32) -> Result<Vec<String>, P
         let old = format!("{s}/{}", LEGACY_WCS_NAMES[0]);
         let new = format!("{s}/{}", crate::setup::WCS_SUFFIX);
         if file.entities.iter().any(|d| d.name == new) {
-            return Err(corrupt(format!("'{new}' already exists - cannot carry '{old}' onto it")));
+            return Err(corrupt(camcraft_i18n::tf("'{new}' already exists - cannot carry '{old}' onto it", &[format!("{}", new), format!("{}", old)])));
         }
         renames.push((old.clone(), new.clone()));
         keep.insert(new);
@@ -120,11 +115,8 @@ pub(super) fn settle(file: &mut ProjectFile, from: u32) -> Result<Vec<String>, P
             return true;
         }
         let [x, y, z] = dto.translation;
-        notes.push(format!(
-            "dropped work offset '{}' (X{x:.3} Y{y:.3} Z{z:.3}): no setup posted it - since v54 a \
-             setup has one WCS, and G54-G59 is only the work offset its post uses",
-            dto.name
-        ));
+        notes.push(camcraft_i18n::tf("dropped work offset '{}' (X{x:.3} Y{y:.3} Z{z:.3}): no setup posted it - since v54 a \
+             setup has one WCS, and G54-G59 is only the work offset its post uses", &[format!("{}", dto.name), format!("{:.3}", x), format!("{:.3}", y), format!("{:.3}", z)]));
         false
     });
     Ok(notes)

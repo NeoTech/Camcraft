@@ -358,7 +358,7 @@ pub fn stale_reason(
     }
     let op = model::operation_of(world, entity)?;
     match model::find_by_name(world, &op.tool) {
-        None => return Some(format!("its tool '{}' no longer exists", op.tool)),
+        None => return Some(camcraft_i18n::tf("its tool '{}' no longer exists", &[format!("{}", op.tool)])),
         Some(t) if !model::is_tool(world, &t) => {
             return Some(format!("'{}' is no longer a tool", op.tool));
         }
@@ -378,13 +378,13 @@ pub fn stale_reason(
         }
         SrcRef::Entity(name) => {
             if model::find_by_name(world, name).is_none() {
-                return Some(format!("its geometry source '{name}' was deleted"));
+                return Some(camcraft_i18n::tf("its geometry source '{name}' was deleted", &[format!("{}", name)]));
             }
         }
         SrcRef::Selection(items) => {
             for g in items {
                 let Some(e) = model::find_by_name(world, &g.entity) else {
-                    return Some(format!("'{}' was deleted", g.entity));
+                    return Some(camcraft_i18n::tf("'{}' was deleted", &[format!("{}", g.entity)]));
                 };
                 if let Some(sketch) = crate::sketch::sketch_of(world, &e) {
                     let ok = match &g.feature {
@@ -393,15 +393,12 @@ pub fn stale_reason(
                         _ => false,
                     };
                     if !ok {
-                        return Some(format!(
-                            "the picked feature of '{}' no longer exists in the DXF profile",
-                            g.entity
-                        ));
+                        return Some(camcraft_i18n::tf("the picked feature of '{}' no longer exists in the DXF profile", &[format!("{}", g.entity)]));
                     }
                     continue;
                 }
                 let Some(tris) = model::facets_of(world, &e) else {
-                    return Some(format!("'{}' no longer carries geometry", g.entity));
+                    return Some(camcraft_i18n::tf("'{}' no longer carries geometry", &[format!("{}", g.entity)]));
                 };
                 let features = model::features_of_local(&tris);
                 let (present, what) = match g.feature {
@@ -424,10 +421,7 @@ pub fn stale_reason(
                     FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => (false, "sketch feature"),
                 };
                 if !present {
-                    return Some(format!(
-                        "the picked {what} of '{}' no longer exists - the geometry moved",
-                        g.entity
-                    ));
+                    return Some(camcraft_i18n::tf("the picked {what} of '{}' no longer exists - the geometry moved", &[format!("{}", what), format!("{}", g.entity)]));
                 }
             }
         }
@@ -436,7 +430,7 @@ pub fn stale_reason(
         if let Some(missing) =
             missing_source(world, op.setup.as_deref(), Some(&op.src), h.reference)
         {
-            return Some(format!("a height is measured from {missing}"));
+            return Some(camcraft_i18n::tf("a height is measured from {missing}", &[format!("{}", missing)]));
         }
     }
     if let Some(why) = area_stale_reason(world, &op) {

@@ -46,11 +46,9 @@ pub(super) fn lathe_reads(facets: &[Triangle], origin: [f64; 3]) -> Result<(), G
             }
         }
     };
-    Err(GenError::Invalid(format!(
-        "a lathe's cross drill plunges toward the spindle, and this part cannot be read as \
+    Err(GenError::Invalid(camcraft_i18n::tf("a lathe's cross drill plunges toward the spindle, and this part cannot be read as \
          turned about one ({why}) - model the part as the turned bar it is, or drill it on a \
-         mill-turn"
-    )))
+         mill-turn", &[format!("{}", why)])))
 }
 
 /// The solids a cross drill reads: its `source` (what the standoffs and
@@ -197,10 +195,7 @@ fn plunges_inward(holes: &[CrossHole], ox: f64, oy: f64) -> Result<(), GenError>
     for h in holes {
         let out = (h.origin.x - ox) * h.dir.x + (h.origin.y - oy) * h.dir.y;
         if out > 1e-9 {
-            return Err(GenError::Invalid(format!(
-                "cross hole at ({}, {}, {}) plunges along ({}, {}, {}), away from the spindle (world Z                  through ({ox}, {oy})): its station would stand beyond the part's far side and the                  rapid in would cross the material - drill it from the face toward the spindle, or                  move the work offset",
-                h.origin.x, h.origin.y, h.origin.z, h.dir.x, h.dir.y, h.dir.z
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("cross hole at ({}, {}, {}) plunges along ({}, {}, {}), away from the spindle (world Z                  through ({ox}, {oy})): its station would stand beyond the part's far side and the                  rapid in would cross the material - drill it from the face toward the spindle, or                  move the work offset", &[format!("{}", h.origin.x), format!("{}", h.origin.y), format!("{}", h.origin.z), format!("{}", h.dir.x), format!("{}", h.dir.y), format!("{}", h.dir.z), format!("{}", ox), format!("{}", oy)])));
         }
     }
     Ok(())

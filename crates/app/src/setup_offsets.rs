@@ -111,7 +111,7 @@ pub fn name_in(t: &WorkOffsets, n: u32) -> String {
         .filter(|s| !s.is_empty());
     match named {
         Some(s) => s.clone(),
-        None => format!("work offset {n}"),
+        None => camcraft_i18n::tf("work offset {n}", &[format!("{}", n)]),
     }
 }
 
@@ -126,8 +126,8 @@ pub fn entry_label(t: &WorkOffsets, n: u32) -> String {
         .and_then(|i| t.names.get(i))
         .filter(|s| !s.is_empty());
     match named {
-        Some(s) => format!("Work offset {n} ({s})"),
-        None => format!("Work offset {n}"),
+        Some(s) => camcraft_i18n::tf("Work offset {n} ({s})", &[format!("{}", n), format!("{}", s)]),
+        None => camcraft_i18n::tf("Work offset {n}", &[format!("{}", n)]),
     }
 }
 
@@ -138,7 +138,7 @@ pub fn entry_label(t: &WorkOffsets, n: u32) -> String {
 pub fn parse_index(v: &serde_json::Value) -> Result<u32, String> {
     let top = u32::try_from(MAX_SLOT).map_or(u32::MAX, |m| m.saturating_add(1));
     let bad = || {
-        format!("work offset must be a whole number 1 to {top}, or one of the words G54-G59 (offsets 1-6), got {v}")
+        camcraft_i18n::tf("work offset must be a whole number 1 to {top}, or one of the words G54-G59 (offsets 1-6), got {v}", &[format!("{}", top), format!("{}", v)])
     };
     match v {
         serde_json::Value::Number(n) => n
@@ -175,18 +175,14 @@ pub fn check(world: &World, setup: &str, n: u32) -> Result<(), String> {
     let max = match table_of(&post) {
         Ok(t) => t.max,
         Err(why) if n > work_offset::DEFAULT_MAX => {
-            return Err(format!(
-                "setup {setup} uses work offset {n}, but its post cannot be read to confirm it has that many ({why})"
-            ));
+            return Err(camcraft_i18n::tf("setup {setup} uses work offset {n}, but its post cannot be read to confirm it has that many ({why})", &[format!("{}", setup), format!("{}", n), format!("{}", why)]));
         }
         Err(_) => return Ok(()),
     };
     if n == 0 || n > max {
         let label = crate::posting::post_ref_label(&post);
-        return Err(format!(
-            "setup {setup} uses work offset {n}, but its post {label} expresses work offsets 1-{max} only - \
-             pick one of those on the Setups page or use a post with more offsets"
-        ));
+        return Err(camcraft_i18n::tf("setup {setup} uses work offset {n}, but its post {label} expresses work offsets 1-{max} only - \
+             pick one of those on the Setups page or use a post with more offsets", &[format!("{}", setup), format!("{}", n), format!("{}", label), format!("{}", max)]));
     }
     Ok(())
 }

@@ -68,23 +68,23 @@ impl SetupPostOptionsDto {
         let threading = match self.threading.as_str() {
             "g32" => ThreadingOutput::G32Passes,
             "g76" => ThreadingOutput::G76Cycle,
-            other => return Err(format!("setup '{setup}' names an unknown threading output {other:?}")),
+            other => return Err(camcraft_i18n::tf("setup '{setup}' names an unknown threading output {other:?}", &[format!("{}", setup), format!("{:?}", other)])),
         };
         let end_units = match self.end_units.as_deref() {
             None => EndUnits::Leave,
             Some("inch") => EndUnits::Inch,
             Some("mm") => EndUnits::Millimeters,
-            Some(other) => return Err(format!("setup '{setup}' names an unknown end-of-program unit {other:?}")),
+            Some(other) => return Err(camcraft_i18n::tf("setup '{setup}' names an unknown end-of-program unit {other:?}", &[format!("{}", setup), format!("{:?}", other)])),
         };
         let between_setups = match self.between_setups.as_deref() {
             None => BetweenSetups::default(),
             Some(w) => BetweenSetups::from_word(w)
-                .ok_or_else(|| format!("setup '{setup}' names an unknown between-setups choice {w:?}"))?,
+                .ok_or_else(|| camcraft_i18n::tf("setup '{setup}' names an unknown between-setups choice {w:?}", &[format!("{}", setup), format!("{:?}", w)]))?,
         };
         let wcs_rotation = match self.wcs_rotation.as_deref() {
             None => WcsRotationOutput::default(),
             Some(w) => WcsRotationOutput::from_word(w)
-                .ok_or_else(|| format!("setup '{setup}' names an unknown wcs_rotation choice {w:?}"))?,
+                .ok_or_else(|| camcraft_i18n::tf("setup '{setup}' names an unknown wcs_rotation choice {w:?}", &[format!("{}", setup), format!("{:?}", w)]))?,
         };
         Ok(PostOptions {
             threading,

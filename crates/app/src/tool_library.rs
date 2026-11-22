@@ -114,7 +114,7 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
                 }
                 (None, body) => ("body", serde_json::to_value(body)),
             };
-            let value = value.map_err(|err| format!("tool '{n}': {key} not written: {err}"))?;
+            let value = value.map_err(|err| camcraft_i18n::tf("tool '{n}': {key} not written: {err}", &[format!("{}", n), format!("{}", key), format!("{}", err)]))?;
             if let Value::Object(o) = &mut def {
                 o.insert(key.into(), value);
             }
@@ -125,7 +125,7 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
         return Err("the document has no tools to export".into());
     }
     let doc = json!({ "format": FORMAT, "version": version, "units": "mm", "tools": tools });
-    serde_json::to_string_pretty(&doc).map_err(|e| format!("tool library not written: {e}"))
+    serde_json::to_string_pretty(&doc).map_err(|e| camcraft_i18n::tf("tool library not written: {e}", &[format!("{}", e)]))
 }
 
 /// Read a library file's text. The whole file is checked before anything
@@ -135,24 +135,24 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
 /// tool. Accepts the envelope or the bare `[{name, definition}]` array
 /// (what MCP's `get_job` lists), so either can be pasted into a file.
 pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
-    let root: Value = serde_json::from_str(text).map_err(|e| format!("not a tool library (bad JSON: {e})"))?;
+    let root: Value = serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("not a tool library (bad JSON: {e})", &[format!("{}", e)]))?;
     let rows = match &root {
         Value::Array(rows) => rows,
         Value::Object(o) => {
             match o.get("format").and_then(Value::as_str) {
                 Some(FORMAT) => {}
-                Some(other) => return Err(format!("not a tool library: format is '{other}', not '{FORMAT}'")),
-                None => return Err(format!("not a tool library: no \"format\": \"{FORMAT}\"")),
+                Some(other) => return Err(camcraft_i18n::tf("not a tool library: format is '{other}', not '{FORMAT}'", &[format!("{}", other), format!("{}", FORMAT)])),
+                None => return Err(camcraft_i18n::tf("not a tool library: no \"format\": \"{FORMAT}\"", &[format!("{}", FORMAT)])),
             }
             match o.get("version").and_then(Value::as_u64) {
                 Some(VERSION | LEFT_HAND_VERSION | CUTTING_STEPS_VERSION | HOLDER_REF_VERSION) => {}
-                Some(v) => return Err(format!("tool library version {v} is not supported (this build reads {VERSION} to {HOLDER_REF_VERSION})")),
+                Some(v) => return Err(camcraft_i18n::tf("tool library version {v} is not supported (this build reads {VERSION} to {HOLDER_REF_VERSION})", &[format!("{}", v), format!("{}", VERSION), format!("{}", HOLDER_REF_VERSION)])),
                 None => return Err("not a tool library: no \"version\"".into()),
             }
             if let Some(u) = o.get("units").and_then(Value::as_str)
                 && u != "mm"
             {
-                return Err(format!("tool library units '{u}' are not supported (lengths are mm)"));
+                return Err(camcraft_i18n::tf("tool library units '{u}' are not supported (lengths are mm)", &[format!("{}", u)]));
             }
             o.get("tools")
                 .and_then(Value::as_array)
@@ -168,11 +168,11 @@ pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| format!("tool #{n} has no name"))?;
+            .ok_or_else(|| camcraft_i18n::tf("tool #{n} has no name", &[format!("{}", n)]))?;
         if out.iter().any(|t| t.name == name) {
-            return Err(format!("tool '{name}' appears twice in the library"));
+            return Err(camcraft_i18n::tf("tool '{name}' appears twice in the library", &[format!("{}", name)]));
         }
-        let def = row.get("definition").ok_or_else(|| format!("tool '{name}' has no definition"))?;
+        let def = row.get("definition").ok_or_else(|| camcraft_i18n::tf("tool '{name}' has no definition", &[format!("{}", name)]))?;
         let tool = project::tool_from_json(def).map_err(|e| format!("tool '{name}': {e}"))?;
         if let Some(why) = tool.torch_refusal() {
             return Err(format!("tool '{name}' is refused: {why}"));
@@ -207,12 +207,12 @@ fn needs_steps_version(t: &Tool) -> bool {
 fn read_body(def: &Value, tool: &Tool, name: &str) -> Result<Option<ToolBody>, String> {
     let key = |k: &str| def.get(k).filter(|v| !v.is_null());
     let dto: Option<ToolBodyDto> = key("body")
-        .map(|raw| serde_json::from_value(raw.clone()).map_err(|e| format!("tool '{name}': body is malformed: {e}")))
+        .map(|raw| serde_json::from_value(raw.clone()).map_err(|e| camcraft_i18n::tf("tool '{name}': body is malformed: {e}", &[format!("{}", name), format!("{}", e)])))
         .transpose()?;
     // #2016: a library holder by reference, drawn from this build's
     // library; an unknown entry refuses the file by name.
     let holder: Option<HolderRefDto> = key("holder")
-        .map(|raw| serde_json::from_value(raw.clone()).map_err(|e| format!("tool '{name}': holder is malformed: {e}")))
+        .map(|raw| serde_json::from_value(raw.clone()).map_err(|e| camcraft_i18n::tf("tool '{name}': holder is malformed: {e}", &[format!("{}", name), format!("{}", e)])))
         .transpose()?;
     let what = if holder.is_some() { "holder" } else { "body" };
     let Some(body) = project::stated_body(holder.as_ref(), dto.as_ref(), name).map_err(|e| format!("{e} ({what} refused)"))? else {

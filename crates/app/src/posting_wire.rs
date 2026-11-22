@@ -77,7 +77,7 @@ pub fn wire_clause(world: &World) -> WireClause {
                 };
                 let what = match (v.skipped, &op.params) {
                     // #1109: an open run says which laws it skipped and why.
-                    (Some(why), OpParams::WireContour(w)) => format!("open run ({} of travel): kerf judged; {why}", w.side.word()),
+                    (Some(why), OpParams::WireContour(w)) => camcraft_i18n::tf("open run ({} of travel): kerf judged; {why}", &[format!("{}", w.side.word()), format!("{}", why)]),
                     (Some(why), _) => why.to_owned(),
                     (None, _) => format!("{how}{}{tail}", slugs_said(&v.slugs)),
                 };
@@ -89,10 +89,7 @@ pub fn wire_clause(world: &World) -> WireClause {
         }
     }
     if !judged.is_empty() {
-        out.line = Some(format!(
-            "{WIRE_VERDICT} - judged by the 2.5D wire laws (kerf, threading, slug): {}",
-            judged.join("; ")
-        ));
+        out.line = Some(camcraft_i18n::tf("{WIRE_VERDICT} - judged by the 2.5D wire laws (kerf, threading, slug): {}", &[format!("{}", WIRE_VERDICT), format!("{}", judged.join("; "))]));
     }
     out
 }
@@ -151,7 +148,7 @@ pub(super) fn stream(
     } else {
         let machine = crate::machine::of_setup(world, setup)
             .1
-            .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
+            .ok_or_else(|| camcraft_i18n::tf("{name}: a leaning wire cut needs its wire EDM machine mounted", &[format!("{}", name)]))?;
         let angle = machine.edm.as_ref().and_then(|e| e.taper_angle);
         let lean = if let Some(a) = angle {
             angle_lean(name, &machine.model, a, four.is_some(), hs.top, origin[2])?
@@ -175,12 +172,12 @@ pub(super) fn stream(
     // generator refuses the pair); a path that carries both is refused
     // here too, never posted with a skim's condition on the cut-off.
     if !p.skims.is_empty() {
-        return Err(format!("{name}: skim passes are stated with tabs - skims are cut on an untabbed profile only; remove the tabs or the skims"));
+        return Err(camcraft_i18n::tf("{name}: skim passes are stated with tabs - skims are cut on an untabbed profile only; remove the tabs or the skims", &[format!("{}", name)]));
     }
-    let (head, tail) = cache.path.moves.split_at_checked(m).ok_or_else(|| format!("{name}: the tab cut-off's start is past the path"))?;
+    let (head, tail) = cache.path.moves.split_at_checked(m).ok_or_else(|| camcraft_i18n::tf("{name}: the tab cut-off's start is past the path", &[format!("{}", name)]))?;
     let main = crate::cl::Toolpath { moves: head.to_vec(), ..crate::cl::Toolpath::default() };
     let cut = crate::cl::Toolpath { moves: tail.to_vec(), ..crate::cl::Toolpath::default() };
-    let off_name = format!("{display_name} tab cut-off");
+    let off_name = camcraft_i18n::tf("{display_name} tab cut-off", &[format!("{}", display_name)]);
     let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word(), taper, four)?;
     records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word(), taper, four)?);
     Ok(records)
@@ -225,7 +222,7 @@ fn section(
     let at = records
         .iter()
         .position(|r| matches!(r, cnc::Record::Section { begin: true }))
-        .ok_or_else(|| format!("{name}: the wire section has no start"))?;
+        .ok_or_else(|| camcraft_i18n::tf("{name}: the wire section has no start", &[format!("{}", name)]))?;
     let mut wire = vec![
         cnc::Record::Param { name: "EdmCondition".into(), value: json!(condition) },
         cnc::Record::Param { name: "WireSide".into(), value: json!(side) },
@@ -245,12 +242,10 @@ fn section(
 /// reaches it another way.
 fn angle_lean(name: &str, model: &str, a: crate::machine::TaperAngle, four: bool, top: Option<f64>, origin_z: f64) -> Result<Lean, String> {
     if four {
-        return Err(format!(
-            "{name}: a 4-axis cut, and machine {model} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles"
-        ));
+        return Err(camcraft_i18n::tf("{name}: a 4-axis cut, and machine {model} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles", &[format!("{}", name), format!("{}", model)]));
     }
     let (positive, corner) = a.complete(model).map_err(|e| format!("{name}: {e}"))?;
-    let top = top.ok_or_else(|| format!("{name}: the workpiece's top does not resolve"))?;
+    let top = top.ok_or_else(|| camcraft_i18n::tf("{name}: the workpiece's top does not resolve", &[format!("{}", name)]))?;
     let left = positive == crate::machine::AngleSide::TopLeft;
     Ok(Lean::Angle { top, left, corner: corner.word(), plane: top - origin_z })
 }
@@ -264,7 +259,7 @@ fn angle_lean(name: &str, model: &str, a: crate::machine::TaperAngle, four: bool
 fn announce_skims(records: &mut Vec<cnc::Record>, cache: &crate::schema::Toolpath, p: &WireContourOp, name: &str) -> Result<(), String> {
     use crate::cl::MoveKind;
     let Some(start) = cache.path.moves.first().map(|m| m.from) else {
-        return Err(format!("{name}: the wire path is empty - regenerate it"));
+        return Err(camcraft_i18n::tf("{name}: the wire path is empty - regenerate it", &[format!("{}", name)]));
     };
     let at_start = |m: &cnc::MoveRec| (m.x - start.x).abs() < 1e-6 && (m.y - start.y).abs() < 1e-6;
     let mut out = Vec::with_capacity(records.len() + p.skims.len());
@@ -289,10 +284,7 @@ fn announce_skims(records: &mut Vec<cnc::Record>, cache: &crate::schema::Toolpat
     }
     *records = out;
     if back != p.skims.len() + 1 {
-        return Err(format!(
-            "{name}: the wire path returns to its threading point {back} time(s), not once per pass ({} passes) - regenerate it",
-            p.skims.len() + 1
-        ));
+        return Err(camcraft_i18n::tf("{name}: the wire path returns to its threading point {back} time(s), not once per pass ({} passes) - regenerate it", &[format!("{}", name), format!("{}", back), format!("{}", p.skims.len() + 1)]));
     }
     Ok(())
 }

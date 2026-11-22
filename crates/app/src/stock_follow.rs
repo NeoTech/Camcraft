@@ -78,7 +78,7 @@ pub fn keep_square(
     if matches!(shape, StockShape::FromModel { .. }) || !is_square(loc.rot) {
         return Ok(None);
     }
-    let refused = || format!("the stock '{name}' cannot keep its allowance round the turned part - set the stock again");
+    let refused = || camcraft_i18n::tf("the stock '{name}' cannot keep its allowance round the turned part - set the stock again", &[format!("{}", name)]);
     let (Some((blo, bhi)), Some((alo, ahi))) = (local_bounds(loc, before), local_bounds(loc, after)) else {
         return Err(refused());
     };

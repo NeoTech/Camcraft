@@ -89,7 +89,7 @@ pub fn place(model: &[Triangle], axis: [f64; 3], offset: f64) -> Result<Vec<Tria
         return Err("the tool axis direction must be a finite, non-zero vector".into());
     }
     if !(offset.is_finite() && offset.abs() <= MAX_BODY_HEIGHT) {
-        return Err(format!("the tip offset must be a finite length within {MAX_BODY_HEIGHT} mm"));
+        return Err(camcraft_i18n::tf("the tip offset must be a finite length within {MAX_BODY_HEIGHT} mm", &[format!("{}", MAX_BODY_HEIGHT)]));
     }
     let a = [axis[0] / n, axis[1] / n, axis[2] / n];
     // The perpendicular pair: +Z maps X to X and Y to Y (the identity
@@ -155,7 +155,7 @@ pub fn build_spun(spun: SpunProfile) -> ToolBody {
 pub fn build_library(reference: &HolderRef) -> Result<ToolBody, String> {
     let entry = reference.resolve().map_err(|e| format!("holder: {e}"))?;
     let points = reference.points().map_err(|e| format!("holder: {e}"))?;
-    let spun = SpunProfile::new(points).map_err(|e| format!("holder profile: {e}"))?;
+    let spun = SpunProfile::new(points).map_err(|e| camcraft_i18n::tf("holder profile: {e}", &[format!("{}", e)]))?;
     let mut body = build_spun(spun);
     body.library = Some(HolderRef::to(&entry, reference.gauge_len, reference.projection));
     Ok(body)
@@ -171,17 +171,10 @@ pub fn fits(tool: &Tool, body: &ToolBody) -> Result<(), String> {
         BodyFrame::Spindle { profile, .. } => profile,
     };
     if LATHE_HELD.contains(&tool.kind) {
-        return Err(format!(
-            "a {} is lathe-held - lathe holders are placed in the turning tool frame (radial and spindle directions, tip point), not along a spindle axis",
-            tool.kind
-        ));
+        return Err(camcraft_i18n::tf("a {} is lathe-held - lathe holders are placed in the turning tool frame (radial and spindle directions, tip point), not along a spindle axis", &[format!("{}", tool.kind)]));
     }
     if profile.enclose(tool).is_none() {
-        return Err(format!(
-            "the tool body reaches into the flutes (its foot is {:.3} mm above the tip, the flutes run {:.3} mm)",
-            profile.bottom(),
-            tool.flute_len
-        ));
+        return Err(camcraft_i18n::tf("the tool body reaches into the flutes (its foot is {:.3} mm above the tip, the flutes run {:.3} mm)", &[format!("{:.3}", profile.bottom()), format!("{:.3}", tool.flute_len)]));
     }
     Ok(())
 }

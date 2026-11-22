@@ -28,9 +28,7 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
                     || crate::setup::wcs_entity_name(world, Some(s)) == name
             });
     if taken {
-        return Some(CommandError::Invalid(format!(
-            "'{name}' is a name reserved for a setup's stock and work offsets"
-        )));
+        return Some(CommandError::Invalid(camcraft_i18n::tf("'{name}' is a name reserved for a setup's stock and work offsets", &[format!("{}", name)])));
     }
     None
 }
@@ -56,12 +54,7 @@ fn cutting_gate(name: &str, tool: &Tool) -> Result<(), CommandError> {
         return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
     }
     if let Some(r) = tool.cutting.iter().find(|r| r.stepover.is_some_and(|s| s > tool.diameter)) {
-        return Err(CommandError::Invalid(format!(
-            "tool '{name}': cutting data for {}: stepover {} is wider than the {} mm cutter",
-            camcraft_tools::cutting_rows::material_label(r.material),
-            r.stepover.unwrap_or_default(),
-            tool.diameter
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}': cutting data for {}: stepover {} is wider than the {} mm cutter", &[format!("{}", name), format!("{}", camcraft_tools::cutting_rows::material_label(r.material)), format!("{}", r.stepover.unwrap_or_default()), format!("{}", tool.diameter)])));
     }
     Ok(())
 }
@@ -126,10 +119,7 @@ impl AddTool {
             return Err(CommandError::NameConflict(name.to_string()));
         }
         let number = crate::tool_numbers::next_free(world).ok_or_else(|| {
-            CommandError::Invalid(format!(
-                "no free tool numbers remain ({})",
-                crate::tool_numbers::RANGE_TEXT
-            ))
+            CommandError::Invalid(camcraft_i18n::tf("no free tool numbers remain ({})", &[format!("{}", crate::tool_numbers::RANGE_TEXT)]))
         })?;
         Ok(AddTool {
             name: name.to_string(),
@@ -163,7 +153,7 @@ impl AddTool {
                             body.machine_default = true;
                             cmd.holder = Some((entry, body));
                         }
-                        Err(e) => cmd.skipped = Some(format!("the machine's default holder {entry} was not applied - {e}")),
+                        Err(e) => cmd.skipped = Some(camcraft_i18n::tf("the machine's default holder {entry} was not applied - {e}", &[format!("{}", entry), format!("{}", e)])),
                     }
                 }
             }
@@ -183,7 +173,7 @@ impl AddTool {
     pub fn note(&self) -> Option<String> {
         match (&self.holder, &self.skipped) {
             (Some((n, b)), _) if b.machine_default => {
-                Some(format!("holder {n} (machine default - judged no smaller than the tool's holder cylinder)"))
+                Some(camcraft_i18n::tf("holder {n} (machine default - judged no smaller than the tool's holder cylinder)", &[format!("{}", n)]))
             }
             (Some((n, _)), _) => Some(format!("holder {n}")),
             (None, Some(why)) => Some(why.clone()),
@@ -291,9 +281,7 @@ impl ChangeTool {
         // (clear it back to the numbers' outline first).
         if let Some(c) = crate::tool_cutter::cutter_of(world, &entity).filter(|_| judge_cutter) {
             camcraft_tools::cutter_profile::agrees(&next, &c).map_err(|e| {
-                CommandError::Invalid(format!(
-                    "tool '{name}': the drawn cutter profile no longer fits: {e} - reset the cutter profile to Parametric first"
-                ))
+                CommandError::Invalid(camcraft_i18n::tf("tool '{name}': the drawn cutter profile no longer fits: {e} - reset the cutter profile to Parametric first", &[format!("{}", name), format!("{}", e)]))
             })?;
         }
         Ok(ChangeTool {

@@ -43,7 +43,7 @@ impl ToolBodySpec {
         // #361: the one body-file door (a reduced-fidelity mesh is refused).
         let file = crate::tool_body_file::read(path)?;
         let report = crate::geometry::import::step_csys::read_tool_csys(&data)
-            .map_err(|e| format!("coordinate systems unreadable: {e}"))?;
+            .map_err(|e| camcraft_i18n::tf("coordinate systems unreadable: {e}", &[format!("{}", e)]))?;
         let (axis, offset) = report.align_tool_body()?;
         Ok(ToolBodySpec { source: file.source, facets: file.facets, axis, offset })
     }
@@ -138,7 +138,7 @@ impl SetToolBody {
             None => None,
             Some(p) => {
                 let spun = SpunProfile::new(p)
-                    .map_err(|e| CommandError::Invalid(format!("tool '{name}': holder profile: {e}")))?;
+                    .map_err(|e| CommandError::Invalid(camcraft_i18n::tf("tool '{name}': holder profile: {e}", &[format!("{}", name), format!("{}", e)])))?;
                 let mut body = tool_body::build_spun(spun);
                 tool_body::fits(&tool, &body).map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
                 // #2016: the outline of the library holder the tool
@@ -301,9 +301,7 @@ impl SetToolBody {
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
         let prev = tool_body::body_of(world, &entity);
         let Some(ref cur) = prev else {
-            return Err(CommandError::Invalid(format!(
-                "tool '{name}' has no body yet - place piece 0 first before attaching modular pieces"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}' has no body yet - place piece 0 first before attaching modular pieces", &[format!("{}", name)])));
         };
         let invalid = |e: String| CommandError::Invalid(format!("tool '{name}': {e}"));
         let next = crate::tool_body_assembly::attach_piece(name, cur, piece, &place).map_err(invalid)?;
@@ -321,7 +319,7 @@ impl SetToolBody {
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
         let prev = tool_body::body_of(world, &entity);
         let Some(ref cur) = prev else {
-            return Err(CommandError::Invalid(format!("tool '{name}' has no body to remove a piece from")));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("tool '{name}' has no body to remove a piece from", &[format!("{}", name)])));
         };
         let invalid = |e: String| CommandError::Invalid(format!("tool '{name}': {e}"));
         let next = crate::tool_body_assembly::remove_piece(name, cur, index).map_err(invalid)?;

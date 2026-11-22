@@ -51,13 +51,13 @@ pub fn plasma_clause(world: &World) -> PlasmaClause {
         }
         judged.push(name.clone());
         let Some(cache) = model::toolpath_of(world, &e) else {
-            out.problems.push(format!("{name}: the plasma laws have no toolpath to judge - generate it first"));
+            out.problems.push(camcraft_i18n::tf("{name}: the plasma laws have no toolpath to judge - generate it first", &[format!("{}", name)]));
             continue;
         };
         let program = match PlasmaProgram::from_toolpath(&cache.path) {
             Ok(p) => p,
             Err(why) => {
-                out.problems.push(format!("{name}: the plasma laws cannot judge the path - {why}"));
+                out.problems.push(camcraft_i18n::tf("{name}: the plasma laws cannot judge the path - {why}", &[format!("{}", name), format!("{}", why)]));
                 continue;
             }
         };
@@ -76,10 +76,7 @@ pub fn plasma_clause(world: &World) -> PlasmaClause {
         } else {
             format!("{} warning(s) - {}", warnings.len(), warnings.join("; "))
         };
-        out.line = Some(format!(
-            "{PLASMA_VERDICT} - {} judged by the 2D plasma laws (cut order, cut crossing, kerf crossing, tip-up): {verdict}",
-            judged.join(", ")
-        ));
+        out.line = Some(camcraft_i18n::tf("{PLASMA_VERDICT} - {} judged by the 2D plasma laws (cut order, cut crossing, kerf crossing, tip-up): {verdict}", &[format!("{}", PLASMA_VERDICT), format!("{}", judged.join(", ")), format!("{}", verdict)]));
     }
     out
 }

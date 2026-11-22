@@ -11,19 +11,14 @@ use serde_json::Value;
 /// setups, stock, tools, and operations through the same seam as MCP.
 pub(crate) fn v_call(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     if args.len() > 2 {
-        return Err(format!(
-            "call takes at most two arguments (tool, args), got {}",
-            args.len()
-        ));
+        return Err(camcraft_i18n::tf("call takes at most two arguments (tool, args), got {}", &[format!("{}", args.len())]));
     }
     let tool = arg_str(&args, 0, "a tool name")?;
     let tool_args = match args.get(1) {
         None | Some(Value::Null) => Value::Object(Default::default()),
         Some(v @ Value::Object(_)) => v.clone(),
         Some(other) => {
-            return Err(format!(
-                "arguments for \"{tool}\" must be an object, got {other}"
-            ));
+            return Err(camcraft_i18n::tf("arguments for \"{tool}\" must be an object, got {other}", &[format!("{}", tool), format!("{}", other)]));
         }
     };
     crate::mcp::call(env, &tool, &tool_args)

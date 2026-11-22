@@ -33,10 +33,7 @@ pub fn source_name(path: &Path) -> String {
 /// Why a body meshed at `chord_mm` is not taken.
 #[must_use]
 pub fn too_coarse(source: &str, chord_mm: f64) -> String {
-    format!(
-        "{source} is too detailed to import at full fidelity (its curved faces would be off by up to {chord_mm:.3} mm, the importer promises {:.3} mm) - a tool body judged from that mesh would read smaller than the holder is; simplify the model (drop threads, lettering, small fillets) and import it again",
-        step::CHORD_CAP
-    )
+    camcraft_i18n::tf("{source} is too detailed to import at full fidelity (its curved faces would be off by up to {chord_mm:.3} mm, the importer promises {:.3} mm) - a tool body judged from that mesh would read smaller than the holder is; simplify the model (drop threads, lettering, small fillets) and import it again", &[format!("{}", source), format!("{:.3}", chord_mm), format!("{:.3}", step::CHORD_CAP)])
 }
 
 /// Take an imported mesh as a tool body, or refuse it by name: reduced
@@ -47,7 +44,7 @@ pub fn accept(path: &Path, graded: Graded) -> Result<BodyFile, String> {
         return Err(too_coarse(&source, chord));
     }
     if graded.mesh.facets.is_empty() {
-        return Err(format!("{source} holds no facets"));
+        return Err(camcraft_i18n::tf("{source} holds no facets", &[format!("{}", source)]));
     }
     Ok(BodyFile { source, facets: graded.mesh.facets.to_vec() })
 }

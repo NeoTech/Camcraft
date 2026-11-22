@@ -103,13 +103,8 @@ fn judge_clause(world: &World) -> SimClause {
             // generation names the part it breaks into, and the way out.
             let moved = kept_moved(world).or_else(|| stock_edge_named(world)).map(|why| format!(" - {why}")).unwrap_or_default();
             SimClause {
-                problem: Some(format!(
-                    "gouge: program cuts below the model in {} cell(s), worst {} {}{at}{}{moved}",
-                    sim.dev.gouge_cells,
-                    crate::units::len(sim.dev.max_gouge, u, 2),
-                    u.suffix(),
-                    crate::stock_source::gouge_hint(world, sim.dev.max_gouge_at).unwrap_or_default() // #1094
-                )),
+                // #1094: name the part the gouge cuts into when one is known.
+                problem: Some(camcraft_i18n::tf("gouge: program cuts below the model in {} cell(s), worst {} {}{at}{}{moved}", &[format!("{}", sim.dev.gouge_cells), format!("{}", crate::units::len(sim.dev.max_gouge, u, 2)), format!("{}", u.suffix()), format!("{}", at), format!("{}", crate::stock_source::gouge_hint(world, sim.dev.max_gouge_at).unwrap_or_default()), format!("{}", moved)])),
                 not_judged: None,
             }
         }
@@ -124,7 +119,7 @@ fn judge_clause(world: &World) -> SimClause {
         Err(reason) => {
             let line = format!("{NOT_JUDGED}: {reason}");
             let problem = uncovered(world)
-                .map(|why| format!("{line} - and {why}, so nothing judged it; refusing"))
+                .map(|why| camcraft_i18n::tf("{line} - and {why}, so nothing judged it; refusing", &[format!("{}", line), format!("{}", why)]))
                 // #1628: the parts beside an op's source, judged again live.
                 .or_else(|| kept_moved(world).map(|why| format!("{line} - and {why}")));
             SimClause {
@@ -145,17 +140,17 @@ fn judge_clause(world: &World) -> SimClause {
 fn uncovered(world: &World) -> Option<String> {
     let ops = match crate::posting::program_ops(world) {
         Ok(ops) => ops,
-        Err(e) => return Some(format!("no operation's generator verdict can be read ({e})")),
+        Err(e) => return Some(camcraft_i18n::tf("no operation's generator verdict can be read ({e})", &[format!("{}", e)])),
     };
     for (name, e) in &ops {
         let Some(op) = model::operation_of(world, e) else {
-            return Some(format!("{name} lost its operation"));
+            return Some(camcraft_i18n::tf("{name} lost its operation", &[format!("{}", name)]));
         };
         if op.stamp.is_none()
             || operation::status_of(world, e) != OpStatus::Ok
             || model::toolpath_of(world, e).is_none()
         {
-            return Some(format!("{name} carries no generator-time verify verdict"));
+            return Some(camcraft_i18n::tf("{name} carries no generator-time verify verdict", &[format!("{}", name)]));
         }
     }
     None

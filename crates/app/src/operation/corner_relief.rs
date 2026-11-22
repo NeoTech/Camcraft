@@ -38,7 +38,7 @@ pub(super) struct ReliefCheck<'a> {
 }
 
 fn slice_err(e: slice::SliceError) -> GenError {
-    GenError::Invalid(format!("corner relief check could not slice geometry: {e}"))
+    GenError::Invalid(camcraft_i18n::tf("corner relief check could not slice geometry: {e}", &[format!("{}", e)]))
 }
 
 fn seg_pt_dist(p: Point2, a: Point2, b: Point2) -> f64 {
@@ -98,20 +98,14 @@ fn overhead_at(facets: &[Triangle], z: f64, hi: f64) -> Result<Region, GenError>
 fn check_avoid(rel: &ResolvedRelief, keepout: &Region, labels: &str) -> Result<(), GenError> {
     let seg_band = capsule_region(rel.start, rel.end, BOUNDARY_TOL)?;
     if keepout.contains(rel.start) || keepout.contains(rel.end) || !keepout.intersect(&seg_band)?.is_empty() {
-        return Err(GenError::Invalid(format!(
-            "corner relief at ({:.3}, {:.3}) violates 'Do not touch' clearance around {}",
-            rel.corner.x, rel.corner.y, labels
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("corner relief at ({:.3}, {:.3}) violates 'Do not touch' clearance around {}", &[format!("{:.3}", rel.corner.x), format!("{:.3}", rel.corner.y), format!("{}", labels)])));
     }
     Ok(())
 }
 
 fn check_steel(rel: &ResolvedRelief, cap: &Region, wall: &Region, what: &str) -> Result<(), GenError> {
     if !wall.is_empty() && cap.intersect(wall)?.area().abs() > BOUNDARY_TOL {
-        return Err(GenError::Invalid(format!(
-            "corner relief at ({:.3}, {:.3}) cuts into {what}",
-            rel.corner.x, rel.corner.y
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("corner relief at ({:.3}, {:.3}) cuts into {what}", &[format!("{:.3}", rel.corner.x), format!("{:.3}", rel.corner.y), format!("{}", what)])));
     }
     Ok(())
 }
@@ -172,10 +166,7 @@ pub(super) fn plan_and_check(input: &ReliefCheck<'_>) -> Result<(Region, Vec<Cor
         let cap_tool = capsule_region(rel.start, rel.end, r_tool)?;
         for (label, forb) in input.forbidden {
             if cap_tool.intersect(forb)?.area().abs() > BOUNDARY_TOL {
-                return Err(GenError::Invalid(format!(
-                    "corner relief at ({:.3}, {:.3}) crosses {label}",
-                    rel.corner.x, rel.corner.y
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("corner relief at ({:.3}, {:.3}) crosses {label}", &[format!("{:.3}", rel.corner.x), format!("{:.3}", rel.corner.y), format!("{}", label)])));
             }
         }
         if let Some((stock, stock_exp)) = &stock_expanded {
@@ -184,10 +175,7 @@ pub(super) fn plan_and_check(input: &ReliefCheck<'_>) -> Result<(Region, Vec<Cor
                 || seg_min_dist_to_region(rel.start, rel.end, stock) < r_tool - BOUNDARY_TOL
                 || cap_tool.difference(stock_exp)?.area().abs() > BOUNDARY_TOL;
             if out_edge {
-                return Err(GenError::Invalid(format!(
-                    "corner relief at ({:.3}, {:.3}) exits the stock boundary",
-                    rel.corner.x, rel.corner.y
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("corner relief at ({:.3}, {:.3}) exits the stock boundary", &[format!("{:.3}", rel.corner.x), format!("{:.3}", rel.corner.y)])));
             }
         }
         if let Some((ko, labels)) = &keepout {
@@ -205,10 +193,7 @@ pub(super) fn plan_and_check(input: &ReliefCheck<'_>) -> Result<(Region, Vec<Cor
                 if !ear_tool.intersect(sec)?.is_empty()
                     && ear_tool.difference(sec_exp)?.area().abs() > BOUNDARY_TOL
                 {
-                    return Err(GenError::Invalid(format!(
-                        "corner relief at ({:.3}, {:.3}) punches through a thin part wall",
-                        rel.corner.x, rel.corner.y
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("corner relief at ({:.3}, {:.3}) punches through a thin part wall", &[format!("{:.3}", rel.corner.x), format!("{:.3}", rel.corner.y)])));
                 }
             }
         }

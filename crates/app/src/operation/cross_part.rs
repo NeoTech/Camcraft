@@ -83,9 +83,7 @@ pub(super) fn part_clear(
         return Err(GenError::Invalid("a cross hole drills into the finished part".into()));
     };
     let Some(h) = hole_of(m.to, holes) else {
-        return Err(GenError::Invalid(format!(
-            "the cross drill {what} the finished part at move {at}, off every modelled hole's line"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the cross drill {what} the finished part at move {at}, off every modelled hole's line", &[format!("{}", what), format!("{}", at)])));
     };
     let o = h.origin;
     let depth = -h.floor_d;
@@ -96,22 +94,15 @@ pub(super) fn part_clear(
             // before a floor stops it; steel met sooner - the face's
             // own curvature - is a hole the model does not have.
             if met < 0.5 * tool.diameter {
-                format!(
-                    "the drill meets steel at the mouth - the model has no hole there (asked {depth} mm deep); model the cross hole in the part, or drop it from the list"
-                )
+                camcraft_i18n::tf("the drill meets steel at the mouth - the model has no hole there (asked {depth} mm deep); model the cross hole in the part, or drop it from the list", &[format!("{}", depth)])
             } else {
-                format!(
-                    "the tip meets steel {met:.3} mm past the mouth, short of the {depth} mm asked - the drill runs past the modelled hole's floor (or the model's hole is narrower than the drill); match the depth and size to the model"
-                )
+                camcraft_i18n::tf("the tip meets steel {met:.3} mm past the mouth, short of the {depth} mm asked - the drill runs past the modelled hole's floor (or the model's hole is narrower than the drill); match the depth and size to the model", &[format!("{:.3}", met), format!("{}", depth)])
             }
         }
         _ => "the finished part stands in the drill's path - model the hole the tool travels".to_string(),
     };
     Err(GenError::invalid_at(
-        format!(
-            "cross hole at ({}, {}, {}) along ({}, {}, {}) {what} the finished part: {why}",
-            o.x, o.y, o.z, h.dir.x, h.dir.y, h.dir.z
-        ),
+        camcraft_i18n::tf("cross hole at ({}, {}, {}) along ({}, {}, {}) {what} the finished part: {why}", &[format!("{}", o.x), format!("{}", o.y), format!("{}", o.z), format!("{}", h.dir.x), format!("{}", h.dir.y), format!("{}", h.dir.z), format!("{}", what), format!("{}", why)]),
         o,
     ))
 }
@@ -148,11 +139,11 @@ pub(super) fn neighbours_clear(
                only its own part's holes; move the hole or the part, or drill the parts in setups of their own";
     let hole = t.moves.get(at).and_then(|m| hole_of(m.to, holes).or_else(|| hole_of(m.from, holes)));
     let Some(h) = hole else {
-        return Err(GenError::Invalid(format!("the cross drill {what} a neighbouring part at move {at}: {why}")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("the cross drill {what} a neighbouring part at move {at}: {why}", &[format!("{}", what), format!("{}", at), format!("{}", why)])));
     };
     let (o, d) = (h.origin, h.dir);
     Err(GenError::invalid_at(
-        format!("cross hole at ({}, {}, {}) along ({}, {}, {}) {what} a neighbouring part: {why}", o.x, o.y, o.z, d.x, d.y, d.z),
+        camcraft_i18n::tf("cross hole at ({}, {}, {}) along ({}, {}, {}) {what} a neighbouring part: {why}", &[format!("{}", o.x), format!("{}", o.y), format!("{}", o.z), format!("{}", d.x), format!("{}", d.y), format!("{}", d.z), format!("{}", what), format!("{}", why)]),
         o,
     ))
 }

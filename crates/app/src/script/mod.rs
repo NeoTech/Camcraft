@@ -176,9 +176,9 @@ fn boot(raw: *const RefCell<Env>) -> Result<Context, String> {
     });
     let mut ctx = Context::default();
     ctx.register_global_callable(JsString::from("__cam_call"), 2, nf)
-        .map_err(|e| format!("host boot: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("host boot: {e}", &[format!("{}", e)]))?;
     ctx.eval(Source::from_bytes(shim().as_bytes()))
-        .map_err(|e| format!("host boot: {}", engine_text(&e)))?;
+        .map_err(|e| camcraft_i18n::tf("host boot: {}", &[format!("{}", engine_text(&e))]))?;
     Ok(ctx)
 }
 
@@ -220,18 +220,18 @@ fn dispatch(raw: *const RefCell<Env>, args: &[JsValue]) -> String {
         .map(|s| s.to_std_string_lossy())
         .unwrap_or_else(|| "[]".to_owned());
     let Some(verb) = VERBS.iter().find(|v| v.name == name) else {
-        return err_envelope(format!("unknown cam method {name}"));
+        return err_envelope(camcraft_i18n::tf("unknown cam method {name}", &[format!("{}", name)]));
     };
     let list: Vec<Value> = match serde_json::from_str(&text) {
         Ok(Value::Array(a)) => a,
-        Ok(_) => return err_envelope(format!("{name}: the argument pack must be an array")),
-        Err(e) => return err_envelope(format!("{name}: argument pack unreadable: {e}")),
+        Ok(_) => return err_envelope(camcraft_i18n::tf("{name}: the argument pack must be an array", &[format!("{}", name)])),
+        Err(e) => return err_envelope(camcraft_i18n::tf("{name}: argument pack unreadable: {e}", &[format!("{}", name), format!("{}", e)])),
     };
     let Ok(mut env) = cell.try_borrow_mut() else {
         // Re-entrance a script must never see: a verb that called
         // back into JS while the host held the borrow. Nothing does
         // today; if one ever did, this names it instead of panicking.
-        return err_envelope(format!("{name}: the host is already inside a verb"));
+        return err_envelope(camcraft_i18n::tf("{name}: the host is already inside a verb", &[format!("{}", name)]));
     };
     // An arity break is a refusal like any other: recorded even when
     // the script catches it, because the job did not run as typed.
@@ -467,7 +467,7 @@ pub(crate) fn only_keys(obj: &Value, allowed: &[&str]) -> Result<BTreeMap<String
     };
     for (k, v) in map {
         if !allowed.contains(&k.as_str()) {
-            return Err(format!("unknown option \"{k}\" - this verb knows: {}", allowed.join(", ")));
+            return Err(camcraft_i18n::tf("unknown option \"{k}\" - this verb knows: {}", &[format!("{}", k), format!("{}", allowed.join(", "))]));
         }
         out.insert(k.clone(), v.clone());
     }
@@ -480,7 +480,7 @@ pub(crate) fn arg_str(args: &[Value], i: usize, what: &str) -> Result<String, St
     match args.get(i) {
         None | Some(Value::Null) => Err(format!("{what} is required")),
         Some(Value::String(s)) => Ok(s.clone()),
-        Some(other) => Err(format!("{what} must be a string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("{what} must be a string, got {other}", &[format!("{}", what), format!("{}", other)])),
     }
 }
 
@@ -489,6 +489,6 @@ pub(crate) fn arg_opt(args: &[Value], i: usize, what: &str) -> Result<Option<Str
     match args.get(i) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
-        Some(other) => Err(format!("{what} must be a string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("{what} must be a string, got {other}", &[format!("{}", what), format!("{}", other)])),
     }
 }

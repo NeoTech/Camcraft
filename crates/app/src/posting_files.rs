@@ -245,7 +245,7 @@ static MACHINE_TEXT: [Cell; MACHINES.len()] = [const { OnceLock::new() }; MACHIN
 fn read(kind: &'static str, file: AssetFile) -> Result<String, String> {
     #[cfg(target_arch = "wasm32")]
     {
-        embedded(kind, file.0).map(str::to_owned).ok_or_else(|| format!("{} is not in this build", file.0))
+        embedded(kind, file.0).map(str::to_owned).ok_or_else(|| camcraft_i18n::tf("{} is not in this build", &[format!("{}", file.0)]))
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -273,7 +273,7 @@ pub fn builtin_post_text(name: &str) -> Result<&'static str, String> {
     let i = BUILTINS
         .iter()
         .position(|(n, _)| *n == name)
-        .ok_or_else(|| format!("built-in post {name} is not in the registry"))?;
+        .ok_or_else(|| camcraft_i18n::tf("built-in post {name} is not in the registry", &[format!("{}", name)]))?;
     let (cell, (_, file)) = POST_TEXT.get(i).zip(BUILTINS.get(i)).ok_or_else(|| format!("built-in post {name}: no slot"))?;
     cached(cell, "posts", *file).map_err(|why| format!("built-in post {name}: {why}"))
 }
@@ -294,7 +294,7 @@ pub fn builtin_machine_text(name: &str) -> Result<&'static str, String> {
     let i = MACHINES
         .iter()
         .position(|(n, _)| *n == name)
-        .ok_or_else(|| format!("machine {name} is not in the built-in library"))?;
+        .ok_or_else(|| camcraft_i18n::tf("machine {name} is not in the built-in library", &[format!("{}", name)]))?;
     let (cell, (_, file)) =
         MACHINE_TEXT.get(i).zip(MACHINES.get(i)).ok_or_else(|| format!("built-in machine {name}: no slot"))?;
     cached(cell, "machines", *file).map_err(|why| format!("built-in machine {name}: {why}"))
@@ -305,7 +305,7 @@ pub fn builtin_machine_text(name: &str) -> Result<&'static str, String> {
 /// parsed machine that passed its check (`default_machine_checked`), so a
 /// broken file that the user repairs posts without a restart (#2319).
 pub fn default_mch_text() -> Result<String, String> {
-    read("machines", DEFAULT_MCH_FILE).map_err(|why| format!("default machine: {why}"))
+    read("machines", DEFAULT_MCH_FILE).map_err(|why| camcraft_i18n::tf("default machine: {why}", &[format!("{}", why)]))
 }
 
 /// Every shipped post as (registry name, text), in registry order - or

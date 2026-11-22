@@ -56,13 +56,13 @@ fn opt_script_patch(
     let mut patch = BTreeMap::new();
     for (k, v) in map {
         if !schema.iter().any(|d| &d.key == k) {
-            return Err(format!("unknown post option '{k}'"));
+            return Err(camcraft_i18n::tf("unknown post option '{k}'", &[format!("{}", k)]));
         }
         if v.is_null() {
             patch.insert(k.clone(), None);
         } else {
             let parsed: OptionValue = serde_json::from_value(v.clone())
-                .map_err(|_| format!("invalid value for post option '{k}'"))?;
+                .map_err(|_| camcraft_i18n::tf("invalid value for post option '{k}'", &[format!("{}", k)]))?;
             patch.insert(k.clone(), Some(parsed));
         }
     }
@@ -133,10 +133,7 @@ fn set_post_options(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
     let cmd = SetPostSettings::new(&env.world, edit).map_err(cmd_err)?;
     if cmd.is_empty() {
         return Err(if follow_doc {
-            format!(
-                "setup '{}' already follows the document's post options",
-                target.as_deref().unwrap_or_default()
-            )
+            camcraft_i18n::tf("setup '{}' already follows the document's post options", &[format!("{}", target.as_deref().unwrap_or_default())])
         } else {
             "those post options are already set".into()
         });
@@ -149,7 +146,7 @@ fn target_setup(world: &World, a: &Map<String, Value>) -> Result<Option<String>,
     match opt_str(a, "setup")? {
         None => Ok(None),
         Some("") => Err("\"setup\" must not be empty".into()),
-        Some(s) if !setup::exists(world, s) => Err(format!("no setup named '{s}'")),
+        Some(s) if !setup::exists(world, s) => Err(camcraft_i18n::tf("no setup named '{s}'", &[format!("{}", s)])),
         Some(s) => Ok(Some(s.to_owned())),
     }
 }
@@ -158,7 +155,7 @@ fn opt_bool(a: &Map<String, Value>, key: &str) -> Result<Option<bool>, String> {
     match a.get(key) {
         None => Ok(None),
         Some(Value::Bool(b)) => Ok(Some(*b)),
-        Some(other) => Err(format!("\"{key}\" must be true or false, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be true or false, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -166,7 +163,7 @@ fn opt_word<'a>(a: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>,
     match a.get(key) {
         None => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.as_str())),
-        Some(other) => Err(format!("\"{key}\" must be a string, got {other}")),
+        Some(other) => Err(camcraft_i18n::tf("\"{key}\" must be a string, got {other}", &[format!("{}", key), format!("{}", other)])),
     }
 }
 
@@ -199,14 +196,14 @@ fn apply_patch(mut next: PostOptions, a: &Map<String, Value>) -> Result<(PostOpt
     if let Some(w) = opt_word(a, "between_setups")? {
         next.between_setups = BetweenSetups::from_word(w).ok_or_else(|| {
             let words: Vec<&str> = BetweenSetups::ALL.iter().map(|b| b.word()).collect();
-            format!("\"between_setups\" must be one of {}, not {w:?}", words.join(", "))
+            camcraft_i18n::tf("\"between_setups\" must be one of {}, not {w:?}", &[format!("{}", words.join(", ")), format!("{:?}", w)])
         })?;
         any = true;
     }
     if let Some(w) = opt_word(a, "wcs_rotation")? {
         next.wcs_rotation = WcsRotationOutput::from_word(w).ok_or_else(|| {
             let words: Vec<&str> = WcsRotationOutput::ALL.iter().map(|v| v.word()).collect();
-            format!("\"wcs_rotation\" must be one of {}, not {w:?}", words.join(", "))
+            camcraft_i18n::tf("\"wcs_rotation\" must be one of {}, not {w:?}", &[format!("{}", words.join(", ")), format!("{:?}", w)])
         })?;
         any = true;
     }
@@ -217,7 +214,7 @@ fn parse_threading(word: &str) -> Result<ThreadingOutput, String> {
     match word {
         "g32" => Ok(ThreadingOutput::G32Passes),
         "g76" => Ok(ThreadingOutput::G76Cycle),
-        other => Err(format!("\"threading\" must be \"g32\" or \"g76\", not {other:?}")),
+        other => Err(camcraft_i18n::tf("\"threading\" must be \"g32\" or \"g76\", not {other:?}", &[format!("{:?}", other)])),
     }
 }
 
@@ -226,7 +223,7 @@ fn parse_end_units(word: &str) -> Result<EndUnits, String> {
         "leave" => Ok(EndUnits::Leave),
         "inch" => Ok(EndUnits::Inch),
         "mm" => Ok(EndUnits::Millimeters),
-        other => Err(format!("\"end_units\" must be \"leave\", \"inch\" or \"mm\", not {other:?}")),
+        other => Err(camcraft_i18n::tf("\"end_units\" must be \"leave\", \"inch\" or \"mm\", not {other:?}", &[format!("{:?}", other)])),
     }
 }
 

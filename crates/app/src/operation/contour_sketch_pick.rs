@@ -112,7 +112,7 @@ pub(super) fn visit_src_chains(
     match src {
         SrcRef::Entity(name) => {
             let Some((entity, sketch)) = crate::sketch::find(world, name) else {
-                return Err(GenError::Invalid(format!("no DXF profile named '{name}'")));
+                return Err(GenError::Invalid(camcraft_i18n::tf("no DXF profile named '{name}'", &[format!("{}", name)])));
             };
             let pose = crate::sketch::world_pose(world, &entity);
             for chain in sketch.data.chains().all() {
@@ -122,39 +122,27 @@ pub(super) fn visit_src_chains(
         SrcRef::Selection(items) => {
             for g in items {
                 let Some((entity, sketch)) = crate::sketch::find(world, &g.entity) else {
-                    return Err(GenError::Invalid(format!(
-                        "the selection names '{}', which is not a DXF profile",
-                        g.entity
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("the selection names '{}', which is not a DXF profile", &[format!("{}", g.entity)])));
                 };
                 let pose = crate::sketch::world_pose(world, &entity);
                 let label = crate::pick::geo_label(world, g);
                 match &g.feature {
                     FeatureSel::SketchChain(id) => {
                         let Some(chain) = sketch.data.chains().find(*id) else {
-                            return Err(GenError::Invalid(format!(
-                                "{label} is no longer in DXF profile '{}' - re-pick it",
-                                g.entity
-                            )));
+                            return Err(GenError::Invalid(camcraft_i18n::tf("{label} is no longer in DXF profile '{}' - re-pick it", &[format!("{}", label), format!("{}", g.entity)])));
                         };
                         emit(&g.entity, pose, chain)?;
                     }
                     FeatureSel::SketchLayer(layer) => {
                         if !sketch.data.layers().iter().any(|l| l == layer) {
-                            return Err(GenError::Invalid(format!(
-                                "layer '{layer}' is no longer in DXF profile '{}' - re-pick it",
-                                g.entity
-                            )));
+                            return Err(GenError::Invalid(camcraft_i18n::tf("layer '{layer}' is no longer in DXF profile '{}' - re-pick it", &[format!("{}", layer), format!("{}", g.entity)])));
                         }
                         for chain in sketch.data.chains().by_layer(layer) {
                             emit(&g.entity, pose, chain)?;
                         }
                     }
                     _ => {
-                        return Err(GenError::Invalid(format!(
-                            "{label}: '{}' is a DXF profile - pick a sketch chain or layer",
-                            g.entity
-                        )));
+                        return Err(GenError::Invalid(camcraft_i18n::tf("{label}: '{}' is a DXF profile - pick a sketch chain or layer", &[format!("{}", label), format!("{}", g.entity)])));
                     }
                 }
             }
@@ -205,17 +193,13 @@ pub(super) fn collect_chains(
     let mut out: Vec<ResolvedSketchChain> = Vec::new();
     visit_src_chains(world, src, |entity_name, pose_opt, chain, label| {
         let Some(pose) = pose_opt else {
-            return Err(GenError::Invalid(format!(
-                "DXF profile '{entity_name}' has no stock to lie on - set up stock first"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("DXF profile '{entity_name}' has no stock to lie on - set up stock first", &[format!("{}", entity_name)])));
         };
         let chain_id = chain.id();
         let closed = chain.is_closed();
         let pts = transform_chain_pts(pose, &chain.sample(tolerance))?;
         if (closed && pts.len() < 3) || (!closed && pts.len() < 2) {
-            return Err(GenError::Invalid(format!(
-                "{label} has too few points to machine"
-            )));
+            return Err(GenError::Invalid(camcraft_i18n::tf("{label} has too few points to machine", &[format!("{}", label)])));
         }
         let ov = overrides
             .iter()
@@ -228,15 +212,10 @@ pub(super) fn collect_chains(
         let mut auto_role_err = None;
         if !closed {
             if let Some(s) = ov.and_then(|o| o.side) {
-                open_side_err = Some(format!(
-                    "{label} is an open sketch chain - per-chain {} side compensation is not allowed; clear its side override to cut along the centerline",
-                    side_word(s)
-                ));
+                open_side_err = Some(camcraft_i18n::tf("{label} is an open sketch chain - per-chain {} side compensation is not allowed; clear its side override to cut along the centerline", &[format!("{}", label), format!("{}", side_word(s))]));
             } else if op_side != Side::Auto {
                 let word = if op_side == Side::Inside { "Inside" } else { "Outside" };
-                open_side_err = Some(format!(
-                    "{label} is an open sketch chain - {word} side compensation is not allowed on open chains; choose Side 'Auto' or pick closed chains"
-                ));
+                open_side_err = Some(camcraft_i18n::tf("{label} is an open sketch chain - {word} side compensation is not allowed on open chains; choose Side 'Auto' or pick closed chains", &[format!("{}", label), format!("{}", word)]));
             }
         } else if let Some(s) = ov.and_then(|o| o.side) {
             eff_side = Some(match s {
@@ -257,9 +236,7 @@ pub(super) fn collect_chains(
                         });
                     }
                     Err(e) => {
-                        auto_role_err = Some(format!(
-                            "{label}: cannot determine inside vs outside automatically ({e}) - set a per-chain side override"
-                        ));
+                        auto_role_err = Some(camcraft_i18n::tf("{label}: cannot determine inside vs outside automatically ({e}) - set a per-chain side override", &[format!("{}", label), format!("{}", e)]));
                     }
                 }
             }

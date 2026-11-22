@@ -101,10 +101,7 @@ impl SetOperationGeometry {
                     }
                 }
                 _ if !ovs.is_empty() => {
-                    return Err(CommandError::Invalid(format!(
-                        "per-chain side and direction overrides apply to 2D Contour only, not {}",
-                        params.kind()
-                    )));
+                    return Err(CommandError::Invalid(camcraft_i18n::tf("per-chain side and direction overrides apply to 2D Contour only, not {}", &[format!("{}", params.kind())])));
                 }
                 _ => {}
             }
@@ -146,36 +143,23 @@ fn valid_pick(world: &World, g: &GeoSel) -> Result<(), CommandError> {
         return Err(CommandError::NotFound(g.entity.clone()));
     };
     if model::is_wcs(world, &e) {
-        return Err(CommandError::Invalid(format!(
-            "'{}' is a work offset, not a solid",
-            g.entity
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' is a work offset, not a solid", &[format!("{}", g.entity)])));
     }
     if let Some(sketch) = crate::sketch::sketch_of(world, &e) {
         let found = match &g.feature {
             FeatureSel::SketchChain(id) => sketch.data.chains().find(*id).is_some(),
             FeatureSel::SketchLayer(layer) => sketch.data.layers().iter().any(|l| l == layer),
             _ => {
-                return Err(CommandError::Invalid(format!(
-                    "'{}' is a DXF profile - pick a sketch chain or layer, not a {}",
-                    g.entity, g.feature
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' is a DXF profile - pick a sketch chain or layer, not a {}", &[format!("{}", g.entity), format!("{}", g.feature)])));
             }
         };
         if !found {
-            return Err(CommandError::Invalid(format!(
-                "{} is not in DXF profile '{}'",
-                crate::pick::geo_label(world, g),
-                g.entity
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("{} is not in DXF profile '{}'", &[format!("{}", crate::pick::geo_label(world, g)), format!("{}", g.entity)])));
         }
         return Ok(());
     }
     let Some(features) = model::features_of(world, &e) else {
-        return Err(CommandError::Invalid(format!(
-            "'{}' has no geometry to select from",
-            g.entity
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' has no geometry to select from", &[format!("{}", g.entity)])));
     };
     let found = match &g.feature {
         FeatureSel::Face(id) => features.faces.iter().any(|f| f.id == *id),
@@ -183,17 +167,11 @@ fn valid_pick(world: &World, g: &GeoSel) -> Result<(), CommandError> {
         FeatureSel::Patch(id) => feature::patches(&features).iter().any(|p| p.id == *id),
         FeatureSel::Vertex(id) => feature::resolve_vertex(&features, *id).is_some(),
         FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-            return Err(CommandError::Invalid(format!(
-                "'{}' is a model, not a DXF profile",
-                g.entity
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("'{}' is a model, not a DXF profile", &[format!("{}", g.entity)])));
         }
     };
     if !found {
-        return Err(CommandError::Invalid(format!(
-            "{} is not in the model",
-            crate::pick::geo_label(world, g)
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("{} is not in the model", &[format!("{}", crate::pick::geo_label(world, g))])));
     }
     Ok(())
 }

@@ -488,14 +488,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let control_comp = lk.approach.compensation.in_control();
             let comp_name = lk.approach.compensation.label();
             if control_comp && contour_open {
-                return Err(GenError::Invalid(format!(
-                    "{comp_name} compensation does not ride an open contour - choose In computer"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{comp_name} compensation does not ride an open contour - choose In computer", &[format!("{}", comp_name)])));
             }
             if control_comp && matches!(params, OpParams::Contour { tilt: Some(_), .. }) {
-                return Err(GenError::Invalid(format!(
-                    "{comp_name} compensation does not ride a 3+2 tilt - choose In computer"
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{comp_name} compensation does not ride a 3+2 tilt - choose In computer", &[format!("{}", comp_name)])));
             }
             let cp = ContourParams {
                 tool_diameter: d,
@@ -616,9 +612,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         path = rings(&cp)?;
                     }
                     if control_comp && !runs.is_empty() {
-                        return Err(GenError::Invalid(format!(
-                            "{comp_name} compensation does not ride open runs - pick closed rings, or choose In computer"
-                        )));
+                        return Err(GenError::Invalid(camcraft_i18n::tf("{comp_name} compensation does not ride open runs - pick closed rings, or choose In computer", &[format!("{}", comp_name)])));
                     }
                     // #1777: a run on a part is cut on its air side, read
                     // from the part's sections; Side applies to rings only.
@@ -1182,10 +1176,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // Minkowski sum differs), so an end mill here refuses by
             // name - never a ball path dressed as something else.
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "3D Finish needs a ball-nose tool, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("3D Finish needs a ball-nose tool, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1262,9 +1253,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         finishing3d::FinishPattern::Pencil | finishing3d::FinishPattern::Corner
                     ) =>
                 {
-                    return Err(GenError::Invalid(format!(
-                        "{pattern:?} cleans the creases inside openings, so it cannot fill them - clear 'Fill openings' or pick another pattern"
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("{pattern:?} cleans the creases inside openings, so it cannot fill them - clear 'Fill openings' or pick another pattern", &[format!("{:?}", pattern)])));
                 }
                 Some(w) => Some((finishing3d::fill_openings(&material.facets, *w, *tolerance)?, *w)),
                 None => None,
@@ -1376,16 +1365,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Taper {
-                return Err(GenError::Invalid(format!(
-                    "Deburr rides its cone over the edge - it needs a chamfer mill, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Deburr rides its cone over the edge - it needs a chamfer mill, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             if !(0.0..180.0).contains(&tool.tip_angle) || !tool.tip_angle.is_finite() {
-                return Err(GenError::Invalid(format!(
-                    "Deburr needs a cone tool: '{}' has an included angle of {}, which rules no chamfer",
-                    tool_name, tool.tip_angle
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Deburr needs a cone tool: '{}' has an included angle of {}, which rules no chamfer", &[format!("{}", tool_name), format!("{}", tool.tip_angle)])));
             }
             // The cone's flank must physically reach the contact
             // circle: at the tip's drop the flank stands `width` out
@@ -1396,10 +1379,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1890: the largest setback the size law gives any edge.
             let slant = sizing.max_setback(*width) / (0.5 * tool.tip_angle.to_radians()).sin();
             if tool.flute_len < slant - 1e-9 {
-                return Err(GenError::Invalid(format!(
-                    "the break reaches {:.1} mm up the cone's flank; '{}' has {} mm of flute",
-                    slant, tool_name, tool.flute_len
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("the break reaches {:.1} mm up the cone's flank; '{}' has {} mm of flute", &[format!("{:.1}", slant), format!("{}", tool_name), format!("{}", tool.flute_len)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1474,16 +1454,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 _ => None,
             };
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "{} needs a ball-nose tool, '{}' is a {}",
-                    if is_contour {
+                return Err(GenError::Invalid(camcraft_i18n::tf("{} needs a ball-nose tool, '{}' is a {}", &[format!("{}", if is_contour {
                         "5-Axis Contour"
                     } else {
                         "5-Axis Parallel"
-                    },
-                    tool_name,
-                    tool.kind
-                )));
+                    }), format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1573,12 +1548,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 _ => 1,
             };
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "{} needs a ball-nose tool, '{}' is a {}",
-                    if is_ladder { "Advanced Swarf" } else { "Swarf" },
-                    tool_name,
-                    tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("{} needs a ball-nose tool, '{}' is a {}", &[format!("{}", if is_ladder { "Advanced Swarf" } else { "Swarf" }), format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1659,16 +1629,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 _ => None,
             };
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "{} needs a ball-nose tool, '{}' is a {}",
-                    if is_contour {
+                return Err(GenError::Invalid(camcraft_i18n::tf("{} needs a ball-nose tool, '{}' is a {}", &[format!("{}", if is_contour {
                         "Rotary Contour"
                     } else {
                         "Rotary Parallel"
-                    },
-                    tool_name,
-                    tool.kind
-                )));
+                    }), format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1761,10 +1726,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "Rotary Offset needs a ball-nose tool, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Rotary Offset needs a ball-nose tool, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -1865,10 +1827,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "Multi-Axis Rough needs a ball-nose tool, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Multi-Axis Rough needs a ball-nose tool, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             // #1749: the same footprint as the 3D Pocket - one ladder.
             let source_built = picked_region.is_none();
@@ -1962,10 +1921,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "5-Axis Flow needs a ball-nose tool, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("5-Axis Flow needs a ball-nose tool, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2030,10 +1986,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::BallNose {
-                return Err(GenError::Invalid(format!(
-                    "Multi-Axis Contour needs a ball-nose tool, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Multi-Axis Contour needs a ball-nose tool, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2058,13 +2011,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     .iter()
                     .find(|v| v.z < bottom - Z_TOL || v.z > top + Z_TOL)
                 {
-                    return Err(GenError::Invalid(format!(
-                        "picked chain {} stands at z {:.3}, outside the window [{:.3}, {:.3}] - widen Top/Bottom of Part Z or re-pick",
-                        ci + 1,
-                        v.z,
-                        bottom,
-                        top
-                    )));
+                    return Err(GenError::Invalid(camcraft_i18n::tf("picked chain {} stands at z {:.3}, outside the window [{:.3}, {:.3}] - widen Top/Bottom of Part Z or re-pick", &[format!("{}", ci + 1), format!("{:.3}", v.z), format!("{:.3}", bottom), format!("{:.3}", top)])));
                 }
             }
             let cp = crate::multiaxis::CurveParams {
@@ -2299,23 +2246,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Taper {
-                return Err(GenError::Invalid(format!(
-                    "2D Chamfer rides its face on a cone - it needs a chamfer mill, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("2D Chamfer rides its face on a cone - it needs a chamfer mill, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let want = 180.0 - 2.0 * angle_deg;
             if (tool.tip_angle - want).abs() > 1e-6 {
-                return Err(GenError::Invalid(format!(
-                    "a {angle_deg}-degree chamfer takes a {want:.0}-degree cone; '{}' has {} degrees",
-                    tool_name, tool.tip_angle
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("a {angle_deg}-degree chamfer takes a {want:.0}-degree cone; '{}' has {} degrees", &[format!("{}", angle_deg), format!("{:.0}", want), format!("{}", tool_name), format!("{}", tool.tip_angle)])));
             }
             if tool.diameter < 2.0 * width - 1e-9 {
-                return Err(GenError::Invalid(format!(
-                    "a {width} mm chamfer reaches {} mm from the wall; '{}' is only {} mm across",
-                    width, tool_name, tool.diameter
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("a {width} mm chamfer reaches {} mm from the wall; '{}' is only {} mm across", &[format!("{}", width), format!("{}", width), format!("{}", tool_name), format!("{}", tool.diameter)])));
             }
             if tool.flute_len < width * angle_deg.to_radians().tan() - 1e-9 {
                 // The depth is DERIVED, and a derived float must not
@@ -2323,12 +2261,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // 0.9999999999999999, and a refusal that quotes
                 // "3.9999999999999996 mm" reads as a bug, not a law.
                 // A tenth is the shop's reading precision.
-                return Err(GenError::Invalid(format!(
-                    "the cone of '{}' is {} mm of flute, short of the {:.1} mm depth this face stands at",
-                    tool_name,
-                    tool.flute_len,
-                    width * angle_deg.to_radians().tan()
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("the cone of '{}' is {} mm of flute, short of the {:.1} mm depth this face stands at", &[format!("{}", tool_name), format!("{}", tool.flute_len), format!("{:.1}", width * angle_deg.to_radians().tan())])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2722,10 +2655,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Facing needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Facing needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2772,10 +2702,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Profile Rough needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Profile Rough needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2809,10 +2736,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Profile Finish needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Profile Finish needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2853,10 +2777,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Groove {
-                return Err(GenError::Invalid(format!(
-                    "Groove Rough needs a grooving blade, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Groove Rough needs a grooving blade, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2890,10 +2811,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Groove {
-                return Err(GenError::Invalid(format!(
-                    "Groove Finish needs a grooving blade, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Groove Finish needs a grooving blade, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2926,10 +2844,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Groove {
-                return Err(GenError::Invalid(format!(
-                    "Parting needs a grooving blade, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Parting needs a grooving blade, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -2974,10 +2889,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Thread {
-                return Err(GenError::Invalid(format!(
-                    "Threading needs a threading insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Threading needs a threading insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             // #3023: a helical thread is refused by name BEFORE the
             // slice, which can call a STEP helix "open" instead.
@@ -3027,10 +2939,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Chamfering needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Chamfering needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -3065,10 +2974,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Taper Turning needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Taper Turning needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -3108,10 +3014,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Turning {
-                return Err(GenError::Invalid(format!(
-                    "Multi-Pass Turning needs a turning insert, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Multi-Pass Turning needs a turning insert, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -3153,10 +3056,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Form {
-                return Err(GenError::Invalid(format!(
-                    "Form Turning needs a form gauge, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Form Turning needs a form gauge, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,
@@ -3195,10 +3095,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Bore {
-                return Err(GenError::Invalid(format!(
-                    "Boring needs a boring bar, '{}' is a {}",
-                    tool_name, tool.kind
-                )));
+                return Err(GenError::Invalid(camcraft_i18n::tf("Boring needs a boring bar, '{}' is a {}", &[format!("{}", tool_name), format!("{}", tool.kind)])));
             }
             let region = region_for_job(
                     &mut picked_region,

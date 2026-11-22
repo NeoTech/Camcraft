@@ -178,25 +178,22 @@ fn datum_of(world: &World, picks: &[GeoSel]) -> Result<Datum, String> {
     for g in picks {
         let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(world, g))?;
         if !setup_align::is_part(world, &e) {
-            return Err(format!("'{}' is not the part - pick a face of the model", g.entity));
+            return Err(camcraft_i18n::tf("'{}' is not the part - pick a face of the model", &[format!("{}", g.entity)]));
         }
         match &g.feature {
             FeatureSel::Face(_) => faces.push(g),
             FeatureSel::Chain(_) => {
-                return Err(format!(
-                    "{} is an edge - an edge cannot set a plane; pick a flat face \
-                     (edges set an axis: Part axes)",
-                    super::geo_label(world, g)
-                ));
+                return Err(camcraft_i18n::tf("{} is an edge - an edge cannot set a plane; pick a flat face \
+                     (edges set an axis: Part axes)", &[format!("{}", super::geo_label(world, g))]));
             }
             FeatureSel::Patch(_) => {
-                return Err(format!("{} is curved - pick a flat face", super::geo_label(world, g)));
+                return Err(camcraft_i18n::tf("{} is curved - pick a flat face", &[format!("{}", super::geo_label(world, g))]));
             }
             FeatureSel::Vertex(_) => {
-                return Err(format!("{} is a vertex - pick a flat face", super::geo_label(world, g)));
+                return Err(camcraft_i18n::tf("{} is a vertex - pick a flat face", &[format!("{}", super::geo_label(world, g))]));
             }
             FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-                return Err(format!("{} is a DXF sketch pick - pick a flat face", super::geo_label(world, g)));
+                return Err(camcraft_i18n::tf("{} is a DXF sketch pick - pick a flat face", &[format!("{}", super::geo_label(world, g))]));
             }
         }
     }
@@ -213,10 +210,10 @@ fn face_datum(world: &World, g: &GeoSel) -> Result<Datum, String> {
     let tris = model::facets_of(world, &e).ok_or_else(|| gone(world, g))?;
     let f = features.faces.iter().find(|f| f.id == fid).ok_or_else(|| gone(world, g))?;
     if f.kind == FaceKind::Degenerate {
-        return Err(format!("{} is degenerate (no usable plane) - pick another face", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} is degenerate (no usable plane) - pick another face", &[format!("{}", super::geo_label(world, g))]));
     }
     let normal = outward_normal(world, g, model::transform_of)?
-        .ok_or_else(|| format!("{} is not flat - pick a flat face", super::geo_label(world, g)))?;
+        .ok_or_else(|| camcraft_i18n::tf("{} is not flat - pick a flat face", &[format!("{}", super::geo_label(world, g))]))?;
     let loc = model::transform_of(world, &e).unwrap_or_default();
     // Area-weighted centroid, placed: the point that goes to the level.
     let (mut area, mut sum) = (0.0_f64, [0.0_f64; 3]);
@@ -231,7 +228,7 @@ fn face_datum(world: &World, g: &GeoSel) -> Result<Datum, String> {
         sum = [sum[0] + a * m[0], sum[1] + a * m[1], sum[2] + a * m[2]];
     }
     if area.is_nan() || area <= MIN_FACE_AREA_MM2 {
-        return Err(format!("{} has no area - pick a face with a surface", super::geo_label(world, g)));
+        return Err(camcraft_i18n::tf("{} has no area - pick a face with a surface", &[format!("{}", super::geo_label(world, g))]));
     }
     let local = Point3::new(sum[0] / area, sum[1] / area, sum[2] / area);
     let w = transform_point(local, loc.pos, loc.rot);
@@ -247,7 +244,7 @@ pub fn plane_side(world: &World, picks: &[GeoSel]) -> Result<String, String> {
     let dir = axis_words(d.normal);
     Ok(match picks.first() {
         // #738: the kind, never the welded face's internal id.
-        Some(_) => format!("outside: {dir} of the picked face (away from the material)"),
+        Some(_) => camcraft_i18n::tf("outside: {dir} of the picked face (away from the material)", &[format!("{}", dir)]),
         None => format!("outside: {dir}"),
     })
 }
@@ -257,10 +254,10 @@ pub(super) fn axis_words(n: [f64; 3]) -> String {
     for (k, name) in ["X", "Y", "Z"].iter().enumerate() {
         let v = n.get(k).copied().unwrap_or(0.0);
         if (v.abs() - 1.0).abs() <= 1e-9 {
-            return format!("{}{name} in the model", if v < 0.0 { "-" } else { "+" });
+            return camcraft_i18n::tf("{}{name} in the model", &[format!("{}", if v < 0.0 { "-" } else { "+" }), format!("{}", name)]);
         }
     }
-    format!("({:.3}, {:.3}, {:.3}) in the model", n[0], n[1], n[2])
+    camcraft_i18n::tf("({:.3}, {:.3}, {:.3}) in the model", &[format!("{:.3}", n[0]), format!("{:.3}", n[1]), format!("{:.3}", n[2])])
 }
 
 /// The shortest turn taking unit `from` onto unit `to`. Antiparallel: a

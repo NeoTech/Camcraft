@@ -144,21 +144,11 @@ impl LiveGate {
 
 fn refusal_message(tool: &str, kind: GateKind) -> String {
     match kind {
-        GateKind::Posting => format!(
-            "{tool}: explicit user approval is required before posting G-code (auto-approval is forbidden)"
-        ),
-        GateKind::MachineEdit => format!(
-            "{tool}: explicit user approval is required before changing machine configuration (auto-approval is forbidden)"
-        ),
-        GateKind::LimitEdit => format!(
-            "{tool}: explicit user approval is required before changing post or workholding limits"
-        ),
-        GateKind::FileWrite => format!(
-            "{tool}: explicit user approval is required before writing files"
-        ),
-        GateKind::FilePathAccess => format!(
-            "{tool}: explicit user approval is required before accessing file-path arguments"
-        ),
+        GateKind::Posting => camcraft_i18n::tf("{tool}: explicit user approval is required before posting G-code (auto-approval is forbidden)", &[format!("{}", tool)]),
+        GateKind::MachineEdit => camcraft_i18n::tf("{tool}: explicit user approval is required before changing machine configuration (auto-approval is forbidden)", &[format!("{}", tool)]),
+        GateKind::LimitEdit => camcraft_i18n::tf("{tool}: explicit user approval is required before changing post or workholding limits", &[format!("{}", tool)]),
+        GateKind::FileWrite => camcraft_i18n::tf("{tool}: explicit user approval is required before writing files", &[format!("{}", tool)]),
+        GateKind::FilePathAccess => camcraft_i18n::tf("{tool}: explicit user approval is required before accessing file-path arguments", &[format!("{}", tool)]),
     }
 }
 

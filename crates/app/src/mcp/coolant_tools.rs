@@ -38,7 +38,7 @@ fn parse(s: &str) -> Result<CoolantMode, String> {
     let n = s.trim().to_ascii_lowercase().replace(['_', ' '], "-");
     CoolantMode::ALL.into_iter().find(|m| word(*m) == n).ok_or_else(|| {
         let all: Vec<&str> = CoolantMode::ALL.iter().map(|m| word(*m)).collect();
-        format!("unknown coolant '{s}' - one of {}", all.join(", "))
+        camcraft_i18n::tf("unknown coolant '{s}' - one of {}", &[format!("{}", s), format!("{}", all.join(", "))])
     })
 }
 
@@ -62,7 +62,7 @@ fn machine_warning(env: &Env, setup: Option<&str>, mode: CoolantMode) -> Option<
         None => mode == CoolantMode::Flood,
     });
     (!coded.is_empty() && !serves).then(|| {
-        format!("the machine has no coolant entry for '{}'; the post will refuse it", word(mode))
+        camcraft_i18n::tf("the machine has no coolant entry for '{}'; the post will refuse it", &[format!("{}", word(mode))])
     })
 }
 

@@ -38,14 +38,12 @@ impl SetSetupNoseToAxis {
         if let Some(v) = next
             && !(v.is_finite() && v > 0.0 && v <= MAX_NOSE_MM)
         {
-            return Err(CommandError::Invalid(format!(
-                "setup '{setup}': the stated nose_to_axis must be a length over zero and at most {MAX_NOSE_MM} mm (got {v})"
-            )));
+            return Err(CommandError::Invalid(camcraft_i18n::tf("setup '{setup}': the stated nose_to_axis must be a length over zero and at most {MAX_NOSE_MM} mm (got {v})", &[format!("{}", setup), format!("{}", MAX_NOSE_MM), format!("{}", v)])));
         }
         if prev == next {
             return Err(CommandError::Invalid(match next {
-                None => format!("setup '{setup}' states no nose_to_axis of its own"),
-                Some(v) => format!("setup '{setup}' already states nose_to_axis {v} mm"),
+                None => camcraft_i18n::tf("setup '{setup}' states no nose_to_axis of its own", &[format!("{}", setup)]),
+                Some(v) => camcraft_i18n::tf("setup '{setup}' already states nose_to_axis {v} mm", &[format!("{}", setup), format!("{}", v)]),
             }));
         }
         Ok(Self { setup: setup.to_owned(), prev, next })

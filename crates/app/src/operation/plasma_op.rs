@@ -52,10 +52,7 @@ pub(super) fn seed_plasma_profile(c: &Carried) -> OpParams {
 /// silhouette is read from is (#1053): the kerf law gives it back.
 pub fn plasma_params(op: &PlasmaOp, tool: &Tool, hs: &ResolvedHeights, model_excess: f64, file_tolerance: bool) -> Result<PlasmaParams, GenError> {
     if tool.kind != ToolKind::Torch {
-        return Err(GenError::Invalid(format!(
-            "a plasma profile mounts a plasma torch, not a {} - its diameter is the kerf width",
-            tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("a plasma profile mounts a plasma torch, not a {} - its diameter is the kerf width", &[format!("{}", tool.kind)])));
     }
     if let Some(why) = tool.torch_refusal() {
         return Err(GenError::Invalid(why));
@@ -64,9 +61,7 @@ pub fn plasma_params(op: &PlasmaOp, tool: &Tool, hs: &ResolvedHeights, model_exc
         return Err(GenError::Invalid("plasma profile: the plate's top and bottom must both resolve".into()));
     };
     if !(top.is_finite() && bottom.is_finite()) || bottom > top {
-        return Err(GenError::Invalid(format!(
-            "plasma profile: the plate's bottom ({bottom:.3}) stands above its top ({top:.3})"
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("plasma profile: the plate's bottom ({bottom:.3}) stands above its top ({top:.3})", &[format!("{:.3}", bottom), format!("{:.3}", top)])));
     }
     Ok(PlasmaParams {
         kerf: op.kerf.unwrap_or(tool.diameter),
@@ -107,7 +102,7 @@ pub(super) fn generate_plasma(
         Region::empty()
     } else {
         slice::project(facets, FOOTPRINT_SAMPLES)
-            .map_err(|e| GenError::Invalid(format!("plasma profile: the part's silhouette is unreadable: {e}")))?
+            .map_err(|e| GenError::Invalid(camcraft_i18n::tf("plasma profile: the part's silhouette is unreadable: {e}", &[format!("{}", e)])))?
     };
     let (loops, chains) = match picks {
         Some(geom) => geom,

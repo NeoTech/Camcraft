@@ -64,8 +64,8 @@ fn index_of(a: &Map<String, Value>, count: usize) -> Result<Option<usize>, Strin
         None | Some(Value::Null) => Ok(None),
         Some(v) => match v.as_u64() {
             Some(n) if (n as usize) < count => Ok(Some(n as usize)),
-            Some(n) => Err(format!("\"create\" is index {n}, but the model has {count} recognised pocket(s) or slot(s)")),
-            None => Err(format!("\"create\" must be a feature index (a whole number), got {v}")),
+            Some(n) => Err(camcraft_i18n::tf("\"create\" is index {n}, but the model has {count} recognised pocket(s) or slot(s)", &[format!("{}", n), format!("{}", count)])),
+            None => Err(camcraft_i18n::tf("\"create\" must be a feature index (a whole number), got {v}", &[format!("{}", v)])),
         },
     }
 }
@@ -86,7 +86,7 @@ pub(super) fn detect_pockets(env: &mut Env, a: &Map<String, Value>) -> Result<Va
         return Ok(out);
     };
     let tool = tool.ok_or("\"tool\" is required with \"create\"")?;
-    let p = found.get(i).ok_or_else(|| format!("no recognised feature {i}"))?;
+    let p = found.get(i).ok_or_else(|| camcraft_i18n::tf("no recognised feature {i}", &[format!("{}", i)]))?;
     let plan = recognize::plan_operation(&env.world, p, tool, op_name)?;
     let cmd = CreateOperation::new(&env.world, &plan.name, tool, plan.src, plan.params).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);

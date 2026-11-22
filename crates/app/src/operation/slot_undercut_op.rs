@@ -35,15 +35,12 @@ pub(super) fn seed_slot_undercut(c: &Carried) -> OpParams {
 /// kind of tool, or numbers the cutter law refuses.
 pub fn cutter_of(name: &str, tool: &Tool) -> Result<Undercut, GenError> {
     if !undercut::is_kind(tool.kind) {
-        return Err(GenError::Invalid(format!(
-            "Slot Undercut cuts with a T-slot, keyseat, dovetail or lollipop cutter - '{name}' is a {}",
-            tool.kind
-        )));
+        return Err(GenError::Invalid(camcraft_i18n::tf("Slot Undercut cuts with a T-slot, keyseat, dovetail or lollipop cutter - '{name}' is a {}", &[format!("{}", name), format!("{}", tool.kind)])));
     }
     if let Some(why) = undercut::refusal(tool) {
-        return Err(GenError::Invalid(format!("Slot Undercut tool '{name}': {why}")));
+        return Err(GenError::Invalid(camcraft_i18n::tf("Slot Undercut tool '{name}': {why}", &[format!("{}", name), format!("{}", why)])));
     }
-    Undercut::of(tool).ok_or_else(|| GenError::Invalid(format!("Slot Undercut tool '{name}' reads as no undercut cutter")))
+    Undercut::of(tool).ok_or_else(|| GenError::Invalid(camcraft_i18n::tf("Slot Undercut tool '{name}' reads as no undercut cutter", &[format!("{}", name)])))
 }
 
 /// The generator's parameters for `op` with `cutter` at resolved heights.

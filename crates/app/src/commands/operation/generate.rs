@@ -80,10 +80,7 @@ impl Staged {
     fn finish(self) -> Result<GenerateOperation, CommandError> {
         let (path, warnings) = operation::run_job(self.job).map_err(|e| machining(&self.name, &e))?;
         let stamp = self.stamp.ok_or_else(|| {
-            CommandError::Machining(format!(
-                "{}: its tool or geometry source vanished mid-generation",
-                self.name
-            ))
+            CommandError::Machining(camcraft_i18n::tf("{}: its tool or geometry source vanished mid-generation", &[format!("{}", self.name)]))
         })?;
         let next_operation = Operation {
             stamp: Some(stamp),
@@ -235,7 +232,7 @@ impl RegenerateAll {
             if operation::status_of(world, &entity) == operation::OpStatus::Stale
                 && !skipped.iter().any(|(n, _)| *n == name)
             {
-                skipped.push((name, format!("still stale after {rounds} regeneration round(s)")));
+                skipped.push((name, camcraft_i18n::tf("still stale after {rounds} regeneration round(s)", &[format!("{}", rounds)])));
             }
         }
         for part in parts.iter().rev() {

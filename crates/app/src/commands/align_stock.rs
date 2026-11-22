@@ -44,10 +44,8 @@ pub(super) fn following_stock(
         return Ok(None);
     }
     if crate::setup::is_furniture_of_other(world, &name, setup) {
-        return Err(CommandError::Invalid(format!(
-            "the stock '{name}' is shared with another setup - turning the part here would move it there too; \
-             give this setup its own stock first"
-        )));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("the stock '{name}' is shared with another setup - turning the part here would move it there too; \
+             give this setup its own stock first", &[format!("{}", name)])));
     }
     let loc = model::transform_of(world, &entity).unwrap_or_default();
     let facets = model::facets_of(world, &entity).unwrap_or_default();
@@ -77,10 +75,8 @@ pub(super) fn following_stock(
             // Written so a NaN reads as "not upright" and refuses.
             let upright = axis.z.abs() >= height * (1.0 - 1e-9);
             if !upright {
-                return Err(CommandError::Invalid(format!(
-                    "the cylinder stock '{name}' would lie on its side - only turns that keep it upright \
-                     can carry it; set the stock again after aligning"
-                )));
+                return Err(CommandError::Invalid(camcraft_i18n::tf("the cylinder stock '{name}' would lie on its side - only turns that keep it upright \
+                     can carry it; set the stock again after aligning", &[format!("{}", name)])));
             }
             let pos = Point3::new(bottom.x, bottom.y, bottom.z.min(top.z));
             let shape = StockShape::Cylinder { diameter: *diameter, height: *height };
@@ -147,9 +143,9 @@ fn refit_box(name: &str, pts: &[Point3]) -> Result<StockState, CommandError> {
 
 fn mesh_of(shape: &StockShape, name: &str) -> Result<std::sync::Arc<[Triangle]>, CommandError> {
     if !shape.is_sane() || !shape.is_bounded() {
-        return Err(CommandError::Invalid(format!("the stock '{name}' cannot be rebuilt in the turned frame")));
+        return Err(CommandError::Invalid(camcraft_i18n::tf("the stock '{name}' cannot be rebuilt in the turned frame", &[format!("{}", name)])));
     }
     stock::stock_mesh(shape)
         .map(Into::into)
-        .ok_or_else(|| CommandError::Invalid(format!("the stock '{name}' cannot be rebuilt in the turned frame")))
+        .ok_or_else(|| CommandError::Invalid(camcraft_i18n::tf("the stock '{name}' cannot be rebuilt in the turned frame", &[format!("{}", name)])))
 }

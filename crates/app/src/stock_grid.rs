@@ -22,7 +22,7 @@ pub fn stock_grid(
 
     let stock_name = crate::setup::stock_entity_name(world, setup);
     let stock_e = model::find_by_name(world, &stock_name)
-        .ok_or_else(|| format!("no stock '{stock_name}' - the program sim judges material, not air"))?;
+        .ok_or_else(|| camcraft_i18n::tf("no stock '{stock_name}' - the program sim judges material, not air", &[format!("{}", stock_name)]))?;
     let shape = model::stock_def_of(world, &stock_e)
         .ok_or("the stock entity lost its shape")?;
     // #2177: a square-turned stock is its unturned twin; oblique refused.

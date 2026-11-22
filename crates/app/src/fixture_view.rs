@@ -64,7 +64,7 @@ impl MeshState {
     pub fn label(self) -> String {
         match self {
             Self::Mesh => "mesh".to_owned(),
-            Self::BoxOnly(why) => format!("box only: {}", why.short()),
+            Self::BoxOnly(why) => camcraft_i18n::tf("box only: {}", &[format!("{}", why.short())]),
         }
     }
 
@@ -73,7 +73,7 @@ impl MeshState {
     pub fn detail(self) -> String {
         match self {
             Self::Mesh => "judged by its closed mesh - a path through its gaps is clear".to_owned(),
-            Self::BoxOnly(BoxReason::Refused(e)) => format!("judged by its bounding box: {e}"),
+            Self::BoxOnly(BoxReason::Refused(e)) => camcraft_i18n::tf("judged by its bounding box: {e}", &[format!("{}", e)]),
             Self::BoxOnly(BoxReason::ProfileChord) => {
                 "judged by its bounding box: the profile mesh approximates curved surfaces".to_owned()
             }

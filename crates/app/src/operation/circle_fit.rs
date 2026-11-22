@@ -72,11 +72,9 @@ pub fn circle_of_region(region: &Region, unit: Unit) -> Result<(Point2, f64), Ge
             units::len(at.x, unit, 3),
             units::len(at.y, unit, 3)
         ),
-        None => format!("{} separate areas, no single round contour", outers.len()),
+        None => camcraft_i18n::tf("{} separate areas, no single round contour", &[format!("{}", outers.len())]),
     };
-    Err(GenError::Invalid(format!(
-        "the selection is not a circle ({detail}) - Circular needs a round hole or face; pick its rim, or clear the selection to use the typed centre and radius"
-    )))
+    Err(GenError::Invalid(camcraft_i18n::tf("the selection is not a circle ({detail}) - Circular needs a round hole or face; pick its rim, or clear the selection to use the typed centre and radius", &[format!("{}", detail)])))
 }
 
 /// The selection's circle for a Circular operation as the world stands

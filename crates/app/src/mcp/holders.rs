@@ -43,14 +43,14 @@ fn mm(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
         None | Some(Value::Null) => Ok(None),
         Some(v) => match v.as_f64() {
             Some(x) if x.is_finite() && x >= 0.0 => Ok(Some(x)),
-            Some(x) => Err(format!("\"{key}\" must be a finite length of 0 mm or more, got {x}")),
-            None => Err(format!("\"{key}\" must be a number (mm), got {v}")),
+            Some(x) => Err(camcraft_i18n::tf("\"{key}\" must be a finite length of 0 mm or more, got {x}", &[format!("{}", key), format!("{}", x)])),
+            None => Err(camcraft_i18n::tf("\"{key}\" must be a number (mm), got {v}", &[format!("{}", key), format!("{}", v)])),
         },
     }
 }
 
 fn points_of(v: &Value) -> Result<Vec<SpunPoint>, String> {
-    let list = v.as_array().ok_or_else(|| format!("\"points\" must be an array of {{z, r, arc}}, got {v}"))?;
+    let list = v.as_array().ok_or_else(|| camcraft_i18n::tf("\"points\" must be an array of {{z, r, arc}}, got {v}", &[format!("{}", v)]))?;
     if list.is_empty() {
         return Err("\"points\" is empty - give the profile's points, or use \"clear\": true".into());
     }
@@ -59,7 +59,7 @@ fn points_of(v: &Value) -> Result<Vec<SpunPoint>, String> {
         .map(|(i, p)| {
             let num = |k: &str, dflt: Option<f64>| match p.get(k) {
                 None | Some(Value::Null) => dflt.ok_or_else(|| format!("\"points\"[{i}] needs \"{k}\"")),
-                Some(x) => x.as_f64().filter(|x| x.is_finite()).ok_or_else(|| format!("\"points\"[{i}].{k} must be a finite number, got {x}")),
+                Some(x) => x.as_f64().filter(|x| x.is_finite()).ok_or_else(|| camcraft_i18n::tf("\"points\"[{i}].{k} must be a finite number, got {x}", &[format!("{}", i), format!("{}", k), format!("{}", x)])),
             };
             Ok(SpunPoint { z: num("z", None)?, r: num("r", None)?, arc: num("arc", Some(0.0))? })
         })
@@ -71,17 +71,17 @@ pub(super) fn set_tool_holder(env: &mut Env, a: &Map<String, Value>) -> Result<V
     let library = match a.get("library") {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) if !s.is_empty() => Some(s.as_str()),
-        Some(v) => return Err(format!("\"library\" must be a holder library name (see list_holder_library), got {v}")),
+        Some(v) => return Err(camcraft_i18n::tf("\"library\" must be a holder library name (see list_holder_library), got {v}", &[format!("{}", v)])),
     };
     let points = a.get("points").filter(|v| !v.is_null());
     let clear = match a.get("clear") {
         None | Some(Value::Null) | Some(Value::Bool(false)) => false,
         Some(Value::Bool(true)) => true,
-        Some(v) => return Err(format!("\"clear\" must be true or false, got {v}")),
+        Some(v) => return Err(camcraft_i18n::tf("\"clear\" must be true or false, got {v}", &[format!("{}", v)])),
     };
     let given = usize::from(library.is_some()) + usize::from(points.is_some()) + usize::from(clear);
     if given != 1 {
-        return Err(format!("give exactly one of \"library\", \"points\" or \"clear\": true (got {given})"));
+        return Err(camcraft_i18n::tf("give exactly one of \"library\", \"points\" or \"clear\": true (got {given})", &[format!("{}", given)]));
     }
     let (gauge, projection) = (mm(a, "gauge_len")?, mm(a, "projection")?);
     if (gauge.is_some() || projection.is_some()) && library.is_none() {

@@ -130,7 +130,7 @@ pub fn cutting_radius(tool: &crate::tools::Tool) -> Result<f64, String> {
     }
     let core = radius - crate::machining2d::THREAD_DEPTH_PER_PITCH * tool.pitch;
     if !(core.is_finite() && core > 0.0) {
-        return Err(format!("{} leaves no thread core (diameter {}, pitch {})", tool.kind, tool.diameter, tool.pitch));
+        return Err(camcraft_i18n::tf("{} leaves no thread core (diameter {}, pitch {})", &[format!("{}", tool.kind), format!("{}", tool.diameter), format!("{}", tool.pitch)]));
     }
     Ok(core)
 }
