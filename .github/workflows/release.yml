@@ -10,6 +10,11 @@
 # releases that carry features (AGENTS.md "Versioning is semantic").
 # workflow_dispatch builds any ref by hand (it builds every platform but
 # publishes nothing: only a tag run reaches the publish job).
+# Site redeploy (#3276): workflow_dispatch with `site_only: true` runs only
+# `site` and `pages`, from the dispatched ref. `pages` deploys it only when
+# that ref is a `site/*` branch (a past release's tree plus its site fixes,
+# docs/decisions/3276-site-redeploy.md). No platform, wasm or publish job
+# runs; the site goes out with app/ as its "not part of this copy" page.
 # Graph (#125): windows, linux and macos start at once; AUR, snap
 # and flatpak follow Linux; publish waits for all six with !cancelled(),
 # puts every asset that was built on the release page and names any
@@ -27,6 +32,11 @@ on:
   push:
     tags: ['v[0-9]+.[0-9]+.0']
   workflow_dispatch:
+    inputs:
+      site_only:
+        description: Build and deploy only the documentation site (from a site/* branch)
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -40,6 +50,7 @@ permissions:
 
 jobs:
   linux:
+    if: ${{ !inputs.site_only }}
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -92,6 +103,7 @@ jobs:
           if-no-files-found: error
 
   macos:
+    if: ${{ !inputs.site_only }}
     runs-on: macos-15
     permissions:
       contents: read
@@ -182,6 +194,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    if: ${{ !inputs.site_only }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -259,9 +272,10 @@ jobs:
   publish:
     # Runs after every build job whatever their result (but not on a
     # cancelled run), and only for a tag: a workflow_dispatch run builds
-    # everything and publishes nothing.
+    # everything and publishes nothing. A `site_only` run (#3276) never
+    # publishes, whatever its ref.
     needs: [windows, linux, macos, aur, snap, flatpak]
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ !cancelled() && !inputs.site_only && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -423,6 +437,7 @@ jobs:
     # rewrites for its flecs patch (#949) never reaches another job: only
     # target/web/ leaves it, as the wasm-app artifact. No rust-cache: tags
     # come weeks apart and an unused cache is evicted after 7 days.
+    if: ${{ !inputs.site_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -462,11 +477,14 @@ jobs:
 
   site:
     # #688: the documentation site, built with Zola from this run's tree
-    # (the tagged tree on a tag run). Read-only; a workflow_dispatch run
-    # builds it as a check and deploys nothing.
+    # (the tagged tree on a tag run). Read-only; a plain workflow_dispatch
+    # run builds it as a check and deploys nothing (a `site_only` run from a
+    # `site/*` branch deploys it, #3276).
     # #1103: waits for `wasm` whatever its result (but not on a cancelled
     # run), like `publish` waits for the platforms: a failed browser build
     # never withholds the docs.
+    # #3276: a `site_only` dispatch skips `wasm`; the site then goes out
+    # with app/ as its "not part of this copy" page.
     needs: [wasm]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
@@ -561,8 +579,11 @@ jobs:
     # source "GitHub Actions"). Only on a tag, only when the site built and
     # the release page was published. The Pages write and OIDC token are
     # scoped to this job alone.
+    # #3276: a `site_only` dispatch deploys too, but only from a `site/*`
+    # branch (publish is skipped there; the environment's branch policy
+    # must permit `site/*`).
     needs: [site, publish]
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') && needs.site.result == 'success' && needs.publish.result == 'success' }}
+    if: ${{ !cancelled() && needs.site.result == 'success' && ((startsWith(github.ref, 'refs/tags/') && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.site_only && startsWith(github.ref, 'refs/heads/site/'))) }}
     runs-on: ubuntu-latest
     permissions:
       pages: write
