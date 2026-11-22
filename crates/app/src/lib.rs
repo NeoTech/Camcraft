@@ -6,6 +6,7 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+mod cli_video;
 pub mod clock;
 pub mod commands;
 pub mod cutting;
@@ -193,6 +194,7 @@ pub mod tool_body_assembly;
 pub mod sim_tool_body;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.
 pub mod sim_lathe_body;
+pub mod sim_video;
 pub mod units;
 pub use camcraft_sim::verify;
 // #645: the viewport view preferences (#727's name toggle), per user.

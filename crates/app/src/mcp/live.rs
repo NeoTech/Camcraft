@@ -61,7 +61,7 @@ pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
         "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
             Some(GateKind::LimitEdit)
         }
-        "save_project" | "export_tool_library" => Some(GateKind::FileWrite),
+        "save_project" | "export_tool_library" | "render_simulation_video" => Some(GateKind::FileWrite),
         "export_fixture_dxf" if has_non_null_arg(args, "path") => Some(GateKind::FileWrite),
         "import_model"
         | "import_tool_library"

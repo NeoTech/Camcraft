@@ -6,7 +6,7 @@
 //! Provenance: our own tool surface over this repo's commands and the
 //! script verbs; schemas are JSON Schema as the MCP spec carries them.
 
-use super::{area, do_not_touch, edit, features, holders, job, pick, pockets, render, tool_delete, tool_edit};
+use super::{area, do_not_touch, edit, features, holders, job, pick, pockets, render, tool_delete, tool_edit, video};
 use crate::commands::ImportMode;
 use crate::script::{api, Env};
 
@@ -55,6 +55,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "verify", description: "Verify the job without posting: per-operation status and findings (op, move index, kind, message, whether it blocks the post) plus the program-level post gate. \"ok\" is true only when the post would write: every operation fresh, the gate passed, and no operation's own warning blocking the post (those operations are listed under \"held_by\").", schema: s_opt_name, run: job::verify },
     Tool { name: "post", description: "Post the program to an NC file through a post processor (a built-in name or a .cps path; default the document's own). Returns the written files, or refuses with the reasons. between_setups chooses what the program does at a setup change (pause by default).", schema: s_post, run: post },
     Tool { name: "render_stock", description: "Render the program's simulated stock as a PNG (an image content block), painted by deviation class (clean, rest, gouge, unjudged), optionally with the toolpath over it; plus rest and gouge volume and the bounds of the stock and the rest. Generate first.", schema: render::schema, run: render::render_stock },
+    Tool { name: "render_simulation_video", description: "Render a 3D multi-setup material-removal simulation movie showing spinning cutters, depth-tested toolpath trails, HUD readout, and smooth setup re-orientation flips/turns. Writes MP4/WebM/GIF via ffmpeg or a pure-Rust PNG frame sequence (format=\"frames\"), optionally splitting per-setup videos alongside the combined movie. Generate first.", schema: video::schema, run: video::render_video },
 ];
 
 /// Every row: this table, then the setup furniture's (#181), then the

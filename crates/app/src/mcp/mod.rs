@@ -57,6 +57,7 @@ mod post_offer_view;
 mod render;
 mod selection;
 mod setup_tools;
+mod video;
 mod tool_delete;
 mod tool_edit;
 mod tools;

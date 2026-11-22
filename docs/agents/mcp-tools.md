@@ -1,7 +1,7 @@
 <!-- Generated from crates/app/src/mcp/tools.rs. Do not edit by hand. Write it again with: cargo run -p camcraft-app --bin camcraft-cli -- mcp reference > docs/agents/mcp-tools.md -->
 # CamCraft MCP tool reference
 
-The server lists 117 tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.
+The server lists 118 tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.
 
 | Tool | Arguments | What it does |
 |---|---|---|
@@ -38,6 +38,7 @@ The server lists 117 tools. The live `tools/list` reply is the authority; this f
 | `verify` | `name?` | Verify the job without posting: per-operation status and findings (op, move index, kind, message, whether it blocks the post) plus the program-level post gate. "ok" is true only when the post would write: every operation fresh, the gate passed, and no operation's own warning blocking the post (those operations are listed under "held_by"). |
 | `post` | `between_setups?`, `output`, `post?` | Post the program to an NC file through a post processor (a built-in name or a .cps path; default the document's own). Returns the written files, or refuses with the reasons. between_setups chooses what the program does at a setup change (pause by default). |
 | `render_stock` | `height?`, `toolpath?`, `view?`, `width?` | Render the program's simulated stock as a PNG (an image content block), painted by deviation class (clean, rest, gouge, unjudged), optionally with the toolpath over it; plus rest and gouge volume and the bounds of the stock and the rest. Generate first. |
+| `render_simulation_video` | `cell_mm?`, `format?`, `fps?`, `height?`, `hud?`, `keyframes_dir?`, `output`, `per_setup?`, `seconds?`, `setup?`, `spin_seconds?`, `toolpath?`, `transition_seconds?`, `view?`, `width?` | Render a 3D multi-setup material-removal simulation movie showing spinning cutters, depth-tested toolpath trails, HUD readout, and smooth setup re-orientation flips/turns. Writes MP4/WebM/GIF via ffmpeg or a pure-Rust PNG frame sequence (format="frames"), optionally splitting per-setup videos alongside the combined movie. Generate first. |
 | `add_setup` | `datum_from?`, `name?` | Declare a new setup and make it active. With datum_from, it starts as a copy of that setup's stock and WCS placement. The first setup on a document without setups adopts the existing stock and G54. |
 | `activate_setup` | `name` | Make a declared setup the active one: where new operations, stock and WCS edits go. |
 | `set_operation_setup` | `operation`, `setup` | Move an operation into another declared setup (setup null: the implicit first position). The stamp is kept, so the operation reads ok or stale by the staleness law. One undo step. Refused by name: an unknown operation or setup, a move to where it already is. |

@@ -23,22 +23,25 @@ const USAGE: &str = "\
 camcraft-cli - CamCraft headless batch lane (clean-room)
 
 USAGE:
-    camcraft-cli script   <job.js|job.camscript>
-    camcraft-cli process  <job.camproj> [-o <out.nc>] [--cps <name|file.cps>]
-    camcraft-cli mcp      [--connect <host:port>]
+    camcraft-cli script       <job.js|job.camscript>
+    camcraft-cli process      <job.camproj> [-o <out.nc>] [--cps <name|file.cps>]
+    camcraft-cli render-video <job.camproj> -o <out.mp4|dir> [options]
+    camcraft-cli mcp          [--connect <host:port>]
     camcraft-cli help
     camcraft-cli version
     camcraft-cli <command> --help    the flags of one command
 
 COMMANDS:
-    script    run a job script through the cam verbs (assets/scripts/
-              cam.d.ts types them; every world write rides the commands)
-    process   headless project processing: load, generate, and - with
-              -o - post; verify's verdict is the exit code
-    mcp       a Model Context Protocol server on stdio (JSON-RPC 2.0):
-              an AI agent drives one headless document through tools;
-              with --connect, a stdio bridge to a running app started
-              with --mcp-port (the agent drives the open window live)
+    script        run a job script through the cam verbs (assets/scripts/
+                  cam.d.ts types them; every world write rides the commands)
+    process       headless project processing: load, generate, and - with
+                  -o - post; verify's verdict is the exit code
+    render-video  render a 3D multi-setup material-removal simulation movie
+                  (.mp4/.webm/.gif or PNG frames) with toolpaths and HUD
+    mcp           a Model Context Protocol server on stdio (JSON-RPC 2.0):
+                  an AI agent drives one headless document through tools;
+                  with --connect, a stdio bridge to a running app started
+                  with --mcp-port (the agent drives the open window live)
 
 A clean run prints its logs, then the last verb's JSON answer on
 stdout; refusals print on stderr. Exit: 0 stood, 1 refused, 2 usage.
@@ -103,9 +106,10 @@ Exit: 0 stood, 1 session ended with an error, 2 usage.
 /// text. The one list `command_usage` reads and the help test walks,
 /// so a lane added here is checked and a lane added elsewhere is
 /// caught by the test's cross-check against the top-level COMMANDS.
-pub const HELP_LANES: [(&str, &str); 3] = [
+pub const HELP_LANES: [(&str, &str); 4] = [
     ("script", SCRIPT_USAGE),
     ("process", PROCESS_USAGE),
+    ("render-video", crate::cli_video::RENDER_VIDEO_USAGE),
     ("mcp", MCP_USAGE),
 ];
 
@@ -199,6 +203,7 @@ pub fn run(args: &[String]) -> i32 {
             _ => match lane {
                 "script" => lane_script(&args[1..]),
                 "process" => lane_process(&args[1..]),
+                "render-video" => crate::cli_video::lane_render_video(&args[1..]),
                 "mcp" => lane_mcp(&args[1..]),
                 other => {
                     eprintln!("camcraft-cli: unknown command {other:?} (try help)");
