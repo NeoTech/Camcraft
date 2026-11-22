@@ -989,6 +989,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     None => machining2d::pocket_started(&region, &pp, &[], corner_relief, *pass_start)?,
                 };
             }
+            path.notes.extend(machining2d::start_wall_note(&region, stock_region.as_ref(), *pass_start));
             relief_zones = zones;
             (relieved_region, path)
         }

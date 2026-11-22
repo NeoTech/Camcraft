@@ -3,7 +3,6 @@
 use crate::geo2d::{Loop, Point2, Region};
 
 use super::face::GenError;
-use super::pass_start::PassStart;
 use super::ring::dist;
 use super::slots::chord_clears;
 /// Does the open chord `a -> b` properly cross the path through `pts`
@@ -60,16 +59,7 @@ pub(crate) fn chord_crosses_path(a: Point2, b: Point2, pts: &[Point2], closed: b
 /// joined honestly run as separate passes, and the caller hops them
 /// with rapids and a plunge - the same fallback `chord_clears` alone
 /// already forced.
-///
-/// `start` (#3316) chooses the walking order of the rings: Auto is the
-/// core-first order below, byte for byte; Inside and Outside rank the
-/// loops by family ([`PassStart::rank`]).
-pub(super) fn waterline_passes(
-    center: &Region,
-    stepover: f64,
-    climb: bool,
-    start: PassStart,
-) -> Result<Vec<Vec<Point2>>, GenError> {
+pub(super) fn waterline_passes(center: &Region, stepover: f64, climb: bool) -> Result<Vec<Vec<Point2>>, GenError> {
     let (lo, hi) = match center.bounds() {
         Some(b) => b,
         None => return Err(GenError::Empty("empty pocket region".into())),
@@ -81,10 +71,6 @@ pub(super) fn waterline_passes(
     // order - the nesting order, so a chain step's honest candidates
     // (the adjacent ring of the same family) come first.
     let mut loops: Vec<(u32, Vec<Point2>)> = Vec::new();
-    // The family of each loop: true for the outer boundary's
-    // (counter-clockwise), false for a hole's - read before `climb`
-    // reverses the walk.
-    let mut outer: Vec<bool> = Vec::new();
     let mut converged = false;
     for k in 0..=cap {
         let ring = if k == 0 {
@@ -106,7 +92,6 @@ pub(super) fn waterline_passes(
             };
             if pts.len() >= 2 {
                 loops.push((k, pts));
-                outer.push(l.is_ccw());
             }
         }
     }
@@ -127,20 +112,7 @@ pub(super) fn waterline_passes(
     // are direction-blind - a chord between adjacent offsets is the
     // same chord either way; only the walking order differs. FINISH
     // waterline lives in `machining3d::rings` and is not touched here.
-    //
-    // #3316: on an Outside band (the part a hole, the stock reach the
-    // outer boundary) the core is the middle of the band, so the first
-    // ring is a full slot. `start` lets the user walk the band from one
-    // side; Auto keeps the order above (`rank` is `kmax - k` for it, the
-    // same stable sort as `Reverse(k)`).
-    let kmax = loops.iter().map(|(k, _)| *k).max().unwrap_or(0);
-    let mut ranked: Vec<(u64, (u32, Vec<Point2>))> = loops
-        .into_iter()
-        .zip(outer)
-        .map(|(l, o)| (start.rank(l.0, kmax, o), l))
-        .collect();
-    ranked.sort_by_key(|(r, _)| *r);
-    let loops: Vec<(u32, Vec<Point2>)> = ranked.into_iter().map(|(_, l)| l).collect();
+    loops.sort_by_key(|(k, _)| std::cmp::Reverse(*k));
     // Phase 2: chain. A chord to a loop's entry point must clear the
     // region and properly cross neither any ring of the level nor any
     // chord of its own chain (earlier join chords are real cut paths

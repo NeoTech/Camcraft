@@ -83,6 +83,8 @@ mod microlift;
 mod pass_start;
 mod pocket;
 mod pocket_plan;
+mod sided_chain;
+mod sided_rings;
 mod pocket_emit;
 mod pocket_zigzag;
 mod pocket_hsm;
@@ -162,7 +164,7 @@ pub use corner_relief::{
     InsideCorner, ResolvedRelief, TBoneDirection, capsule_region, inside_corners, plan_corner_reliefs,
 };
 pub use corner_relief_spur::pocket_relief_plan;
-pub use pass_start::PassStart;
+pub use pass_start::{PassStart, start_wall_note};
 pub use pocket::{pocket, pocket_entered, pocket_entered_with_relief, pocket_started, PocketParams, PocketStrategy};
 pub use pocket_avoid::{pocket_avoid, pocket_avoid_started, pocket_avoid_with_relief};
 pub use predrilled::PreHole;

@@ -19,6 +19,7 @@ mod area_support;
 mod common;
 
 use area_support::*;
+use camcraft_app::geo2d::Point2;
 use camcraft_app::machining2d::PassStart;
 use camcraft_app::mcp::Server;
 use camcraft_app::operation::HeightReference;
@@ -152,6 +153,96 @@ fn to_part(world: &World, name: &str, pt: Point3) -> f64 {
     best
 }
 
+/// The worst width of cut (mm) of each level, over any window of 3 tool
+/// radii of planar feed: a 0.25 mm grid of the stock box minus the part
+/// outline, cut by every feed that ends on the level. A full slot is
+/// the tool diameter (8 mm).
+fn worst_width_per_level(world: &World, name: &str, t: &Toolpath, (lo, hi): (Point3, Point3)) -> Vec<(f64, f64, Point3)> {
+    const CELL: f64 = 0.25;
+    let e = model::find_by_name(world, name).expect("part");
+    let facets = model::world_facets(world, &e).expect("facets");
+    let part = camcraft_app::geometry::slice::project(&facets, 64).expect("part outline");
+    let nx = ((hi.x - lo.x) / CELL).ceil() as usize;
+    let ny = ((hi.y - lo.y) / CELL).ceil() as usize;
+    let at = |i: usize, j: usize| Point2::new(lo.x + (i as f64 + 0.5) * CELL, lo.y + (j as f64 + 0.5) * CELL);
+    let fresh: Vec<bool> = (0..nx * ny).map(|k| !part.contains(at(k % nx, k / nx))).collect();
+    let mut out = Vec::new();
+    for (z, _, _) in level_ends(t) {
+        let mut cells = fresh.clone();
+        let mut trail: Vec<(f64, f64, Point3)> = vec![(0.0, 0.0, Point3::new(0.0, 0.0, z))];
+        let (mut len, mut area) = (0.0, 0.0);
+        for m in t.moves.iter().filter(|m| m.kind != MoveKind::Rapid && (m.from.z.min(m.to.z) - z).abs() < 1e-6) {
+            let planar = (m.from.z - m.to.z).abs() < 1e-9;
+            for (a, b) in m.chords(0.005) {
+                let d = (b.x - a.x).hypot(b.y - a.y);
+                let n = (d / (CELL * 0.5)).ceil().max(1.0) as usize;
+                for s in 1..=n {
+                    let f = s as f64 / n as f64;
+                    let c = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+                    let (i0, j0) = (((c.x - R8 - lo.x) / CELL).max(0.0) as usize, ((c.y - R8 - lo.y) / CELL).max(0.0) as usize);
+                    let (i1, j1) = ((((c.x + R8 - lo.x) / CELL).max(0.0) as usize + 1).min(nx), (((c.y + R8 - lo.y) / CELL).max(0.0) as usize + 1).min(ny));
+                    let mut got = 0usize;
+                    for j in j0..j1 {
+                        for i in i0..i1 {
+                            let p = at(i, j);
+                            if cells[j * nx + i] && (p.x - c.x).hypot(p.y - c.y) <= R8 {
+                                cells[j * nx + i] = false;
+                                got += 1;
+                            }
+                        }
+                    }
+                    if planar {
+                        len += d / n as f64;
+                        area += got as f64 * CELL * CELL;
+                        trail.push((len, area, Point3::new(c.x, c.y, z)));
+                    }
+                }
+            }
+        }
+        let (win, mut lo_i, mut worst) = (3.0 * R8, 0usize, (0.0, Point3::new(0.0, 0.0, z)));
+        for hi_i in 0..trail.len() {
+            while trail[hi_i].0 - trail[lo_i].0 > win {
+                lo_i += 1;
+            }
+            let span = trail[hi_i].0 - trail[lo_i].0;
+            if span >= win - CELL && (trail[hi_i].1 - trail[lo_i].1) / span > worst.0 {
+                worst = ((trail[hi_i].1 - trail[lo_i].1) / span, trail[hi_i].2);
+            }
+        }
+        out.push((z, worst.0, worst.1));
+    }
+    out
+}
+
+/// #3316 pin (second read of PR #3353): on fig8 the band splits at the
+/// lobe tips and the waist. Outside then cuts no full slot anywhere along
+/// a level: the worst width over any 3 R of planar feed stays at most
+/// 1.5 stepovers. A start-wall note is absent: the band starts in air.
+#[test]
+fn fig8_outside_offset_never_slots_along_a_level() {
+    let (world, mut h, name, stock) = fig8_world();
+    let (path, warnings) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Outside);
+    // The open pieces end on the part wall's ring; none may cross it
+    // (or any other feed) at one depth once the moves are on the lattice.
+    let crossings: Vec<&String> = warnings.iter().filter(|w| w.starts_with("Crossing")).collect();
+    assert!(crossings.is_empty(), "{} feed crossings, first {:?}", crossings.len(), crossings.first());
+    // `offset_op` keeps the stepover of the retyped pocket params.
+    let step = match operation::retype_params(&pocket(20.0, 0.0), OpType::Offset2D.ordinal()) {
+        OpParams::Offset2D { stepover, .. } => stepover,
+        other => panic!("not a 2D Offset: {other:?}"),
+    };
+    let widths = worst_width_per_level(&world, &name, &path, stock);
+    assert!(!widths.is_empty());
+    for (z, w, at) in &widths {
+        assert!(*w <= 1.5 * step, "Z {z:.3}: Outside cuts {w:.2} mm wide (step {step}) near {at:?}");
+    }
+    assert!(
+        !path.notes.iter().any(|n| n.starts_with("Pass starts at")),
+        "the band's outer boundary is air, so no start-wall note: {:?}",
+        path.notes
+    );
+}
+
 /// #3316 pin: Outside starts each level with the tool at the stock edge
 /// (its disc outside the stock box, so the first ring cuts one stepover,
 /// never a slot) and ends it on the part wall. No lateral rapid runs
@@ -180,8 +271,7 @@ fn fig8_outside_offset_starts_each_level_at_the_stock_edge() {
 #[test]
 fn fig8_auto_offset_keeps_every_lateral_rapid_at_the_clearance_plane() {
     let (world, mut h, name, stock) = fig8_world();
-    let (path, warnings) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Auto);
-    let clear_z = stock.1.z + CLEARANCE;
+    let (path, warnings) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Auto);    let clear_z = stock.1.z + CLEARANCE;
     assert_eq!(lateral_rapids_below(&path, clear_z), vec![], "#3319: a lateral rapid below Z {clear_z}");
     assert!(!warnings.iter().any(|w| w.starts_with("RapidInStock")), "#3319: a rapid through stock: {warnings:?}");
     // Auto is the core-first order: the first ring is not at the stock edge.

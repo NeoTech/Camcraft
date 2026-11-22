@@ -13,7 +13,7 @@ use super::fields::*;
 pub(crate) const PASS_START_LABEL: &str = "Pass starts at";
 
 /// What the three values do: the row's hover text.
-const PASS_START_HINT: &str = "Auto: the order this operation always cut. Inside: start at the part or island wall and work out. Outside: start at the outer edge and work in. With an Outside containment the outer edge is the stock edge, so the tool starts in air and no ring cuts a full-width slot";
+const PASS_START_HINT: &str = "Auto: the order this operation always cut. Inside: start at the part or island wall and work out. Outside: start at the outer edge and work in. Inside and Outside step one stepover at a time from the start side. A start on a wall (Inside at the part, Outside in a closed pocket) cuts its first pass at full width; the toolpath notes say so. With an Outside containment the outer edge is the stock edge, so the tool starts in air";
 
 /// The names of the combo, in its order (`PassStart::ALL`).
 pub(crate) fn pass_start_names() -> Vec<&'static str> {

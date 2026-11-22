@@ -10,6 +10,7 @@ use super::face::GenError;
 use super::pass_start::PassStart;
 use super::pocket_strategy::PocketStrategy;
 use super::pocket_zigzag::zigzag_passes;
+use super::sided_rings::sided_passes;
 use super::waterscan::waterline_passes;
 
 /// Concentric rings marching inward: ring k is the cutter-center area
@@ -44,8 +45,11 @@ pub(crate) fn plan_passes_from(
         // plan is `pocket_hsm.rs`'s (the planar pocket's own, and the
         // 3-D ladder's per level through `machining3d::hsm`), which
         // hands a refused area back here as rings.
-        PocketStrategy::Waterline | PocketStrategy::Adaptive | PocketStrategy::OffsetRings => {
-            waterline_passes(center, stepover, climb, start)
-        }
+        // Auto is the core-first ring family; Inside / Outside walk the
+        // level curves of the start side (`sided_rings.rs`).
+        PocketStrategy::Waterline | PocketStrategy::Adaptive | PocketStrategy::OffsetRings => match start {
+            PassStart::Auto => waterline_passes(center, stepover, climb),
+            PassStart::Inside | PassStart::Outside => sided_passes(center, stepover, climb, start),
+        },
     }
 }

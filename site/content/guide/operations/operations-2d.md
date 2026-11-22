@@ -298,6 +298,12 @@ wanted rather than a constant load.
   wall. Use it to stop full-width slots in the stock.
 - **Inside** starts at the part or island wall and works out.
 
+Inside and Outside step one stepover at a time from the start side, also
+where the area is narrow and the rings split. A level that starts on a
+wall cuts its first pass at full width: Inside always starts on the part
+or island wall, and Outside in a closed pocket starts on the pocket wall.
+The toolpath notes name this case.
+
 **Do not touch** (Geometry tab, **Boundaries**): pick faces or edge chains
 to protect from every cut, plunge, ramp, helix, keep-down and rapid link
 across the full tool assembly (flutes, shank and holder). **Clearance**
