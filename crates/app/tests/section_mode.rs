@@ -121,7 +121,7 @@ fn make_tilted_pocket_world() -> World {
     add_tool(&world, &mut history, "EM-0600-4FL");
     let block = cube(Point3::new(0.0, 0.0, -20.0), Point3::new(40.0, 30.0, -10.0));
     history.execute(&world, ImportModel::from_mesh("part", block));
-    let params = OpParams::Pocket {
+    let params = OpParams::Pocket { pass_start: Default::default(),
         rest: None,
         blend_radius: None,
         links: Links::PLANAR,

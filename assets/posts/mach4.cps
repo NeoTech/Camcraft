@@ -732,6 +732,15 @@ function onCircular() {
   var qS = transformPt(pose, cfg, sx, sy, sz);
   var qC = transformPt(pose, cfg, cx, cy, cz);
   var qE = transformPt(pose, cfg, num(p.X, 0), num(p.Y, 0), num(p.Z, 0));
+  // #3442: an arc whose written ends coincide is no arc block (arcFate,
+  // PRELUDE), judged on the machine-frame words this block writes.
+  var pt3 = function (q) { return { X: q[0], Y: q[1], Z: q[2] }; };
+  var fate = arcFateOf({
+    plane: machPlaneG === 18 ? "XZ" : (machPlaneG === 19 ? "YZ" : "XY"),
+    ccw: (cw !== flipDir) === false,
+    start: pt3(qS), end: pt3(qE), center: pt3(qC), rotary: false
+  }, function (k, v) { return fu(v); });
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   var centerWs = [];
   if (machPlaneG === 17) centerWs = ["I" + fu(qC[0] - qS[0]), "J" + fu(qC[1] - qS[1])];
   else if (machPlaneG === 18) centerWs = ["I" + fu(qC[0] - qS[0]), "K" + fu(qC[2] - qS[2])];

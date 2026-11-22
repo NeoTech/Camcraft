@@ -42,6 +42,7 @@ pub(super) fn roughing2d_pane(
     arc: (&mut bool, &mut Option<f64>),
     corner_relief: &mut camcraft_app::machining2d::CornerRelief,
     tilt: &mut Option<Tilt>,
+    pass_start: Option<&mut camcraft_app::machining2d::PassStart>,
 ) {
     if tab == SEC_HEIGHTS {
         orientation_editor(ui, u, tilt);
@@ -65,12 +66,20 @@ pub(super) fn roughing2d_pane(
         if optimal_load.is_none() {
             prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
         }
+        // #3316: the shared pass-order row; the kinds that own it pass it.
+        if let Some(s) = pass_start {
+            super::pass_start_row::pass_start_row(ui, tag, s);
+            // #3355: the Trochoidal loops have no ring order; said by name.
+            if trochoidal && *s != camcraft_app::machining2d::PassStart::Auto {
+                consequence(ui, super::pass_start_row::TROCH_PASS_START_REFUSED);
+            }
+        }
         prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
         arc_turn_rows(ui, u, "Arc turns at corners", arc.0, arc.1);
         if trochoidal && *arc.0 {
             consequence(ui, "arc turns are not available with the Trochoidal method: the operation is refused");
         }
-        corner_relief_rows(ui, tag, corner_relief);
+        corner_relief_rows(ui, world, op_ctx, tag, corner_relief);
         if trochoidal && !corner_relief.is_off() {
             consequence(ui, "corner relief is not available with the Trochoidal method: the operation is refused");
         }
@@ -156,12 +165,20 @@ const RELIEF_KINDS: [&str; 3] = ["None", "Dogbone", "T-bone"];
 const TBONE_DIRS: [&str; 4] = ["Long edge", "Short edge", "Horizontal", "Vertical"];
 
 /// Corner relief controls (#2400) shared by Pocket, 2D Adaptive, and 2D Offset.
+/// A router option (#2410): drawn when the operation's machine offers it,
+/// and always when the operation already states a relief (never hidden).
 pub(super) fn corner_relief_rows(
     ui: &mut Ui,
+    world: &flecs_ecs::prelude::World,
+    op_ctx: Option<&str>,
     tag: &str,
     relief: &mut camcraft_app::machining2d::CornerRelief,
 ) {
     use camcraft_app::machining2d::{CornerReliefKind, TBoneDirection};
+    use camcraft_app::router_offer::{offers, RouterOption};
+    if relief.is_off() && !offers(world, op_ctx, RouterOption::CornerRelief) {
+        return;
+    }
     let before = match relief.kind {
         CornerReliefKind::None => 0,
         CornerReliefKind::Dogbone => 1,

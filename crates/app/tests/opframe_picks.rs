@@ -141,7 +141,7 @@ fn face_params(cut: Height, clearance: f64) -> OpParams {
 }
 
 fn pocket_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
-    OpParams::Pocket { rest: None,
+    OpParams::Pocket { pass_start: Default::default(), rest: None,
         blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt: None,
@@ -186,6 +186,7 @@ fn adaptive_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
         method: AdaptiveMethod::Spiral,
         troch: Default::default(),
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 

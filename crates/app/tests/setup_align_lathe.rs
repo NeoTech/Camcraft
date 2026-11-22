@@ -191,7 +191,7 @@ fn lathe_facing_rough_finish_chamfer_and_axial_drill_match_baked() {
 
 #[test]
 fn lathe_groove_part_thread_taper_multipass_and_form_match_baked() {
-    // 1. GrooveRough + GrooveFinish + Part
+    // 1. GrooveRough + GrooveFinish
     let grooved = revolve(&[(0.0, -16.0), (6.0, -16.0), (6.0, -6.8), (4.0, -6.8), (4.0, -3.6), (6.0, -3.6), (6.0, 28.0), (0.0, 28.0)]);
     run_case(
         unturn(&grooved),
@@ -208,11 +208,10 @@ fn lathe_groove_part_thread_taper_multipass_and_form_match_baked() {
                 tolerance: 0.05, clearance_z: Height::fixed(32.0),
                 top_z: Height::fixed(-3.6), bottom_z: Height::fixed(-6.8), feed: 150.0, plunge_feed: 60.0,
             }),
-            ("PT1", "GT-0300", OpParams::Part {
-                tolerance: 0.05, clearance_z: Height::fixed(32.0),
-                top_z: Height::fixed(28.0), bottom_z: Height::fixed(-10.0), stepdown: 0.5, feed: 150.0, plunge_feed: 60.0,
-                bar_load: true, bar_advance: 30.0, bar_unload: true, bar_transfer: false, inspect_tol: 0.0,
-            }),
+            // #3452: no Part here. This bar is modelled lying down and its
+            // parting plane Z-10 is inside the model, so no setup can say
+            // which piece is the part: the part-off is refused by name
+            // (`lathe_part_off_kerf.rs` pins it both ways).
         ],
         true,
     );

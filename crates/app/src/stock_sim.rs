@@ -380,7 +380,7 @@ fn plan_ops(world: &flecs_ecs::prelude::World, ops: &[(String, flecs_ecs::prelud
             breaks: if breaks::breaks_stock_edge(world, &op) { Vec::new() } else { breaks::bounded(name, &op.params, cache.path.breaks) },
             walled: matches!(op.params, crate::operation::OpParams::Chamfer2D { .. }),
             auto_edges: breaks::auto_edges(&op),
-            mark: crate::operation::mark_law::sim_mark_of(world, &op, tool.diameter * 0.5),
+            mark: crate::operation::mark_law::sim_mark_of(world, &op, crate::operation::mark_law::cutter_depth_limit(&op.params, &tool)),
             radius,
             ball: tool.kind == crate::tools::ToolKind::BallNose,
             cone,

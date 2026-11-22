@@ -249,7 +249,7 @@ pub(super) fn plan_level(
 /// The tail every ring-cut level's note ends with (issue #983): the
 /// level by name - its Z, or on the wrap its developed radius.
 pub(super) fn rings_tag(what: &str) -> String {
-    format!(" - Offset rings cut {what} instead")
+    format!("{}{what} instead", crate::machining2d::RINGS_FALLBACK)
 }
 
 /// The level cut by Offset rings at the load step instead of the HSM

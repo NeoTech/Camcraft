@@ -63,6 +63,7 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     // #617: the Sodick 2-axis wire post, its words from Sodick's 1998
     // operation manual (Mark 21 / EX21); not verified on a control.
     ("Sodick Wire EDM (Mark 21)", AssetFile("sodick-wire.cps")),
+    (super::agie::POST, AssetFile("agie-native.cps")),
     // #542: the generic ISO-style sinker post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
     ("Sinker EDM (ISO)", AssetFile("sinker-iso.cps")),
@@ -348,6 +349,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "tormach-lathe.cps") => Some(include_str!("../../../assets/posts/tormach-lathe.cps")),
         ("posts", "tormach-plasma.cps") => Some(include_str!("../../../assets/posts/tormach-plasma.cps")),
         ("posts", "wire-iso.cps") => Some(include_str!("../../../assets/posts/wire-iso.cps")),
+        ("posts", "agie-native.cps") => Some(include_str!("../../../assets/posts/agie-native.cps")),
         ("posts", "sodick-wire.cps") => Some(include_str!("../../../assets/posts/sodick-wire.cps")),
         ("posts", "sinker-iso.cps") => Some(include_str!("../../../assets/posts/sinker-iso.cps")),
         ("machines", "vmc.mch") => Some(include_str!("../../../assets/machines/vmc.mch")),

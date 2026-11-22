@@ -100,8 +100,11 @@ pub(crate) fn shell_layout(
     state.geo_hover_drawn = state.geo_hover.take();
     state.geo_row_marked.clear();
     panes::shortcuts(ui, state);
-    // #1450: a model file dropped on the window goes through Model's import.
-    super::file_drop::take_drop(ui, state);
+    // #1450: a model file dropped on the window goes through Model's import;
+    // #2950: a drop with a machine or post file goes to those lists instead.
+    if !super::setup_file_drop::take(ui, state) {
+        super::file_drop::take_drop(ui, state);
+    }
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
     // disagree on a retheme (M6.1 A). `ribbon_h` tracks the cell box.
@@ -192,6 +195,8 @@ pub(crate) fn shell_layout(
     super::fixture_library_dialog::window(ui.ctx(), state);
     // #2339: the Panel setups window - same window law, closed by default.
     super::panel_setups::window(ui.ctx(), state);
+    // #1863: the DXF units prompt (None on a fresh State).
+    super::dxf_units_dialog::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
     drop(windows);
@@ -324,6 +329,7 @@ fn viewport_panel(
         // through material. Held while the stock removal is calculated.
         crate::play_precalc::advance_playhead(state, f64::from(ui.input(|i| i.stable_dt).clamp(0.0, 0.1)), total);
         let held = crate::play_precalc::holds_playhead(state);
+        let starts = super::sim_steps::cached_op_starts(state);
         let mut stop = false;
         ui.horizontal(|ui| {
             let Some(sim) = state.sim.as_mut() else {
@@ -349,6 +355,8 @@ fn viewport_panel(
                 stop = true;
             }
             if total > 0.0 {
+                // #2608: step to an operation's start (sim_steps).
+                super::sim_steps::op_step_buttons(ui, sim, &sc, &starts, held);
                 ui.add_enabled(!held, egui::Slider::new(&mut sim.t, 0.0..=total).show_value(false));
                 egui::ComboBox::from_id_salt("sim_speed")
                     .selected_text(format!("{:.0}x", sim.speed))

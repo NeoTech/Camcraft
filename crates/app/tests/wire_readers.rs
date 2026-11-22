@@ -78,6 +78,7 @@ fn wire_doc() -> (World, History) {
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
         four_axis: None,
+        sharp_corners: false,
     };
     let create = CreateOperation::new(&world, "Die1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op));
     h.execute(&world, create.expect("die"));

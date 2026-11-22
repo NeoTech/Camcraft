@@ -107,6 +107,7 @@ impl OpParams {
                 holes,
                 break_through,
                 strategy,
+                pass_start,
             } => {
                 // #1557: the break-through, written only when stated,
                 // so every older op keeps the digest it was cached under.
@@ -119,6 +120,12 @@ impl OpParams {
                 if let crate::machining2d::BoreStrategy::Helical { spring_pass } = strategy {
                     h.write_u8(0xB8);
                     h.write_u8(u8::from(*spring_pass));
+                }
+                // #3360: written only off Auto, the #3316 bytes.
+                match pass_start {
+                    crate::machining2d::PassStart::Auto => {}
+                    crate::machining2d::PassStart::Inside => h.write_u8(0xC1),
+                    crate::machining2d::PassStart::Outside => h.write_u8(0xC2),
                 }
                 wh(h, *clearance_z);
                 wh(h, *top_z);

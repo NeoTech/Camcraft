@@ -341,6 +341,11 @@ pub enum OpType {
     /// [`crate::machining2d::undercut`]). Appended: stored kind ids
     /// never move.
     SlotUndercut,
+    /// V-carve (#1443): a V-bit's tip on the medial axis of a closed
+    /// region, the depth set by the region's width (see
+    /// [`crate::machining2d::v_carve`]). Appended: the declaration order
+    /// is the table order (`OpType as usize` is the row everywhere).
+    VCarve,
 }
 
 impl core::fmt::Display for OpType {

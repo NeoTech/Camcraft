@@ -602,16 +602,16 @@ fn a_coolant_list_at_the_tooling_root_also_reads() {
 fn a_kind_that_is_not_a_kind_refuses_at_the_door() {
     // The one gate is parse_mch: an unreadable word never reaches a
     // mounted machine, so nothing downstream re-litigates it.
-    let bad = r#"{"general": {"kind": "router"}}"#;
+    let bad = r#"{"general": {"kind": "drill press"}}"#;
     let err = parse_mch(bad).expect_err("a word the grammar does not know");
-    assert!(err.contains("router"), "the refusal names the word: {err}");
+    assert!(err.contains("drill press"), "the refusal names the word: {err}");
     let notaword = r#"{"general": {"kind": {"surprise": 1}}}"#;
     assert!(parse_mch(notaword).is_err(), "a table is not a declaration");
     let empty = r#"{"general": {"kind": ""}}"#;
     assert_eq!(parse_mch(empty).expect("empty states nothing").kind, None);
     // Hand-edited project files face the loader's is_sane gate.
     let smuggled = Machine {
-        kind: Some("router".to_string()),
+        kind: Some("drill press".to_string()),
         ..Default::default()
     };
     assert!(!smuggled.is_sane());

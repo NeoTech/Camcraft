@@ -61,6 +61,45 @@ follow the document or keep its own options. Agents can inspect and edit
 these choices with `get_post_options` and `set_post_options`; see
 [AI agents (MCP)](@/guide/automate/mcp.md).
 
+### Fanuc AI contour control
+
+With **Fanuc** selected, open the Post options' **Smoothing** group.
+**AI contour control (G05.1)** is off by default. Enable it only if the
+control has that option. **AI contour control level** supplies the R
+value, from 1 to 10 (default 5); it is the controller's machining
+condition level, not a tolerance in mm.
+
+For example, enabling it at level 5 writes `G05.1 Q1 R5` after the
+operation preamble. `G05.1 Q0` cancels it at the operation's end and
+before a canned cycle. Probe sections do not enable it. A level outside
+1–10 is refused by name; the standalone post also reports "G05.1 Q1
+takes R1 to R10; not written" and emits no enable word.
+
+This option owns the AI contour words when enabled. It does not also
+write the operation's tolerance-based Smoothing request. With the option
+off, that request alone gives "SMOOTHING NOT WRITTEN - G5.1 STATES NO
+TOLERANCE". Check the control's level settings and prove out the program.
+
+### Fanuc Manual Guide i blank
+
+In the Fanuc Post options' **Header & comments** group, **Manual Guide i
+blank (G1902 / G1900)** is off by default. Enable it only on a control
+with Manual Guide i. It writes the setup's supported stock blank once,
+after the unit selection and before the first operation.
+
+A machine-aligned box uses `G1902`: B, D and H are its X, Y and Z sizes;
+I, J and K locate the work origin from its minimum corner. For example,
+a 100 × 60 × 20 mm box with the work origin at the centre of its top
+writes `G1902 B100. D60. H20. I50. J30. K20.`. A Z-axis cylinder whose
+axis passes through the work origin uses `G1900`: D is diameter, L is
+length, and K is the positive-Z end face's distance from the work origin.
+
+Unsupported stock produces a `NO BLANK BLOCK` comment with its reason,
+and posting continues without a blank block. Examples include stock from
+a model or previous setup, rotated stock or WCS, X/Y-axis cylinders and
+a Z cylinder whose axis is off the work origin. Correct the stock or
+define the blank at the control; CamCraft does not substitute a box.
+
 ### Explain G-code
 
 Tick **Explain G-code (add a comment to each block)** on the document or
@@ -129,10 +168,17 @@ The post is a gate. It writes the program only when all of these hold:
   operation;
 - every operation has been generated, and nothing it depends on has
   changed since (no **stale** operations);
-- no operation carries a warning;
+- no operation carries a warning that blocks posting;
 - the program as a whole verifies: the simulated stock shows no gouge into
   the part, no move strikes a fixture, and no move exceeds a limit the
   mounted machine states, such as axis travel or spindle speed.
+
+An Adaptive fallback to **Offset rings** raises a visible advisory
+warning with the number of affected areas. For example, one area the
+planner could not cut adaptively appears as "Adaptive fell back to
+Offset rings on 1 area". Read the toolpath notes for each area and its
+reason. This warning does not hold the post because the rings are
+verified; collision and gouge warnings still block it.
 
 For part-source Engrave and Trace, simulation accepts the intended mark
 only on the selected part or parts. Neighbouring parts remain subject to

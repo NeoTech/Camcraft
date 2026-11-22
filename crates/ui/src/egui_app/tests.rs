@@ -89,6 +89,7 @@ mod frame_cost_probe;
 mod pick_mode;
 mod spindle_row;
 mod stock_size;
+mod dxf_profile;
 mod stock_axis;
 mod stock_material;
 mod setup_settings_page;
@@ -104,10 +105,14 @@ mod machines_edit;
 mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
+#[cfg(not(target_arch = "wasm32"))]
+mod agie_post;
 mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod work_envelope;
+// #2632: the operator-side arrow and text of the work envelope.
+mod operator_side;
 mod lathe_gizmo;
 // #2172: the bodies stand on the floor of the work envelope.
 mod floor;
@@ -117,10 +122,12 @@ mod camera_target;
 mod structural;
 // #2181: the transport row of the calculation before playback.
 mod transport_precalc;
+mod sim_op_steps;
 mod page_layout;
 mod page_layout_windows;
 mod anchors;
 mod stock_fit;
+mod stock_source_default;
 mod ribbon_rows;
 mod ribbon_cell_fill;
 mod theme_op_tabs_tree;
@@ -136,6 +143,7 @@ mod radial_step_field;
 mod auto_input_manual;
 // #1509: 2D Adaptive's Method choice on the Passes tab.
 mod adaptive_method;
+mod pass_start;
 mod adaptive3d_method;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
@@ -183,6 +191,8 @@ mod setup_eye;
 mod program_entry;
 // #2055: "Do not touch" protected faces/edges in Boundaries.
 mod do_not_touch;
+// #3335: real viewport clicks into the "Do not touch" group.
+mod do_not_touch_click;
 // #371: the tool editor's Body section.
 mod tool_body;
 mod tool_body_assembly;
@@ -213,6 +223,8 @@ mod browser_files;
 mod browser_delete;
 // #1450: a model file dropped on the window.
 mod file_drop;
+// #2950: the browser loads .mch and .cps files from a pick, a folder or a drop.
+mod browser_setup_files;
 // #645: the browser's "Show origin names" switch and the per-user view file.
 mod view_names;
 mod prefs_door;
@@ -1042,7 +1054,7 @@ fn every_field_lives_on_exactly_one_section() {
             vec![
                 ("Geometry", vec!["Click selects:"]),
                 ("Heights", vec!["Clearance Z", "Cut Z", "Levels"]),
-                ("Passes", vec!["Stepover (Y spacing)"]),
+                ("Passes", vec!["Stepover (Y spacing)", "Pass starts at"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
         ),
@@ -1070,7 +1082,7 @@ fn every_field_lives_on_exactly_one_section() {
             vec![
                 ("Geometry", vec!["Click selects:"]),
                 ("Heights", vec!["Clearance Z", "Levels", "Top Z", "Bottom Z", "Stepdown"]),
-                ("Passes", vec!["Stepover", "Stock to leave", "Strategy", "Rest machining"]),
+                ("Passes", vec!["Stepover", "Stock to leave", "Strategy", "Pass starts at", "Rest machining"]),
                 ("Lead in / Lead out", vec!["Entry", "Level to level", "Between levels", "Between passes", "Plunge", "Ramp / helix / arc feed", "Entry plunge feed", "Lead-in feed", "Engagement", "Minimum radius", "Helix pitch"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
@@ -1125,7 +1137,7 @@ fn every_field_lives_on_exactly_one_section() {
                     "Heights",
                     vec!["Clearance Z", "Levels", "Top Z", "Bottom Z", "Stepdown"],
                 ),
-                ("Passes", vec!["Stepover", "Stock to leave"]),
+                ("Passes", vec!["Stepover", "Pass starts at", "Stock to leave"]),
                 ("Lead in / Lead out", vec!["Entry", "Level to level", "Between levels", "Between passes"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
@@ -1246,7 +1258,7 @@ fn every_field_lives_on_exactly_one_section() {
                         "Stepdown",
                     ],
                 ),
-                ("Passes", vec!["Stock to leave", "Tolerance"]),
+                ("Passes", vec!["Pass starts at", "Stock to leave", "Tolerance"]),
                 ("Lead in / Lead out", vec!["Level to level", "Between levels", "Between passes"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
@@ -1322,14 +1334,15 @@ fn every_field_lives_on_exactly_one_section() {
             // labels name the TIP's law, not a cut floor), and the
             // feeds are the ride's - no climb row, the cone follows
             // the edge wherever the weld puts it. There is NO Passes
-            // group: one edge, one pass - the loci are what the weld
-            // exposes, and a stepover could only disagree with the
-            // taxonomy (has_section's exclusion, Chamfer2D's answer
-            // once more).
+            // tab: the loci are what the weld exposes, and a stepover
+            // could only disagree with the taxonomy (has_section's
+            // exclusion, Chamfer2D's answer once more). The pass count
+            // of one break rides Geometry with its size (#1890).
             "Deburr",
             vec![
-                // #1888 and #1889: keep the edge filters and reach policy.
-                ("Geometry", vec!["Break width", "Minimum edge angle", "Skip round holes", "Exclude the picked edges", "Unreachable edges"]),
+                // #1888 and #1889: keep the edge filters and reach policy;
+                // #1890: the break mode, profile and passes ride Geometry.
+                ("Geometry", vec!["Break mode", "Break width", "Break profile", "Number of passes", "Minimum edge angle", "Skip round holes", "Exclude the picked edges", "Unreachable edges"]),
                 ("Heights", vec!["Clearance Z", "Window Top Z", "Window Bottom Z"]),
                 ("Feeds", vec!["Feed", "Plunge feed"]),
             ],

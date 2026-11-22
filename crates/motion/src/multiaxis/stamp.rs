@@ -213,6 +213,17 @@ fn stamp_inner(
         held = pose.unwrap_or(UP);
         poses.push(pose);
     }
+    // #3300: a path that leans states its pose from its first move. The
+    // stations before the first lean hold the upright home, and they
+    // say so - the post commands that zero on the opening move, so the
+    // control knows its rotaries before the first tilted feed (a feed
+    // from an angle it does not know refuses at a stated rotary rate).
+    // A path that never leans stays silent, byte for byte as before.
+    if leaned {
+        for p in poses.iter_mut().filter(|p| p.is_none()) {
+            *p = Some(UP);
+        }
+    }
     let mut b = PathBuilder::new(path.start().unwrap_or(Point3::ZERO));
     let mut k = 0usize;
     for (i, mv) in path.moves.iter().enumerate() {

@@ -303,7 +303,7 @@ pub(super) fn judge(path: &Toolpath, params: &OpParams, mill: bool, frame: Optio
                 match start_h.filter(|_| !work_turns).map(|h| (h, table_read(b, f, h, stroke))) {
                     Some((_, TableRead::Counts(face))) => steel.push(face),
                     Some((height_mm, TableRead::Under { limit })) => {
-                        under = Some(Warning::FirstTraverseUnderTable { at: 0, height_mm, limit_mm: limit });
+                        under = Some(in_user_frame(Warning::FirstTraverseUnderTable { at: 0, height_mm, limit_mm: limit }, f));
                     }
                     Some((_, TableRead::Clear)) | None => {}
                 }
@@ -328,9 +328,14 @@ pub(super) fn judge(path: &Toolpath, params: &OpParams, mill: bool, frame: Optio
 
 /// The law's local verdict in the user's heights frame (#2991): both
 /// heights shifted back by the frame's `origin.z`, `tilted` set when the
-/// frame is not upright. Other warnings pass unchanged.
+/// frame is not upright. #3148: the table verdict of a down-pointing
+/// axis shifts its plane and its limit the same way. Other warnings
+/// pass unchanged.
 pub(super) fn in_user_frame(w: Warning, f: &TiltedFrame) -> Warning {
     match w {
+        Warning::FirstTraverseUnderTable { at, height_mm, limit_mm } => {
+            Warning::FirstTraverseUnderTable { at, height_mm: height_mm + f.origin.z, limit_mm: limit_mm + f.origin.z }
+        }
         Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, .. } => Warning::FirstTraverseLow {
             at,
             height_mm: height_mm + f.origin.z,

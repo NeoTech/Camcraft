@@ -169,51 +169,71 @@ pub fn twin_work(moves: &[Move], tool: &SdfTool, meta: &LatticeMeta) -> Result<T
     Ok(TwinWork { chords, items })
 }
 
-/// Run the f32 kernel over a work list: the cut layer in the dense
-/// layout of `pack_cut` over `meta` (z-major, then y, then x), with
-/// the same `-4 cap` floor where no chord claims a cell.
-pub fn run_twin(work: &TwinWork, meta: &LatticeMeta) -> Result<Vec<f32>, StockError> {
+/// One work item as the kernel reads it (#2627): the chord seen from
+/// its brick, the brick origin's lattice offset in cells, and the
+/// brick-local cells `lo..=hi` to cut. Plain numbers, so a caller can
+/// hand them to the GPU kernel of camcraft-gpu field by field.
+#[derive(Clone, Copy, Debug)]
+pub struct TwinItem {
+    pub tile: TileChord,
+    pub base: [i32; 3],
+    pub lo: [u32; 3],
+    pub hi: [u32; 3],
+}
+
+/// The kernel items of a work list over `meta`. Refuses an item that
+/// names no chord or whose cells leave their brick or the lattice: a
+/// hand-made list refuses, never writes a wrapped slot.
+pub fn twin_items(work: &TwinWork, meta: &LatticeMeta) -> Result<Vec<TwinItem>, StockError> {
     let bx = lattice_box(meta)?;
-    let dims = [meta.dims[0] as usize, meta.dims[1] as usize, meta.dims[2] as usize];
-    let floor = ordered_bits((-4.0 * meta.cap) as f32);
-    let mut keys = vec![floor; dims[0] * dims[1] * dims[2]];
-    let (cell32, cap32) = (meta.cell as f32, meta.cap as f32);
+    let mut out = Vec::new();
+    out.try_reserve_exact(work.items.len())
+        .map_err(|e| invalid(format!("no memory for {} work items: {e}", work.items.len())))?;
     for it in &work.items {
         let Some(ch) = work.chords.get(it.chord as usize) else {
             return Err(invalid(format!("work item names chord {} of {}", it.chord, work.chords.len())));
         };
-        let b0 = [
-            it.brick[0].saturating_mul(BRICK),
-            it.brick[1].saturating_mul(BRICK),
-            it.brick[2].saturating_mul(BRICK),
-        ];
-        let origin = [f64::from(b0[0]) * meta.cell, f64::from(b0[1]) * meta.cell, f64::from(b0[2]) * meta.cell];
-        let tc = TileChord::of(ch, origin, meta.cell);
+        let outside = || invalid(format!("work item cells {:?}..={:?} lie outside their brick or the lattice", it.lo, it.hi));
+        let b0: [i32; 3] = std::array::from_fn(|a| it.brick[a].saturating_mul(BRICK));
+        let (mut base, mut lo, mut hi) = ([0i32; 3], [0u32; 3], [0u32; 3]);
+        for a in 0..3 {
+            let (l, h) = (i64::from(it.lo[a]) - i64::from(b0[a]), i64::from(it.hi[a]) - i64::from(b0[a]));
+            let last = i64::from(bx[a].1);
+            if !(0 <= l && l <= h && h < i64::from(BRICK)) || i64::from(it.lo[a]) < i64::from(bx[a].0) || i64::from(it.hi[a]) > last {
+                return Err(outside());
+            }
+            base[a] = i32::try_from(i64::from(b0[a]) - i64::from(bx[a].0)).map_err(|_| outside())?;
+            (lo[a], hi[a]) = (u32::try_from(l).map_err(|_| outside())?, u32::try_from(h).map_err(|_| outside())?);
+        }
+        let origin = b0.map(|v| f64::from(v) * meta.cell);
+        out.push(TwinItem { tile: TileChord::of(ch, origin, meta.cell), base, lo, hi });
+    }
+    Ok(out)
+}
+
+/// Run the f32 kernel over a work list: the cut layer in the dense
+/// layout of `pack_cut` over `meta` (z-major, then y, then x), with
+/// the same `-4 cap` floor where no chord claims a cell.
+pub fn run_twin(work: &TwinWork, meta: &LatticeMeta) -> Result<Vec<f32>, StockError> {
+    let items = twin_items(work, meta)?;
+    let dims = [meta.dims[0] as usize, meta.dims[1] as usize, meta.dims[2] as usize];
+    let floor = ordered_bits((-4.0 * meta.cap) as f32);
+    let mut keys = vec![floor; dims[0] * dims[1] * dims[2]];
+    let (cell32, cap32) = (meta.cell as f32, meta.cap as f32);
+    for it in &items {
         for k in it.lo[2]..=it.hi[2] {
             for j in it.lo[1]..=it.hi[1] {
                 for i in it.lo[0]..=it.hi[0] {
-                    let key = [i, j, k];
-                    let outside = || invalid(format!("work item cell {key:?} lies outside its brick or the lattice"));
-                    let mut q = [0.0f32; 3];
-                    let mut at = [0usize; 3];
-                    for a in 0..3 {
-                        // the local index must be in 0..BRICK, the
-                        // lattice offset in 0..dims: a hand-made list
-                        // refuses, never writes a wrapped slot
-                        let local = key[a].saturating_sub(b0[a]);
-                        let off = usize::try_from(i64::from(key[a]) - i64::from(bx[a].0)).map_err(|_| outside())?;
-                        if !(0..BRICK).contains(&local) || off >= dims[a] {
-                            return Err(outside());
-                        }
-                        q[a] = (local as f32 + 0.5) * cell32;
-                        at[a] = off;
-                    }
-                    let Some(v) = cell_cut(&tc, q, cap32) else {
+                    let local = [i, j, k];
+                    let q = local.map(|v| (v as f32 + 0.5) * cell32);
+                    let Some(v) = cell_cut(&it.tile, q, cap32) else {
                         continue;
                     };
+                    // twin_items keeps base + local inside 0..dims
+                    let at: [usize; 3] = std::array::from_fn(|a| (i64::from(it.base[a]) + i64::from(local[a])) as usize);
                     let slot = (at[2] * dims[1] + at[1]) * dims[0] + at[0];
                     let Some(dst) = keys.get_mut(slot) else {
-                        return Err(outside());
+                        return Err(invalid(format!("work item cell {local:?} lies outside the lattice")));
                     };
                     *dst = (*dst).max(ordered_bits(v));
                 }

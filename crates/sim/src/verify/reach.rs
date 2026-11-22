@@ -54,7 +54,7 @@ pub(super) fn band_reach(
     if cx.mode == Mode::Undercut {
         return;
     }
-    if !matches!(cx.mode, Mode::Engrave | Mode::Radial | Mode::Rotary) {
+    if !matches!(cx.mode, Mode::Engrave | Mode::Carve | Mode::Radial | Mode::Rotary) {
         // Both boundaries matter: the region's loops carry the part
         // islands (holes in the region), the stock's carry its outer
         // walls wherever they stand beyond the region. A model-driven
@@ -237,7 +237,7 @@ pub(super) fn band_reach(
         // on far-field samples. Engrave never poses. Paths no posed
         // generator ever touched hold every pose at home and convict
         // nothing, exactly as before this law existed.
-        if cx.mode != Mode::Engrave {
+        if !matches!(cx.mode, Mode::Engrave | Mode::Carve) {
             let columns = super::hidden_span::Columns::new(None);
             let sweeps = super::sweep::mid_turn_sweeps(
                 path,

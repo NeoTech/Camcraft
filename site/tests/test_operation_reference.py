@@ -21,7 +21,8 @@ FAMILIES = {
     "2d": {
         "Face": "Face", "Contour": "2D Contour", "Pocket": "2D Pocket",
         "Adaptive2D": "2D Adaptive", "Offset2D": "2D Offset", "Slot": "Slot",
-        "TrochoidalSlot": "Trochoidal slot", "Trace": "Trace", "Engrave": "Engrave",
+        "TrochoidalSlot": "Trochoidal slot", "SlotUndercut": "Slot Undercut",
+        "Trace": "Trace", "Engrave": "Engrave", "VCarve": "V-Carve",
         "Chamfer2D": "2D Chamfer", "Circular": "Circular", "Thread": "Thread",
         "Drill": "Drill", "Bore": "Bore",
     },

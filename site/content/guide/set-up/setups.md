@@ -33,15 +33,30 @@ Below the pages, {{ <icon name="tree-op-group" /> }} **Operations** lists the se
 ## Place a DXF profile
 
 A DXF drawing is a profile on the stock of one setup, not a solid model.
-Create the stock first. The automation commands `import_dxf` (MCP) and
+Create the stock first. On the **Stock** page, open **DXF profiles** and
+choose **Add DXF profile…**. In the desktop app you can also drop one
+`.dxf` file onto the window to import it onto the active setup's stock.
+A drop without stock is refused: "make a stock first (Setup > Stock)".
+Browser drops are refused; use the desktop app for this workflow.
+
+The automation commands `import_dxf` (MCP) and
 `cam.importDxf(path, { setup, units, join_tol, name })` (script) place it
 on the stock top at the stock origin. For box and cylinder stock, that
 origin is the XY centre. A moved or resized stock carries its profile.
 
-Use `move_dxf_profile` to set X, Y and a rotation about the stock face
-normal. The profile stays on that face; it has no independent Z move.
-Import and placement changes are undoable. A drawing without units is
-refused with its width and height until you state the intended units.
+Each profile row has **Profile X**, **Profile Y** and **Profile angle
+(deg)**. Choose **Place profile** to apply the placement, **Hide profile**
+or **Show profile** to change visibility, or **Delete profile** to remove
+it. For example, X 10 mm, Y 5 mm and angle 90 place the drawing 10 mm
+across and 5 mm along the stock face, turned a quarter turn.
+The automation equivalent is `move_dxf_profile`. The profile stays on
+that face; it has no independent Z move. Import, placement and deletion
+are undoable; hiding is view state.
+
+A drawing without units waits at **DXF units**, showing its width and
+height under both readings. Choose **Millimeters** or **Inches** from
+the drawing's intended units. **Cancel** places nothing; CamCraft never
+guesses the units. Automation refuses the import until units are stated.
 Read the import summary for skipped DXF items.
 
 **Current limit:** a 2D operation can name a profile, but generation from

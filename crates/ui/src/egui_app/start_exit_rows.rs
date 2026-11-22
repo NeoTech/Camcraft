@@ -12,16 +12,18 @@
 //! chosen entry and exit position on a closed profile; no vendor
 //! material or text.
 
-use egui::{Align, Layout, Margin, RichText, Ui};
+use egui::{Align, Label, Layout, Margin, RichText, Ui};
 
 use camcraft_app::geo2d::Point2;
 use camcraft_app::links::Approach;
+use camcraft_app::operation::{OpType, PickCapability};
+use camcraft_app::path_picks::PickRole;
 use camcraft_app::units::Unit;
 
 use crate::start_exit_pick::{StartExitAct, StartExitRole, act_id, armed_id};
 
 use super::fields::num;
-use super::layout::{GROUP_GAP, consequence, hint, prop_row};
+use super::layout::{GROUP_GAP, check_row, consequence, group, hint, prop_row};
 use super::pick_button::pick_button;
 
 /// The two group titles, as the tab's structural tests find them.
@@ -72,6 +74,44 @@ pub(super) fn start_exit_groups(ui: &mut Ui, u: Unit, a: &mut Approach) {
     point_group(ui, u, &START, &mut a.start_point);
     point_group(ui, u, &EXIT, &mut a.exit_point);
 }
+
+/// The wire's threading point uses the same Start point group on Geometry.
+pub(super) fn wire_start_group(ui: &mut Ui, u: Unit, start: &mut Option<[f64; 2]>) {
+    group(ui, START_GROUP, None, |ui| {
+        let mut stated = start.is_some();
+        check_row(ui, "Start hole stated", &mut stated);
+        match (stated, start.as_mut()) {
+            (true, Some(s)) => {
+                prop_row(ui, "Start hole X", |ui| num(ui, u, &mut s[0]));
+                prop_row(ui, "Start hole Y", |ui| num(ui, u, &mut s[1]));
+            }
+            (true, None) => *start = Some([0.0, 0.0]),
+            (false, _) => *start = None,
+        }
+    });
+}
+
+/// #3324: the Start point / Exit point groups of a kind that does not
+/// take that pick. Each says so by name, with the registry's reason
+/// (`KindInfo::pick`), so no page hides that the planner chooses alone.
+pub(super) fn not_taken_groups(ui: &mut Ui, kind: OpType) {
+    let cap = kind.info().pick();
+    for (role, title) in [(PickRole::Start, START_GROUP), (PickRole::Exit, EXIT_GROUP)] {
+        if cap.takes(role) {
+            continue;
+        }
+        let why = match cap {
+            PickCapability::NotTaken(why) => why,
+            _ => "this kind takes a start point only",
+        };
+        group(ui, title, None, |ui| {
+            ui.add(Label::new(RichText::new(format!("{NOT_TAKEN}{why}")).weak()).wrap());
+        });
+    }
+}
+
+/// The lead words of a not-taken group's line, as the tests find it.
+pub(super) const NOT_TAKEN: &str = "Not taken - ";
 
 fn point_group(ui: &mut Ui, u: Unit, rows: &PointRows, p: &mut Option<Point2>) {
     let was_on = p.is_some();

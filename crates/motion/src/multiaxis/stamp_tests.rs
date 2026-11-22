@@ -184,8 +184,11 @@ fn the_stamp_poses_only_moves_that_touch() {
     )
     .unwrap();
     assert_eq!(out.moves.len(), 4);
-    assert_eq!(out.moves[0].axis, None, "the rapid must hold no angle");
-    assert_eq!(out.moves[1].axis, None, "a move ending in air is vertical");
+    // #3300: the path leans, so its opening states the upright Z column
+    // (the post commands it as zero angles) - still no lean.
+    let upright = |m: &Move| m.axis.is_some_and(|a| crate::cl::is_vertical(&a));
+    assert!(upright(&out.moves[0]), "the rapid must hold no angle: {:?}", out.moves[0].axis);
+    assert!(upright(&out.moves[1]), "a move ending in air is vertical: {:?}", out.moves[1].axis);
     assert!(out.moves[2].axis.is_some(), "the plunge onto the surface poses");
     assert!(out.moves[3].axis.is_some(), "the cut along the surface poses");
 }

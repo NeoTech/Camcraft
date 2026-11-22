@@ -207,7 +207,11 @@ pub fn compute(
 ) -> Suggestion {
     let win = material.window(tm);
     let vc = 0.5 * (win.vc.0 + win.vc.1);
-    let fz = 0.5 * (win.fz10.0 + win.fz10.1) * cutting::fz_scale(tool.diameter);
+    // #3068: a V-bit cuts mostly near its tip, so on a router material
+    // its chip load is the one of a cutter half its diameter. The metal
+    // rows keep their reading at the full diameter.
+    let d_chip = if material.router() && tool.kind == ToolKind::Taper { 0.5 * tool.diameter } else { tool.diameter };
+    let fz = 0.5 * (win.fz10.0 + win.fz10.1) * material.chip_scale(d_chip);
     let thinning = load.map(cutting::thinning_factor).filter(|f| *f < 1.0);
     let fz_prog = fz / thinning.unwrap_or(1.0);
     let mut notes = Vec::new();
@@ -259,6 +263,7 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::Pocket { feed, .. }
         | OpParams::Adaptive2D { feed, .. }
         | OpParams::Offset2D { feed, .. }
+        | OpParams::VCarve { feed, .. }
         | OpParams::Engrave { feed, .. }
         | OpParams::Chamfer2D { feed, .. }
         | OpParams::Circular { feed, .. }

@@ -155,6 +155,7 @@ fn bore_state(cells: &[Cell]) -> State {
         AddTool::new(&state.world, TOOL, tool).expect("tool"),
     );
     let params = OpParams::Bore {
+        pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
         strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,

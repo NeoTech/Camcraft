@@ -22,6 +22,7 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::TrochoidalSlot => Icon::TrochoidalSlot,
         OpType::Trace => Icon::Trace,
         OpType::Engrave => Icon::Engrave,
+        OpType::VCarve => Icon::VCarve,
         OpType::Chamfer2D => Icon::Chamfer2D,
         OpType::Deburr => Icon::Deburr,
         OpType::Circular => Icon::Circular,

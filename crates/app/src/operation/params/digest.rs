@@ -4,6 +4,16 @@
 
 use super::*;
 
+/// Pass starts at (#3316, #3354, #3355): written only off Auto, so every
+/// earlier operation keeps the digest it had. One byte pair for every kind.
+pub(super) fn write_pass_start(s: crate::machining2d::PassStart, h: &mut std::hash::DefaultHasher) {
+    match s {
+        crate::machining2d::PassStart::Auto => {}
+        crate::machining2d::PassStart::Inside => h.write_u8(0xC1),
+        crate::machining2d::PassStart::Outside => h.write_u8(0xC2),
+    }
+}
+
 /// Corner relief (#2400): written only when non-default, so every
 /// operation without relief keeps its digest.
 pub(super) fn write_corner_relief(

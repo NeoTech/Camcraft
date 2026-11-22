@@ -41,6 +41,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         burnout: None,
         clearance: super::types::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
     })
 }
 
@@ -148,6 +149,7 @@ pub fn condition_of(world: &World, setup: Option<&str>, tool_name: &str, op: &Wi
         tabs: None,
         stock: None,
         clearance: op.clearance,
+        sharp_corners: false,
     };
     check_passes(&rough, &c.skims).map_err(|e| match e {
         GenError::Invalid(why) => why,
@@ -341,6 +343,7 @@ pub fn wire_params(
         }),
         stock,
         clearance: op.clearance,
+        sharp_corners: op.sharp_corners,
     })
 }
 

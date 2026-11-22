@@ -221,10 +221,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             hole_min_diameter,
             hole_max_diameter,
             unreachable,
+            sizing,
         } => {
             if tab == SEC_GEO {
-                prop_row(ui, "Break width", |ui| num(ui, u, width));
-                hint(ui, "measured in the edge's own plane; the tip stands width / tan(half-angle) below it - the cone is the tool's, so its angle authors the depth, never a field here");
+                // #1890: the break mode, its width or depth, the profile
+                // and the passes.
+                super::deburr_page::sizing(ui, u, width, sizing);
                 // #1888: which exposed edges the ride keeps.
                 super::deburr_page::filters(
                     ui,

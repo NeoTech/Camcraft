@@ -140,6 +140,12 @@ pub fn current_stamp(
     {
         h.write(b"rotary-picked-faces-v1");
     }
+    // #3452: a part-off cached before the kerf moved to the chuck side of
+    // the end face cut half a blade into the part. Such a path is stale
+    // until the op is generated again (and judged by the kerf law).
+    if matches!(params, OpParams::Part { .. }) {
+        h.write(b"part-off-kerf-side-v1");
+    }
     // #326: the setup's part alignment is a moved input for every op of
     // the setup (the parts it machines, verifies against or measures
     // heights from). Written only when one is set, so no stamp of an

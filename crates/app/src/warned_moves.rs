@@ -40,7 +40,8 @@ pub fn moves_named(w: &Warning) -> [Option<usize>; 2] {
         | Warning::ProbeSearch { at, .. }
         | Warning::SinkerFinishOrder { at, .. }
         | Warning::DrillUndersize { at, .. } => [Some(*at), None],
-        Warning::RestUnjudged { .. } => [None, None],
+        // #3035: the fallback names areas in the notes, not one move.
+        Warning::RestUnjudged { .. } | Warning::StrategyFallback { .. } => [None, None],
     }
 }
 

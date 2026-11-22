@@ -7,12 +7,15 @@
 
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use crate::artifacts::{self, Built, Package, TestExe};
 use crate::plan::Step;
+use crate::watchdog::{self, End};
 
 /// The cargo flag of a build step whose test executables the gate records.
 pub const JSON: &str = "--message-format=json-render-diagnostics";
@@ -132,21 +135,31 @@ fn shown(p: &Path, root: &Path) -> String {
 /// Runs each executable of `d` with its output in `log`, after a `Running` line in cargo's form. All of
 /// them run (the step has `--no-fail-fast`). The exit code of the first one that failed, else 0. An
 /// executable that cannot start is an `error:` line in the log and code -1: a red step, never a pass.
-pub fn run(d: &Direct, root: &Path, mut log: File) -> Result<i32, String> {
+/// One that a signal kills, or that stops on a crash status, gets an `exit_status::STOPPED` line (#3258).
+/// One whose tree writes nothing for `limit` is killed by the watchdog (#3303): code -1, `true` (stalled),
+/// and no later executable of the step runs.
+pub fn run(d: &Direct, root: &Path, mut log: File, limit: Duration) -> Result<(i32, bool), String> {
     let io = |e: std::io::Error| format!("gate log: {e}");
     let mut code = 0;
     for t in &d.exes {
         writeln!(log, "     Running {} ({})", t.label, shown(&t.exe, root)).map_err(io)?;
-        let status = Command::new(&t.exe)
+        let child = Command::new(&t.exe)
             .args(&d.args)
             .envs(d.env.iter().map(|(k, v)| (k, v)))
             .current_dir(&d.cwd)
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(io)?)
             .stderr(log.try_clone().map_err(io)?)
-            .status();
-        let one = match status {
-            Ok(st) => st.code().unwrap_or(-1),
+            .spawn();
+        let one = match child.and_then(|mut c| watchdog::wait(&mut c, &log, &|| 0, limit)) {
+            Ok(End::Stalled) => return Ok((-1, true)),
+            Ok(End::Exited(st)) => match crate::exit_status::read(st) {
+                (c, Some(how)) => {
+                    writeln!(log, "{} {how}", crate::exit_status::STOPPED).map_err(io)?;
+                    c
+                }
+                (c, None) => c,
+            },
             Err(e) => {
                 writeln!(log, "error: could not start the test executable {}: {e}", t.exe.display()).map_err(io)?;
                 -1
@@ -156,23 +169,52 @@ pub fn run(d: &Direct, root: &Path, mut log: File) -> Result<i32, String> {
             code = one;
         }
     }
-    Ok(code)
+    Ok((code, false))
 }
 
-/// Runs `cargo <args>` in `dir` with its output in `log`. With `capture`, stdout (the JSON messages of
-/// a recording build) comes back as text and only stderr (the build's readable output) goes to the log.
-pub fn cargo(cargo: &str, env: Vec<(&'static str, String)>, args: &[String], dir: &Path, log: File, capture: bool) -> Result<(i32, Option<String>), String> {
+/// Runs `cargo <args>` in `dir` with its output in `log`, under the watchdog (`limit`, #3303). With
+/// `capture`, stdout (the JSON messages of a recording build) comes back as text and only stderr (the
+/// build's readable output) goes to the log; the JSON bytes count as output too. The `bool` is true when
+/// the watchdog killed the step.
+pub fn cargo(cargo: &str, env: Vec<(&'static str, String)>, args: &[String], dir: &Path, log: File, capture: bool, limit: Duration) -> Result<(i32, Option<String>, bool), String> {
     let fail = |e: std::io::Error| format!("cargo {}: {e}", args.join(" "));
     let mut cmd = Command::new(cargo);
     crate::unit_env::apply(&mut cmd);
     cmd.envs(env).args(args).current_dir(dir).stdin(Stdio::null());
-    if capture {
-        let out = cmd.stdout(Stdio::piped()).stderr(log).output().map_err(fail)?;
-        return Ok((out.status.code().unwrap_or(-1), Some(String::from_utf8_lossy(&out.stdout).into_owned())));
-    }
     let err = log.try_clone().map_err(fail)?;
-    let status = cmd.stdout(log).stderr(err).status().map_err(fail)?;
-    Ok((status.code().unwrap_or(-1), None))
+    if capture {
+        let mut child = cmd.stdout(Stdio::piped()).stderr(err).spawn().map_err(fail)?;
+        let pipe = child.stdout.take();
+        let bytes = AtomicU64::new(0);
+        let (end, text) = std::thread::scope(|sc| {
+            let reader = sc.spawn(|| {
+                let mut all = Vec::new();
+                let mut buf = [0u8; 8192];
+                if let Some(mut p) = pipe {
+                    while let Ok(n @ 1..) = p.read(&mut buf) {
+                        all.extend_from_slice(&buf[..n]);
+                        bytes.fetch_add(n as u64, Ordering::Relaxed);
+                    }
+                }
+                all
+            });
+            let end = watchdog::wait(&mut child, &log, &|| bytes.load(Ordering::Relaxed), limit);
+            (end, reader.join().unwrap_or_default())
+        });
+        let (code, stalled) = code_of(end.map_err(fail)?);
+        return Ok((code, Some(String::from_utf8_lossy(&text).into_owned()), stalled));
+    }
+    let mut child = cmd.stdout(log.try_clone().map_err(fail)?).stderr(err).spawn().map_err(fail)?;
+    let (code, stalled) = code_of(watchdog::wait(&mut child, &log, &|| 0, limit).map_err(fail)?);
+    Ok((code, None, stalled))
+}
+
+/// The step code of a watched cargo process (its exit code, -1 for a signal or a stall) and whether it stalled.
+fn code_of(end: End) -> (i32, bool) {
+    match end {
+        End::Exited(st) => (st.code().unwrap_or(-1), false),
+        End::Stalled => (-1, true),
+    }
 }
 
 /// The package of a green recording build, from its JSON `messages` and one `cargo metadata --no-deps`

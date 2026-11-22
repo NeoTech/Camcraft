@@ -12,7 +12,7 @@ use camcraft_sim::cl::{Move, MoveKind};
 use camcraft_sim::geometry::{cube, Point3};
 use camcraft_sim::stock_sim::preview::{pack_cut, pack_field, LatticeMeta};
 use camcraft_sim::stock_sim::{
-    from_ordered_bits, ordered_bits, twin_cut, twin_work, SdfField, SdfTool, StockError,
+    from_ordered_bits, ordered_bits, run_twin, twin_cut, twin_items, twin_work, SdfField, SdfTool, StockError,
 };
 
 fn p(x: f64, y: f64, z: f64) -> Point3 {
@@ -176,6 +176,76 @@ fn the_work_list_covers_every_claimed_cell_inside_its_bricks() {
         ];
         let covered = work.items.iter().any(|w| (0..3).all(|a| w.lo[a] <= key[a] && key[a] <= w.hi[a]));
         assert!(covered, "claimed cell {key:?} is in no work item");
+    }
+}
+
+/// The text of the GPU kernel's parity fixture (#2627): the kernel
+/// items of the twin, the twin's layer and the f64 layer, as f32 bit
+/// patterns, sparse (only texels off the `-4 cap` floor).
+fn gpu_fixture(tool: SdfTool, name: &str) -> String {
+    // the level feed, the ramp and the plunge: the three flat paths
+    let moves = program()[..3].to_vec();
+    let (want, meta) = reference(&tool, &moves);
+    let work = twin_work(&moves, &tool, &meta).expect("the work list");
+    let items = twin_items(&work, &meta).expect("the kernel items");
+    let twin = run_twin(&work, &meta).expect("the twin cuts");
+    let h = |v: f32| format!("{:08x}", v.to_bits());
+    // FNV-1a over the twin layer's bits, in slot order
+    let fnv = twin.iter().flat_map(|v| v.to_bits().to_le_bytes()).fold(0xcbf2_9ce4_8422_2325u64, |acc, b| {
+        (acc ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    let mut s = format!(
+        "# {name}: the f32 cut twin (#2626) on the block and the first three moves\n\
+         # of crates/sim/tests/stock_cut_twin.rs, for the GPU kernel parity of #2627.\n\
+         # Written by the_gpu_kernel_fixtures_match_the_twin; CAMCRAFT_BLESS=1 writes it again.\n\
+         # f32 values are hex bit patterns. grid: dims cell cap. item: a b r flank margin\n\
+         # ball base lo hi. twin: FNV-1a 64 of the twin layer's bits (slot order, LE).\n\
+         # t: slot step from the last t line, f64 reference (texels off the floor).\n"
+    );
+    let [dx, dy, dz] = meta.dims;
+    s += &format!("grid {dx} {dy} {dz} {} {}\n", h(meta.cell as f32), h(meta.cap as f32));
+    for it in &items {
+        let t = &it.tile;
+        let v3 = |p: [f32; 3]| format!("{} {} {}", h(p[0]), h(p[1]), h(p[2]));
+        let i3 = |p: [i64; 3]| format!("{} {} {}", p[0], p[1], p[2]);
+        s += &format!(
+            "item {} {} {} {} {} {} {} {} {}\n",
+            v3(t.a),
+            v3(t.b),
+            h(t.r),
+            h(t.flank),
+            h(t.margin),
+            u8::from(t.ball),
+            i3(it.base.map(i64::from)),
+            i3(it.lo.map(i64::from)),
+            i3(it.hi.map(i64::from)),
+        );
+    }
+    s += &format!("twin {fnv:016x}\n");
+    let floor = (-4.0 * meta.cap) as f32;
+    let mut last = 0;
+    for (n, w) in want.iter().enumerate() {
+        if w.to_bits() != floor.to_bits() {
+            s += &format!("t {} {}\n", n - last, h(*w));
+            last = n;
+        }
+    }
+    s
+}
+
+/// The fixtures that `crates/gpu/tests/cut_parity.rs` reads are the
+/// twin's current output (the `facet_grid_2619` pattern of #2620).
+#[test]
+fn the_gpu_kernel_fixtures_match_the_twin() {
+    for (tool, name) in [(BALL, "cut_twin_ball_2627"), (FLAT, "cut_twin_flat_2627")] {
+        let path = format!("{}/../gpu/tests/fixtures/{name}.txt", env!("CARGO_MANIFEST_DIR"));
+        let text = gpu_fixture(tool, name);
+        if std::env::var("CAMCRAFT_BLESS").is_ok_and(|v| v == "1") {
+            std::fs::write(&path, &text).expect("write the fixture");
+            continue;
+        }
+        let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
+        assert!(have == text, "{path} is stale or missing; CAMCRAFT_BLESS=1 writes it again");
     }
 }
 

@@ -46,7 +46,7 @@ fn params(strategy: PocketStrategy) -> PocketParams {
 }
 
 fn rest(previous_tool_diameter: f64) -> RestParams {
-    RestParams { previous_tool_diameter, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 }
+    RestParams { source: Default::default(), previous_tool_diameter, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 }
 }
 
 fn visits_at_floor(path: &Toolpath, target: Point2) -> bool {

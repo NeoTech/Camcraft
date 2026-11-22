@@ -90,7 +90,7 @@ fn part_problem(world: &World, name: &str, op: &Operation, path: &Toolpath, know
     } else {
         Law::Keep
     };
-    let budget = job.hs.top.zip(job.hs.bottom).map_or(0.0, |(t, b)| mark_law::budget(t, b, job.tool.diameter * 0.5));
+    let budget = job.hs.top.zip(job.hs.bottom).map_or(0.0, |(t, b)| mark_law::budget(t, b, mark_law::cutter_depth_limit(&job.params, &job.tool)));
     // The thread grant generation gave (#1071 x #1205): only over round walls.
     let thread_bores = if law == Law::Hole { super::thread_op::bores(&job.tool, &job.params, thread_round(&job)) } else { Vec::new() };
     // The laws run in the frame generation judged in: a 3+2 op's local one.

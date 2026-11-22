@@ -178,6 +178,7 @@ pub(crate) fn op_applies(kind: crate::machine::Kind, params: &OpParams) -> bool 
         | OpParams::Pocket { .. }
         | OpParams::Adaptive2D { .. }
         | OpParams::Offset2D { .. }
+        | OpParams::VCarve { .. }
         | OpParams::Engrave { .. }
         | OpParams::Chamfer2D { .. }
         | OpParams::Circular { .. }

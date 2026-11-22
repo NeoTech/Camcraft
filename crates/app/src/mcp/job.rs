@@ -73,6 +73,8 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
                 // #3070: the guided sheet job (allowance always shown).
                 "sheet_job": s.as_deref().and_then(|n| crate::sheet_job::of(w, n)).as_ref().map(super::sheet_job_tools::job_view),
+                // #2410: the router options the setup's machine offers (the UI reads the same list).
+                "router_options": crate::router_offer::router_options(w, d).iter().map(|o| o.word()).collect::<Vec<_>>(),
                 // #1862: what stands for the setup's model - a part, or the
                 // virtual reference of its placed DXF profiles (no solid).
                 "model_reference": super::sketch_tools::model_reference(env, d),
@@ -241,6 +243,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 "tool_kinds": k.tool_kinds.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>(),
                 "mounts_tool": k.mounts_tool(),
                 "fields": fields,
+                "start_exit": start_exit(k),
             });
             if !k.mounts_tool() {
                 kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind");
@@ -254,6 +257,19 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
         "kinds": kinds,
         "note": "Fields absent from the defaults are optional and off; set them in a params patch to turn them on.",
     }))
+}
+
+/// #3324: does the kind take a start / exit pick, and where; or why not.
+fn start_exit(k: &KindInfo) -> Value {
+    use crate::path_picks::PickRole;
+    let cap = k.pick();
+    let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
+    match cap {
+        operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
+        operation::PickCapability::Threading => out["field"] = json!("start"),
+        _ => out["field"] = json!("links.approach.start_point / exit_point"),
+    }
+    out
 }
 
 pub(super) fn list_tool_catalog(_env: &mut Env, _a: &Map<String, Value>) -> Result<Value, String> {
@@ -286,6 +302,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::SinkerFinishOrder { at, .. } => ("sinker_finish_order", *at),
         Warning::DrillUndersize { at, .. } => ("drill_undersize", *at),
         Warning::UndercutLift { at } => ("undercut_lift", *at),
+        Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
     };
     json!({
         "op": op,

@@ -72,6 +72,8 @@ mod heights_sel;
 pub use heights_sel::*;
 mod kinds;
 pub use kinds::*;
+mod pick_kinds;
+pub use pick_kinds::*;
 mod seed;
 pub use seed::seed_params;
 pub mod tool_law;
@@ -89,6 +91,8 @@ pub(crate) use stamp_stock::write_setup_stock;
 mod material;
 // #2496: a drill makes its own size; a wider hole is named.
 mod drill_size;
+// #3448: a mill names the radial holes it cannot reach.
+mod cross_reach;
 // #2598: a Drill or Thread op's feed against its tool's stated feed.
 pub mod feed_rating;
 pub use material::*;
@@ -97,6 +101,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 // #1504: the plain Slot's room read off two picked edges or a face.
 mod slot_pick;
+// #1868: the same room read off DXF sketch chains.
+mod slot_sketch;
 pub use slot_pick::{slot_bound_of, slot_fit_of, slot_from_picks};
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
@@ -116,6 +122,8 @@ mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
+mod agie_profile;
+pub(crate) use agie_profile::agie_job;
 mod wire_ruled;
 pub(crate) mod wire_sketch;
 // #534: the wire laws' inputs, read live at the post.
@@ -132,6 +140,8 @@ pub mod sinker_wear_op;
 pub mod sinker_side_op;
 // #1444: the Slot Undercut's seed and generation glue.
 pub mod slot_undercut_op;
+/// #1443: the V-Carve operation's seed and tool doors.
+pub mod vcarve_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;
@@ -201,6 +211,7 @@ mod tilt_heights;
 pub use tilt_heights::{fold_height, resolve_params_folded};
 mod wcs_yaw;
 pub(crate) mod corner_relief;
+mod pass_start_stock;
 mod corner_relief_sim;
 mod job;
 pub use job::*;

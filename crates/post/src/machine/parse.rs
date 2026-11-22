@@ -198,6 +198,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
     // The declared kind (M3.3 C) and its per-kind door rules.
     let declared = super::kind::declared_kind(&v)?;
     m.kind = declared.as_ref().map(|(_, w)| w.clone());
+    m.operator_side = super::operator_side::parse(&v)?; // #2632
 
     // #828: the spindle mount and the default holder, refused by name.
     let (mount, holder) = super::tooling::parse_tooling(&v, holders).map_err(|e| format!("machine file: {e}"))?;

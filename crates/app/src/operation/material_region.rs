@@ -110,6 +110,8 @@ fn region_turn_core(
         return Some((r, turn, None));
     }
     if let SrcRef::Selection(items) = &op.src
+        // #1868: sketch picks of a slot kind bound a slot, not a region.
+        && !super::slot_sketch::is_sketch_slot(world, &op.src, &op.params)
         && !matches!(
             op.params,
             OpParams::Slot { .. }

@@ -35,3 +35,6 @@ examples/**/*.nc text eol=lf
 
 # Solidcraft designs are ZIP containers: never touch their bytes.
 *.sc binary
+
+# Agie controller files have byte-exact CRLF record terminators.
+crates/app/tests/golden/nc/agie-native/* -text whitespace=trailing-space,space-before-tab,cr-at-eol

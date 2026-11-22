@@ -13,6 +13,15 @@ pub enum Mode {
     /// Trace: the cutter center runs on the boundary itself; laws that
     /// assume tangency do not apply.
     Engrave,
+    /// V-carve (#1443): a cone's tip rides the medial axis of the
+    /// region, and each branch of the axis is ridden two times, one
+    /// time from each wall. Engrave's stand-downs apply (the cut is a
+    /// mark inside the region, proved by the generator), and the
+    /// crossing law (a) stands down too: the second ride of a branch
+    /// lies on the first within the chord tolerance, so their chords
+    /// cross at a shared depth by design. That is the pattern, not a
+    /// path defect.
+    Carve,
     /// The cone rides (M2.5 E B): a chamfer mill whose GENERATRIX lies
     /// on the wall - the axis runs exactly on the edge's own XY, and
     /// on a convex crease the virtual tip stands deliberately INSIDE
@@ -301,7 +310,8 @@ pub enum Warning {
     /// along that axis; the move to it from the tool-change height (the Z
     /// travel top) can end under the table top. A HIGHER plane along the
     /// axis stands LOWER in the world, so the repair is a plane at
-    /// `limit_mm` or under it - never a raise.
+    /// `limit_mm` or under it - never a raise. The operation layer gives
+    /// the two heights in the frame the user sets them in (#3148).
     FirstTraverseUnderTable { at: usize, height_mm: f64, limit_mm: f64 },
     /// Move `move` carries a modelled lathe holder body (#369) through
     /// material standing about the spindle: `part` as ShankHit reads
@@ -385,6 +395,12 @@ pub enum Warning {
     /// head into the roof of its own undercut, a dive drives it into
     /// uncut stock it cannot plunge. Blocking like `Gouge`.
     UndercutLift { at: usize },
+    /// An Adaptive op whose planner gave `areas` areas (a pocket, a 3-D
+    /// level) to the Offset rings (#3035), from the first cut at `at`.
+    /// The notes name each one. Advisory: the rings are verified like any
+    /// path, so the post is not held - but the strategy the user asked for
+    /// did not cut those areas, and the op says so.
+    StrategyFallback { at: usize, areas: usize },
 }
 
 impl Warning {
@@ -395,7 +411,8 @@ impl Warning {
         !matches!(self, Warning::Scallop { .. }
                 | Warning::ProbeSearch { .. }
                 | Warning::SinkerFinishOrder { .. }
-                | Warning::DrillUndersize { .. })
+                | Warning::DrillUndersize { .. }
+                | Warning::StrategyFallback { .. })
     }
 
     /// The envelope report's unjudged hidden half, as the warning that
@@ -467,11 +484,13 @@ impl core::fmt::Display for Warning {
                 if *fixture { "fixture" } else { "stock" },
                 top_mm - height_mm
             ),
+            // #3148: the axis is always tilted here, so the heights are
+            // the user's values along it, never a Z value.
             Warning::FirstTraverseUnderTable { at, height_mm, limit_mm } => write!(
                 f,
                 "the first rapid (move {at}) runs from the tool-change height along a tool axis that points down toward the \
-                 machine table; to the clearance plane at Z{height_mm:.3} it can go under the table top - lower the clearance \
-                 plane to Z{limit_mm:.3} or under it"
+                 machine table; to the clearance plane at {height_mm:.3} mm it can go under the table top - lower the \
+                 clearance plane to {limit_mm:.3} mm or under it (both measured along the tilted tool axis)"
             ),
             Warning::FixtureHit { at, fixture_part } => write!(
                 f,
@@ -527,6 +546,11 @@ impl core::fmt::Display for Warning {
             Warning::DrillUndersize { at, hole_mm, drill_mm } => write!(
                 f,
                 "undersize hole at move {at}: the hole is {hole_mm:.3} mm, and the {drill_mm:.3} mm drill makes it {drill_mm:.3} mm - use a {hole_mm:.3} mm drill, or follow with a Bore or a reamer (the post is not held: a pilot drill is a valid plan)"
+            ),
+            Warning::StrategyFallback { at, areas } => write!(
+                f,
+                "Adaptive fell back to Offset rings on {areas} area{} from move {at}: the notes name each one and why (the post is not held: the rings are verified)",
+                if *areas == 1 { "" } else { "s" }
             ),
         }
     }

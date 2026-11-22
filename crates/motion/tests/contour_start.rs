@@ -115,12 +115,14 @@ fn a_non_finite_pick_is_refused_before_any_move() {
 }
 
 #[test]
-fn control_compensation_with_a_pick_is_refused_by_name() {
-    let pick = Some(Point2::new(44.0, 20.0));
+fn control_compensation_with_a_corner_pick_is_refused_by_name() {
+    // #1473: a mid-run pick is taken (contour_start_comp.rs); a corner
+    // pick cannot hold the comp seam law and is refused, not moved.
+    let pick = Some(Point2::new(44.0, 44.0));
     let mut p = params(pick);
     p.links.approach.compensation = Compensation::Control;
     let comp = refusal(&p);
-    assert!(comp.contains("compensation"), "{comp}");
+    assert!(comp.contains("start point") && comp.contains("control compensation"), "{comp}");
 }
 
 /// Does a feed move at level `z` pass over the point `w`?

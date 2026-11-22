@@ -123,9 +123,10 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
         return Err(invalid("the open run lays down no cut".into()));
     }
     let wire: Vec<Point2> = std::iter::once(t0).chain(ride.iter().copied()).chain(std::iter::once(t1)).collect();
-    laws::cover_run(&run, false, &wire, false, p)?;
+    let corner_rest = laws::cover_run(&run, false, &wire, false, p)?;
     laws::kerf(&path, &run, false, k, z)?;
     path.notes.extend(notes(p, t0, t1));
+    path.notes.extend(corner_rest.map(|r| laws::sharp_note(r, k)));
     Ok(path)
 }
 

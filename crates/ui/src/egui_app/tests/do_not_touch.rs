@@ -61,8 +61,10 @@ fn expand_boundary(h: &mut Harness<'static, ShellUi>) {
 #[test]
 fn geometry_boundaries_shows_do_not_touch_controls_rows_and_viewport_marks() {
     let _g = snapshot_guard();
+    // #3338: taller by the Outside boundary offset row, so the last ×
+    // stays on the screen.
     let mut h = Harness::builder()
-        .with_size(Vec2::new(1400.0, 1100.0))
+        .with_size(Vec2::new(1400.0, 1200.0))
         .build_ui_state(frame, ShellUi::seeded());
     h.run_steps(2);
     let (face_top, face_other, edge) = {
@@ -166,8 +168,26 @@ fn unsupported_op_shows_do_not_touch_note_without_pick_button() {
     }
     h.run_steps(3);
     expand_boundary(&mut h);
-    assert!(h.query_by_label_contains("2D Offset and 3D Pocket").is_some());
+    assert!(h.query_by_label_contains("2D Offset, 3D Pocket and Face").is_some());
     assert!(h.query_by_label("Pick protected").is_none());
+}
+
+#[test]
+fn face_op_shows_pick_protected_button() {
+    // #3343: a Face operation takes protected items like 2D Offset does.
+    let _g = snapshot_guard();
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1400.0, 1100.0))
+        .build_ui_state(frame, ShellUi::seeded());
+    h.run_steps(2);
+    {
+        let st = &mut h.state_mut().state;
+        seed_part_and_offset(st, OpType::Face);
+    }
+    h.run_steps(3);
+    expand_boundary(&mut h);
+    assert!(h.query_by_label("Pick protected").is_some());
+    assert!(h.query_by_label_contains("only so far").is_none());
 }
 
 #[test]

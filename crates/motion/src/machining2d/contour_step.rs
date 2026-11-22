@@ -20,6 +20,7 @@ use crate::approach::CENTER_CUT_REFUSAL;
 
 use super::contour_bore::{BoreStep, bore_entry};
 use super::contour_entry::Engage;
+use super::contour_params::Lead;
 use super::descent::feed_down;
 
 /// What one level's engagement reads beyond the shared [`Engage`].
@@ -98,7 +99,7 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top);
+        graze(b, eng, e2, s.lead_top, s.arm);
         None
     } else if s.inside {
         // The bore side: the eroded region states the bounded air
@@ -126,7 +127,7 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top);
+        graze(b, eng, e2, s.lead_top, s.arm);
         None
     }
 }
@@ -137,14 +138,30 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
 /// A tool that is not centre-cutting may not plunge here (the stock
 /// beside the wall is not proved cleared): the operation is refused by
 /// name.
-fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64) {
+fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D) {
     let p = eng.p;
     let a = &p.links.approach;
     if !a.center_cutting {
         b.note_once(&format!(
-            "{CENTER_CUT_REFUSAL} - the dive at the lead-in ({:.3}, {:.3}) is into material no helix or ramp can be proved beside; pick the Arc entry or a centre-cutting tool",
-            e2.x, e2.y
+            "{CENTER_CUT_REFUSAL} - the dive at the lead-in ({:.3}, {:.3}) is into material no helix or ramp can be proved beside; {}",
+            e2.x,
+            e2.y,
+            graze_hint(arm, p.lead == Lead::None)
         ));
     }
     feed_down(b, e2, z, p.entry_top(), eng.m, a.plunge(p.plunge_feed));
+}
+
+/// What the user can change to lift the refusal. The Arc entry is already
+/// chosen when it reaches this dive, so it never says "pick the Arc entry"
+/// (#3247): with no lead-in the arc stands down, so the lead-in is the
+/// thing to set.
+fn graze_hint(arm: Entry3D, no_lead_in: bool) -> &'static str {
+    match (arm, no_lead_in) {
+        (Entry3D::Arc, true) => {
+            "the Arc entry does not run when the lead-in is None; set a Linear or Arc lead-in, or use a centre-cutting tool"
+        }
+        (Entry3D::Arc, false) => "the Arc entry found no room here (see the entry note); use a centre-cutting tool",
+        _ => "pick the Arc entry or a centre-cutting tool",
+    }
 }

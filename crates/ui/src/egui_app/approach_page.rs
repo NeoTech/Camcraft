@@ -220,7 +220,7 @@ pub(super) fn contour_leads_editor(ui: &mut Ui, u: Unit, a: &mut Approach) {
 pub(crate) fn entry_status_lines(notes: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     for n in notes {
-        if n.starts_with(camcraft_app::operation::TOP_STOCK_WARNING) {
+        if n.starts_with(camcraft_app::operation::TOP_STOCK_WARNING) || n.starts_with(camcraft_app::machining2d::PASS_START_NOTE) {
             out.push(format!("warning: {n}"));
             continue;
         }

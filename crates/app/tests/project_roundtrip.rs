@@ -967,7 +967,7 @@ fn v5_roundtrips_retract_and_auto() {
             "Pocket1",
             "EM-0400-2FL",
             SrcRef::Stock,
-            OpParams::Pocket { rest: None, blend_radius: None, tilt: None,
+            OpParams::Pocket { pass_start: Default::default(), rest: None, blend_radius: None, tilt: None,
                 links: camcraft_app::links::Links::PLANAR,
                 stepover: 1.0,
                 stock_to_leave: 0.0,
@@ -5497,4 +5497,124 @@ fn finish3d_file_without_gap_link_reads_jump() {
     let world = new_world();
     project::open(&world, &finish3d_text("")).expect("a pre-gap-link finish3d file must read");
     assert_eq!(gap_link_of(&world), camcraft_app::finishing3d::GapLink::Jump, "absent means jump");
+}
+
+// ---- Atomic project save: a failed save keeps the old file whole ----
+
+/// An empty folder of its own for one atomic-save test.
+fn atomic_dir(tag: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("camcraft_proj_atomic_{tag}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).expect("make the test folder");
+    d
+}
+
+#[test]
+fn a_project_save_replaces_the_file_and_leaves_no_temp_file() {
+    let d = atomic_dir("replace");
+    let path = d.join("job.camproj");
+    project::save(&populated_world(), &path).expect("first save");
+    let second = new_world();
+    project::save(&second, &path).expect("a save over the first file");
+    let want = project::save_text(&second).expect("text");
+    assert_eq!(std::fs::read_to_string(&path).expect("read"), want, "the second save replaced the file");
+    let names: Vec<String> = std::fs::read_dir(&d)
+        .expect("list")
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["job.camproj"], "no temp file left behind");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_failed_project_save_keeps_the_old_file() {
+    let d = atomic_dir("failed");
+    let path = d.join("job.camproj");
+    project::save(&populated_world(), &path).expect("first save");
+    let before = std::fs::read(&path).expect("read");
+    // A folder in the temp file's place: the write fails before the rename.
+    let tmp = machine::store::temp_path_for(&path).expect("temp path");
+    std::fs::create_dir_all(&tmp).expect("block the temp file");
+    let err = project::save(&new_world(), &path).expect_err("the save must fail");
+    assert!(matches!(err, ProjectError::Io(_)), "{err}");
+    assert_eq!(std::fs::read(&path).expect("read"), before, "the old project is whole");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_project_save_into_a_missing_folder_is_refused_and_makes_no_folder() {
+    let d = atomic_dir("missing");
+    let missing = d.join("missing");
+    let err = project::save(&populated_world(), &missing.join("job.camproj")).expect_err("refused");
+    assert!(matches!(err, ProjectError::Io(_)), "{err}");
+    assert!(err.to_string().contains("does not exist"), "the refusal names the folder: {err}");
+    assert!(!missing.exists(), "the save makes no folder");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_read_only_project_file_is_refused_and_kept() {
+    let d = atomic_dir("readonly");
+    let path = d.join("job.camproj");
+    project::save(&populated_world(), &path).expect("first save");
+    let before = std::fs::read(&path).expect("read");
+    let original = std::fs::metadata(&path).expect("metadata").permissions();
+    let mut read_only = original.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(&path, read_only).expect("make the file read-only");
+    let result = project::save(&new_world(), &path);
+    let after = std::fs::read(&path).expect("read");
+    std::fs::set_permissions(&path, original).expect("make the file writable again");
+    let err = result.expect_err("a read-only project file is refused");
+    assert!(matches!(err, ProjectError::Io(_)), "{err}");
+    assert!(err.to_string().contains("read-only"), "the refusal says read-only: {err}");
+    assert_eq!(after, before, "the read-only project is whole");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_project_save_over_a_unix_socket_is_refused_and_kept() {
+    use std::os::unix::fs::FileTypeExt;
+    let d = atomic_dir("socket");
+    let path = d.join("job.camproj");
+    // A node that cannot be opened for writing, with a write bit in its
+    // mode: `readonly()` is false, so only the write probe refuses it.
+    let _socket = std::os::unix::net::UnixListener::bind(&path).expect("bind the socket");
+    let before = std::fs::metadata(&path).expect("metadata").len();
+    let err = project::save(&populated_world(), &path).expect_err("a socket is not a writable project");
+    let after = std::fs::metadata(&path).expect("the socket stays");
+    let _ = std::fs::remove_dir_all(&d);
+    assert!(matches!(err, ProjectError::Io(_)), "{err}");
+    assert!(after.file_type().is_socket(), "the socket is kept, not replaced by the project");
+    assert_eq!(after.len(), before, "the socket node is unchanged");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_project_save_into_a_folder_without_write_access_is_refused_and_kept() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = atomic_dir("nowritefolder");
+    let path = d.join("job.camproj");
+    project::save(&populated_world(), &path).expect("first save");
+    let before = std::fs::read(&path).expect("read");
+    let original = std::fs::metadata(&d).expect("metadata").permissions();
+    let mut locked = original.clone();
+    locked.set_mode(0o555);
+    std::fs::set_permissions(&d, locked).expect("lock the folder");
+    // A process with CAP_DAC_OVERRIDE (root) ignores the folder mode.
+    let bypass = std::fs::write(d.join("probe"), b"x").is_ok();
+    let result = if bypass { Ok(()) } else { project::save(&new_world(), &path) };
+    let _ = std::fs::remove_file(d.join("probe"));
+    std::fs::set_permissions(&d, original).expect("unlock the folder");
+    let after = std::fs::read(&path).expect("read");
+    if bypass {
+        let _ = std::fs::remove_dir_all(&d);
+        return;
+    }
+    let err = result.expect_err("a folder without write access is refused");
+    assert!(matches!(err, ProjectError::Io(_)), "{err}");
+    assert_eq!(after, before, "the old project is whole");
+    let _ = std::fs::remove_dir_all(&d);
 }

@@ -97,6 +97,13 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
             bottom_z,
             ..
         }
+        | OpParams::VCarve {
+            clearance_z,
+            retract_z,
+            top_z,
+            bottom_z,
+            ..
+        }
         | OpParams::Circular {
             clearance_z,
             retract_z,

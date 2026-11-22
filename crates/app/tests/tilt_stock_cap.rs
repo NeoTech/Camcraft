@@ -109,7 +109,7 @@ fn side_pocket_part(a_deg: f64, depth: f64) -> Mesh {
 }
 
 fn pocket(a_deg: f64, depth: f64) -> OpParams {
-    OpParams::Pocket {
+    OpParams::Pocket { pass_start: Default::default(),
         rest: None,
         blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,

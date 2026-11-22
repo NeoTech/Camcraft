@@ -13,12 +13,14 @@
 
 mod controls;
 mod form;
+mod scroll_gutter;
 /// #2339: the saved panel arrangements - the dock's JSON, the start load.
 pub(crate) mod setups;
 // #2516: Tab, Shift+Tab and Enter over the pane's value fields.
 pub mod field_ring;
 pub(crate) use controls::*;
 pub(crate) use form::*;
+pub(crate) use scroll_gutter::keep_scroll_gutter;
 #[cfg(test)]
 mod banner_tests;
 #[cfg(test)]

@@ -34,6 +34,27 @@ CONTROL_ICONS = [
 ]
 
 
+CATALOG_START = "<!-- catalog:examples:start -->"
+CATALOG_END = "<!-- catalog:examples:end -->"
+
+
+def section_lead(body):
+    """Return a section body after its generated catalog block (#3271).
+
+    `cargo xtask catalog` writes the example-case block directly under each
+    operation heading, and `cargo xtask catalog --check` holds it there. The
+    section's own content starts after that block. Only one leading,
+    well-formed block is skipped: a block elsewhere or without its end
+    marker leaves the body as it is, so the icon check still fails.
+    """
+    body = body.lstrip()
+    if body.startswith(CATALOG_START + "\n"):
+        end = body.find("\n" + CATALOG_END + "\n")
+        if end != -1:
+            body = body[end + len(CATALOG_END) + 2:].lstrip()
+    return body
+
+
 def parse_icon_table():
     source = ICONS_RS.read_text()
     block = source.split("icon_table! {", 1)[1].split("\n}", 1)[0]
@@ -114,7 +135,7 @@ class GuideIcons(unittest.TestCase):
             for kind, heading in sections.items():
                 with self.subTest(kind=kind):
                     stem = op_map[kind]
-                    body = contents[heading].lstrip()
+                    body = section_lead(contents[heading])
                     self.assertTrue(
                         body.startswith(f'{{{{ <icon name="{stem}" /> }}}}'),
                         f"{page.name} ## {heading} must start with {{{{ <icon name=\"{stem}\" /> }}}}",

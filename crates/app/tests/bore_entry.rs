@@ -46,6 +46,7 @@ fn world() -> World {
 
 fn bore(radius: f64) -> OpParams {
     OpParams::Bore {
+        pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
         strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,

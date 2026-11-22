@@ -99,6 +99,7 @@ fn params_sanity_gates() {
         optimal_load: crate::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     };
     assert!(!bad.is_sane());
     // A depth range that runs upward is nonsense, refused at command
@@ -222,8 +223,9 @@ fn stamp_follows_every_input() {
     // contour, appended as the wire EDM's own section, to 42 - #541's
     // sinker burn, appended as the sinker EDM's own section, to 43 - #545's
     // sinker side burn, appended behind it, to 44 - #1444's slot
-    // undercut, appended behind it, to 45.)
-    assert_eq!(KindInfo::ALL.len(), 45);
+    // undercut, appended behind it, to 45 - #1443's V-carve,
+    // appended behind that, to 46.)
+    assert_eq!(KindInfo::ALL.len(), 46);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");
@@ -518,6 +520,7 @@ fn the_arc_entry_splits_the_stamp_and_leaves_the_others_alone() {
         optimal_load: crate::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();

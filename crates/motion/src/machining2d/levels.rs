@@ -162,6 +162,10 @@ pub(super) struct Motion {
     /// user's entry (helix, ramp, arc), not a silent plunge - the pocket
     /// family opts in (`with_solid_restart`).
     pub(super) solid_restart: bool,
+    /// #3316: a keep-down pass link must also run through material this
+    /// path already cut (the start-side plan's open pieces end on walls,
+    /// beside stock no cut has reached yet).
+    pub(super) cleared_links: bool,
 }
 
 impl Motion {
@@ -189,7 +193,14 @@ impl Motion {
             holes: Vec::new(),
             ring_zig: false,
             solid_restart: false,
+            cleared_links: false,
         }
+    }
+
+    /// #3316: prove keep-down pass links through cut material too.
+    pub(super) fn with_cleared_links(mut self, on: bool) -> Self {
+        self.cleared_links = on;
+        self
     }
 
     /// #2265: enter a solid pass start by the entry arm (the pocket).

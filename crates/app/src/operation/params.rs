@@ -201,6 +201,7 @@ impl OpParams {
                 optimal_load,
                 blend_turns,
                 tilt,
+                pass_start,
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -253,8 +254,14 @@ impl OpParams {
                     for v in [r.previous_tool_diameter, r.previous_corner_radius, r.previous_stock_to_leave, r.allowance] {
                         w(h, v);
                     }
+                    // #2033: written only in previous-operations mode, so
+                    // every entered-tool rest pocket keeps its digest.
+                    if r.source == crate::machining2d::RestSource::PreviousOperations {
+                        h.write_u8(0xD8);
+                    }
                 }
                 write_corner_relief(corner_relief, h);
+                digest::write_pass_start(*pass_start, h); // #3354: only off Auto
             }
             // The roughing twins (M2.4 A): the pocket's digest minus
             // the strategy byte - the kind tag at the head already
@@ -281,6 +288,7 @@ impl OpParams {
                 method,
                 troch,
                 tilt,
+                pass_start,
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -332,11 +340,13 @@ impl OpParams {
                     }
                 }
                 write_corner_relief(corner_relief, h);
+                digest::write_pass_start(*pass_start, h);
             }
             OpParams::Offset2D { .. }
             | OpParams::Slot { .. }
             | OpParams::TrochoidalSlot { .. }
             | OpParams::Trace { .. }
+            | OpParams::VCarve { .. }
             | OpParams::Engrave { .. }
             | OpParams::Chamfer2D { .. }
             | OpParams::Circular { .. } => self.stamp_mill2d(world, setup, src, h),

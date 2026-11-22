@@ -348,6 +348,10 @@ fn q(v: f64) -> String {
 /// joined (`X1000`) and legacy positional forms.
 pub fn serialize(records: &[Record]) -> String {
     let mut s = String::from("; HSMW-CNC v1\n");
+    // The true position before each record (#3442): an arc's start, for
+    // the lattice law of `cnc_arc_lattice`. None where a record leaves it
+    // unknown here; an arc after it is written as it is.
+    let mut pos: Option<[f64; 3]> = None;
     for r in records {
         match r {
             Record::Param { name, value } => {
@@ -364,6 +368,8 @@ pub fn serialize(records: &[Record]) -> String {
                 s.push_str(if *begin { "SECTION\n" } else { "ENDSECTION\n" });
             }
             Record::Move(m) => {
+                let short = super::cnc_arc_lattice::short_arc_on_lattice(pos, m);
+                pos = Some([m.x, m.y, m.z]);
                 let f = m
                     .feed
                     .map(|f| format!(" F {}", (f * 1000.0).round() as i64))
@@ -375,7 +381,9 @@ pub fn serialize(records: &[Record]) -> String {
                     .abc
                     .map(|[a, b, c]| format!(" A {} B {} C {}", q(a), q(b), q(c)))
                     .unwrap_or_default();
-                match m.center {
+                // #3442: a short arc whose ends round to one micrometre
+                // is written as the straight move it is on the lattice.
+                match m.center.filter(|_| !short) {
                     // The center words name the plane (M11.2 A): I J
                     // is XY - byte-identical to every pre-M11.2
                     // stream - I K is XZ, J K is YZ.
@@ -394,6 +402,7 @@ pub fn serialize(records: &[Record]) -> String {
                     None => s.push_str(&format!(
                         "{} X {} Y {} Z {}{f}{abc}\n",
                         match m.kind {
+                            _ if short => "Feed",
                             MoveKind::Rapid => "Rapid",
                             MoveKind::Feed => "Feed",
                             MoveKind::Plunge => "Plunge",
@@ -405,6 +414,7 @@ pub fn serialize(records: &[Record]) -> String {
                 }
             }
             Record::Cycle(c) => {
+                pos = Some([c.x, c.y, c.r_z]);
                 let f = c
                     .feed
                     .map(|f| format!(" F {}", (f * 1000.0).round() as i64))
@@ -454,10 +464,19 @@ pub fn serialize(records: &[Record]) -> String {
             }
             Record::Thread(Some(t)) => s.push_str(&t.line()),
             Record::Thread(None) => s.push_str("THREAD END\n"),
-            Record::Touch(t) => s.push_str(&super::probe_rec::write_touch(t)),
+            Record::Touch(t) => {
+                pos = None;
+                s.push_str(&super::probe_rec::write_touch(t))
+            }
             Record::Found(f) => s.push_str(&super::probe_rec::write_found(f)),
-            Record::Retreat(r) => s.push_str(&super::probe_rec::write_retreat(r)),
-            Record::Guard(g) => s.push_str(&super::probe_rec::write_guard(g)),
+            Record::Retreat(r) => {
+                pos = None;
+                s.push_str(&super::probe_rec::write_retreat(r))
+            }
+            Record::Guard(g) => {
+                pos = None;
+                s.push_str(&super::probe_rec::write_guard(g))
+            }
             Record::Plasma(p) => s.push_str(&p.line()),
             Record::Torch(t) => s.push_str(&t.line()),
         }

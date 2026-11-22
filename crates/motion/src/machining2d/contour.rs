@@ -344,7 +344,7 @@ pub(super) fn emit_band(
                     .with_ghost_moves(b.moves()));
                 }
                 // #871: a part-way refusal hands back the rings so far.
-                contour_comp::push_span(b, &SpanCtx { prog, p }, walk_at - 1, out_at)
+                contour_comp::push_span(b, &SpanCtx { prog, p, picked }, walk_at - 1, out_at)
                     .map_err(|e| e.with_ghost_moves(b.moves()))?;
             }
         }

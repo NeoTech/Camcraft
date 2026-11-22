@@ -212,7 +212,7 @@ fn refusal(iso: bool) -> Result<Fit, GenError> {
     Err(GenError::Invalid(if iso {
         "every axis fits this model equally - it curves the same the world around; domed ground is 5-Axis Contour or Parallel work".into()
     } else {
-        "the model's normals share no rotation axis - a turned workpiece is rotary work; finish a freeform with the 5-Axis kinds".into()
+        "the model's normals share no rotation axis - it is not a shape of revolution, and the rotary kinds need one today; 4-axis work on a part clamped on A that is not turned (helical lobes, a carving) is not supported yet (#2772); on a 5-axis machine, finish a freeform with the 5-Axis kinds".into()
     }))
 }
 

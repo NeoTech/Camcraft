@@ -441,7 +441,8 @@ fn parting_ladders_to_the_axis_in_one_center() {
     // ref_top 6, stepdown 1.5 - tips 4.5, 3.0, 1.5, 0.0, and the
     // through-axis rung is the last feed: the blade's tip stands ON
     // the axis, the kerf's whole column falls above it. One center,
-    // at the parting station.
+    // half a blade below the parting plane (#3452: the plane is the
+    // part's end face, the kerf stands on the chuck side of it).
     let f = Frame::about(&wall()).expect("upright");
     let t = part(
         &wall(),
@@ -462,7 +463,7 @@ fn parting_ladders_to_the_axis_in_one_center() {
     for m in &feeds {
         let (a, b) = (sr(&f, m.from), sr(&f, m.to));
         assert!((a.0 - b.0).abs() < 1e-9, "one center: {a:?} {b:?}");
-        assert!((a.0).abs() < 1e-6, "the parting station is z 0: {}", a.0);
+        assert!((a.0 - (f.station_of(0.0) - WIDTH * 0.5)).abs() < 1e-6, "the center stands half a blade below z 0: {}", a.0);
     }
     assert!((sr(&f, feeds[0].to).1 - 4.5).abs() < 1e-9, "the first rung steps the stepdown");
     assert!(sr(&f, feeds[3].to).1.abs() < 1e-9, "the last rung stands on the axis");
@@ -516,7 +517,9 @@ fn every_refusal_names_itself() {
         },
     )
     .expect_err("nothing stands at z 50");
-    assert!(format!("{err:?}").contains("off the end of the bar"), "{err:?}");
+    // #3452: the whole wall stands below z 50, on the chuck side - no
+    // part stands past the plane.
+    assert!(format!("{err:?}").contains("stands wholly on the chuck side"), "{err:?}");
 
     // The center sweep's own cap: a hair-wide blade in a long run.
     let err = groove_rough(

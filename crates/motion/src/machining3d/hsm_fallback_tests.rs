@@ -73,6 +73,17 @@ fn a_planar_level_the_planner_refuses_is_named_by_its_z() {
     assert!(notes.iter().any(|n| n.ends_with(&tag) && n.contains("channel")), "named with its reason: {notes:?}");
 }
 
+/// Issue #3035: the refused level counts as one fallback, so the op can
+/// raise its warning; a level the HSM plan keeps counts none.
+#[test]
+fn a_refused_level_counts_as_one_rings_fallback() {
+    let (notes, hsm, _) = plan(-2.0, None);
+    assert!(!hsm, "{notes:?}");
+    assert_eq!(crate::machining2d::rings_fallbacks(&notes), 1, "{notes:?}");
+    let kept = ["adaptive: the level is entered by a plunge in the air outside the stock".to_owned()];
+    assert_eq!(crate::machining2d::rings_fallbacks(&kept), 0);
+}
+
 /// A developed level the wrap's seam cuts goes through the same door.
 #[test]
 fn a_developed_level_the_seam_cuts_is_named_by_its_radius() {

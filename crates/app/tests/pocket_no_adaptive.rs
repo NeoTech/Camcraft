@@ -55,7 +55,7 @@ fn setup_world() -> (flecs_ecs::prelude::World, History) {
 }
 
 fn pocket_params(strategy: PocketStrategy) -> OpParams {
-    OpParams::Pocket {
+    OpParams::Pocket { pass_start: Default::default(),
         links: Links::PLANAR,
         stepover: 2.0,
         stock_to_leave: 0.0,

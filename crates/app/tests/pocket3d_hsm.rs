@@ -177,9 +177,12 @@ fn the_users_whole_model_bore_roughs_adaptive_on_each_level() {
     h.execute(&world, GenerateOperation::new(&world, "Op1").expect("generate"));
     let e = model::find_by_name(&world, "Op1").expect("op");
     let tp = model::toolpath_of(&world, &e).expect("cached path");
-    let warns: Vec<String> = tp.warnings.iter().map(|w| format!("{w:?}")).collect();
-    assert!(warns.is_empty(), "every level verifies clean: {warns:?}
-notes {:?}", tp.path.notes);
+    let areas = camcraft_app::machining2d::rings_fallbacks(&tp.path.notes);
+    assert_eq!(tp.warnings.len(), usize::from(areas > 0), "only the fallback is reported: {:?}", tp.warnings);
+    assert!(tp.warnings.iter().all(|w| {
+        matches!(w, camcraft_app::verify::Warning::StrategyFallback { areas: n, .. } if *n == areas)
+            && !w.blocks_post()
+    }), "unexpected warnings: {:?}\nnotes {:?}", tp.warnings, tp.path.notes);
     let fell: Vec<&String> = tp.path.notes.iter().filter(|n| n.contains("Offset rings cut")).collect();
     // known-fail-assert
     assert!(fell.is_empty(), "every level keeps the HSM plan: {fell:?}");

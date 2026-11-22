@@ -49,7 +49,7 @@ const ARC_READ_SHARE: f64 = 0.25;
 pub(super) fn judged(mode: Mode) -> bool {
     !matches!(
         mode,
-        Mode::Engrave | Mode::Envelope | Mode::Revolve | Mode::Radial | Mode::Cone | Mode::Rotary | Mode::Undercut
+        Mode::Engrave | Mode::Carve | Mode::Envelope | Mode::Revolve | Mode::Radial | Mode::Cone | Mode::Rotary | Mode::Undercut
     )
 }
 

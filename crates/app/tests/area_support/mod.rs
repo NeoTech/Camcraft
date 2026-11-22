@@ -43,7 +43,7 @@ pub const R: f64 = 5.0;
 pub const EPS: f64 = 1e-3;
 
 pub fn pocket(top: f64, bottom: f64) -> OpParams {
-    OpParams::Pocket { rest: None,
+    OpParams::Pocket { pass_start: Default::default(), rest: None,
         blend_radius: None,
         stepover: 4.0,
         stock_to_leave: 0.0,

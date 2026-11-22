@@ -105,6 +105,7 @@ fn op(pairing: WirePairingRule, sync: Vec<WireSyncPair>) -> WireContourOp {
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
         four_axis: Some(WireFourAxis {
             pairing,
             sync,

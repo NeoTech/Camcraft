@@ -116,6 +116,7 @@ fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -151,6 +152,7 @@ fn gouging_die() -> World {
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Die1", "EDM-W025", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -455,6 +457,7 @@ fn cutoff_doc(wrong: bool) -> World {
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
         four_axis: None,
+        sharp_corners: false,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);
     h.execute(&world, CreateOperation::new(&world, "Cutoff1", "EDM-W025", src, OpParams::WireContour(op)).expect("op"));

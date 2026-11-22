@@ -253,7 +253,7 @@ fn tilted_reference_pocket_preserves_part(src: SrcRef) {
         &world,
         camcraft_app::commands::ImportModel::from_mesh("part", part),
     );
-    let params = OpParams::Pocket {
+    let params = OpParams::Pocket { pass_start: Default::default(),
         rest: None,
         blend_radius: None,
         stepover: 4.0,

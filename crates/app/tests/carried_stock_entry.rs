@@ -117,6 +117,7 @@ fn adaptive_with(method: AdaptiveMethod, top: f64, troch: AdaptiveTrochParams) -
         method,
         troch,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 

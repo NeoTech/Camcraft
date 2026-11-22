@@ -14,17 +14,17 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use solidcore::kernel::CancelToken;
-use solidcore::mass::integrator::properties::brep_area;
 use solidcore::topology::Brep;
-use solidcore_convert::brep::to_kernel_body;
 use solidcore_step::p21::{self, Progress};
 use solidcore_step::topology;
 
-use crate::solidcore_impl::{SolidcoreKernel, VOLUME_ACCURACY, checked, failed};
-use crate::solidcore_import::{HEAL_GAP_LIMIT, vertex_gaps};
+use crate::solidcore_impl::SolidcoreKernel;
 use crate::solidcore_trims::KernelTrims;
 use crate::step_edge_gap::{EdgeGap, EdgeGapCap, raised_edge_gap};
-use crate::{Kernel, KernelError, Measure};
+use crate::{KernelError, Measure};
+
+mod record;
+pub(crate) use record::{RecordSource, build_record};
 
 pub use crate::solidcore_step_import::{StepImport, StepModel, StepSheet, import_step, import_step_model};
 
@@ -38,7 +38,7 @@ pub const SHEET: &str = "a surface model of open shells, not a closed solid";
 /// parsed entity in memory, so the seam refuses earlier, by name.
 pub const MAX_STEP_BYTES: usize = 64 << 20;
 
-/// One solid of a STEP file, in millimetres, healed and checked.
+/// One checked solid of a STEP file, in millimetres.
 #[derive(Debug)]
 pub struct StepSolid {
     /// The file's entity id of the solid item (`#id`).
@@ -55,10 +55,10 @@ pub struct StepSolid {
     /// trimmed cylinder face, so it can be too large. Do not size or place
     /// anything from it until that is fixed.
     pub measure: Measure,
-    /// Surface area (mm^2), the port's estimate at [`VOLUME_ACCURACY`].
+    /// Surface area (mm^2), the port's estimate at [`crate::solidcore_impl::VOLUME_ACCURACY`].
     pub area: f64,
     /// Largest vertex-to-edge-end distance left in the solid (mm), always
-    /// at or under [`HEAL_GAP_LIMIT`].
+    /// at or under [`crate::solidcore_import::HEAL_GAP_LIMIT`].
     pub vertex_gap: f64,
     /// What the reader repaired or noted on this solid.
     pub notes: Vec<String>,
@@ -268,7 +268,7 @@ fn read_guarded(
             out.sheets.push(StepSheet { item, name: s.name, record: s.brep, notes: s.notes });
             continue;
         }
-        match build_record(k, item, s.name, s.brep, s.notes) {
+        match build_record(k, RecordSource::Step(item), s.name, s.brep, s.notes) {
             Ok(solid) => out.solids.push(solid),
             Err(_) if stop.is_cancelled() => return Err(timed_out("building solids")),
             Err((stage, reason)) => out.refused.push(StepRefusal {
@@ -280,68 +280,4 @@ fn read_guarded(
     }
     out.refused.sort_by_key(|r| r.item);
     Ok(out)
-}
-
-/// One B-rep record (mm) from a file as a checked kernel solid: built,
-/// healed, integrity-checked, measured and its vertex gaps judged. Shared
-/// by the STEP and the Solidcraft (#1456) importers. `Err` is
-/// `(stage, reason)`.
-pub(crate) fn build_record(
-    k: &mut SolidcoreKernel,
-    item: u64,
-    name: String,
-    record: solidcore_record::brep::Brep,
-    notes: Vec<String>,
-) -> Result<StepSolid, (&'static str, String)> {
-    // Untrusted: the record comes from a file, so the kernel heals it as it
-    // builds it (the conversion's own rule for records not made by a
-    // modeller that keeps the kernel's rules).
-    let mut brep =
-        to_kernel_body(&mut k.k, &record, false).map_err(|e| ("build", e.to_string()))?;
-    // Finding at the pinned commit (bench, tests/step_agreement.rs): the
-    // build leaves the port's cached `Face::shell` behind its face-use
-    // links on every fixture, which the integrity check below refuses. The
-    // port's own operations rewrite those caches before they return; the
-    // conversion does not, so the seam does (it changes the cached fields
-    // only, never a result).
-    brep.refresh_cached_topology();
-    let mut brep = checked("read_step", brep).map_err(|e| ("check", e.to_string()))?;
-    let measure = k.measure(&mut brep).map_err(|e| ("measure", e.to_string()))?;
-    let area = brep_area(&k.k, &mut brep, VOLUME_ACCURACY)
-        .map_err(|e| ("measure", failed("read_step", &e).to_string()))?;
-    if !(area.is_finite() && area > 0.0) {
-        return Err(("measure", format!("not a positive finite area {area}")));
-    }
-    // The same law the native importer keeps (docs/decisions/27, point 3):
-    // a vertex off its edges by more than the limit is not a model a
-    // toolpath may trust, and an edge with no 3D curve cannot be judged.
-    let gaps = vertex_gaps(k, &brep).map_err(|e| ("check", e.to_string()))?;
-    if gaps.unjudged_edges > 0 {
-        return Err((
-            "check",
-            format!(
-                "{} edge(s) without a 3D curve: gaps cannot be judged",
-                gaps.unjudged_edges
-            ),
-        ));
-    }
-    if gaps.gap > HEAL_GAP_LIMIT {
-        return Err((
-            "check",
-            format!(
-                "a vertex sits {:.3e} mm off its edges (limit {HEAL_GAP_LIMIT:e})",
-                gaps.gap
-            ),
-        ));
-    }
-    Ok(StepSolid {
-        item,
-        name,
-        brep,
-        record,
-        measure,
-        area,
-        vertex_gap: gaps.gap,
-        notes,
-    })
 }

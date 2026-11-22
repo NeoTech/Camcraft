@@ -17,6 +17,7 @@ pub fn classify(params: &OpParams, path: &Toolpath) -> Option<SectionMode> {
         | OpParams::Pocket { .. }
         | OpParams::Adaptive2D { .. }
         | OpParams::Offset2D { .. }
+        | OpParams::VCarve { .. }
         | OpParams::Engrave { .. }
         | OpParams::Chamfer2D { .. }
         | OpParams::Circular { .. }

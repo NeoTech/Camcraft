@@ -19,7 +19,10 @@ use crate::operation::OpParams;
 #[must_use]
 pub fn declared_width(params: &OpParams) -> Option<f64> {
     match params {
-        OpParams::Chamfer2D { width, .. } | OpParams::Deburr { width, .. } => Some(*width),
+        OpParams::Chamfer2D { width, .. } => Some(*width),
+        // #1890: a Deburr `width` is the chord; its records are held to
+        // the largest setback the size law gives any edge.
+        OpParams::Deburr { width, sizing, .. } => Some(sizing.max_setback(*width)),
         _ => None,
     }
 }

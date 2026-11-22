@@ -109,7 +109,7 @@ fn text_hsm(params: OpParams, tag: &str) -> String {
 /// have, held equal so the ONLY differences are the kind tag and
 /// whatever the pin replaces.
 fn pocket(strategy: PocketStrategy, eng: f64) -> OpParams {
-    OpParams::Pocket { rest: None,
+    OpParams::Pocket { pass_start: Default::default(), rest: None,
         blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         stepover: 3.0,
@@ -153,6 +153,7 @@ fn adaptive(eng: f64) -> OpParams {
         troch: camcraft_app::machining2d::AdaptiveTrochParams::default(),
         tilt: None,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 
@@ -174,6 +175,7 @@ fn offset() -> OpParams {
         helix_radius: 1.0,
         tilt: None,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 

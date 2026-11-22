@@ -3,6 +3,7 @@
 //!
 //! Provenance: our own page and window law; no vendor material consulted.
 
+use camcraft_app::post::options::OptionValue;
 use camcraft_app::posting;
 use camcraft_app::schema::PostRef;
 use camcraft_app::setup_post_options;
@@ -74,6 +75,16 @@ fn desktop_post_command_opens_dialog_and_applies_declared_script_options_undoabl
         Some(&camcraft_app::post::options::OptionValue::Bool(true)),
         "clicking Write tool list at {rect:?} must toggle draft value"
     );
+    // #3384: the Fanuc Manual Guide i blank row (#3307) is listed, off by
+    // default, and its checkbox toggles the draft with the scroll bar shown.
+    let mgi = "Manual Guide i blank (G1902 / G1900)";
+    let draft = |h: &Harness<'_, State>| h.state().post_dialog.as_ref().and_then(|d| d.values.get("manualGuideBlank").cloned());
+    assert_eq!(draft(&h), Some(OptionValue::Bool(false)), "manualGuideBlank is off by default");
+    let mgi_cb = h.get_by(|n| n.role() == Role::CheckBox && n.label().as_deref() == Some(mgi));
+    let mgi_rect = mgi_cb.rect();
+    mgi_cb.click();
+    h.run_steps(2);
+    assert_eq!(draft(&h), Some(OptionValue::Bool(true)), "clicking {mgi} at {mgi_rect:?} must toggle draft value");
     h.get_by_role_and_label(Role::Button, "Apply").click();
     h.run_steps(2);
 
@@ -88,6 +99,10 @@ fn desktop_post_command_opens_dialog_and_applies_declared_script_options_undoabl
         h.state().post_dialog.is_some(),
         h.state().post_dialog.as_ref().map(|d| d.values.get("writeToolList")),
         h.state().post_dialog.as_ref().and_then(|d| d.error.as_ref()),
+    );
+    assert!(
+        doc.for_post(&key).contains_key("manualGuideBlank"),
+        "Apply must commit the manualGuideBlank override in the same undo step"
     );
 
     // Undo restores default.
@@ -104,6 +119,10 @@ fn desktop_post_command_opens_dialog_and_applies_declared_script_options_undoabl
     assert!(
         !doc_after.for_post(&key).contains_key("writeToolList"),
         "Ctrl+Z reverts declared option edit"
+    );
+    assert!(
+        !doc_after.for_post(&key).contains_key("manualGuideBlank"),
+        "Ctrl+Z reverts the manualGuideBlank edit too"
     );
     let _ = posting::post_options(&h.state().world);
 }
@@ -159,7 +178,6 @@ fn postable_face() -> State {
 #[test]
 fn dialog_uses_setups_own_post_while_options_follow_document() {
     use camcraft_app::commands::SetSetupPost;
-    use camcraft_app::post::options::OptionValue;
     let mut state = postable_face();
     let haas = PostRef::Named("Haas".into());
     state.history.execute(&state.world,

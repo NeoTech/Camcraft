@@ -18,8 +18,13 @@ use std::fs;
 mod support;
 use support::*;
 
+include!("example_catalog/case_probe_face.rs");
+
 #[path = "example_catalog/contract.rs"]
 mod contract;
+
+#[path = "example_catalog/refusal.rs"]
+mod refusal;
 
 /// #2865: three original parts demonstrate the five additional turning kinds.
 #[test]
@@ -97,13 +102,17 @@ mod catalog_multiaxis_indexed {
     }
 }
 
+// These full-case checks exceed the 60 s debug budget. The heavy lane keeps
+// both checks; example_catalog_adaptive pins the committed program in quick.
 mod catalog_2d_adaptive_pocket {
     use super::*;
     #[test]
+    #[ignore = "heavy lane (#3163 2d/adaptive-pocket): exceeds its 60 s debug budget - run with --release -- --ignored"]
     fn regenerates() {
         run_case("2d", "adaptive-pocket", "regenerates", regenerate);
     }
     #[test]
+    #[ignore = "heavy lane (#3163 2d/adaptive-pocket): exceeds its 60 s debug budget - run with --release -- --ignored"]
     fn rebuilds() {
         run_case("2d", "adaptive-pocket", "rebuilds", rebuild);
     }
@@ -159,6 +168,9 @@ mod catalog_2d_hole_work {
 
 // #2861: the case 2d/slots, its two case tests and its program pin.
 include!("example_catalog/case_2d_slots.rs");
+
+// #2856: the refusal case 2d/drill-overfeed and its two case tests.
+include!("example_catalog/case_2d_drill_overfeed.rs");
 
 mod catalog_turning_bushing {
     use super::*;
@@ -295,8 +307,12 @@ fn turning_cone_thread_case_posts_the_taper_and_the_thread() {
     assert!(!program.contains("G76"), "this case posts G32 passes, not the G76 cycle");
 
     // The neck and the part-off: the 3 mm blade, to X8 and to the axis.
+    // The part-off plane is Z15, the end face of the part. The whole 3 mm
+    // kerf is on the bar side (Z12 to Z15), so the orientation 2 blade
+    // posts its low edge at Z12 (#3452).
     assert!(section(&program, "Neck").contains(&"G01 X8. Z60. F0.02"), "the neck is 8 mm at Z60");
-    assert!(section(&program, "Part off").iter().any(|l| l.starts_with("G01 X0. Z13.5")), "the part-off reaches the axis");
+    assert!(section(&program, "Part off").contains(&"G01 X0. Z12. F0.02"),
+        "the part-off reaches the axis at the low edge Z12, its kerf Z12..15 below the part (#3452)");
 }
 
 /// The G word and the Z word of each motion block of a posted program.

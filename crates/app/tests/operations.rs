@@ -779,11 +779,9 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
     assert_eq!(status(&world, "Slot1"), OpStatus::Ok);
     let before = cache(&world, "Slot1").expect("cached").path;
     assert!(height_notes_only(&world), "no entry fallback, only the independent height warnings: {:?}", before.notes);
-    assert_eq!(
-        before.moves.iter().filter(|m| m.arc.is_some()).count(),
-        0,
-        "Plunge means no orbit in the file"
-    );
+    // An orbit descends; the planar arcs are the slot's wall lap (#2906).
+    let orbits = |p: &camcraft_app::cl::Toolpath| p.moves.iter().filter(|m| m.arc.is_some() && m.from.z != m.to.z).count();
+    assert_eq!(orbits(&before), 0, "Plunge means no orbit in the file");
 
     let mut edited = slot_params();
     let OpParams::Slot {
@@ -812,7 +810,7 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
     assert_eq!(status(&world, "Slot1"), OpStatus::Ok);
     let after = cache(&world, "Slot1").expect("cached").path;
     assert!(
-        after.moves.iter().any(|m| m.arc.is_some()),
+        orbits(&after) > 0,
         "a channel this wide certifies the orbit - it must land"
     );
     assert!(height_notes_only(&world), "a certified orbit adds no entry note; only the height warnings remain: {:?}", after.notes);
@@ -2000,7 +1998,7 @@ fn pocket_refuses_an_open_run() {
     let op = Operation {
         tool: "EM-0600-4FL".into(),
         src: sel("part", open),
-        params: OpParams::Pocket { rest: None,
+        params: OpParams::Pocket { pass_start: Default::default(), rest: None,
             blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             tilt: None,
@@ -7565,9 +7563,11 @@ fn the_crease_pair_generates_through_the_operation_layer() {
 /// The deburr ride's params: the window is stated in the TIP's units
 /// (the kernel's clipping law), so a `top_z` at the model's own top
 /// minus the drop names exactly the rim that stands there.
-fn deburr_params(width: f64, top_z: f64, bottom_z: f64) -> OpParams {
+/// #1890: callers state the setback on a 90-degree edge; the width is
+/// its chord, `setback * sqrt(2)`.
+fn deburr_params(setback: f64, top_z: f64, bottom_z: f64) -> OpParams {
     OpParams::Deburr {
-        width,
+        width: setback * std::f64::consts::SQRT_2,
         clearance_z: Height::fixed(25.0),
         top_z: Height::fixed(top_z),
         bottom_z: Height::fixed(bottom_z),
@@ -7580,6 +7580,7 @@ fn deburr_params(width: f64, top_z: f64, bottom_z: f64) -> OpParams {
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
+        sizing: camcraft_app::finishing3d::DeburrBreak::default(),
     }
 }
 
@@ -7720,8 +7721,10 @@ fn deburr_refuses_a_cone_that_rules_no_chamfer() {
 
 #[test]
 fn deburr_refuses_a_flank_too_short_for_the_break() {
-    // Width 5 on the 90-degree cone reaches 5 / sin 45 = 7.1 mm up
-    // the flank - the CM-0400's 6 mm of flute stops at its shank, and
+    // A 5 mm setback (chord 5 * sqrt(2)) may reach a setback of
+    // 5 * sqrt(2) / (2 sin 15) = 13.66 mm on the sharpest wedge the
+    // size law sizes (#1890), 13.66 / sin 45 = 19.3 mm up the flank -
+    // the CM-0400's 6 mm of flute stops at its shank, and
     // the ride would dress a cylinder as a cone. The catalog's own
     // tool proves the door: no fixture invention needed.
     let world = new_world();
@@ -7747,7 +7750,7 @@ fn deburr_refuses_a_flank_too_short_for_the_break() {
         panic!("expected a machining refusal");
     };
     assert!(msg.contains("up the cone's flank"), "{msg}");
-    assert!(msg.contains("7.1"), "{msg}");
+    assert!(msg.contains("19.3"), "{msg}");
     assert_eq!(status(&world, "DB"), OpStatus::Never);
 }
 

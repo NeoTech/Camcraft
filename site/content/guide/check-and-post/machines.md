@@ -5,7 +5,7 @@ weight = 3
 aliases = ["guide/machines/"]
 +++
 
-A machine file (`.mch`) declares a **kind**: `mill`, `lathe`, `mill-turn`,
+A machine file (`.mch`) declares a **kind**: `mill`, `router`, `lathe`, `mill-turn`,
 `plasma`, `wire_edm`, `sinker_edm` or `waterjet`. A file that declares
 nothing is read from its axes (a mill unless it has a lathe's X/Z pair or
 a turning rotary); plasma, EDM and waterjet are never guessed, only
@@ -18,6 +18,7 @@ messages below.
 | Kind | Operation families allowed | Posts that serve it | Shipped machine files |
 |---|---|---|---|
 | Mill | Milling 2D, Milling 3D, Drilling, Multi-axis | every milling post | VMC 3-axis, Tilt-head 5-axis, Tormach, Carvera |
+| Router | the same operations as Mill, with router options | every milling post | Tormach 24R, xsTECH, Sienci AltMill |
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn (live tooling) | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
@@ -108,13 +109,24 @@ tapping uses G84.
 
 ## Router
 
-CamCraft has no separate router kind: a router is a machine file that
-declares `mill`, so everything above applies. Nothing in the code treats a
-router differently, so there are no router-only operations or limits; its
-travel, spindle range and tool table are whatever its file states. The
-Tormach 24R and xsTECH files in `assets/machines/` are mills in this sense.
-Sheet-goods practice (spoilboard, tabs, hold-down) is handled by the
-ordinary milling operations and the setup's fixtures, not by the machine.
+A router declares `router` in its machine file. It follows the mill's
+operation, posting and safety rules, using its stated travel, spindle
+range and tool table. The Tormach 24R, xsTECH and Sienci AltMill files
+declare this kind.
+
+Router options stay on the **Milling** tab; there is no separate Router
+tab. On the Setups page, **Sheet job** groups the sheet size, thickness,
+Z zero, spoilboard allowance and clamp clearance. The 2D clearing pages
+offer **Corner relief** for dogbone and T-bone reliefs. These controls are
+also offered when no machine is mounted. A plain mill does not offer a
+new router option, but switching machines keeps existing sheet jobs and
+relief settings available instead of hiding or discarding them.
+
+For example, mount **Sienci AltMill 4x4**, then use **Sheet job** to state
+an 18 mm sheet with Z zero at its top and a 0.3 mm through-cut allowance.
+Its deepest cut is then Z -18.3 mm. State the real hold-down clearance
+before applying. Mounting a router does not relax the mill's checks:
+an out-of-travel move or excessive spindle rpm is refused by name.
 
 The library also supplies **Sienci AltMill 2x4**, **4x4** and **4x8**
 machines, paired with the **grblHAL** post. **grblHAL 3-axis** and

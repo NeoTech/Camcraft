@@ -30,6 +30,7 @@
 
 /// Setup coordinates for a closed punch with a predrilled 2 mm start hole.
 /// XY coordinates are integer micrometres in the same work frame as the ISO.
+#[derive(Debug)]
 pub struct PunchSetup20<'a> {
     /// Common DOS file stem for the ISO, SBR and SBL (for example, `CCSEP20`).
     pub stem: &'a str,
@@ -102,7 +103,8 @@ impl PunchSetup20<'_> {
     }
 }
 
-fn valid_stem(stem: &str) -> bool {
+/// Whether the stem can name the matching ISO, SBR and SBL on Agie Control.
+pub fn valid_stem(stem: &str) -> bool {
     let bytes = stem.as_bytes();
     (1..=8).contains(&bytes.len())
         && bytes[0].is_ascii_uppercase()

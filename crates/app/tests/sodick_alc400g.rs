@@ -101,6 +101,7 @@ fn punch_world(machine_text: &str, condition: &str, taper_deg: f64) -> Result<fl
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).map_err(|e| format!("{e:?}"))?;
     h.execute(&world, c);

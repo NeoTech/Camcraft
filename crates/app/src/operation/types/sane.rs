@@ -68,23 +68,11 @@ impl OpParams {
         if let Some(why) = crate::operation::rest_op::rest_refusal(self) {
             return Some(why);
         }
-        // #1448: only the untilted 2D contour takes a picked start so far;
-        // every other kind refuses it here rather than ignore it.
-        // #1473: the exit point likewise.
-        for (what, set) in [
-            ("start", self.links().is_some_and(|l| l.approach.start_point.is_some())),
-            ("exit", self.links().is_some_and(|l| l.approach.exit_point.is_some())),
-        ] {
-            if !set {
-                continue;
-            }
-            match self {
-                OpParams::Contour { tilt: None, .. } => {}
-                OpParams::Contour { .. } => {
-                    return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
-                }
-                _ => return Some(format!("a {what} point is taken only by the 2D contour so far - clear it on this operation")),
-            }
+        // #1448 / #3324: a start or exit pick on a kind whose capability
+        // does not take it is refused here, by the kind's name, rather
+        // than ignored (`operation::pick_kinds`).
+        if let Some(why) = self.pick_refusal() {
+            return Some(why);
         }
         match self {
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
@@ -92,8 +80,10 @@ impl OpParams {
             OpParams::SlotUndercut(p) => p.refusal(),
             OpParams::Pocket { corner_relief, .. }
             | OpParams::Offset2D { corner_relief, .. } => corner_relief.validate().err().map(|e| e.to_string()),
-            OpParams::Adaptive2D { method, troch, corner_relief, .. } => troch.refusal().or_else(|| {
-                if *method == crate::machining2d::AdaptiveMethod::Trochoidal && !corner_relief.is_off() {
+            OpParams::Adaptive2D { method, troch, corner_relief, pass_start, .. } => troch.refusal().or_else(|| {
+                if let Some(why) = crate::machining2d::trochoidal_pass_start_refusal(*method, *pass_start) {
+                    Some(why)
+                } else if *method == crate::machining2d::AdaptiveMethod::Trochoidal && !corner_relief.is_off() {
                     Some("corner relief is not available with the Trochoidal method - turn corner relief off or use Spiral".into())
                 } else {
                     corner_relief.validate().err().map(|e| e.to_string())
@@ -364,6 +354,28 @@ impl OpParams {
                     && pos(*feed)
                     && pos(*plunge_feed)
             }
+            // The V-carve's door (#1443): the engrave's numbers, and a
+            // floor stepover the generator can ring with.
+            OpParams::VCarve {
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                plunge_feed,
+                flat_stepover,
+                ..
+            } => {
+                clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && top_z.is_sane()
+                    && bottom_z.is_sane()
+                    && pos(*stepdown)
+                    && pos(*feed)
+                    && pos(*plunge_feed)
+                    && pos(*flat_stepover)
+            }
             // The 2-D chamfer's door (M2.4 B): the authored promise -
             // a land wider than nothing, cut at an angle that is a
             // chamfer and not a flat (0) or a wall (90): the ride
@@ -529,8 +541,11 @@ impl OpParams {
                 hole_max_diameter,
                 // #1889: the policy is an enum; each value is legal.
                 unreachable: _,
+                sizing,
             } => {
                 pos(*width)
+                    // #1890: a positive depth and 1..=100 passes.
+                    && sizing.is_sane()
                     && clearance_z.is_sane()
                     && top_z.is_sane()
                     && bottom_z.is_sane()

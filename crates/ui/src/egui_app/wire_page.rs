@@ -191,25 +191,19 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start, burnout, clearance, taper_deg, four_axis, .. } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, burnout, clearance, taper_deg, four_axis, sharp_corners, .. } = p;
 
     if tab == SEC_GEO {
         let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
         *side = SIDE_OF.get(si).copied().unwrap_or(WireSide::Die);
         prop_row(ui, "Run-out clearance", |ui| num(ui, u, clearance));
-        let mut stated = start.is_some();
-        check_row(ui, "Start hole stated", &mut stated);
-        match (stated, start.as_mut()) {
-            (true, Some(s)) => {
-                prop_row(ui, "Start hole X", |ui| num(ui, u, &mut s[0]));
-                prop_row(ui, "Start hole Y", |ui| num(ui, u, &mut s[1]));
-            }
-            (true, None) => *start = Some([0.0, 0.0]),
-            (false, _) => *start = None,
-        }
+        super::start_exit_rows::wire_start_group(ui, u, start);
         hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
         hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, threaded outside the stock the run-out clearance off its edge");
+        // #3207: sharp inside corners keep the wire's own radius.
+        check_row(ui, "Sharp inside corners at the wire radius", sharp_corners);
+        hint(ui, "on: an inside corner tighter than the wire is cut, and keeps the wire radius + gap - the leftover is said as a note; off refuses it");
         // #536: a constant taper, degrees from vertical.
         prop_row(ui, "Taper angle", |ui| {
             ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));

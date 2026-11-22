@@ -114,7 +114,10 @@ fn properties_body(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     ScrollArea::vertical()
         .auto_shrink([false, false])
         .max_height(content_height)
-        .show(ui, |ui| match t {
+        .show(ui, |ui| {
+            // #3390: keep the gap that the scroll bar needs on the right.
+            super::layout::keep_scroll_gutter(ui, 120.0);
+            match t {
             UiTarget::None => super::op_page::no_operation_page(ui),
             UiTarget::Operation(_) | UiTarget::Tool(_) => {}
             UiTarget::Stock => {
@@ -164,6 +167,7 @@ fn properties_body(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 ui.separator();
                 setups_page(ui, state);
                 setup_error(ui, state);
+            }
             }
         });
     if has_close {

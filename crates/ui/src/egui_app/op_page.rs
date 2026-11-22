@@ -77,11 +77,7 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         // edge. A control flush right in the control column - the box of
         // a check_row is 18 px - then sits under the bar and the bar
         // takes clicks meant for it. Stop the content short of that zone.
-        let style = ui.style();
-        let bar_total = style.spacing.scroll.bar_inner_margin
-            + style.spacing.scroll.bar_width
-            + style.spacing.scroll.bar_outer_margin;
-        ui.set_max_width((ui.available_width() - bar_total).max(120.0));
+        super::layout::keep_scroll_gutter(ui, 120.0);
         ui.horizontal(|ui| {
             ui.heading(format!("Operation: {label}"));
             if exists && ui.small_button("Rename").clicked() {
@@ -166,6 +162,12 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
             ui.ctx().request_repaint();
         }
         drop(fields);
+        // #3324: a kind that does not take a start or exit pick says so
+        // by name, on the tab where the contour's rows sit (else Geometry).
+        let picks_tab = if super::op_tabs::has_section(kind, SEC_LEADS) { SEC_LEADS } else { SEC_GEO };
+        if tab == picks_tab {
+            super::start_exit_rows::not_taken_groups(ui, kind);
+        }
         if tab == SEC_FEEDS {
             // M13.2: material, edge, flutes and the suggestion.
             super::feeds_page::cutting_group(ui, state, &target);

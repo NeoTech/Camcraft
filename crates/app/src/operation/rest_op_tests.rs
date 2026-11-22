@@ -5,7 +5,7 @@
 
 use std::hash::Hasher;
 
-use crate::machining2d::{PocketStrategy, RestParams};
+use crate::machining2d::{PocketStrategy, RestParams, RestSource};
 use crate::machining3d::Entry3D;
 use crate::operation::{Height, OpParams};
 
@@ -31,11 +31,12 @@ fn pocket(rest: Option<RestParams>) -> OpParams {
         optimal_load: crate::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 
 const PREV: RestParams =
-    RestParams { previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 };
+    RestParams { source: RestSource::EnteredTool, previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 };
 
 #[test]
 fn the_rest_group_moves_the_stamp() {
@@ -53,8 +54,32 @@ fn the_rest_group_moves_the_stamp() {
         RestParams { previous_corner_radius: 1.0, ..PREV },
         RestParams { previous_stock_to_leave: 0.2, ..PREV },
         RestParams { allowance: 0.1, ..PREV },
+        // #2033: the mode is an input - the two modes never share a path.
+        RestParams { source: RestSource::PreviousOperations, ..PREV },
     ] {
         assert_ne!(on, digest(&pocket(Some(other))), "{other:?} must move the stamp");
     }
     assert_eq!(on, digest(&pocket(Some(PREV))), "the stamp is a function");
+}
+
+/// #3354: Inside and Outside move the pocket's stamp; Auto is the stamp
+/// every earlier pocket had (nothing written).
+#[test]
+fn pass_start_moves_the_pocket_stamp_only_off_auto() {
+    use crate::machining2d::PassStart;
+    let world = crate::world::new_world();
+    let digest = |s: PassStart| {
+        let mut p = pocket(None);
+        if let OpParams::Pocket { pass_start, .. } = &mut p {
+            *pass_start = s;
+        }
+        let mut h = std::hash::DefaultHasher::new();
+        p.stamp_with(&world, None, None, &mut h);
+        h.finish()
+    };
+    let auto = digest(PassStart::Auto);
+    let (inside, outside) = (digest(PassStart::Inside), digest(PassStart::Outside));
+    assert_ne!(auto, inside, "Inside must not share Auto's stamp");
+    assert_ne!(auto, outside, "Outside must not share Auto's stamp");
+    assert_ne!(inside, outside, "the two sides must not share a stamp");
 }

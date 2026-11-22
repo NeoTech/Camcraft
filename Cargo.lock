@@ -754,7 +754,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-app"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
@@ -771,6 +771,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -781,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-cl"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-geometry",
  "tracing",
@@ -790,7 +791,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-geometry"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-kernel",
  "clipper2-rust",
@@ -800,8 +801,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "camcraft-gpu"
+version = "0.25.0"
+dependencies = [
+ "pollster 0.4.0",
+ "tracing",
+ "wgpu",
+]
+
+[[package]]
 name = "camcraft-kernel"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-kernel",
  "flate2",
@@ -820,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-motion"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -835,20 +845,23 @@ dependencies = [
 
 [[package]]
 name = "camcraft-post"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
  "camcraft-geometry",
  "getrandom 0.3.4",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "camcraft-sim"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -862,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-tools"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-geometry",
  "serde",
@@ -873,9 +886,10 @@ dependencies = [
 
 [[package]]
 name = "camcraft-ui"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "camcraft-app",
+ "camcraft-gpu",
  "chrono",
  "eframe",
  "egui",
@@ -6399,7 +6413,7 @@ checksum = "0637d3a5566a82fa5214bae89087bc8c9fb94cd8e8a3c07feb691bb8d9c632db"
 
 [[package]]
 name = "xtask"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "regex",
  "resvg",

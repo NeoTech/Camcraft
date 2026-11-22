@@ -89,6 +89,12 @@ pub struct WireContourOp {
     /// plane - and pairs them into rulings by the stated rule. `None`
     /// is the one-profile cut.
     pub four_axis: Option<WireFourAxis>,
+    /// The operator accepts sharp inside corners at the wire's own
+    /// radius (#3207): a corner tighter than the kerf offset is cut,
+    /// and the rest it keeps (at most the offset) is said as a note.
+    /// `false` - the default - refuses it by name. A 4-axis cut reads
+    /// its heal tolerance instead.
+    pub sharp_corners: bool,
 }
 
 /// How the two profiles of a 4-axis cut are paired (#537) - stated,

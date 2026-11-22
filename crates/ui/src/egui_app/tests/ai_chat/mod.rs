@@ -3,6 +3,7 @@
 
 mod basic;
 mod budget;
+mod delete_confirmation;
 mod regressions;
 mod safety;
 

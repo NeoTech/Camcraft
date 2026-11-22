@@ -15,9 +15,11 @@ use super::fillet::{Legal, fillet_corners};
 use super::fillet_tally::{FilletTally, corner_arc_radius, fillet_floor};
 use super::equal_steps::cut_levels_for;
 use super::levels::{Cert, Motion, WalkState, walk_one_level};
-use super::pocket::{PocketParams, PocketStrategy, non_sliver_center, plan_passes};
+use super::level_rings::ring_plan;
+use super::pass_start::{PassStart, StartSide};
+use super::pocket::{PocketParams, PocketStrategy, non_sliver_center};
 use super::pocket_zigzag::rest_passes;
-use super::{GenError, pocket_entered_with_relief};
+use super::GenError;
 
 /// Plan a 2D pocket/offset path whose tool assembly stays clear of `avoid`.
 pub fn pocket_avoid(
@@ -35,8 +37,32 @@ pub fn pocket_avoid_with_relief(
     avoid: &AvoidSpec,
     relief: &CornerRelief,
 ) -> Result<Toolpath, GenError> {
+    pocket_avoid_started(region, p, avoid, relief, PassStart::Auto)
+}
+
+/// [`pocket_avoid_with_relief`] with the side each level starts on
+/// (#3316); [`PassStart::Auto`] is that function, byte for byte.
+pub fn pocket_avoid_started(
+    region: &Region,
+    p: &PocketParams,
+    avoid: &AvoidSpec,
+    relief: &CornerRelief,
+    start: PassStart,
+) -> Result<Toolpath, GenError> {
+    pocket_avoid_started_on(region, p, avoid, relief, &StartSide::from(start))
+}
+
+/// [`pocket_avoid_started`] with the stock known (#3316): each level's
+/// keep-out edges are walls, cut after its rings.
+pub fn pocket_avoid_started_on(
+    region: &Region,
+    p: &PocketParams,
+    avoid: &AvoidSpec,
+    relief: &CornerRelief,
+    side: &StartSide,
+) -> Result<Toolpath, GenError> {
     if avoid.is_empty() {
-        return pocket_entered_with_relief(region, p, &[], relief);
+        return super::pocket_started_on(region, p, &[], relief, side);
     }
     p.validate()?;
     relief.validate()?;
@@ -129,7 +155,9 @@ pub fn pocket_avoid_with_relief(
             // island and keep-out edge; the level closes with its rings.
             (rest_passes(&level_center, p.tiling_step(), p.climb)?, strategy, None, Vec::new())
         } else {
-            (plan_passes(&level_center, p.tiling_step(), p.climb, strategy)?, strategy, None, Vec::new())
+            let (ps, pnotes) = ring_plan(region, &level_center, p, strategy, side)?;
+            notes.extend(pnotes.into_iter().filter(|n| !notes.contains(n)).collect::<Vec<_>>());
+            (ps, strategy, None, Vec::new())
         };
         let fit = match actual {
             PocketStrategy::Waterline | PocketStrategy::OffsetRings => Some(ARC_FIT_TOL),
@@ -177,7 +205,8 @@ pub fn pocket_avoid_with_relief(
             .with_top(p.links.approach.entry_top(p.top_z))
             .with_xy_arc(p.links.approach.arc_xy)
             .with_microlift(joins)
-            .with_solid_restart();
+            .with_solid_restart()
+            .with_cleared_links(side.start != PassStart::Auto);
         let cert_entry = room.as_ref().map(|rm| Cert::Region(&rm.tess));
         let cert_links = Cert::Region(&level_center);
         walk_one_level(

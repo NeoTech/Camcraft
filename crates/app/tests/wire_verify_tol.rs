@@ -141,6 +141,7 @@ fn wire_op(four: WireFourAxis) -> WireContourOp {
         clearance: operation::DEFAULT_CLEARANCE,
         four_axis: Some(four),
         skims: Vec::new(),
+        sharp_corners: false,
     }
 }
 

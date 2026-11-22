@@ -158,7 +158,9 @@ pub use mark::{credit_marks, Mark};
 // The floor a mark must leave on the part's underside (#1595).
 pub use crate::verify::MARK_FLOOR;
 pub use cut_twin::{cell_cut, from_ordered_bits, ordered_bits, TileChord, TwinChord, TwinTool, TWIN_ULPS};
-pub use cut_twin_work::{run_twin, twin_cut, twin_work, TwinWork, WorkItem, TWIN_MAX_CELLS_PER_CHORD};
+pub use cut_twin_work::{
+    run_twin, twin_cut, twin_items, twin_work, TwinItem, TwinWork, WorkItem, TWIN_MAX_CELLS_PER_CHORD,
+};
 pub use field::SdfField;
 pub use field_body::Lattice;
 pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};

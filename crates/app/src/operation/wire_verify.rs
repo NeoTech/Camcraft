@@ -123,10 +123,35 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             taper: w.taper_deg != 0.0 || w.four_axis.is_some(),
 
             burnout: w.burnout.is_some(),
-            // #1170: the 4-axis cut's stated verify tolerance.
-            verify_tol: w.four_axis.as_ref().map_or(0.0, |f| f.verify_tolerance),
+            // #1170: the 4-axis cut's stated verify tolerance; #3210: a
+            // constant taper's is the model's chord tolerance.
+            verify_tol: w.four_axis.as_ref().map_or_else(|| taper_chord(world, &op.src, w), |f| f.verify_tolerance),
+            taper_chord: w.four_axis.is_none() && w.taper_deg != 0.0,
         }))
     })())
+}
+
+/// The verify tolerance of a constant-taper cut (#3210): the coarsest
+/// chord its source models were meshed at - the importer's promise, or
+/// the coarser chord a reduced-fidelity model records. The generator
+/// lays the wire from one height's section, and the facets at the other
+/// heights stand off the true wall by up to that chord. 0 for a cut
+/// that states no taper.
+fn taper_chord(world: &World, src: &SrcRef, w: &super::types::WireContourOp) -> f64 {
+    if w.taper_deg == 0.0 {
+        return 0.0;
+    }
+    let names: Vec<&str> = match src {
+        SrcRef::Entity(name) => vec![name.as_str()],
+        SrcRef::Selection(items) => items.iter().map(|g| g.entity.as_str()).collect(),
+        SrcRef::Stock => Vec::new(),
+    };
+    let cap = crate::geometry::import::step::CHORD_CAP;
+    names
+        .into_iter()
+        .filter_map(|n| model::find_by_name(world, n))
+        .filter_map(|e| crate::model_fidelity::chord_of(world, &e))
+        .fold(cap, f64::max)
 }
 
 fn model_sections(world: &World, op: &crate::schema::Operation, hs: &super::ResolvedHeights) -> Result<Vec<WireSection>, String> {
@@ -173,4 +198,20 @@ pub fn cutoff_from(w: &super::types::WireContourOp, path: &crate::cl::Toolpath) 
     crate::wire_edm::cutoff_split(path, Point2::new(x, y), n as usize).map(Some).ok_or_else(|| {
         format!("the path does not hold the tab cut-off its {n} tab(s) state - regenerate it")
     })
+}
+
+/// The leftover a stated sharp inside corner keeps (#3207), as the
+/// generator said it on the op's cached path: a note on the verify
+/// line, never a refusal. `None` when the op states no sharp corners
+/// or its path keeps no rest.
+#[must_use]
+pub fn sharp_corner_said(world: &World, e: &Entity) -> Option<String> {
+    let op = model::operation_of(world, e)?;
+    let OpParams::WireContour(w) = &op.params else { return None };
+    if !w.sharp_corners {
+        return None;
+    }
+    let cache = model::toolpath_of(world, e)?;
+    let note = cache.path.notes.iter().find(|n| n.starts_with(crate::wire_edm::SHARP_NOTE))?;
+    Some(note.trim_start_matches("wire EDM: ").to_owned())
 }

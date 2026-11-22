@@ -157,7 +157,14 @@ use super::*;
 /// v75 (#3181): a machine can record its controller model, exact NC software,
 /// installed options and tool-change procedure. A v74 file leaves them
 /// unstated. Older readers must refuse v75 to prevent losing these facts.
-pub const PROJECT_VERSION: u32 = 75;
+/// v76 (#1890): a 3D Deburr `width` is the chamfer chord across the
+/// edge, not the cone's setback at the edge's level, and Deburr adds
+/// `break_mode`, `break_depth`, `break_profile` and `passes` (absent is
+/// one Constant Width chamfer pass). A v75 width steps up by sqrt(2),
+/// the chord of its setback on a 90-degree edge, so the cut depth stays.
+/// An old reader must refuse a v76 file rather than read the chord as a
+/// setback and cut each break sqrt(2) times deeper.
+pub const PROJECT_VERSION: u32 = 76;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {

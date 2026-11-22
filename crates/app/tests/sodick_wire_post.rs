@@ -82,6 +82,7 @@ fn punch_doc_with(machine_text: &str, condition: &str, skims: Vec<WireSkim>) -> 
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

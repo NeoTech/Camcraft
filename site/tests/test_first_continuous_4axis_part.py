@@ -58,18 +58,18 @@ UI_STRINGS = {
     "Y origin": UI + "wcs_page.rs",
     "Z origin": UI + "wcs_page.rs",
     "New tool…": UI + "tool_library.rs",
-    "Type": UI + "tool_settings.rs",
-    "Ball nose": UI + "tool_settings.rs",
-    "Name": UI + "tool_settings.rs",
-    "Diameter": UI + "tool_settings.rs",
-    "Flute length": UI + "tool_settings.rs",
-    "Shank diameter": UI + "tool_settings.rs",
-    "Spindle rpm": UI + "tool_settings.rs",
+    "Type": UI + "tool_settings_grid.rs",
+    "Ball nose": UI + "tool_settings_grid.rs",
+    "Name": UI + "tool_settings_grid.rs",
+    "Diameter": UI + "tool_settings_grid.rs",
+    "Flute length": UI + "tool_settings_grid.rs",
+    "Shank diameter": UI + "tool_settings_grid.rs",
+    "Spindle rpm": UI + "tool_settings_grid.rs",
     "Add tool": UI + "tool_settings.rs",
     "Rotary Parallel": "crates/app/src/operation/kinds.rs",
     "Multi-axis": "crates/app/src/operation/kinds.rs",
-    "Tool": UI + "op_page.rs",
-    "Source": UI + "op_page.rs",
+    "Tool": UI + "op_page/header.rs",
+    "Source": UI + "op_page/header.rs",
     "Rename": UI + "op_page.rs",
     "Apply name": UI + "op_page.rs",
     "Generate": UI + "op_page.rs",
@@ -196,11 +196,12 @@ class FirstContinuousFourAxisProgram(unittest.TestCase):
     def test_continuous_a_claims_match_the_shipped_machine(self):
         text = flat(page())
         reference = flat((GUIDE / "multi-axis/continuous-4-axis.md").read_text())
-        decision = flat((ROOT / "docs/decisions/1904-continuous-4axis-walkthrough.md").read_text())
         self.assertIn("travel is unstated in both the shipped file and this example project", text)
         self.assertIn("former -360..360 travel refusal no longer applies", text)
         self.assertIn("former -360..360 travel refusal no longer applies", reference)
-        self.assertIn("shipped file now states no A travel limit", decision)
+        # #3271: no check reads docs/decisions/: the cut moves each file
+        # into RECOMMENDED.md. The shipped A axis has no travel: the
+        # project test above reads it from the saved machine.
         self.assertIn("chart scale is not a machine limit", text)
         index = flat((GUIDE / "multi-axis/_index.md").read_text())
         self.assertIn("A about X, no stated A travel limit, `nose_to_axis` 10.6", index)

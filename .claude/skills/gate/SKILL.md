@@ -21,7 +21,7 @@ wrappers `scripts/gate.ps1` (`-Tier quick`, `-Test <name>`) and
 |---|---|---|
 | quick | `cargo xtask gate quick [--base main]` | Only the test binaries that the diff touches, from the gate maps and the touched crates. One build for each crate, then one step for each binary. Debug. No heavy lanes. Target: 5 minutes. |
 | batch | `cargo xtask gate batch` | One debug build (`--no-run`) for each crate, then one step for each test target (`<crate> suites: lib`, `<crate> suites: <binary>`) that is not in `SLOW_BINARIES`, the `camcraft-kernel` suites (#1702), the ui suites from `crates/ui`, clippy. The steps run in the parallel lanes of `lanes.rs` (#2727). No release-mode heavy lanes. Target: 20 minutes. |
-| heavy | `cargo xtask gate heavy [--base main]` | The release `--ignored` heavy lanes that the diff reaches, also through the crate dependencies (#2568). One release build of the reached crates, then one step for each reached target. Before a PR is ready and at its review. |
+| heavy | `cargo xtask gate heavy [--base main]` | The release `--ignored` heavy lanes that the diff reaches, also through the crate dependencies (#2568). One release build of the reached crates, then one step for each reached target. A tool, not a merge condition (#3556): a PR never runs the full reach. Only a `P1` PR under the safety floor runs one targeted step with `--only "<crate> heavy: <target>"`. The wave form `--covers <PR>:<head sha>` (#3460) stays as an option. |
 | release | `cargo xtask gate release` | One step for each debug test target (`lib`, `bins`, each binary, `doc`) and the `--ignored` heavy lanes in release. Only at a cut. On the cut runner: `cargo xtask gate release --no-snapshots`. |
 | test | `cargo xtask gate test <name> [--crate c] [--binary b] [--exact]` | One test by name. The plain form is `cargo test -p <crate> --test <binary> -- <name> --exact`. |
 
@@ -129,6 +129,25 @@ Quick prints its selection before it runs:
   two gates at `CAMCRAFT_GATE_JOBS=3` on 6 cores). A plain `cargo` call
   takes its own `-j`.
 
+## Stall watchdog (#3303)
+
+- Each gate step runs under a watchdog. Output is the growth of the step
+  log (the child and each descendant write there) and of a piped stdout.
+- A debug step with no output for 15 minutes is a stall. A `--release` or
+  `--ignored` step (a release link, a heavy test) gets 4 times the time:
+  60 minutes.
+- `CAMCRAFT_GATE_STALL_MIN=<n>` sets the debug stall time in whole minutes
+  (1 or more). The release time is 4 times the value. A bad value uses the
+  default and prints a diagnostic that names the value, as for
+  `CAMCRAFT_GATE_JOBS`.
+- At a stall the gate kills the process tree of the step. It prints
+  `STALL <minutes>min <step>`, the last lines of the step and the processes
+  that were alive. The log gets an `error: gate watchdog: STALL` line, thus
+  `--failed` selects the step again.
+- The summary has a `STALL` row, not a `FAIL` row. The other steps go on.
+- Exit code: 1 for any `FAIL` row or a void run, 3 for `STALL` rows only,
+  else 0.
+
 ## Slow binaries and heavy lanes
 
 - Batch does not run the debug binaries in `SLOW_BINARIES`
@@ -139,8 +158,9 @@ Quick prints its selection before it runs:
   or gets a smaller fixture. The ignore reason names the lane.
 - Heavy lane tests are `#[ignore]`d. They measure geometry (envelope scans,
   full-precision projections) or generate over the large fixtures. Run them
-  with `cargo test --release -p camcraft-app -- --ignored`, at a cut and
-  before a push of risky work. Do not run them for each edit.
+  with `cargo test --release -p camcraft-app -- --ignored`, at a cut, in
+  the cut gate on the cut runner. Do not run them for each edit or for
+  each PR (AGENTS.md "Heavy lanes at review", #3556).
 - In the release tier, the heavy lanes of motion and app are one release
   build (`--no-run`). Then there is one step for each test target that can
   hold an ignored test: `<crate> heavy: lib`, `bins`, `doc` and `<crate>
@@ -164,6 +184,36 @@ Quick prints its selection before it runs:
   - A diff that reaches no heavy lane gives a plan with no step.
   - The steps have the names of the release tier (`<crate> heavy:
     <target>`), so `--only` and `--failed` select them.
+  - The command is a tool. Its result is not a condition for "ready" or
+    for a merge (#3556).
+- The targeted heavy step (AGENTS.md "Heavy lanes at review"): only a `P1`
+  PR under the safety floor gets it. Find the binary that holds the named
+  heavy tests of the changed code with `--dry-run`, then run its one step:
+  `cargo xtask gate heavy --base main --only "<crate> heavy: <target>"`.
+  Never run the whole reach for it. A `P2` or lower PR runs no heavy step.
+- The wave form (#3460), an optional tool:
+  `cargo xtask gate heavy --base origin/main --covers <PR>:<head sha>
+  [--covers ...]` in the trial tree of a merge wave. The `merge-ready`
+  skill makes the tree and posts the record when a session chooses to run
+  it. No merge waits for it.
+  - The flag is repeatable and applies to the heavy tier only. A bad value,
+    and `--covers` with `--only` or `--failed`, is refused with the usage
+    text.
+  - The tool refuses a sha that is not a commit, a head that is not an
+    ancestor of `HEAD`, and a working tree with changes.
+  - The plan header and the summary print `covers: #<PR> <sha>` for each
+    head, `tree: <HEAD^{tree}>` and `base: <ref> <merge-base sha>`.
+  - A real run writes `covers.txt` to the log directory: the header, each
+    step with its result and note, the counts (planned, ran, ok, failed),
+    the wall time and the verdict. The verdict is `PASS`, `FAIL`,
+    `INCOMPLETE` (a planned step did not run), `VOID` or `NO LANE` ("the
+    wave reaches no heavy lane"). Only `PASS` covers the heads.
+    `--dry-run` prints the header and runs nothing.
+  - A wave record covers a PR only for the head that it names. A
+    safety-floor PR is covered only if the trial tree contains its final
+    head.
+  - **Owed heavy result** (#3467) is retired (#3556): no PR is owed heavy,
+    and no merge waits for a heavy record.
 - When you move a test to a lane, the `#[test]` count before and after must
   be the same, and the ignored set keeps its golden asserts.
 

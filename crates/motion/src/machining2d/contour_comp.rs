@@ -141,7 +141,7 @@ pub(super) fn seam_mid_run(pts: &[Point2]) -> Vec<Point2> {
 
 /// The closest point of `prog`'s boundary to `q`: (loop index, edge
 /// index, the point, the distance).
-fn closest(prog: &Region, q: Point2) -> Option<(usize, usize, Point2, f64)> {
+pub(super) fn closest(prog: &Region, q: Point2) -> Option<(usize, usize, Point2, f64)> {
     let mut best: Option<(usize, usize, Point2, f64)> = None;
     for (li, l) in prog.loops().iter().enumerate() {
         let pts = l.points();
@@ -165,6 +165,8 @@ fn closest(prog: &Region, q: Point2) -> Option<(usize, usize, Point2, f64)> {
 pub(super) struct SpanCtx<'a> {
     pub prog: &'a Region,
     pub p: &'a ContourParams,
+    /// The user's start point when this ring was picked (#1473).
+    pub picked: Option<Point2>,
 }
 
 /// Record the span over the moves `first..=last` of `b` - `first` the
@@ -202,6 +204,10 @@ pub(super) fn push_span(b: &mut PathBuilder, ctx: &SpanCtx, first: usize, last: 
     }
     if moves[first + 1..last].iter().any(|m| m.from.z != z || m.to.z != z || m.kind != MoveKind::Feed) {
         return Err(refused_as(p, "needs one planar feed walk between its leads"));
+    }
+    // #1473: a picked seam was not placed mid-run - prove it, by its name.
+    if let (Some(q), Some(f), Some(l)) = (ctx.picked, moves.get(first + 1), moves.get(last - 1)) {
+        super::contour_comp_pick::picked_seam(p, q, f, l, s_c, (!wear(p)).then_some(ctx.prog))?;
     }
     if wear(p) {
         return push_wear(b, p, first, last, s_c);

@@ -102,6 +102,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
     }
 }
 

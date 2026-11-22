@@ -84,6 +84,18 @@ fn protected_project_roundtrips_and_refuses_a_future_version() {
     assert_eq!(got2["picks"].as_array().map(Vec::len), Some(2));
     assert_eq!(c2.ok("verify", json!({}))["ok"], json!(true));
 
+    // #1864: a v73 file (the first protection format) steps up to the
+    // current version and keeps its protection.
+    let mut v73 = parsed.clone();
+    v73["version"] = json!(73);
+    let v73_path = dir.join("protected_v73.camproj");
+    std::fs::write(&v73_path, v73.to_string()).expect("v73 fixture");
+    let mut c3 = Client::new();
+    c3.ok("open_project", json!({ "path": v73_path.display().to_string() }));
+    let got3 = c3.ok("get_operation_do_not_touch", json!({ "operation": op_name }));
+    assert_eq!(got3["clearance"], json!(1.5));
+    assert_eq!(got3["picks"].as_array().map(Vec::len), Some(2));
+
     // A future version is refused with UnsupportedVersion instead of ignoring protection.
     parsed["version"] = json!(PROJECT_VERSION + 1);
     let future_path = dir.join("future.camproj");

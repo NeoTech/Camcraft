@@ -274,8 +274,8 @@ pub fn circular(_region: &Region, p: &CircularParams) -> Result<Toolpath, GenErr
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     // Ring-major: each circle runs its own ladder to its own floor
     // before the next starts. The nesting is exact (a disk's rings
-    // cannot interfere), so the order costs no re-crossing anywhere,
-    // and on the vault it is what keeps every cut above the bowl.
+    // cannot interfere), and on the vault it is what keeps every cut
+    // above the bowl. Each ring enters from clearance (#2898).
     let mut k: usize = 0;
     loop {
         let rho = rc - p.stepover * k as f64;
@@ -326,6 +326,12 @@ pub fn circular(_region: &Region, p: &CircularParams) -> Result<Toolpath, GenErr
         if zs.is_empty() {
             k += 1;
             continue;
+        }
+        // #2898: climb straight up off the last ring's floor; this ring's
+        // entry traverses at clearance, over the core still to be cut.
+        let at = b.at();
+        if at.z < p.clearance_z {
+            b.push(MoveKind::Rapid, Point3::new(at.x, at.y, p.clearance_z), None);
         }
         let before = b.moves_len();
         run_level_walks(&mut b, &pass, &zs, &motion, Some(&runs), cert.as_ref(), cert.as_ref());

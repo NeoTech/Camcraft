@@ -125,7 +125,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
 - `get_tool_cutter_profile { "tool": string }`: Read a milling tool's cutter, neck and shank as a spun half-outline: points `[z, r, arc]` from the tip (z = 0, on the axis) up to the shank top (`arc` = 0 for a straight segment, else the signed radius of an arc to the next point). `drawn` says whether it is a hand-drawn outline or the one the tool's numbers draw. Turning tools have none.
 - `set_tool_cutter_profile { "tool": string, "points": [[z, r] | [z, r, arc], ...] | null }`: Set a milling tool's drawn cutter outline (tip-up, closed to the axis at both ends), or clear it with `null` (back to the outline its numbers draw). The outline must agree with the tool's numbers (reach exactly the stated diameter within the flute length, end at flute + shank length, not exceed the cutter or shank width above the flutes, not fold over itself), else it is refused by name. Toolpaths keep reading the numbers; the collision checks and the simulation read a drawn neck where it is narrower than the stated shank (never wider). One undoable step.
-- `set_work_material { "material": string | null }`: State the document's workpiece material (`aluminium_6061`, `mild_steel`, `stainless_304`, `grey_cast_iron`, `brass`, `plastics_pom`), or `null` to clear it. Re-stating the current one or an unknown word is refused by name. One undoable step; `get_job` shows it as `work_material`.
+- `set_work_material { "material": string | null }`: State the document's workpiece material (`aluminium_6061`, `mild_steel`, `stainless_304`, `grey_cast_iron`, `brass`, `plastics_pom`, `softwood`, `hardwood`, `mdf`, `plywood`, `acrylic`, `hdpe`), or `null` to clear it. Re-stating the current one or an unknown word is refused by name. One undoable step; `get_job` shows it as `work_material`.
 - `set_stock_material { "material": string | null }`: State the active setup stock's workpiece material (same words as `set_work_material`), or `null` to clear it. Picks each tool's cutting-data row for that setup's operations in order (stock, then document, then the tool's `Unknown` row) and re-seeds their `feed` (rows naming the material) and `stepdown` / `stepover` in one undoable step (`SetStockMaterial`); tools' running `rpm` and `feed` follow the document material only. Returns `{ stock, stock_material, operations_seeded }`. Refused by name when the active setup has no stock, the stock already states that material, or the material word is unknown.
 - `suggest_cutting_data { "operation": string }`: The feeds-and-speeds suggestion for the operation's tool on the stated material, as data (writes nothing): `material`, `tool_material`, `cutting_speed` m/min, `feed_per_tooth` mm, `thinning_factor`, `rpm`, `feed` mm/min, `machine_clamps`. Refused by name when no material is stated or the table cannot speak for the tool.
 - `apply_cutting_data { "operation": string }`: Apply that suggestion: the operation's feed and its tool's rpm, one undoable step (the Cutting data page's Apply). Refused by name with no material, a kind with no milling feed, or an op already on the suggestion. Returns what was applied.
@@ -149,6 +149,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - **Sinker electrode (#547, #1156)**: `electrode_from_faces { "name": string, "picks": [face ids], "undersize"?: number, "condition"?: string, "setup"?: string, "orbit"?: number, "stub": number, "pickup": number }` generates a sinker EDM electrode from the picked faces of a cavity (its level floor and every vertical wall standing on it, `face:0x…` ids from `list_features`, all on one model) and adds it as a document tool. Give `undersize` (mm per side, 0 or more) or `condition` (a machine EDM condition id, read from the setup's sinker EDM; `setup` names that setup, default the active one), not both; `stub` (more than 0) is how far the electrode stands above the cavity's mouth; `pickup` (0 or more) is the offset from the electrode's top to the measuring reference. `orbit` makes it that much smaller again per side. The reply gives the electrode, its `burn` fields (the `add_operation` params of a Sinker Burn of this cavity) a `warning` when the stated undersize is 0 (the electrode is then the cavity's full size, so any spark gap burns the walls past it), and a `note` when an orbit is given. Only an axis-aligned rectangular cavity yields an electrode; refused by name: picks on more than one model or on something that is not a face, a degenerate face, a boss, rib or overhang standing in the electrode's way, a condition with no undersize or no sinker EDM setup, a model whose facets can't be read, and malformed numbers. One undo step.
 - `edit_operation { "name": string, "params": object }`: JSON merge-patch operation parameters (e.g. `stepdown`, `stepover`, `feed`, `spindle_speed`).
 - **Change a lead shape (#2876)**: `add_operation` and `edit_operation` merge object keys, including enum shape keys. Inspect the current shape with `get_job`, or the seeded defaults with `list_operation_types`. To change a linear lead to an arc, give `"params": { "lead": { "linear": null, "arc": { "radius": 3.0 } } }`. Remove the old key with `null` in the same patch. For a nested lead, give `"params": { "links": { "approach": { "lead_out": { "linear": null, "arc": { "radius": 3.0 } } } } }`. Without removal, the refusal keeps the parser error and lists the merged field paths and keys, such as `lead: arc, linear`.
+- **Pass starts at (#3316)**: `edit_operation { "name": "O1", "params": { "pass_start": "outside" } }` sets where each level's rings start on a 2D Offset: `"auto"` (the default, the core first; the reply leaves the key out), `"inside"` (the part or island wall first) or `"outside"` (the outer edge first; with an Outside containment the stock edge, so each level starts in air). Inside and Outside cut rings that follow the start edge one stepover at a time; where the first ring runs along a wall, or the area is narrower than the tool plus one stepover, a cut takes the full tool width and the toolpath carries a `Pass start` note (a warning line on the op page). Any other word is refused. One undo step. Other kinds get the same key in their own issues.
 - **Threading infeed (#1847)**: `get_thread_infeed { "name": string }` reads a Threading operation by key or display label. `set_thread_infeed { "name": string, "infeed_plan": { /* partial fields */ } }` changes its plan. Both return `{ name, infeed_plan }` with all fields explicit, including defaults. Fields are `method` (`"radial"`, `"flank"`, `"alternating"`), `flank_angle` (degrees), `schedule` (`"constant_depth"`, `"constant_area"`), `min_depth` and `finish_allowance` (mm), `spring_passes` (integer), `repeat_each_depth` (boolean), and `dips` with optional `interval`, `height`, `length` fields (mm). Omitted fields keep their values. The setter uses `EditOperationParams` as one undo step. Unknown fields, invalid plans, unknown operations and operations of another kind are refused by name.
 - **Thread milling (#989)**: Use `add_operation { "kind": "Thread", "tool": "TMS-0600-P050-150", "params": { "pitch": 1.0, "hand": "left" } }`; `edit_operation` patches the same `pitch` and `hand` keys in `params`. `hand` is `"right"` (default) or `"left"`. `pitch` is a positive finite number in mm, or `null` to leave it unstated: a multi-form mill defaults to its own pitch and refuses a different pitch; a single-form mill requires a stated pitch inside its `pitch_min` to `pitch` range. An unstated single-form pitch leaves an unfinished operation that `generate` refuses by name. Thread requires a thread mill; a Tap is refused. A form other than 60 degrees and an out-of-range pitch are refused on creation, edit or tool change. For internal threads, each `holes` entry's `radius` is the thread's minor radius (the drilled hole), and the mill must be smaller than that hole's minor diameter. Open the hole with a preceding operation before `generate`; it refuses an undrilled hole by name. For `external: true`, `detect_holes` selects bosses instead, whose radii describe their major cylinders.
 
@@ -223,6 +224,41 @@ The following capabilities exist in the GUI or app command layer but do not yet 
 
 Per `AGENTS.md` ("Everything Is a Command"):
 > A PR that adds a user-facing command also adds its MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a `source:agent` follow-up issue `MCP: <command>` (labels `P5`, `area:mcp`) and names it in the PR body.
+
+## Waterjet Profile workflow (#1883)
+
+This workflow requires the Waterjet Profile implementation in #1883 (PR #3058).
+That implementation is not yet on `main`.
+There is no built-in waterjet. Mount a `.mch` file whose machine `kind` is
+`"waterjet"` with `load_machine { "path": "waterjet.mch" }`.
+Add a nozzle with `kind: "waterjet"` and `rpm: 0`. Its diameter is the kerf width.
+
+For a plate model spanning Z = 0 to 5 mm, call these MCP tools in order.
+Use the actual machine file and plate model. Adapt the heights, leads, tab
+positions and cutting parameters to the part and machine.
+
+```text
+load_machine { "path": "waterjet.mch" }
+add_tool { "name": "Nozzle", "definition": { "kind": "waterjet", "diameter": 0.8, "corner_r": 0, "tip_angle": 0, "pitch": 0, "nose_radius": 0, "width": 0, "flute_len": 10, "shank_d": 30, "shank_len": 100, "holder_d": 0, "holder_len": 0, "material_group": "mild steel", "rpm": 0, "feed": 2500, "center_cutting": false } }
+import_model { "path": "plate.stl", "name": "plate" }
+add_operation { "kind": "Waterjet Profile", "name": "Jet1", "tool": "Nozzle", "source": "plate", "params": { "clearance_z": 25, "top_z": 5, "bottom_z": 0, "kerf": null, "control_comp": false, "reversed": false, "lead": "arc", "lead_in": 4, "lead_out": 3, "open_side": "center", "tabs": { "count": 1, "width": 2, "at": [[20, 0]] }, "feed": 250, "pierce_time": 2.5, "abrasive_delay": 0.5, "linearize": 0.01 } }
+generate { "name": "Jet1" }
+```
+
+Use `list_operation_types` for the complete parameter fields and defaults.
+`kerf: null` uses the nozzle diameter. `control_comp` selects controller
+compensation; `false` uses computer compensation. `reversed` reverses the cut.
+`lead` accepts `arc` or `straight`; `lead_in` and `lead_out` set their lengths.
+`open_side` accepts `center`, `left` or `right` for an open chain.
+`tabs` supplies `count`, `width` and explicit XY positions in `at`.
+Lengths and the optional `linearize` tolerance are in mm; `feed` is in mm/min.
+`linearize: null` keeps arcs.
+
+`pierce_time` and `abrasive_delay` are in seconds. They appear in path notes
+only until #1882 adds post support. Inspect the notes returned by `generate`.
+No post serves a waterjet yet. Do not use a milling or plasma post for this path.
+The implementation in #1883 pins this workflow in
+`crates/app/tests/mcp_waterjet.rs`. Those tests run headlessly, not on a machine.
 
 ## Plasma Profile workflow (#1871)
 

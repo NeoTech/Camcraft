@@ -60,6 +60,7 @@ fn adaptive(method: AdaptiveMethod) -> OpParams {
         troch: camcraft_app::machining2d::AdaptiveTrochParams::default(),
         tilt: None,
         corner_relief: Default::default(),
+        pass_start: Default::default(),
     }
 }
 

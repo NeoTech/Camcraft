@@ -77,6 +77,9 @@ pub const COVER_TOL: f64 = 0.002;
 /// before the kerf law refuses it: 10 nm, ten steps of the offsetter's
 /// lattice. The path is built to stand exactly at the offset.
 pub const PATH_TOL: f64 = 1e-5;
+/// How the note of a stated sharp inside corner (#3207) starts - the
+/// verify line finds it on the cached path by this.
+pub const SHARP_NOTE: &str = "wire EDM: sharp inside corners stated";
 /// The shortest lead (mm) that is a move at all.
 const MIN_LEAD: f64 = 1e-6;
 
@@ -141,6 +144,11 @@ pub struct WireParams {
     /// the kerf offset plus this off the stock. A closed profile never
     /// reads it.
     pub clearance: f64,
+    /// The operator accepts sharp inside corners at the wire's own
+    /// radius (#3207): the cover law then lets a corner keep an uncut
+    /// rest up to the kerf offset, said as a note. `false` - the
+    /// default - refuses any rest past [`COVER_TOL`].
+    pub sharp_corners: bool,
 }
 
 fn invalid(why: String) -> GenError {
@@ -226,7 +234,7 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
     // The corner minimum (#290 D8): every point of the profile must be
     // touched by the kerf - judged before the start hole, so a profile
     // the wire cannot cut is refused whatever else is stated.
-    laws::cover(&given, &path_ring, p)?;
+    let corner_rest = laws::cover(&given, &path_ring, p)?;
     let Some(start) = p.start else {
         return Err(invalid(format!(
             "no start hole is stated - a closed profile is cut from a threading point ({}); the wire cannot be threaded through solid material",
@@ -283,6 +291,7 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
     if let Some(tb) = tabbed {
         said.splice(1..2, tb.notes);
     }
+    said.extend(corner_rest.map(|r| laws::sharp_note(r, k)));
     path.notes.extend(said);
     Ok(path)
 }
@@ -362,5 +371,7 @@ mod ruled_heal_tests;
 mod ruled_tests;
 #[cfg(test)]
 mod ruled_widen_tests;
+#[cfg(test)]
+mod sharp_tests;
 #[cfg(test)]
 mod tests;

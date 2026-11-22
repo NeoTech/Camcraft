@@ -141,7 +141,7 @@ fn general(v: &Value, out: &mut Vec<Refusal>) {
     match g.and_then(|g| g.get("kind")) {
         None | Some(Value::Null) => {}
         Some(Value::String(w)) if w.is_empty() || Kind::from_word(w).is_some() => {}
-        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm"))),
+        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, router, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm"))),
     }
 }
 

@@ -51,7 +51,7 @@ mod gizmo_tests {
 
     /// The Z=0 ground grid: the floor the empty viewport was missing. It is
     /// world-space overlay geometry on the table plane, spaced in 1-2-5
-    /// decades that follow the zoom, and it obeys the axes switch.
+    /// decades that follow the zoom, and only the Grid switch hides it.
     #[test]
     fn the_ground_grid_is_a_round_spaced_floor() {
         let mut state = State::new();
@@ -72,8 +72,13 @@ mod gizmo_tests {
             "the step follows the zoom: {:?}",
             coarse[0]
         );
+        // #3322: the axes switch hides the axes alone; the Grid switch hides the grid alone.
         state.show_world_axes = false;
-        assert!(ground_grid_lines(&state).is_empty(), "hiding the axes hides the floor");
+        assert!(!ground_grid_lines(&state).is_empty(), "hiding the axes leaves the floor");
+        state.show_grid = false;
+        assert!(ground_grid_lines(&state).is_empty(), "the Grid switch hides the floor");
+        state.show_world_axes = true;
+        assert!(ground_grid_lines(&state).is_empty(), "axes on does not bring the floor back");
     }
 
     /// #948: a non-finite or absurd camera must not stretch the grid's
@@ -1446,7 +1451,7 @@ mod height_plane_tests {
     }
 
     fn pocket() -> OpParams {
-        OpParams::Pocket { rest: None, tilt: None, blend_radius: None,
+        OpParams::Pocket { pass_start: Default::default(), rest: None, tilt: None, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             stepover: 3.0,
             stock_to_leave: 0.0,

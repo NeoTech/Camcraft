@@ -162,7 +162,9 @@ pub(super) fn pass_link(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: O
         Link::Clearance => m.clearance_z,
         Link::Retract => m.hop_z,
         Link::KeepDown => {
-            let proof = cert.map_or(Err(NOT_PROVED), |c| link_proof(c, &[passes, &st.level], at, e, &m.links));
+            let proof = cert
+                .map_or(Err(NOT_PROVED), |c| link_proof(c, &[passes, &st.level], at, e, &m.links))
+                .and_then(|()| if !m.cleared_links || through_cut(b, at, e, z, m.tool_r()) { Ok(()) } else { Err(NOT_PROVED) });
             match proof {
                 Ok(()) => {
                     b.push(MoveKind::Feed, Point3::new(e.x, e.y, z), Some(m.feed));
@@ -211,6 +213,18 @@ pub(super) fn pass_link(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: O
     }
     b.push(MoveKind::Rapid, Point3::new(e.x, e.y, plane), None);
     feed_down(b, e, z, mat_top, m, m.plunge_feed);
+}
+
+/// #3316: does the chord `a -> s` at `z` run through material this path
+/// already cut - the column under every sample (a quarter radius apart)
+/// cleared by the centre-cutting law ([`plunge_law::column_cleared`])?
+fn through_cut(b: &PathBuilder, a: Point2, s: Point2, z: f64, tool_r: f64) -> bool {
+    let len = (s.x - a.x).hypot(s.y - a.y);
+    let n = (len / (0.25 * tool_r).max(1e-3)).ceil().clamp(1.0, 1e5) as usize;
+    (0..=n).all(|k| {
+        let t = k as f64 / n as f64;
+        plunge_law::column_cleared(b.moves(), Point2::new(a.x + t * (s.x - a.x), a.y + t * (s.y - a.y)), z, tool_r)
+    })
 }
 
 /// The keep-down link law: `a -> s` within the stay-down limit, inside

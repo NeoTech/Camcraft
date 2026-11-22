@@ -141,6 +141,18 @@ fn layout_window_unsaved_prompt() {
     );
 }
 
+#[test]
+fn layout_window_dxf_units() {
+    // #1863: a drawing with no $INSUNITS opens the units prompt.
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    let dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n5\n0\nENDSEC\n0\nEOF\n";
+    let source = crate::state::DxfSource::Bytes { name: "free.dxf".into(), data: std::sync::Arc::from(dxf.as_bytes()) };
+    h.state_mut().state.pending.push_back(CommandKind::ImportDxf { source, units: None });
+    h.run_steps(3);
+    assert_modal_layout(&h, "dxf-units-prompt", "DXF units modal", &["DXF units", "Millimeters"], "Cancel");
+}
+
 fn assert_fixture_modal(cmd: CommandKind, who: &str, anchors: &[&str]) {
     let dismiss = if matches!(cmd, CommandKind::FixtureLibraryInsertDialog(_)) { "Close" } else { "Cancel" };
     let mut h = shell_harness();

@@ -2,7 +2,8 @@
 //! the real page code: both groups sit on the Lead in / Lead out tab off
 //! by default, the header switch seeds or clears the draft, a typed X
 //! edits the draft only, and Apply commits through the command history -
-//! undo and redo included. Other kinds draw neither group.
+//! undo and redo included. Other kinds say by name that they take no
+//! pick (#3324).
 //! Provenance: our own page law; no vendor material consulted.
 
 use egui::accesskit::{Role, Toggled};
@@ -138,16 +139,62 @@ fn switching_the_exit_point_off_clears_it() {
 }
 
 #[test]
-fn kinds_without_a_picked_start_draw_neither_group() {
-    for label in ["2D Pocket", "Face"] {
+fn kinds_without_a_picked_start_say_so_by_name() {
+    // #3324: the maintainer's 2D Offset, a lead-tab kind (2D Pocket) and
+    // a Geometry-only kind (Face): each draws both groups, no switch and
+    // no X / Y row, and a line that says why the pick is not taken.
+    for label in ["2D Offset", "2D Pocket", "Face"] {
         let mut state = opened(crate::operations::retype(&face(), kind(label)));
         state.op_tab = SEC_LEADS;
         let mut harness = page(state);
         harness.run();
         for g in [START_GROUP, EXIT_GROUP] {
-            assert!(harness.query_by_label(g).is_none(), "{label} has no {g} group");
+            assert!(harness.query_by_label(g).is_some(), "{label} has the {g} group");
         }
+        for r in ["Start X", "Start Y", "Exit X", "Exit Y", "Pick start", "Pick exit"] {
+            assert!(harness.query_by_label(r).is_none(), "{label} has no {r} row");
+        }
+        let said = harness.query_all_by_label_contains(super::NOT_TAKEN).count();
+        assert_eq!(said, 2, "{label}: the start and the exit say they are not taken");
+        let why = harness.query_all_by_label_contains(camcraft_app::operation::PICK_OWED).count();
+        assert_eq!(why, 2, "{label}: each says why, by name");
+        assert_eq!(draft(&harness), (None, None), "drawing the tab writes no point");
     }
+}
+
+#[test]
+fn the_wire_geometry_tab_groups_the_start_hole_and_says_the_exit_is_not_taken() {
+    let mut state = opened(face());
+    let machine = camcraft_app::machine::parse_mch(include_str!("../../../app/tests/edm/wire-iso-fixture.mch"))
+        .expect("wire machine fixture");
+    state.pending.push_back(crate::state::CommandKind::EditMachineApply {
+        path: "wire-test.mch".into(), machine: Box::new(machine),
+    });
+    state.pending.push_back(crate::state::CommandKind::AddTool {
+        name: "EDM-W025".into(), tool: camcraft_app::wire_tools::wire_tool(0.25),
+    });
+    state.drain_actions();
+    crate::actions::add_operation(&mut state, kind("Wire Contour"));
+    state.drain_actions();
+    state.sync_ops_ui();
+    if let OpParams::WireContour(wire) = &mut state.op_ui.params {
+        wire.start = Some([2.0, 3.0]);
+    }
+    state.op_tab = super::super::op_tabs::SEC_GEO;
+    let mut harness = page(state);
+    harness.run();
+    for label in [START_GROUP, EXIT_GROUP, "Start hole stated", "Start hole X", "Start hole Y"] {
+        assert!(harness.query_by_label(label).is_some(), "Wire Contour has {label} on Geometry");
+    }
+    assert_eq!(harness.query_all_by_label_contains(super::NOT_TAKEN).count(), 1, "only the exit is not taken");
+    harness.get_by_label(START_GROUP).click();
+    harness.run();
+    for label in ["Start hole stated", "Start hole X", "Start hole Y"] {
+        assert!(harness.query_by_label(label).is_none(), "{label} folds with the Start point group");
+    }
+    assert!(harness.query_by_label(EXIT_GROUP).is_some(), "folding the start leaves the exit group visible");
+    let OpParams::WireContour(wire) = &harness.state().op_ui.params else { panic!("wire draft") };
+    assert_eq!(wire.start, Some([2.0, 3.0]), "folding the group preserves the threading point");
 }
 
 #[test]

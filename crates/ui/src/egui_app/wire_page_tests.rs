@@ -208,3 +208,22 @@ fn wire_four_axis_states_the_stand_off_choice_and_the_verify_tolerance() {
     choose(&mut h, "Stand off", "The same all round");
     assert_eq!(draft(&h).four_axis.as_ref().expect("the block").widening, WireWidening::Uniform);
 }
+
+/// #3207: the sharp-inside-corner option is off by default, its row is
+/// on the geometry tab, and Apply stores it as one undoable edit.
+#[test]
+fn wire_sharp_inside_corners_toggle_applies_and_undoes() {
+    let mut h = wire_page();
+    h.state_mut().op_tab = super::super::op_tabs::SEC_GEO;
+    h.run_steps(3);
+    assert!(!draft(&h).sharp_corners, "off by default");
+    press(&mut h, "Sharp inside corners at the wire radius");
+    assert!(draft(&h).sharp_corners);
+    assert!(!live(&h).sharp_corners, "edits wait for Apply");
+    press(&mut h, "Apply");
+    h.state_mut().drain_actions();
+    assert!(live(&h).sharp_corners);
+    let st = h.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert!(!live(&h).sharp_corners, "one undo restores the default");
+}

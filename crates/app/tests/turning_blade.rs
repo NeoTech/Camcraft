@@ -215,6 +215,8 @@ fn a_part_op_severs_the_bar_in_the_document() {
     // Parting at z -10: one center, a rung ladder to the axis - the
     // LAST feed stands on it (the kerf's through cut, snapped exact,
     // not a hair off), and the verdict reads the separation silent.
+    // #3452: the plane is the part's end face, so the 3 mm kerf stands
+    // at z -13..-10 and its center at z -11.5.
     let (world, mut history) = blade_world();
     create(&world, &mut history, "P1", "GT-0300", part_params(-10.0));
     assert_eq!(status(&world, "P1"), OpStatus::Ok, "the kerf is a cut, not a verdict");
@@ -222,7 +224,7 @@ fn a_part_op_severs_the_bar_in_the_document() {
     let feeds: Vec<_> = t.moves.iter().filter(|m| m.kind == camcraft_app::cl::MoveKind::Feed).collect();
     assert_eq!(feeds.len(), 12, "the 6 of column at 0.5 rungs");
     for m in &feeds {
-        assert!((m.to.z + 10.0).abs() < 1e-9 && (m.from.z + 10.0).abs() < 1e-9, "one center: {m:?}");
+        assert!((m.to.z + 11.5).abs() < 1e-9 && (m.from.z + 11.5).abs() < 1e-9, "one center: {m:?}");
     }
     assert!(rho(feeds[0].to) > 5.4, "the first rung steps the column: {:?}", feeds[0].to);
     assert!(rho(feeds[11].to) < 1e-12, "the last rung stands ON the axis: {:?}", feeds[11].to);

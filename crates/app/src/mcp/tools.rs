@@ -46,9 +46,9 @@ const TOOLS: &[Tool] = &[
     Tool { name: "list_features", description: "A model's, fixture's, or DXF profile's pickable features with stable ids: faces, edge chains, welded smooth faces and vertices on models, or sketch chains and layers on DXF profiles, in world coordinates.", schema: pick::s_list_features, run: features::list_features },
     Tool { name: "get_operation_geometry", description: "What an operation machines: its source (stock, a model, a DXF profile, or picked features), per-chain overrides, its area controls, and what the picks resolve to.", schema: pick::s_op, run: pick::get_operation_geometry },
     Tool { name: "set_operation_geometry", description: "Set the features an operation machines (faces, edge chains, loops, or DXF sketch chains and layers with optional per-chain side and direction overrides) by list_features ids. One undo step; undo restores the previous source.", schema: pick::s_set_geometry, run: pick::set_operation_geometry },
-    Tool { name: "set_operation_area", description: "Replace an operation's area controls (containment, offset, corner, extension, extra include/exclude boundaries, open boundary). One undo step.", schema: area::s_set_area, run: area::set_operation_area },
+    Tool { name: "set_operation_area", description: "Replace an operation's area controls (containment, offset, outer_offset, corner, extension, extra include/exclude boundaries, open boundary). One undo step.", schema: area::s_set_area, run: area::set_operation_area },
     Tool { name: "get_operation_do_not_touch", description: "Read an operation's 'Do not touch' protected faces/edges and standoff clearance (mm).", schema: pick::s_op, run: do_not_touch::get_operation_do_not_touch },
-    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that 2D Offset and 3D Pocket paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
+    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that 2D Offset, 3D Pocket and Face paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
     Tool { name: "undo", description: "Undo the last document change.", schema: s_empty, run: edit::undo },
     Tool { name: "redo", description: "Redo the last undone change.", schema: s_empty, run: edit::redo },
     Tool { name: "generate", description: "Generate toolpaths: one named operation (always regenerated) or, with no name, every operation that is not current when reached in program order, including operations made stale by earlier generations in this call. A refusal stops the call and names the operation.", schema: s_opt_name, run: generate },
@@ -316,7 +316,7 @@ fn s_add_tool() -> Value {
         json!({
             "name": { "type": "string", "description": "Tool name in the document; defaults to the catalog name." },
             "catalog": { "type": "string", "description": "A list_tool_catalog name to copy." },
-            "definition": { "type": "object", "description": "A full tool definition (get_job's tool shape). Optional catalog keys part_number, vendor, coating, helix_deg (0-90) and notes ride it; unusable ones refuse the add by tool name. Optional cutting_data: [{material, rpm, feed, stepdown?, stepover?}] per workpiece material word (aluminium_6061, mild_steel, stainless_304, grey_cast_iron, brass, plastics_pom) or unknown (the tool's default row; added from its own rpm/feed when absent), feed mm/min, stepdown/stepover mm; a material twice, a non-positive rpm/feed/step or a stepover wider than the cutter refuses the add by tool name. The tool runs its row for the document material (else its unknown row); add_operation seeds a milling op's feed from a row naming the material in force (the active setup stock's, else the document's) and its stepdown/stepover from that row, each missing one from the unknown row." },
+            "definition": { "type": "object", "description": "A full tool definition (get_job's tool shape). Optional catalog keys part_number, vendor, coating, helix_deg (0-90) and notes ride it; unusable ones refuse the add by tool name. Optional cutting_data: [{material, rpm, feed, stepdown?, stepover?}] per workpiece material word (aluminium_6061, mild_steel, stainless_304, grey_cast_iron, brass, plastics_pom, softwood, hardwood, mdf, plywood, acrylic, hdpe) or unknown (the tool's default row; added from its own rpm/feed when absent), feed mm/min, stepdown/stepover mm; a material twice, a non-positive rpm/feed/step or a stepover wider than the cutter refuses the add by tool name. The tool runs its row for the document material (else its unknown row); add_operation seeds a milling op's feed from a row naming the material in force (the active setup stock's, else the document's) and its stepdown/stepover from that row, each missing one from the unknown row." },
             "holder": { "type": "string", "description": "A built-in library holder for it (\"BT30 ER20\", or a taper's Weldon pick \"BT40 Weldon\": the bore for the tool's shank), or \"none\" for no holder body. Omitted: the active setup's machine's default holder (tooling.default_holder), when it states one and the holder takes the tool. The reply names the holder it landed with (holder, holder_from) or why the default was left off (note)." }
         }),
         &[],
@@ -370,10 +370,13 @@ fn s_add_op() -> Value {
 }
 
 fn s_edit_op() -> Value {
+    // #3324: the start / exit picks, named, with the kinds that take them.
+    let ring: Vec<&str> = crate::operation::KindInfo::ALL.iter().filter(|k| k.pick() == crate::operation::PickCapability::Ring).map(|k| k.label).collect();
+    let params = format!("Fields to change (see get_job for the current ones). Start / exit picks: links.approach.start_point and links.approach.exit_point, [x, y] in model mm, null clears; taken by {} (Wire Contour: its own start). Each kind's start_exit in list_operation_types says if it takes a pick.", ring.join(", "));
     obj(
         json!({
             "name": { "type": "string", "description": "Operation name (key or label)." },
-            "params": { "type": "object", "description": "Fields to change (see get_job for the current ones)." }
+            "params": { "type": "object", "description": params }
         }),
         &["name", "params"],
     )

@@ -40,6 +40,14 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `general.operator_side` (#2632, optional) ∈ `"-X"` | `"+X"` | `"-Y"` |
+  `"+Y"`: the side of the work envelope from which the operator looks
+  into it, named by the world axis that points from the envelope to the
+  operator. The viewport draws an arrow and the text "Operator side"
+  there. Unstated takes the default of the kind: `"+Y"` for a lathe (the
+  lathe view shows the turning plane from there), `"-Y"` (the front) for
+  each other kind. Any other word REFUSES the file by name. Display
+  only: no check and no post reads it.
 - `wire_edm` / `sinker_edm` (#530, part of #290) are DECLARED only: no
   axis inventory infers an EDM. A wire machine needs X and Y (U and V,
   the upper guide, add taper); a sinker needs Z. Neither has a spindle

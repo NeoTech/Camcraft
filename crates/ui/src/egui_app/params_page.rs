@@ -259,6 +259,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
     let params = &mut state.op_ui.params;
     super::mill2d_page::fields(ui, world, params, &mut cx);
     super::mill2d_more_page::fields(ui, world, params, &mut cx);
+    super::vcarve_page::fields(ui, world, params, &mut cx);
     super::holes_page::fields(ui, world, params, &mut cx);
     super::probe_page::fields(ui, world, params, &mut cx);
     super::plasma_page::fields(ui, world, params, &mut cx);

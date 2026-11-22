@@ -26,6 +26,7 @@ workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (
 workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 endUnits = "G20 G21";     // #596 / #2189: switches end units before M30 when asked
+coolantModes = true;      // #3446: reads PARAM Coolant (#112/#150)
 
 declaredOptions = {
   showSequenceNumbers: {
@@ -81,6 +82,7 @@ var clearZ = null;         // #1614: the section's ClearancePlane, null when uns
 var afterAsk = "";         // the section's PARAM AfterOperation (#1532), none when unstated
 var setupNext = "";        // the section's PARAM SetupChange (#1532): the setup the program changes to after it
 var coolant = "";          // the M-code this program started, if any
+var coolantAsk = "flood";  // #3446: the section's PARAM Coolant, flood when unstated
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var wcsFlip = "";          // #1649: the flipped WCS axes ("X", "Y", "XY") - the engine mirrored the section
 var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
@@ -174,6 +176,7 @@ function xyz(p) {
   return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)];
 }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
 }
@@ -202,27 +205,47 @@ function spindleStopped(what) {  // true: refused, nothing is posted
 }
 var feedRefused = false;  // #1357: the cycle-feed refusal, once per program
 
-// The .mch tool-station coolant list carries names + M-codes. This post
-// reads no PARAM Coolant (the engine refuses a non-Flood op by name), so
-// every section asks flood: the machine's Flood entry; failing one, the
-// first coded entry of no other known family (a shop's own "Brine" is
-// its flood); a stated codeless Flood is the operator's own valve,
-// silent. A list that states only other kinds (Mist, Air - #869) has no
-// flood code: refused by name, never posted as mist or air. An unstated
-// list stays silent. M9 (stop) is the RS-274 fixed pair.
+// The .mch tool-station coolant list carries names + M-codes. A flood ask
+// takes the machine's Flood entry; failing one, the first coded entry of
+// no other known family (a shop's own "Brine" is its flood); a stated
+// codeless Flood is the operator's own valve, silent. A list that states
+// only other kinds (Mist, Air - #869) has no flood code: refused by name,
+// never posted as mist or air. An unstated list stays silent. M9 (stop)
+// is the RS-274 fixed pair.
 var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
+function coolantName(c) {
+  return String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+}
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   var other = "", floodNamed = false;
   for (var i = 0; i < cs.length; i++) {
     var c = cs[i];
     var code = (typeof c === "string") ? "" : (c.mCode || "");
-    var name = String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+    var name = coolantName(c);
     if (name === "flood") { if (code) return code; floodNamed = true; continue; }
     if (code && !other && COOLANT_KINDS.indexOf(name) < 0) other = code;
   }
   if (other || floodNamed || cs.length === 0) return other;
-  msg("the machine states no flood coolant code" + inOp() + " - add a Flood entry to the machine, or post through a post that reads the operation's coolant");
+  msg("the machine states no flood coolant code" + inOp() + " - pick another coolant for the operation (Off cuts dry) or add a Flood entry to the machine");
+  return "";
+}
+// #3446: the op's coolant ask (#112) - off writes no coolant word; mist,
+// air or through-tool take the machine's own entry of that family,
+// refused by name (naming the operation) when the machine states none.
+function coolantFor(ask) {
+  if (ask === "off") return "";
+  if (!ask || ask === "flood") return coolantCode();
+  var want = ask === "mist" ? ["mist"] : ask === "air" ? ["air", "air-blast"]
+    : ask === "through-tool" ? ["through-spindle", "through-tool"] : [];
+  if (want.length === 0) { msg("unknown coolant ask " + ask + inOp()); return ""; }
+  var cs = (typeof machine !== "undefined" && machine.coolants) || [];
+  for (var i = 0; i < cs.length; i++) {
+    var c = cs[i];
+    var code = (typeof c === "string") ? "" : (c.mCode || "");
+    if (code && want.indexOf(coolantName(c)) >= 0) return code;
+  }
+  msg("the machine states no " + ask + " coolant code" + inOp() + " - pick another coolant for the operation or add it to the machine");
   return "";
 }
 
@@ -442,6 +465,7 @@ function onParameter(name, value) {
   if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1614
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
+  if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }  // #3446
   commentParam(name, value);
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "SetupChange") { setupNext = clean(value); return; }
@@ -574,7 +598,7 @@ function startPreamble() {
   if (probeStop) { block(["M5"]); spindleOn = false; }
   probeSection = touchProbe && kindProbe;
   spindleWait = false;
-  coolant = touchProbe ? "" : coolantCode();
+  coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }
@@ -592,6 +616,7 @@ function endPreamble() {
   if (inCycle) block(["G80"]);
   inCycle = false;
   if (coolant) block(["M9"]);
+  coolantAsk = "flood";      // #3446: the next section states its own ask
   block(["M5"]);
   spindleOn = false;
   probeSection = false;
@@ -1079,6 +1104,9 @@ function onLinear() {
 }
 function onCircular() {
   startPreamble();
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord);
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (chainCut() || !motionFor(properties, "arc move")) return;
   var p = properties;
   if (indexed()) {  // #785: a tilted path is chords; an arc here is unstated

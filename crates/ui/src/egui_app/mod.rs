@@ -54,6 +54,10 @@ pub(crate) mod home;
 mod machine_page;
 mod tool_list_page;
 mod stock_page;
+mod stock_profiles;
+mod dxf_units_dialog;
+mod dxf_drop;
+mod op_source;
 mod stock_axis_rows;
 // pub: M13.4's ColorVision layer - the viewport, the traced stock and
 // the overlay lines read the palette; `cvd` is its maths.
@@ -73,6 +77,7 @@ mod op_icons;
 mod tool_icons;
 mod layout;
 mod load_field;
+mod pass_start_row;
 // #2339: the Panel setups window (save, load and delete dock arrangements).
 mod panel_setups;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
@@ -99,6 +104,7 @@ mod lead_page;
 mod start_exit_rows;
 pub(crate) mod op_tabs;
 mod painted;
+mod sim_steps;
 mod ribbon_cell;
 mod tree_badges;
 mod tree_glyphs;
@@ -194,6 +200,7 @@ mod undercut_page;
 mod kind_editors;
 mod deburr_page;
 mod mill2d_more_page;
+mod vcarve_page;
 mod mill2d_page;
 // #1815: 2D Pocket's "Rest machining" group on the Passes tab.
 mod rest_pocket_page;
@@ -215,6 +222,8 @@ mod panes;
 mod theme_drop;
 mod recent_drop;
 mod file_drop;
+// #2950: dropped .mch and .cps files go to the machine and post lists.
+mod setup_file_drop;
 mod gen_overlay;
 // #343: the browser tree, split from panes (rows / pane / operation menu).
 mod browser_tree;
@@ -296,6 +305,8 @@ mod footer_tests;
 #[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
+mod boundary_offset_tests;
+#[cfg(test)]
 mod field_focus_tests;
 #[cfg(test)]
 mod coolant_tests;
@@ -313,6 +324,8 @@ mod after_op_tests;
 mod program_info_tests;
 #[cfg(test)]
 mod post_dialog_tests;
+#[cfg(test)]
+mod setup_post_gap_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]

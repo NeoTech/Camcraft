@@ -137,13 +137,13 @@ fn positions_are_the_prismatic_ladders_bit_for_bit() {
 }
 
 #[test]
-fn rapids_and_floors_hold_no_pose_and_flanks_do() {
-    // Rapids are air: no tangency, no angle (stage C's law carried
-    // onto the rough). Floors are the rough's own story: the ladder's
+fn rapids_hold_inherited_pose_and_flanks_lean() {
+    // Rapids inherit the previous pose, starting upright (#3300).
+    // Floors are the rough's own story: the ladder's
     // CL rides IN the machined plane, so the ball's contact point is
     // the one under the center with d = 0 - no direction out of the
     // surface to lean off, and the stamp leaves the spindle vertical
-    // (axis None), which is exactly what a floor wants. Flanks are
+    // (an explicit upright axis), which is what a floor wants. Flanks are
     // where the kind earns its name: tangency on a vertical facet is
     // a pose DEAD ON its normal; a ring rounding a convex corner
     // touches the EDGE and states the bisector - still inside the
@@ -154,8 +154,13 @@ fn rapids_and_floors_hold_no_pose_and_flanks_do() {
     let region = silhouette(&f);
     let rough = multiaxis_rough(&f, &region, &params(), &control(0.0, 0.0, Some(60.0)), None).unwrap();
     // Rapids travel under the pose they inherit (the post keeps the
-    // tilt modal): they state no NEW angle.
-    let mut held: Option<[f64; 3]> = None;
+    // tilt modal): they state no NEW angle. #3300: the rough leans on
+    // its flanks, so it inherits the upright home and states it on
+    // every move before the first lean (floors included - the post
+    // commands it as zero angles); after the lean a floor states the
+    // upright Z column as before. The flank count below proves the lean.
+    assert_eq!(rough.moves[0].axis, Some([0.0, 0.0, 1.0]), "the opening states the upright pose");
+    let mut held: Option<[f64; 3]> = Some([0.0, 0.0, 1.0]);
     for m in &rough.moves {
         if m.kind == MoveKind::Rapid {
             assert_eq!(m.axis, held, "a rapid changed the pose it inherited");
@@ -177,7 +182,7 @@ fn rapids_and_floors_hold_no_pose_and_flanks_do() {
         } else {
             panic!("a zero-lead pose drifted {off:.2} past every wall cone: kind {:?} to {:?}", m.kind, m.to);
         }
-        // Floors pose nothing, so every pose this stamp states is a
+        // Floor poses stay upright, so every remaining pose is a
         // HORIZONTAL tangency: a rough over a level floor must never
         // lean the spindle on air.
         assert!(a.z.abs() < 1e-6, "a posed move leans off a horizontal seed: {a:?}");
