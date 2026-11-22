@@ -267,6 +267,9 @@ pub fn bore(p: &BoreParams) -> Result<Toolpath, GenError> {
 /// `Inside` is the centre-out order (the disk has no inner wall).
 pub fn bore_started(p: &BoreParams, pass_start: PassStart) -> Result<Toolpath, GenError> {
     p.validate()?;
+    if let Some(why) = bore_helix::helical_pass_start_refusal(p.strategy, pass_start) {
+        return Err(GenError::Invalid(why));
+    }
     if let BoreStrategy::Helical { spring_pass } = p.strategy {
         return finished(bore_helix::ride(p, spring_pass)?);
     }

@@ -17,16 +17,23 @@
 //! wider hole would leave a core (a loose slug in a through hole), so
 //! it is refused by name before any move is built. A helix steeper
 //! than [`MAX_HELIX_ANGLE_DEG`] is a plunge in all but name, so it is
-//! refused too, with the pitch that would fit.
+//! refused too, with the pitch that would fit. A cutter that is not
+//! centre-cutting has an uncut core round its axis (`plunge_law::CORE`);
+//! the helix cuts the hole's axis only while its wall circle stands at
+//! least that core radius off it, so a smaller hole is refused for such
+//! a cutter.
 
 use std::f64::consts::PI;
 
 use crate::cl::{lattice, MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
 
+use crate::plunge_law::CORE;
+
 use super::bore::{BoreHole, BoreParams};
 use super::bore_core::{bore_floor_reach, CORE_TOL};
 use super::face::GenError;
+use super::pass_start::PassStart;
 
 /// How a Bore operation cuts each hole.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -62,7 +69,28 @@ pub fn helix_leaves_core(hole_radius: f64, tool_diameter: f64, corner_radius: f6
     rc > bore_floor_reach(tool_diameter, corner_radius, through_allowance) + CORE_TOL
 }
 
-/// The hole's two helical doors (the ring ladder's mouth door has run
+/// The smallest hole a helix cuts with a cutter that is not
+/// centre-cutting: the wall circle must stand at least the uncut core
+/// (`CORE` of the radius) off the hole's axis, or the core rides over
+/// the solid there for the whole descent.
+#[must_use]
+pub fn min_helix_bore_diameter_no_center_cut(tool_diameter: f64, leave: f64) -> f64 {
+    tool_diameter + 2.0 * leave + CORE * tool_diameter
+}
+
+/// Why a helical bore refuses `start` (#3360), or `None`. A helix has no
+/// rings, so Inside and Outside are refused by name, never ignored.
+#[must_use]
+pub fn helical_pass_start_refusal(strategy: BoreStrategy, start: PassStart) -> Option<String> {
+    (strategy != BoreStrategy::Rings && start != PassStart::Auto).then(|| {
+        format!(
+            "Pass starts at {} is not available with the Helical strategy - one helix per hole has no ring order; use Auto or Rings",
+            start.label()
+        )
+    })
+}
+
+/// The hole's helical doors (the ring ladder's mouth door has run
 /// before): no core at the floor, and a helix no steeper than the limit.
 pub(super) fn check(p: &BoreParams, h: &BoreHole, mouth: Point3) -> Result<(), GenError> {
     let through = h.through.then_some(p.through_allowance);
@@ -80,6 +108,30 @@ pub(super) fn check(p: &BoreParams, h: &BoreHole, mouth: Point3) -> Result<(), G
                 p.tool_diameter,
                 2.0 * (rc - reach),
                 max_helix_bore_diameter(p.tool_diameter, p.corner_radius, p.stock_to_leave, through),
+            ),
+            mouth,
+        ));
+    }
+    // A cutter that is not centre-cutting: its uncut core must stay off
+    // the hole's axis. The axis is the worst point - it stays `rc` from
+    // the cutter's axis for the whole helix, the floor circle and the
+    // move to the centre. Refused, not proved clear by the stock: no
+    // pre-hole is known here (a conservative door).
+    let core = CORE * p.tool_diameter * 0.5;
+    if !p.links.approach.center_cutting && rc + CORE_TOL < core {
+        return Err(GenError::invalid_at(
+            format!(
+                "the {:.3} mm hole at ({:.3}, {:.3}) is too small for a helix with a {:.3} mm cutter that is not \
+                 centre-cutting: the helix radius {:.3} mm is inside the cutter's {:.3} mm uncut core, which would \
+                 run into the solid at the hole axis. The smallest hole this cutter helixes is {:.3} mm. \
+                 Use a centre-cutting tool, or a smaller tool",
+                h.radius * 2.0,
+                tidy(h.xy.x),
+                tidy(h.xy.y),
+                p.tool_diameter,
+                rc,
+                core,
+                min_helix_bore_diameter_no_center_cut(p.tool_diameter, p.stock_to_leave),
             ),
             mouth,
         ));

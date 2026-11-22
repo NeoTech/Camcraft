@@ -89,6 +89,8 @@ impl OpParams {
                     corner_relief.validate().err().map(|e| e.to_string())
                 }
             }),
+            // #3360 x #2830: one helix per hole has no ring order.
+            OpParams::Bore { strategy, pass_start, .. } => crate::machining2d::helical_pass_start_refusal(*strategy, *pass_start),
             _ => None,
         }
     }

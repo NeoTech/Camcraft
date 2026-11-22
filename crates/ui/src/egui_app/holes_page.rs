@@ -178,6 +178,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // #3360: the shared pass-order row; the rings of a level.
                 super::pass_start_row::pass_start_row(ui, "bore", pass_start);
                 hint(ui, super::pass_start_row::BORE_PASS_START_HINT);
+                if helical && *pass_start != camcraft_app::machining2d::PassStart::Auto {
+                    consequence(ui, super::pass_start_row::HELICAL_PASS_START_REFUSED);
+                }
                 prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
                 prop_row(ui, "Tolerance", |ui| num(ui, u, tolerance));
                 hint(ui, "the ring is chords to this tolerance - the same fit law the pocket walls keep");

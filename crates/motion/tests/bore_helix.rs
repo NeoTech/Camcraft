@@ -2,7 +2,9 @@
 //! radius from above the material to the floor, one flat floor circle
 //! (two with the spring pass), a move to the centre, a retract - and no
 //! axial plunge anywhere. A hole one helix cannot clear to the centre,
-//! and a helix steeper than the limit, are refused by name.
+//! a helix steeper than the limit, a helix whose radius lies inside the
+//! uncut core of a cutter that is not centre-cutting, and a pass order
+//! other than Auto are refused by name.
 //!
 //! Provenance: our own tests over the kernel's helical law (helical
 //! interpolation with an end mill, RS-274 G2/G3 with Z); the numbers are
@@ -18,7 +20,8 @@ use camcraft_motion::entry::Entry3D;
 use camcraft_motion::geo2d::Point2;
 use camcraft_motion::links::Links;
 use camcraft_motion::machining2d::{
-    BoreHole, BoreParams, BoreStrategy, MAX_HELIX_ANGLE_DEG, bore, helix_leaves_core, max_helix_bore_diameter,
+    BoreHole, BoreParams, BoreStrategy, MAX_HELIX_ANGLE_DEG, PassStart, bore, bore_started, helical_pass_start_refusal,
+    helix_leaves_core, max_helix_bore_diameter, min_helix_bore_diameter_no_center_cut,
 };
 
 const FEED: f64 = 600.0;
@@ -199,4 +202,46 @@ fn the_rings_strategy_is_the_default_and_keeps_its_centre_dive() {
     let t = path(&p);
     let axial = t.moves.iter().any(|m| m.kind != MoveKind::Rapid && m.to.z < m.from.z && m.to.x == m.from.x && m.to.y == m.from.y);
     assert!(axial, "the ladder still dives at the centre");
+}
+
+#[test]
+fn a_helix_inside_the_uncut_core_of_a_non_centre_cutting_tool_is_refused() {
+    // The review's case: Ø6.5 with a Ø6 tool and 0.4 mm per turn gives a
+    // 14.3 deg helix of radius 0.25 mm. A centre-cutting tool may take
+    // it; a tool that is not centre-cutting has a 1.5 mm uncut core
+    // (plunge_law::CORE = half the radius), and that core runs into the
+    // solid at the hole axis for the whole descent.
+    let mut p = params(hole(6.5, false), false);
+    p.stepdown = 0.4;
+    path(&p);
+    p.links.approach.center_cutting = false;
+    let why = refusal(&p);
+    assert!(
+        why.contains("not centre-cutting") && why.contains("0.250 mm") && why.contains("1.500 mm uncut core") && why.contains("9.000 mm"),
+        "{why}"
+    );
+    // The smallest hole that tool helixes: the wall circle 1.5 mm off the axis.
+    assert!((min_helix_bore_diameter_no_center_cut(6.0, 0.0) - 9.0).abs() < 1e-12);
+    let mut edge = params(hole(9.0, false), false);
+    edge.links.approach.center_cutting = false;
+    path(&edge);
+    // The issue's counterbore keeps its helix with that tool (rc 2.5).
+    let mut cb = params(hole(11.0, false), false);
+    cb.links.approach.center_cutting = false;
+    path(&cb);
+}
+
+#[test]
+fn a_helical_bore_refuses_a_pass_order_by_name() {
+    let p = params(hole(11.0, false), false);
+    assert_eq!(helical_pass_start_refusal(p.strategy, PassStart::Auto), None);
+    assert_eq!(helical_pass_start_refusal(BoreStrategy::Rings, PassStart::Outside), None);
+    for start in [PassStart::Inside, PassStart::Outside] {
+        let why = match bore_started(&p, start) {
+            Ok(_) => panic!("{start:?}: a helix has no ring order"),
+            Err(e) => e.to_string(),
+        };
+        assert!(why.contains("Helical strategy") && why.contains(start.label()), "{why}");
+    }
+    assert_eq!(bore_started(&p, PassStart::Auto).ok(), Some(path(&p)));
 }

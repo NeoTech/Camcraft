@@ -825,6 +825,16 @@ tool diameter (plus twice the stock to leave): a Ø6 end mill cuts holes
 up to Ø12. **Detect holes** skips a wider hole and names it. Use the
 Rings strategy or a larger tool for that hole.
 
+A cutter that is not centre-cutting has an uncut core at its axis
+(a quarter of its diameter, the same rule as for a plunge). The helix
+cuts the hole's axis only when the wall circle stays at least that far
+from it, so the smallest hole for such a cutter is its diameter plus half
+its diameter (plus twice the stock to leave): Ø9 with a Ø6 end mill.
+A centre-cutting tool has no such limit.
+
+**Pass starts at** does not apply to the Helical strategy, because one
+helix per hole has no ring order. Keep it at **Auto**.
+
 Example: an M6 counterbore, Ø11 x 7 deep, with a Ø6 flat end mill and a
 helix pitch of 1 mm. The tool starts the helix 2 mm above the material
 (the default plunge height) and makes nine turns to the floor. Then it
@@ -835,4 +845,6 @@ helix with a ... mm cutter: the helix leaves a ... mm core at the floor";
 "the helix in the ... mm hole at (...) descends at ... deg, steeper than
 15 deg: set the stepdown (the helix pitch) to ... mm or less". A helix
 steeper than 15 degrees is close to a plunge. It occurs in a hole only a
-little wider than the tool.
+little wider than the tool. "the ... mm hole at (...) is too small for a helix
+with a ... mm cutter that is not centre-cutting"; "Pass starts at ... is
+not available with the Helical strategy".

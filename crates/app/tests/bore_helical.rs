@@ -4,7 +4,9 @@
 //! axial plunge into the solid block, also with a cutter that is not
 //! centre-cutting. The strategy survives the project file, an older file
 //! (no key) reads as the ring ladder, a ring ladder writes no new key,
-//! and the stamp moves when the strategy changes.
+//! and the stamp moves when the strategy changes. A small hole whose
+//! helix lies inside the uncut core of a cutter that is not
+//! centre-cutting is refused, and so is a pass order other than Auto.
 //!
 //! Provenance: our own tests over the operation layer; helical
 //! interpolation of a counterbore with an end mill is standard practice
@@ -119,6 +121,35 @@ fn a_hole_too_wide_for_one_helix_is_refused_through_the_operation() {
     }
     let msg = generate(&world, "CC", p).err().unwrap_or_default();
     assert!(msg.contains("too wide for one helix") && msg.contains("12.000 mm"), "{msg}");
+}
+
+#[test]
+fn a_small_helix_inside_the_uncut_core_is_refused_through_the_operation() {
+    // The review's probe: Ø6.5, 0.4 mm per turn, a Ø6 tool. The helix
+    // radius is 0.25 mm; the uncut core of the "NC" tool is 1.5 mm.
+    let world = world();
+    let mut p = bore(HELICAL);
+    if let OpParams::Bore { holes, stepdown, .. } = &mut p {
+        holes[0].radius = 3.25;
+        *stepdown = 0.4;
+    }
+    let msg = generate(&world, "NC", p.clone()).err().unwrap_or_default();
+    assert!(msg.contains("not centre-cutting") && msg.contains("1.500 mm uncut core") && msg.contains("9.000 mm"), "{msg}");
+    // The centre-cutting tool keeps the legal small helix.
+    let cc = generate(&world, "CC", p).expect("a centre-cutting tool may helix the small hole");
+    assert!(cc.moves.iter().all(|m| m.kind != MoveKind::Plunge), "the small helix posts no plunge");
+}
+
+#[test]
+fn a_helical_bore_with_a_pass_order_is_refused_by_name() {
+    let world = world();
+    let mut p = bore(HELICAL);
+    if let OpParams::Bore { pass_start, .. } = &mut p {
+        *pass_start = camcraft_app::machining2d::PassStart::Outside;
+    }
+    assert!(p.named_refusal().is_some_and(|why| why.contains("Helical strategy")), "the command refuses it first");
+    let msg = generate(&world, "CC", p).err().unwrap_or_default();
+    assert!(msg.contains("Helical strategy"), "{msg}");
 }
 
 #[test]
