@@ -23,7 +23,13 @@ pub(super) fn pick_widget<'a>(ui: &Ui, armed: bool, text: impl Into<egui::Widget
     let v = ui.visuals();
     let stroke = if armed { Stroke::new(1.5, v.selection.stroke.color) } else { Stroke::new(1.0, v.selection.bg_fill) };
     let fill = pick_fill(v, armed);
-    Button::selectable(armed, text).fill(fill).stroke(stroke)
+    let text: egui::WidgetText = text.into();
+    let label = if camcraft_i18n::missing(camcraft_i18n::Lang::ZhCn, text.text()) {
+        text
+    } else {
+        egui::WidgetText::from(camcraft_i18n::tr_owned(text.text()))
+    };
+    Button::selectable(armed, label).fill(fill).stroke(stroke)
 }
 
 #[cfg(test)]

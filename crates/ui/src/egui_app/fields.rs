@@ -252,9 +252,11 @@ pub(super) fn orientation_editor(ui: &mut Ui, u: Unit, tilt: &mut Option<Tilt>) 
 /// Combo over `&[&str]` with a usize model (imgui's combo idiom).
 pub(crate) fn combo(ui: &mut Ui, id: &str, idx: &mut usize, names: &[&str]) {
     let cur = names.get((*idx).min(names.len().saturating_sub(1))).copied().unwrap_or("");
-    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
+    let cur = camcraft_i18n::tr(cur);
+    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur.as_ref()).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
-            ui.selectable_value(idx, i, *n);
+            let shown = camcraft_i18n::tr(n);
+            ui.selectable_value(idx, i, shown.as_ref());
         }
     });
 }
@@ -262,9 +264,11 @@ pub(crate) fn combo(ui: &mut Ui, id: &str, idx: &mut usize, names: &[&str]) {
 /// Same, for owned name lists (tool/source lists built per frame).
 pub(crate) fn combo_owned(ui: &mut Ui, id: &str, idx: &mut usize, names: &[String]) {
     let cur: String = names.get((*idx).min(names.len().saturating_sub(1))).cloned().unwrap_or_default();
-    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
+    let cur = camcraft_i18n::tr(&cur);
+    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur.as_ref()).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
-            ui.selectable_value(idx, i, n.as_str());
+            let shown = camcraft_i18n::tr(n);
+            ui.selectable_value(idx, i, shown.as_ref());
         }
     });
 }

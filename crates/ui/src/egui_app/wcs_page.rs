@@ -99,7 +99,8 @@ pub(super) fn even_row(ui: &mut Ui, labels: &[&str], size: Vec2) -> Option<usize
     let mut hit = None;
     ui.horizontal(|ui| {
         for (i, label) in labels.iter().enumerate() {
-            if ui.add_sized(size, Button::new(*label)).clicked() {
+            let shown = camcraft_i18n::tr(label);
+            if ui.add_sized(size, Button::new(shown.as_ref())).clicked() {
                 hit = Some(i);
             }
         }

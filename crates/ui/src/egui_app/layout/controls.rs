@@ -10,12 +10,24 @@ use egui::{Response, Ui, WidgetText};
 
 /// A form action button (e.g. "Detect holes").
 pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.button(label)
+    let label: WidgetText = label.into();
+    // #853: translate catalogue labels in place; dynamic/styled text without
+    // a catalogue entry is passed through untouched.
+    if !camcraft_i18n::missing(camcraft_i18n::Lang::ZhCn, label.text()) {
+        ui.button(camcraft_i18n::tr_owned(label.text()))
+    } else {
+        ui.button(label)
+    }
 }
 
 /// A compact inline button inside a list or row (e.g. "Remove 1").
 pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.small_button(label)
+    let label: WidgetText = label.into();
+    if !camcraft_i18n::missing(camcraft_i18n::Lang::ZhCn, label.text()) {
+        ui.small_button(camcraft_i18n::tr_owned(label.text()))
+    } else {
+        ui.small_button(label)
+    }
 }
 
 /// One read-only text row in a form list (e.g. a detected hole entry).
