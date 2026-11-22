@@ -21,8 +21,7 @@ dialog):
   The plan marks its start (`LevelPlan::ramp_starts`). Only Outside marks
   starts; Inside, Auto, Adaptive, Zigzag and rest machining mark none.
 - The ladder's pass link (`ladder_links::pass_link`) enters a marked start
-  over a column that is still solid (`plunge_law::into_solid`) by the
-  existing ramp fallback of the 2D strategies: the zig-zag along the
+  below the material top by the existing ramp fallback of the 2D strategies: the zig-zag along the
   first cut (`links::plan_zig_capped` / `push_zig`, `descent::zig_from`).
   No second ramp law: the angle is the entry's ramp angle, and 3 deg
   (`links::DEFAULT_RAMP_ANGLE`) when the operation sets none; the leg
@@ -33,11 +32,16 @@ dialog):
   the ramped stretch again at the floor. So the floor under the ramp is
   cut, in the climb direction.
 - The ramp comes before the user's helix or plunge restart (#2265) at a
-  marked start. A start whose column is already cut keeps the ordinary
-  pass link.
+  marked start. The ladder does not scan the cut moves again to prove the
+  column solid (`plunge_law::into_solid`): the mark is the plan's proof
+  that no cut of the level reaches the start, and the scan of every
+  earlier move at each mark made the fig8 Outside pocket test run for
+  more than 10 minutes in debug. A ramp over a column that is cut after
+  all is harmless.
 - The fallback law: the plan checks each dead end before it is kept
-  (`level_ramp_entry::too_short_at`), at the deepest descent of any level
-  (material top plus plunge height down to the bottom). A dead end too
+  (`level_ramp_entry::too_short_at`), at the deepest descent of any cut
+  level (the material top of that level plus the plunge height, down to
+  the level; levels that cannot be read count as too short). A dead end too
   short for the ramp sends the area to the Auto order with the named note
   `StartSide::ramp_fallback_note`, which carries `RINGS_FALLBACK`, so the
   op raises `Warning::StrategyFallback`. If the ladder still cannot plan

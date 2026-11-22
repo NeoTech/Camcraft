@@ -11,8 +11,8 @@
 use crate::cl::PathBuilder;
 use crate::geo2d::Point2;
 use crate::links::plan_zig_capped;
-use crate::plunge_law;
 
+use super::equal_steps::cut_levels_for;
 use super::descent::{Cuts, Lvl, fallback_ramp_angle, push, zig_from};
 use super::ladder_links::LevelWalk;
 use super::levels::{Cert, Motion};
@@ -34,26 +34,46 @@ fn marked(starts: &[Point2], e: Point2) -> bool {
     starts.iter().any(|q| (q.x - e.x).hypot(q.y - e.y) <= SAME)
 }
 
+/// The deepest descent (mm) a dead-end ramp takes at any cut level: from
+/// the material top of that level (the level above; the entry top on the
+/// first) plus the plunge height, down to the level. `None` when the
+/// levels cannot be read.
+fn deepest_descent(p: &PocketParams) -> Option<f64> {
+    let a = &p.links.approach;
+    let zs = cut_levels_for(p.top_z, a, p.bottom_z, p.stepdown).ok()?;
+    let mut above = a.entry_top(p.top_z);
+    let mut worst: f64 = 0.0;
+    for z in zs {
+        worst = worst.max(above + a.plunge_height.max(0.0) - z);
+        above = z;
+    }
+    (worst.is_finite() && worst > 0.0).then_some(worst)
+}
+
 /// The first dead-end start among `passes` whose pass is too short for
-/// the ramp at the entry's angle over the deepest descent any level asks
-/// (the top of the material plus the plunge height down to the bottom):
-/// the plan cannot enter it without a plunge, so the caller falls back.
+/// the ramp at the entry's angle over the deepest descent of any level
+/// ([`deepest_descent`]): the plan cannot enter it without a plunge, so
+/// the caller falls back. Levels that cannot be read count as too short.
 pub(super) fn too_short_at(passes: &[Vec<Point2>], starts: &[Point2], p: &PocketParams) -> Option<Point2> {
     let a = &p.links.approach;
-    let dz = a.entry_top(p.top_z) + a.plunge_height.max(0.0) - p.bottom_z;
+    let dz = deepest_descent(p).unwrap_or(f64::NAN);
     passes.iter().filter_map(|pass| pass.first().copied().map(|e| (e, pass))).find_map(|(e, pass)| {
         (marked(starts, e) && plan_zig_capped(pass, dz, fallback_ramp_angle(a), a.ramp_max_len).is_none()).then_some(e)
     })
 }
 
 /// Enter the pass of `lv` by the ramp along it when its start is a
-/// marked dead end over a column still solid at `lv.z`; the tool stands
+/// marked dead end below the material top; the tool stands
 /// at `plane`. `None` when the start is not one (the ordinary pass link
 /// posts the entry); a dead end the ramp cannot plan is named on the path
 /// and left to the ordinary link.
 pub(super) fn dead_end_ramp(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: Option<&Cert<'_>>, plane: f64) -> Option<Cuts> {
     let &e = lv.pass.first()?;
-    if !marked(&m.ramp_starts, e) || !plunge_law::into_solid(b, e, lv.z, lv.mat_top, m.tool_r()) {
+    // The mark is the plan's proof that no cut of the level reaches the
+    // start (`level_order::order`), so the column is not scanned again:
+    // a scan of every earlier move at each mark costs seconds on a large
+    // part, and a ramp over a column that is cut after all is harmless.
+    if !marked(&m.ramp_starts, e) || lv.z >= lv.mat_top {
         return None;
     }
     let cen = cert?;
