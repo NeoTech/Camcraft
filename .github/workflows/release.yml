@@ -14,7 +14,10 @@
 # `site` and `pages`, from the dispatched ref. `pages` deploys it only when
 # that ref is a `site/*` branch (a past release's tree plus its site fixes,
 # docs/decisions/3276-site-redeploy.md). No platform, wasm or publish job
-# runs; the site goes out with app/ as its "not part of this copy" page.
+# runs; the site goes out with app/ as its "not part of this copy" page,
+# unless `app_run_id` names an earlier run (the tag run of that release):
+# then `site` downloads that run's wasm-app artifact and serves it at app/
+# (docs/decisions/3276-site-app-artifact.md).
 # Graph (#125): windows, linux and macos start at once; AUR, snap
 # and flatpak follow Linux; publish waits for all six with !cancelled(),
 # puts every asset that was built on the release page and names any
@@ -37,6 +40,10 @@ on:
         description: Build and deploy only the documentation site (from a site/* branch)
         type: boolean
         default: false
+      app_run_id:
+        description: With site_only, the id of an earlier run whose wasm-app artifact goes to app/ (empty for none)
+        type: string
+        default: ''
 
 env:
   CARGO_TERM_COLOR: always
@@ -484,12 +491,16 @@ jobs:
     # run), like `publish` waits for the platforms: a failed browser build
     # never withholds the docs.
     # #3276: a `site_only` dispatch skips `wasm`; the site then goes out
-    # with app/ as its "not part of this copy" page.
+    # with app/ as its "not part of this copy" page, unless `app_run_id`
+    # names an earlier run: then that run's wasm-app artifact is the app,
+    # and a missing or bad artifact fails this job (nothing deploys).
+    # `actions: read` lets the job token read that run's artifacts.
     needs: [wasm]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Zola
@@ -529,17 +540,45 @@ jobs:
         with:
           name: wasm-app
           path: /tmp/wasm-app
+      - name: Earlier run of the browser build
+        # #3276: a site_only dispatch with app_run_id takes the app from that
+        # run. The id must be a run number; anything else stops the job.
+        if: ${{ inputs.site_only && inputs.app_run_id != '' }}
+        shell: bash
+        env:
+          APP_RUN_ID: ${{ inputs.app_run_id }}
+        run: |
+          if ! [[ "$APP_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::app_run_id must be a workflow run id (digits only), not '$APP_RUN_ID'"; exit 1
+          fi
+          echo "Browser build from run $APP_RUN_ID"
+      - uses: actions/download-artifact@v4
+        # #3276: no continue-on-error: the dispatch asked for this app, so a
+        # failed download fails the site and nothing deploys.
+        if: ${{ inputs.site_only && inputs.app_run_id != '' }}
+        with:
+          name: wasm-app
+          path: /tmp/wasm-app
+          run-id: ${{ inputs.app_run_id }}
+          github-token: ${{ github.token }}
       - name: Is there a browser build to publish
         # The front page claims the browser build only when it is deployed:
         # `app = true|false` in site/version.toml tells the templates. No
         # browser build (wasm job failed, nothing downloaded, or the page
-        # check fails) is a warning by name, never a failed site.
+        # check fails) is a warning by name, never a failed site. An app
+        # from app_run_id (#3276) that fails the page check is an error.
         shell: bash
         env:
           WASM_RESULT: ${{ needs.wasm.result }}
+          APP_RUN_ID: ${{ inputs.site_only && inputs.app_run_id || '' }}
         run: |
           app=false
-          if [ "$WASM_RESULT" != success ]; then
+          if [ -n "$APP_RUN_ID" ]; then
+            if ! bash web/check-app-page.sh /tmp/wasm-app; then
+              echo "::error::the wasm-app artifact of run $APP_RUN_ID failed web/check-app-page.sh"; exit 1
+            fi
+            app=true
+          elif [ "$WASM_RESULT" != success ]; then
             echo "::warning::Browser build missing: the wasm job did not succeed (result: $WASM_RESULT); the site goes out with app/ saying so"
           elif ! bash web/check-app-page.sh /tmp/wasm-app; then
             echo "::warning::Browser build missing: the wasm-app artifact did not download or failed web/check-app-page.sh; the site goes out with app/ saying so"
@@ -555,8 +594,11 @@ jobs:
         # Zola writes app/ as the "not part of this copy" page; with a
         # browser build, the build's folder replaces it and is checked again
         # where it will be served. A copy that fails is dropped and the site
-        # is built again saying the browser build is missing.
+        # is built again saying the browser build is missing (an app from
+        # app_run_id, #3276, fails the job instead).
         shell: bash
+        env:
+          APP_RUN_ID: ${{ inputs.site_only && inputs.app_run_id || '' }}
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           repo="${GITHUB_REPOSITORY#*/}"
@@ -564,6 +606,9 @@ jobs:
           build
           if [ "$CAMCRAFT_APP" = true ]; then
             if ! { rm -rf site/public/app && cp -r /tmp/wasm-app site/public/app && bash web/check-app-page.sh site/public/app; }; then
+              if [ -n "$APP_RUN_ID" ]; then
+                echo "::error::the app of run $APP_RUN_ID failed web/check-app-page.sh at app/"; exit 1
+              fi
               echo "::warning::Browser build missing: its copy at app/ failed web/check-app-page.sh; the site goes out with app/ saying so"
               sed -i 's/^app = true$/app = false/' site/version.toml
               build
