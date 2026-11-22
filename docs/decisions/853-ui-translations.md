@@ -10,7 +10,7 @@ language (Simplified Chinese) end to end:
   so a miss shows the English string (never a key, never a blank), and a
   rewording in the source degrades to English until a translator follows it.
   Transported CL/G-code/project text never passes through the lookup.
-- The catalogue is `assets/i18n/zh-CN.toml` (3 636 pairs), checked without a
+- The catalogue is `assets/i18n/zh-CN.toml` (3 638 pairs), checked without a
   build by `scripts/i18n/check.py`, with a translator's guide beside it.
 - The language follows the system locale on first start (`LC_ALL`, then
   `LC_MESSAGES`, then `LANG`). The View door carries a **Language** list -

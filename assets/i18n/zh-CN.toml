@@ -3689,3 +3689,5 @@
 "updated" = "已更新"
 "imported" = "已导入"
 "{verb} {name}{note}" = "{verb}{name}{note}"
+"cutter profile not set: {err}" = "切削刃轮廓未设置：{err}"
+"holder profile not set: {err}" = "刀柄轮廓未设置：{err}"

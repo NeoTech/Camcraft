@@ -23,7 +23,18 @@ use super::{CommandKind, ErrorScope, State};
 
 /// The head of an Apply profile refusal, so a later valid outline can
 /// retire exactly that message.
+/// The stable **code** of a holder-profile Apply refusal. It stays English
+/// even in a translated message: `retire_profile_refusal` matches it so a
+/// translated sentence cannot stop the refusal from retiring.
 const PROFILE_REFUSED: &str = "holder profile not set: ";
+
+/// True when `msg` is a holder-profile Apply refusal, in any language.
+/// Matching the stable code alone would miss a translated message; matching
+/// only what is on screen would miss one left in English after a switch.
+pub(crate) fn is_profile_refusal(msg: &str) -> bool {
+    let shown_head = camcraft_i18n::tr("holder profile not set: ");
+    msg.starts_with(PROFILE_REFUSED) || msg.starts_with(shown_head.as_ref())
+}
 
 /// Which section the editor's third column shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -182,7 +193,7 @@ impl State {
             }
             Err(err) => {
                 self.tool_profile_ui.refused = tried;
-                self.refuse(ErrorScope::Tool, format!("{PROFILE_REFUSED}{err}"));
+                self.refuse(ErrorScope::Tool, camcraft_i18n::tf("holder profile not set: {err}", &[format!("{}", err)]));
             }
         }
     }
@@ -271,7 +282,10 @@ impl State {
             return;
         }
         self.tool_profile_ui.refused = None;
-        if !self.error_for(ErrorScope::Tool).is_some_and(|m| m.starts_with(PROFILE_REFUSED)) {
+        if !self
+            .error_for(ErrorScope::Tool)
+            .is_some_and(is_profile_refusal)
+        {
             return;
         }
         if let Some((_, msg)) = self.feedback.take()
@@ -431,5 +445,32 @@ impl State {
             }
             Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("holder profile not converted: {err}", &[format!("{}", err)])),
         }
+    }
+}
+
+#[cfg(test)]
+mod translated_refusal_tests {
+    use super::is_profile_refusal;
+
+    /// A translated refusal must still retire. The displayed head changes
+    /// with the language; the stable English code must keep matching too,
+    /// so a switch after the refusal cannot strand its banner.
+    #[test]
+    fn a_profile_refusal_is_recognised_in_both_languages() {
+        camcraft_i18n::set_lang(camcraft_i18n::Lang::En);
+        let en = camcraft_i18n::tf("holder profile not set: {err}", &["bad outline".to_owned()]);
+        assert!(is_profile_refusal(&en), "{en}");
+
+        camcraft_i18n::set_lang(camcraft_i18n::Lang::ZhCn);
+        let zh = camcraft_i18n::tf("holder profile not set: {err}", &["bad outline".to_owned()]);
+        assert!(zh.contains("刀柄轮廓未设置"), "{zh}");
+        assert!(is_profile_refusal(&zh), "{zh}");
+        // A message shown in English before the switch keeps matching.
+        assert!(is_profile_refusal(&en), "{en}");
+        // Another Tool refusal must not be retired as a profile one.
+        let other = camcraft_i18n::tf("tool not updated: {err}", &["bad outline".to_owned()]);
+        assert!(!is_profile_refusal(&other), "{other}");
+
+        camcraft_i18n::set_lang(camcraft_i18n::Lang::En);
     }
 }

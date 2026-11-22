@@ -24,11 +24,6 @@ use camcraft_app::tool_cutter;
 
 use super::{CommandKind, ErrorScope, State};
 
-/// The head of an Apply cutter refusal.
-pub(crate) const CUTTER_REFUSED: &str = "cutter profile not set: ";
-/// The head of a parameter-edit (`ReshapeTool`) refusal.
-pub(crate) const RESHAPE_REFUSED: &str = "tool not updated: ";
-
 /// The editor's drawn-cutter draft for the tool it is open on.
 #[derive(Clone, Default)]
 pub struct ToolCutterUi {
@@ -199,7 +194,9 @@ impl State {
                     camcraft_i18n::tf("tool {name}: cutter profile set", &[format!("{}", name)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("{CUTTER_REFUSED}{err}")),
+            // The English template is the stable refusal name; tf() shows
+            // the translated sentence without losing that identity.
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("cutter profile not set: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -212,7 +209,7 @@ impl State {
                 self.doc_version += 1;
                 self.status = camcraft_i18n::tf("tool {name} updated with its cutter profile", &[format!("{}", name)]);
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("{RESHAPE_REFUSED}{err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool not updated: {err}", &[format!("{}", err)])),
         }
     }
 }
