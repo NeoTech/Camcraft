@@ -39,7 +39,7 @@ pub fn click_selects_hint() -> String {
 /// armed). Off: every other tab - the selection is locked, clicks do nothing.
 pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
     if crate::interact::op_pick_locked(state) {
-        ui.label(RichText::new("Picking off - selection locked").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("Picking off - selection locked")).weak());
     } else {
         ui.label(RichText::new(camcraft_i18n::tr_owned("Picking on - clicks edit the selection")).strong());
     }
@@ -118,7 +118,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
         let n = state.op_ui.src_name.clone();
         ui.label(format!("Whole of '{n}' - the first pick replaces this."));
     } else if state.op_ui.src_kind != 2 {
-        ui.label("Whole stock contour (default) - picks bound the operation.");
+        ui.label(camcraft_i18n::tr("Whole stock contour (default) - picks bound the operation."));
     }
     let sketches = camcraft_app::sketch::placed_in(&state.world, live_setup);
     if !sketches.is_empty() {
@@ -145,7 +145,7 @@ fn sketch_layer_picks(ui: &mut Ui, state: &mut State, target: &str, sketches: &[
                 let picked = state.op_ui.src_kind == 2 && state.op_ui.geo.contains(&sel);
                 let resp = ui
                     .selectable_label(picked, &entry.label)
-                    .on_hover_text("Toggle all cuttable chains on this DXF sketch layer");
+                    .on_hover_text(camcraft_i18n::tr("Toggle all cuttable chains on this DXF sketch layer"));
                 if resp.hovered() {
                     state.geo_hover = Some(sel.clone());
                 }
@@ -207,11 +207,11 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
             .horizontal(|ui| {
                 // #1688: the remove button comes first, so it stays in reach
                 // however long the label is or however narrow the panel.
-                let x = ui.small_button("×").on_hover_text("remove this pick");
+                let x = ui.small_button(camcraft_i18n::tr("×")).on_hover_text(camcraft_i18n::tr("remove this pick"));
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
                 if let Some((entity, id)) = &vertex
-                    && ui.small_button(camcraft_i18n::tr_owned("Set origin")).on_hover_text("set the work origin at this vertex").clicked()
+                    && ui.small_button(camcraft_i18n::tr_owned("Set origin")).on_hover_text(camcraft_i18n::tr("set the work origin at this vertex")).clicked()
                 {
                     crate::vertex_pick::queue_origin_at_vertex(state, entity, *id);
                 }
@@ -226,8 +226,8 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                     }
                     if t.plane_z.is_some()
                         && ui
-                            .small_button("Set origin (Z only)")
-                            .on_hover_text("keep the origin's X and Y; move Z to this flat face")
+                            .small_button(camcraft_i18n::tr("Set origin (Z only)"))
+                            .on_hover_text(camcraft_i18n::tr("keep the origin's X and Y; move Z to this flat face"))
                             .clicked()
                     {
                         crate::vertex_pick::queue_origin_at_face(state, entity, feat.clone(), true);
@@ -280,7 +280,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
             }
         }
     }
-    if ui.small_button(camcraft_i18n::tr_owned("Clear")).on_hover_text("drop every pick - the stock bounds the operation again").clicked() {
+    if ui.small_button(camcraft_i18n::tr_owned("Clear")).on_hover_text(camcraft_i18n::tr("drop every pick - the stock bounds the operation again")).clicked() {
         state.pending.push_back(CommandKind::EditOperationLinks {
             name: target.to_owned(),
             tool: None,

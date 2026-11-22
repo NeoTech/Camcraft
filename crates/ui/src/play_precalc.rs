@@ -88,7 +88,7 @@ pub(crate) fn precalc_row(ui: &mut egui::Ui, p: &Precalc) -> bool {
     ui.horizontal(|ui| {
         ui.label(text);
         matches!(p, Precalc::Running { .. })
-            && ui.button(CANCEL).on_hover_text("Stop the calculation and calculate the stock during playback").clicked()
+            && ui.button(camcraft_i18n::tr(CANCEL)).on_hover_text(camcraft_i18n::tr("Stop the calculation and calculate the stock during playback")).clicked()
     })
     .inner
 }

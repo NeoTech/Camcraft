@@ -101,7 +101,7 @@ fn plane_side(ui: &mut Ui, state: &mut State, setup: &str) {
     let id = ui.id().with(("orient_plane", setup));
     let mut method: PlaneMethod = ui.data_mut(|m| *m.get_temp_mut_or_insert_with(id, || PlaneMethod::Axes));
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Plane orientation").strong());
+        ui.label(RichText::new(camcraft_i18n::tr("Plane orientation")).strong());
         ComboBox::from_id_salt(id)
             .selected_text(method.label())
             .show_ui(ui, |ui| {
@@ -126,7 +126,7 @@ fn point_side(ui: &mut Ui, state: &mut State, setup: &str) {
     let id = ui.id().with(("orient_point", setup));
     let mut method: PointMethod = ui.data_mut(|m| *m.get_temp_mut_or_insert_with(id, || PointMethod::ModelBox));
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Orientation point").strong());
+        ui.label(RichText::new(camcraft_i18n::tr("Orientation point")).strong());
         ComboBox::from_id_salt(id)
             .selected_text(method.label())
             .show_ui(ui, |ui| {
@@ -136,9 +136,9 @@ fn point_side(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text(
+            .on_hover_text(camcraft_i18n::tr(
                 "Where this setup's WCS origin sits. The frame comes from the plane side; \
-                 the point only moves the origin, the rotation is kept.",
+                 the point only moves the origin, the rotation is kept."),
             );
     });
     ui.data_mut(|m| m.insert_temp(id, method));
@@ -168,7 +168,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
     }
     let id = ui.id().with(("setup_cylinder", setup));
     let mut d: CylDraft = ui.data_mut(|m| *m.get_temp_mut_or_insert_with(id, CylDraft::default));
-    ui.label("    Pick the bore's or cylinder's curved wall - its facet normals name the axis");
+    ui.label(camcraft_i18n::tr("    Pick the bore's or cylinder's curved wall - its facet normals name the axis"));
     let mine = state.cylinder_pick.as_ref().is_some_and(|p| p.setup == setup);
     let armed = mine && crate::cylinder_pick::collecting(state);
     ui.horizontal(|ui| {
@@ -180,7 +180,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
                 crate::cylinder_pick::arm(state, setup);
             }
         }
-        if mine && ui.button("Clear wall").clicked() {
+        if mine && ui.button(camcraft_i18n::tr("Clear wall")).clicked() {
             crate::cylinder_pick::disarm(state);
         }
     });
@@ -190,7 +190,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
         ui.label(format!("      wall: {}", camcraft_app::pick::geo_label(&state.world, g)));
     }
     ui.horizontal(|ui| {
-        ui.label("      Lands on");
+        ui.label(camcraft_i18n::tr("      Lands on"));
         ComboBox::from_id_salt(id.with("target"))
             .selected_text(d.target.label())
             .show_ui(ui, |ui| {
@@ -199,8 +199,8 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             });
         ui.add(egui::DragValue::new(&mut d.angle).speed(1.0).suffix("°"))
-            .on_hover_text("The angle about the axis it landed on, applied after the landing.");
-        ui.checkbox(&mut d.flip, "Flip axis").on_hover_text("Run the wall's axis the other way.");
+            .on_hover_text(camcraft_i18n::tr("The angle about the axis it landed on, applied after the landing."));
+        ui.checkbox(&mut d.flip,camcraft_i18n::tr( "Flip axis")).on_hover_text(camcraft_i18n::tr("Run the wall's axis the other way."));
         ui.data_mut(|m| m.insert_temp(id, d));
     });
     let pick = state
@@ -219,7 +219,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
     ui.label(RichText::new(format!("      {words}")).weak());
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(check.is_ok(), egui::Button::new("Apply cylinder"))
+            .add_enabled(check.is_ok(), egui::Button::new(camcraft_i18n::tr("Apply cylinder")))
             .clicked()
             && let Some(g) = pick
         {
@@ -251,7 +251,7 @@ fn box_panel(ui: &mut Ui, state: &mut State, setup: &str, stock: bool) {
                 }
             })
             .response
-            .on_hover_text("Which reading of the box the origin takes.");
+            .on_hover_text(camcraft_i18n::tr("Which reading of the box the origin takes."));
         ui.data_mut(|m| m.insert_temp(id, point));
         let read = if stock {
             camcraft_app::model::stock_world_aabb_for(&state.world, Some(setup))
@@ -274,7 +274,7 @@ fn box_panel(ui: &mut Ui, state: &mut State, setup: &str, stock: bool) {
         ui.label(RichText::new(words).weak());
     });
     let at = if stock { OriginAt::StockBox(point) } else { OriginAt::ModelBox(point) };
-    if ui.button("Place origin").clicked() {
+    if ui.button(camcraft_i18n::tr("Place origin")).clicked() {
         state.pending.push_back(CommandKind::PlaceSetupOrigin {
             setup: setup.to_owned(),
             at,
@@ -287,7 +287,7 @@ fn vertex_panel(ui: &mut Ui, state: &mut State, setup: &str) {
     if !state.setup_pick_rows.iter().any(|s| s == setup) {
         state.setup_pick_rows.push(setup.to_owned()); // #664
     }
-    ui.label("    Pick a vertex in the viewport for the WCS origin");
+    ui.label(camcraft_i18n::tr("    Pick a vertex in the viewport for the WCS origin"));
     let mine = state.origin_pick.as_ref().is_some_and(|p| p.setup == setup);
     let armed = mine && crate::origin_pick::collecting(state);
     ui.horizontal(|ui| {
@@ -299,7 +299,7 @@ fn vertex_panel(ui: &mut Ui, state: &mut State, setup: &str) {
                 crate::origin_pick::arm(state, setup);
             }
         }
-        if mine && ui.button("Clear point").clicked() {
+        if mine && ui.button(camcraft_i18n::tr("Clear point")).clicked() {
             crate::origin_pick::disarm(state);
         }
     });
@@ -307,7 +307,7 @@ fn vertex_panel(ui: &mut Ui, state: &mut State, setup: &str) {
         && let Some(g) = &p.pick
     {
         ui.label(format!("      point: {}", camcraft_app::pick::geo_label(&state.world, g)));
-        if ui.button("Place origin").clicked() {
+        if ui.button(camcraft_i18n::tr("Place origin")).clicked() {
             state.pending.push_back(CommandKind::PlaceSetupOrigin {
                 setup: setup.to_owned(),
                 at: OriginAt::Vertex(g.clone()),

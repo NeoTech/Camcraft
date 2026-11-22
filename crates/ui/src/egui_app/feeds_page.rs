@@ -142,8 +142,8 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
                 None
             };
             let mut ok = ui
-                .add_enabled(!dirty && !same, egui::Button::new("Apply suggestion"))
-                .on_hover_text("write the suggested spindle and feed (one undoable command)");
+                .add_enabled(!dirty && !same, egui::Button::new(camcraft_i18n::tr("Apply suggestion")))
+                .on_hover_text(camcraft_i18n::tr("write the suggested spindle and feed (one undoable command)"));
             if let Some(w) = why {
                 ok = ok.on_disabled_hover_text(w);
             }

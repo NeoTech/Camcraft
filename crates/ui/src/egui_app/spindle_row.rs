@@ -96,7 +96,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, tool: &Tool) {
     let mut commit = None;
     prop_row_hint(ui, "Spindle speed", &help, |ui| {
         let label = if as_vc { "surface" } else { "rpm" };
-        if ui.small_button(label).on_hover_text("show the speed as rpm or as surface (cutting) speed").clicked() {
+        if ui.small_button(label).on_hover_text(camcraft_i18n::tr("show the speed as rpm or as surface (cutting) speed")).clicked() {
             flip = true;
         }
         // A draft rides egui's temp memory while the field is held, so

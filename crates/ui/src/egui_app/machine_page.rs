@@ -60,7 +60,7 @@ pub(super) fn machine_page(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let (path, m) = machine::of(&state.world);
     let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
     group(ui, GROUPS[1], None, |ui| {
-        ui.label(RichText::new(FILE_HELP).small().weak());
+        ui.label(RichText::new(camcraft_i18n::tr(FILE_HELP)).small().weak());
         library_row(ui, state, &path);
         match &m {
             Some(m) => {
@@ -75,7 +75,7 @@ pub(super) fn machine_page(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
                 super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)], OVERVIEW_GAP);
             }
             None => {
-                ui.label(NO_MACHINE);
+                ui.label(camcraft_i18n::tr(NO_MACHINE));
             }
         }
     });
@@ -115,9 +115,9 @@ fn library_row(ui: &mut Ui, state: &mut State, path: &str) {
     // button first, so the combo (which fills the remaining width) cannot
     // push the button out of the cell.
     prop_grid(ui, "machine_library_grid", |ui| {
-        ui.label("Library");
+        ui.label(camcraft_i18n::tr("Library"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let refresh = ui.button("Refresh").on_hover_text("Read the machine folder again");
+            let refresh = ui.button(camcraft_i18n::tr("Refresh")).on_hover_text(camcraft_i18n::tr("Read the machine folder again"));
             if super::fields::named(refresh, REFRESH_MACHINES).clicked() {
                 // #2380: read the shipped folder again, then list the
                 // catalogue again (its shipped part is that scan).

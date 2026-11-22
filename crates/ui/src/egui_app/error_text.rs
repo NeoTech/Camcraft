@@ -42,7 +42,7 @@ pub(crate) fn error_rich(ui: &mut Ui, text: RichText, plain: &str, sense_click: 
             ui.close();
         }
     });
-    if wants_button(plain) && ui.small_button(COPY_LABEL).clicked() {
+    if wants_button(plain) && ui.small_button(camcraft_i18n::tr(COPY_LABEL)).clicked() {
         ui.ctx().copy_text(plain.to_owned());
     }
     resp

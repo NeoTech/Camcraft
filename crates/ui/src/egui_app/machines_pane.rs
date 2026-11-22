@@ -152,8 +152,8 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         };
         ui.label(RichText::new(count).color(pal.text_dim));
         if ui
-            .button("Refresh")
-            .on_hover_text("Read the machine files again")
+            .button(camcraft_i18n::tr("Refresh"))
+            .on_hover_text(camcraft_i18n::tr("Read the machine files again"))
             .clicked()
         {
             // #2380: read the shipped folders again, then the catalogue.
@@ -176,14 +176,14 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             super::fields::named(cb.response, "Filter machines by kind");
             // A blank file needs a kind: shut under "All", accent-filled
             // once a kind is picked.
-            let mut blank = egui::Button::new("New blank");
+            let mut blank = egui::Button::new(camcraft_i18n::tr("New blank"));
             if want.is_some() {
                 blank = blank.fill(pal.accent);
             }
             if ui
                 .add_enabled(want.is_some(), blank)
-                .on_hover_text("A new machine file with the keys its kind requires")
-                .on_disabled_hover_text("Pick a kind first")
+                .on_hover_text(camcraft_i18n::tr("A new machine file with the keys its kind requires"))
+                .on_disabled_hover_text(camcraft_i18n::tr("Pick a kind first"))
                 .clicked()
                 && let Some(kind) = want
             {
@@ -191,18 +191,18 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             }
             let has = picked.is_some();
             if ui
-                .add_enabled(has, egui::Button::new("New from template"))
-                .on_hover_text("A new machine file copied from the selected machine")
-                .on_disabled_hover_text("Select a machine to copy")
+                .add_enabled(has, egui::Button::new(camcraft_i18n::tr("New from template")))
+                .on_hover_text(camcraft_i18n::tr("A new machine file copied from the selected machine"))
+                .on_disabled_hover_text(camcraft_i18n::tr("Select a machine to copy"))
                 .clicked()
                 && let Some(src) = &picked
             {
                 open = Some(MachineDraft::from_template(src).map_err(|r| r.to_string()));
             }
             if ui
-                .add_enabled(has, egui::Button::new("Edit machine"))
-                .on_hover_text("Edit the selected machine file (a shipped one saves as a copy)")
-                .on_disabled_hover_text("Select a machine to edit")
+                .add_enabled(has, egui::Button::new(camcraft_i18n::tr("Edit machine")))
+                .on_hover_text(camcraft_i18n::tr("Edit the selected machine file (a shipped one saves as a copy)"))
+                .on_disabled_hover_text(camcraft_i18n::tr("Select a machine to edit"))
                 .clicked()
                 && let Some(src) = &picked
             {
@@ -225,7 +225,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         .auto_shrink([false, true])
         .show(ui, |ui| {
             if shown == 0 {
-                ui.label(RichText::new("No machines of this kind.").color(pal.text_dim));
+                ui.label(RichText::new(camcraft_i18n::tr("No machines of this kind.")).color(pal.text_dim));
             }
             for (i, e) in list.iter().enumerate() {
                 if !matches_filter(e, want) {
@@ -274,7 +274,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         return;
     }
     let Some(e) = p.selected.and_then(|i| list.get(i)) else {
-        ui.label(RichText::new("Select a machine to see its properties.").color(pal.text_dim));
+        ui.label(RichText::new(camcraft_i18n::tr("Select a machine to see its properties.")).color(pal.text_dim));
         if reread {
             p.list = None;
         }
@@ -289,7 +289,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             super::error_text::error_text(ui, inks.error, &r.to_string());
         }
         let why = block.clone().flatten();
-        let r = ui.add_enabled(why.is_none(), egui::Button::new(USE_FOR_SETUP));
+        let r = ui.add_enabled(why.is_none(), egui::Button::new(camcraft_i18n::tr(USE_FOR_SETUP)));
         match &why {
             None => {
                 if r.on_hover_text(format!("Make this the setup's machine ({} undoes it)", chord("Z"))).clicked() {

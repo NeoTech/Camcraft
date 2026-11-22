@@ -35,7 +35,7 @@ const ANGLE_HINTS: [&str; 3] = [
 
 pub(super) fn axis_rows(ui: &mut Ui, s: &mut StockUi) {
     ui.horizontal_wrapped(|ui| {
-        ui.label("Stock axis").on_hover_text(AXIS_HINT);
+        ui.label(camcraft_i18n::tr("Stock axis")).on_hover_text(AXIS_HINT);
         for axis in StockAxis::ALL {
             ui.radio_value(&mut s.axis, axis, axis.label()).on_hover_text(AXIS_HINT);
         }

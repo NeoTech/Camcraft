@@ -57,7 +57,7 @@ pub(super) fn threading_picker(ui: &mut Ui, state: &mut State) {
     };
     let mut pick: Option<ThreadingOutput> = None;
     ui.horizontal(|ui| {
-        ui.label("Threading");
+        ui.label(camcraft_i18n::tr("Threading"));
         egui::ComboBox::from_id_salt("post_threading")
             .selected_text(label(now.threading))
             .show_ui(ui, |ui| {
@@ -85,8 +85,8 @@ pub(super) fn smoothing_switch(ui: &mut Ui, state: &mut State) {
     }
     let now = posting::post_options(&state.world);
     let mut want = now.smoothing;
-    ui.checkbox(&mut want, "Smoothing per operation").on_hover_text(
-        "write the control's smoothing mode per operation: finishing ops ask their tolerance, roughing ops a looser one from the stock they leave (G64 P, G5.1, G187, CYCLE832, G62) - needs the control's smoothing option on some machines",
+    ui.checkbox(&mut want,camcraft_i18n::tr( "Smoothing per operation")).on_hover_text(camcraft_i18n::tr(
+        "write the control's smoothing mode per operation: finishing ops ask their tolerance, roughing ops a looser one from the stock they leave (G64 P, G5.1, G187, CYCLE832, G62) - needs the control's smoothing option on some machines"),
     );
     if want != now.smoothing {
         state.pending.push_back(CommandKind::SetPostOptions(PostOptions { smoothing: want, ..now }));
@@ -110,7 +110,7 @@ pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
         } {
             ui.horizontal(|ui| {
                 ui.label(format!("End in: {asked} (not supported by this post)"));
-                if ui.button("Reset to Program's unit").clicked() {
+                if ui.button(camcraft_i18n::tr("Reset to Program's unit")).clicked() {
                     state.pending.push_back(CommandKind::SetPostOptions(PostOptions {
                         end_units: EndUnits::Leave,
                         ..now
@@ -129,7 +129,7 @@ pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
     };
     let mut pick: Option<EndUnits> = None;
     ui.horizontal(|ui| {
-        ui.label("End in");
+        ui.label(camcraft_i18n::tr("End in"));
         egui::ComboBox::from_id_salt("post_end_units")
             .selected_text(label(now.end_units))
             .show_ui(ui, |ui| {
@@ -140,7 +140,7 @@ pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
                 }
             })
             .response
-            .on_hover_text("the unit the control is left in after the program: M30 does not reset the unit word on these controls, so a mm program on an inch-run control leaves the DRO and MDI in mm unless the unit word is written before program end");
+            .on_hover_text(camcraft_i18n::tr("the unit the control is left in after the program: M30 does not reset the unit word on these controls, so a mm program on an inch-run control leaves the DRO and MDI in mm unless the unit word is written before program end"));
     });
     if let Some(u) = pick {
         state.pending.push_back(CommandKind::SetPostOptions(PostOptions { end_units: u, ..now }));
@@ -154,7 +154,7 @@ pub(super) fn between_setups_picker(ui: &mut Ui, state: &mut State) {
     let now = posting::post_options(&state.world);
     let mut pick: Option<camcraft_app::schema::BetweenSetups> = None;
     ui.horizontal(|ui| {
-        ui.label("Between setups");
+        ui.label(camcraft_i18n::tr("Between setups"));
         egui::ComboBox::from_id_salt("post_between_setups")
             .selected_text(now.between_setups.label())
             .show_ui(ui, |ui| {
@@ -165,7 +165,7 @@ pub(super) fn between_setups_picker(ui: &mut Ui, state: &mut State) {
                 }
             })
             .response
-            .on_hover_text("where the program moves on to the next setup the part has to be re-clamped: pause there with a comment naming the next setup, stop only with the optional-stop switch on, run straight on (several vises on one table), or write each setup as its own program");
+            .on_hover_text(camcraft_i18n::tr("where the program moves on to the next setup the part has to be re-clamped: pause there with a comment naming the next setup, stop only with the optional-stop switch on, run straight on (several vises on one table), or write each setup as its own program"));
     });
     if let Some(b) = pick {
         state.pending.push_back(CommandKind::SetPostOptions(PostOptions { between_setups: b, ..now }));
@@ -178,7 +178,7 @@ pub(super) fn wcs_rotation_picker(ui: &mut Ui, state: &mut State) {
     let now = posting::post_options(&state.world);
     let mut pick: Option<camcraft_app::schema::WcsRotationOutput> = None;
     ui.horizontal(|ui| {
-        ui.label("WCS rotation");
+        ui.label(camcraft_i18n::tr("WCS rotation"));
         egui::ComboBox::from_id_salt("post_wcs_rotation")
             .selected_text(now.wcs_rotation.label())
             .show_ui(ui, |ui| {
@@ -189,8 +189,8 @@ pub(super) fn wcs_rotation_picker(ui: &mut Ui, state: &mut State) {
                 }
             })
             .response
-            .on_hover_text(
-                "Bake posts table XY coordinates relative to the work offset origin. Do not enter a rotation on the control. Control posts rotated WCS coordinates with G68/G69 or ROT RPL=/ROT; do not enter an additional rotation on the control.",
+            .on_hover_text(camcraft_i18n::tr(
+                "Bake posts table XY coordinates relative to the work offset origin. Do not enter a rotation on the control. Control posts rotated WCS coordinates with G68/G69 or ROT RPL=/ROT; do not enter an additional rotation on the control."),
             );
     });
     if let Some(r) = pick {
@@ -207,8 +207,8 @@ pub(super) fn units_row(ui: &mut Ui, state: &mut State, label: &str) {
     ui.horizontal(|ui| {
         ui.label(label);
         for cand in [Unit::Millimeters, Unit::Inches] {
-            let r = ui.radio(u == cand, cand.label()).on_hover_text(
-                "the document's unit: every number shown, and the unit every post writes the program in (G21 mm / G20 inch, or the control's own word) - the machine file does not choose it",
+            let r = ui.radio(u == cand, cand.label()).on_hover_text(camcraft_i18n::tr(
+                "the document's unit: every number shown, and the unit every post writes the program in (G21 mm / G20 inch, or the control's own word) - the machine file does not choose it"),
             );
             if r.clicked() && u != cand {
                 state.pending.push_back(CommandKind::SetUnits(cand));

@@ -25,17 +25,17 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
     let mut choice = None;
     let response = Modal::new(Id::new("unsaved-prompt")).show(ctx, |ui| {
         ui.set_max_width(360.0);
-        ui.heading("Unsaved changes");
+        ui.heading(camcraft_i18n::tr("Unsaved changes"));
         ui.label(format!("Save the changes to {name} before {verb}?"));
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if ui.button("Save").clicked() {
+            if ui.button(camcraft_i18n::tr("Save")).clicked() {
                 choice = Some(UnsavedChoice::Save);
             }
-            if ui.button("Don't Save").clicked() {
+            if ui.button(camcraft_i18n::tr("Don't Save")).clicked() {
                 choice = Some(UnsavedChoice::DontSave);
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                 choice = Some(UnsavedChoice::Cancel);
             }
         });

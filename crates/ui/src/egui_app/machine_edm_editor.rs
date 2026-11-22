@@ -77,7 +77,7 @@ fn stated_with(ui: &mut Ui, label: &str, v: &mut Option<f64>, seed: f64, show: i
         match v {
             Some(x) => show(ui, x, &format!("{label} value")),
             None => {
-                ui.label("not stated");
+                ui.label(camcraft_i18n::tr("not stated"));
             }
         }
     });
@@ -88,16 +88,16 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
     stated_num(ui, u, "Max orbit radius", &mut e.max_orbit_radius, 1.0);
     ui.horizontal(|ui| {
         let mut on = e.pickup.is_some();
-        if ui.checkbox(&mut on, "Electrode pickup").changed() {
+        if ui.checkbox(&mut on,camcraft_i18n::tr( "Electrode pickup")).changed() {
             e.pickup = on.then(String::new);
         }
         match &mut e.pickup {
             Some(p) => {
-                let l = ui.label("pickup name");
+                let l = ui.label(camcraft_i18n::tr("pickup name"));
                 ui.add(TextEdit::singleline(p).desired_width(140.0).hint_text("the holder system's name")).labelled_by(l.id);
             }
             None => {
-                ui.label("not stated");
+                ui.label(camcraft_i18n::tr("not stated"));
             }
         }
     });
@@ -128,9 +128,9 @@ fn orbits(ui: &mut Ui, e: &mut Edm) {
         e.orbits.remove(i);
     }
     if e.orbits.is_empty() {
-        ui.label("no orbits stated");
+        ui.label(camcraft_i18n::tr("no orbits stated"));
     }
-    if ui.button("Add orbit").clicked() {
+    if ui.button(camcraft_i18n::tr("Add orbit")).clicked() {
         e.orbits.push(OrbitWord { kind: ORBIT_KINDS[0].to_owned(), word: String::new() });
     }
 }
@@ -179,9 +179,9 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
         e.conditions.remove(i);
     }
     if e.conditions.is_empty() {
-        ui.label("no conditions stated - a sinker op refuses by name until one is");
+        ui.label(camcraft_i18n::tr("no conditions stated - a sinker op refuses by name until one is"));
     }
-    if ui.button("Add condition").clicked() {
+    if ui.button(camcraft_i18n::tr("Add condition")).clicked() {
         let mut n = e.conditions.len() + 1;
         while e.conditions.iter().any(|c| condition_id_key(&c.id) == condition_id_key(&format!("C{n}"))) {
             n += 1;
@@ -209,7 +209,7 @@ fn codes(ui: &mut Ui, codes: &mut BTreeMap<String, String>) {
                     ui.add(TextEdit::singleline(t).desired_width(150.0).hint_text(hint)).labelled_by(l.id);
                 }
                 None => {
-                    ui.label("not stated");
+                    ui.label(camcraft_i18n::tr("not stated"));
                 }
             }
         });

@@ -1651,7 +1651,7 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
                 ui.add(Label::new(line).selectable(true).truncate())
                     .on_hover_text(text.as_str())
                     .context_menu(|ui| {
-                        if ui.button("Copy message").clicked() {
+                        if ui.button(camcraft_i18n::tr("Copy message")).clicked() {
                             ui.ctx().copy_text(text.clone());
                             ui.close();
                         }

@@ -24,15 +24,15 @@ pub(super) fn profiles_group(ui: &mut Ui, state: &mut State) {
     let active = setup::active(&state.world);
     let has_face = sketch::face_frame(&state.world, active.as_deref()).is_some();
     let add = ui
-        .add_enabled(has_face, egui::Button::new(ADD_LABEL))
-        .on_hover_text("Place a DXF drawing on the top of this stock, as a profile for 2D, plasma and wire EDM operations")
-        .on_disabled_hover_text("make a stock first - a DXF profile is placed on the stock top");
+        .add_enabled(has_face, egui::Button::new(camcraft_i18n::tr(ADD_LABEL)))
+        .on_hover_text(camcraft_i18n::tr("Place a DXF drawing on the top of this stock, as a profile for 2D, plasma and wire EDM operations"))
+        .on_disabled_hover_text(camcraft_i18n::tr("make a stock first - a DXF profile is placed on the stock top"));
     if add.clicked() {
         state.pending.push_back(CommandKind::AddDxfProfileDialog);
     }
     let names = sketch::placed_in(&state.world, active.as_deref());
     if names.is_empty() {
-        ui.label(RichText::new("No DXF profiles on this stock.").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("No DXF profiles on this stock.")).weak());
         return;
     }
     for name in names {
@@ -50,13 +50,13 @@ fn profile_row(ui: &mut Ui, state: &mut State, name: &str) {
     ui.separator();
     ui.label(RichText::new(name).strong());
     prop_grid(ui, &format!("stock_profile_grid_{name}"), |ui| {
-        ui.label("Profile X");
+        ui.label(camcraft_i18n::tr("Profile X"));
         num(ui, u, &mut draft[0]);
         ui.end_row();
-        ui.label("Profile Y");
+        ui.label(camcraft_i18n::tr("Profile Y"));
         num(ui, u, &mut draft[1]);
         ui.end_row();
-        ui.label("Profile angle (deg)");
+        ui.label(camcraft_i18n::tr("Profile angle (deg)"));
         num_plain(ui, &mut draft[2]);
         ui.end_row();
     });
@@ -67,14 +67,14 @@ fn profile_row(ui: &mut Ui, state: &mut State, name: &str) {
     }
     let hidden = state.hidden_models.iter().any(|n| n == name);
     ui.horizontal(|ui| {
-        if ui.add_enabled(draft != placed, egui::Button::new("Place profile")).clicked() {
+        if ui.add_enabled(draft != placed, egui::Button::new(camcraft_i18n::tr("Place profile"))).clicked() {
             let [x, y, angle_deg] = draft;
             state.pending.push_back(CommandKind::MoveSketch { name: name.to_owned(), x, y, angle_deg });
         }
         if ui.button(if hidden { "Show profile" } else { "Hide profile" }).clicked() {
             State::toggle_visibility(&mut state.hidden_models, name);
         }
-        if ui.button("Delete profile").clicked() {
+        if ui.button(camcraft_i18n::tr("Delete profile")).clicked() {
             state.pending.push_back(CommandKind::DeleteByName(name.to_owned()));
         }
     });

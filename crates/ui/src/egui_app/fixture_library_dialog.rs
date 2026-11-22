@@ -65,7 +65,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
         ui.set_max_width(420.0);
         match dialog {
             FixtureLibDialog::Save(d) => {
-                ui.heading("Save fixture to library");
+                ui.heading(camcraft_i18n::tr("Save fixture to library"));
                 ui.label(RichText::new(&path).small());
                 ui.add_space(4.0);
                 if d.fixtures.is_empty() {
@@ -74,10 +74,10 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 for (name, on) in &mut d.fixtures {
                     ui.checkbox(on, name.as_str());
                 }
-                ui.label("Placed by");
-                ui.radio_value(&mut d.datum, DatumChoice::ModelOrigin, "Model origin");
-                ui.radio_value(&mut d.datum, DatumChoice::BottomCentre, "Bottom centre");
-                let l = ui.label("Note");
+                ui.label(camcraft_i18n::tr("Placed by"));
+                ui.radio_value(&mut d.datum, DatumChoice::ModelOrigin,camcraft_i18n::tr( "Model origin"));
+                ui.radio_value(&mut d.datum, DatumChoice::BottomCentre,camcraft_i18n::tr( "Bottom centre"));
+                let l = ui.label(camcraft_i18n::tr("Note"));
                 ui.add(TextEdit::singleline(&mut d.note).desired_width(320.0)).labelled_by(l.id);
                 if let Some(err) = &d.error {
                     super::error_text::error_text(ui, ui.visuals().error_fg_color, err);
@@ -86,19 +86,19 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 if let Some(taken) = &d.confirm_replace {
                     ui.label(format!("Replace {} in the library?", taken.join(", ")));
                     ui.horizontal(|ui| {
-                        if ui.button("Replace").clicked() {
+                        if ui.button(camcraft_i18n::tr("Replace")).clicked() {
                             act = Some(Act::Save { replace: true });
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                             act = Some(Act::Close);
                         }
                     });
                 } else {
                     ui.horizontal(|ui| {
-                        if ui.button("Save").clicked() {
+                        if ui.button(camcraft_i18n::tr("Save")).clicked() {
                             act = Some(Act::Save { replace: false });
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                             act = Some(Act::Close);
                         }
                     });
@@ -132,11 +132,11 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 });
             }
             FixtureLibDialog::Insert(d) => {
-                ui.heading("Insert from library");
+                ui.heading(camcraft_i18n::tr("Insert from library"));
                 ui.label(RichText::new(&path).small());
                 ui.add_space(4.0);
                 if d.rows.is_empty() && d.error.is_none() {
-                    ui.label("The library is empty - save a fixture to it first.");
+                    ui.label(camcraft_i18n::tr("The library is empty - save a fixture to it first."));
                 }
                 ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
                     for r in &d.rows {
@@ -170,25 +170,25 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 if let Some(name) = d.confirm_delete.clone() {
                     ui.label(format!("Delete '{name}' from the library? This edits the file and cannot be undone."));
                     ui.horizontal(|ui| {
-                        if ui.button("Delete").clicked() {
+                        if ui.button(camcraft_i18n::tr("Delete")).clicked() {
                             act = Some(Act::Delete(name.clone()));
                         }
-                        if ui.button("Keep").clicked() {
+                        if ui.button(camcraft_i18n::tr("Keep")).clicked() {
                             d.confirm_delete = None;
                         }
                     });
                 } else {
                     ui.horizontal(|ui| {
                         let cmd = insert_command(d);
-                        if ui.add_enabled(cmd.is_some(), egui::Button::new("Insert")).clicked()
+                        if ui.add_enabled(cmd.is_some(), egui::Button::new(camcraft_i18n::tr("Insert"))).clicked()
                             && let Some(cmd) = cmd
                         {
                             act = Some(Act::Insert(Box::new(cmd)));
                         }
-                        if ui.add_enabled(d.selected.is_some(), egui::Button::new("Delete from library…")).clicked() {
+                        if ui.add_enabled(d.selected.is_some(), egui::Button::new(camcraft_i18n::tr("Delete from library…"))).clicked() {
                             d.confirm_delete = d.selected.clone();
                         }
-                        if ui.button("Close").clicked() {
+                        if ui.button(camcraft_i18n::tr("Close")).clicked() {
                             act = Some(Act::Close);
                         }
                     });

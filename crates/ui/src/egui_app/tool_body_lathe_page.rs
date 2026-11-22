@@ -47,15 +47,15 @@ pub(super) fn frame_row(ui: &mut Ui, state: &mut State) {
 pub(super) fn section(ui: &mut Ui, state: &mut State, u: Unit) {
     let Some(l) = state.tool_body_ui.lathe.as_mut() else { return };
     ui.horizontal(|ui| {
-        ui.label("Radial").on_hover_text("the model direction that points away from the spindle axis");
+        ui.label(camcraft_i18n::tr("Radial")).on_hover_text(camcraft_i18n::tr("the model direction that points away from the spindle axis"));
         direction_combo(ui, "tool_body_radial", &mut l.place.radial);
     });
     ui.horizontal(|ui| {
-        ui.label("Spindle +Z").on_hover_text("the model direction of the lathe's +Z: from the chuck toward the free end");
+        ui.label(camcraft_i18n::tr("Spindle +Z")).on_hover_text(camcraft_i18n::tr("the model direction of the lathe's +Z: from the chuck toward the free end"));
         direction_combo(ui, "tool_body_along", &mut l.place.along);
     });
     ui.horizontal(|ui| {
-        ui.label(format!("Tip ({})", u.suffix())).on_hover_text("the model point the moves carry: the insert's nose centre (model X, Y, Z)");
+        ui.label(format!("Tip ({})", u.suffix())).on_hover_text(camcraft_i18n::tr("the model point the moves carry: the insert's nose centre (model X, Y, Z)"));
         for v in &mut l.place.tip {
             num_narrow(ui, u, v);
         }
@@ -92,7 +92,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, u: Unit) {
     if !note.is_empty() {
         ui.label(note);
     }
-    if ui.button("Apply body").on_hover_text("attach the holder with this placement (one undo step)").clicked() {
+    if ui.button(camcraft_i18n::tr("Apply body")).on_hover_text(camcraft_i18n::tr("attach the holder with this placement (one undo step)")).clicked() {
         state.queue_apply_tool_body();
     }
 }
@@ -101,8 +101,8 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, u: Unit) {
 /// tip on each side of each turning-frame axis.
 fn zone_rows(ui: &mut Ui, state: &mut State, u: Unit) {
     let Some(l) = state.tool_body_ui.lathe.as_mut() else { return };
-    ui.checkbox(&mut l.zone_on, "Insert zone")
-        .on_hover_text("the file models the insert plate with its holder: a box about the tip the holder check leaves out, no larger than one insert");
+    ui.checkbox(&mut l.zone_on,camcraft_i18n::tr( "Insert zone"))
+        .on_hover_text(camcraft_i18n::tr("the file models the insert plate with its holder: a box about the tip the holder check leaves out, no larger than one insert"));
     if !l.zone_on {
         return;
     }

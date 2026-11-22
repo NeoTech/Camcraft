@@ -20,7 +20,7 @@ use crate::state::State;
 pub(super) fn cutter_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     if !exists {
         ui.strong("Cutter profile");
-        ui.label("Add the tool first, then draw its cutter.");
+        ui.label(camcraft_i18n::tr("Add the tool first, then draw its cutter."));
         return;
     }
     state.sync_tool_cutter_ui();
@@ -43,15 +43,15 @@ fn cutter_controls(ui: &mut Ui, state: &mut State, u: Unit) {
     let custom = state.tool_cutter_ui.custom;
     ui.horizontal(|ui| {
         if ui
-            .selectable_label(!custom, "Parametric")
-            .on_hover_text("the cutter, neck and shank its numbers draw, redrawn as they change")
+            .selectable_label(!custom,camcraft_i18n::tr( "Parametric"))
+            .on_hover_text(camcraft_i18n::tr("the cutter, neck and shank its numbers draw, redrawn as they change"))
             .clicked()
         {
             state.set_cutter_custom(false);
         }
         if ui
-            .selectable_label(custom, "Custom")
-            .on_hover_text("edit the outline point by point; it must keep the stated diameter, flute and shank lengths")
+            .selectable_label(custom,camcraft_i18n::tr( "Custom"))
+            .on_hover_text(camcraft_i18n::tr("edit the outline point by point; it must keep the stated diameter, flute and shank lengths"))
             .clicked()
         {
             state.set_cutter_custom(true);
@@ -66,7 +66,7 @@ fn cutter_controls(ui: &mut Ui, state: &mut State, u: Unit) {
     let moved = state.editor_tool_changed();
     let can = custom || landed.is_some() || moved;
     if ui
-        .add_enabled(can, egui::Button::new("Apply cutter"))
+        .add_enabled(can, egui::Button::new(camcraft_i18n::tr("Apply cutter")))
         .on_hover_text(if custom {
             "land the drawn cutter, and any edited numbers with it, on the tool (one undo step); toolpaths and checks keep reading the numbers"
         } else {

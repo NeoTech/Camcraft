@@ -51,7 +51,7 @@ pub(super) fn paint(ui: &mut Ui, rect: Rect, state: &mut State, pal: &super::the
         painter.rect_filled(bar, bar_h * 0.5, pal.accent);
     }
     let button = Rect::from_min_size(egui::pos2(row.max.x - cancel_w, row.min.y), Vec2::new(cancel_w, row_h));
-    if ui.put(button, egui::Button::new(CANCEL).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
+    if ui.put(button, egui::Button::new(camcraft_i18n::tr(CANCEL)).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
         state.cancel_generation();
     }
     Some(panel)

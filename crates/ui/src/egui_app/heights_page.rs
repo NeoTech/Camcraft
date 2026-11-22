@@ -152,7 +152,7 @@ fn height_rows(ui: &mut Ui, world: &flecs_ecs::prelude::World, setup: Option<&st
         // #329: no slot choice here - the setup's offset, read-only.
         prop_row(ui, "Work offset", |ui| {
             ui.add(Label::new(setup_offset_text(world, setup)).selectable(false))
-                .on_hover_text(SETUP_OFFSET_HINT);
+                .on_hover_text(camcraft_i18n::tr(SETUP_OFFSET_HINT));
         });
     }
     // Both strings are operations.rs's law (the retired imgui height row

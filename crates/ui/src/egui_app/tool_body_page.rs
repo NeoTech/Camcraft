@@ -60,7 +60,7 @@ pub(super) fn envelope(state: &mut State) -> Option<Vec<(f64, f64, f64)>> {
 pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     ui.strong("Tool body");
     if !exists {
-        ui.label("Add the tool first, then import its holder or assembly.");
+        ui.label(camcraft_i18n::tr("Add the tool first, then import its holder or assembly."));
         return;
     }
     state.sync_tool_body_ui();
@@ -85,8 +85,8 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
                 "read a STEP, STL or OBJ holder/assembly; place it, then Apply body",
             );
             let clear = ui
-                .add_enabled(landed.is_some() || has_draft, egui::Button::new("Clear body"))
-                .on_hover_text("remove the body and check the holder cylinder from the dimensions again (undoable)")
+                .add_enabled(landed.is_some() || has_draft, egui::Button::new(camcraft_i18n::tr("Clear body")))
+                .on_hover_text(camcraft_i18n::tr("remove the body and check the holder cylinder from the dimensions again (undoable)"))
                 .clicked();
             (import, clear)
         })
@@ -122,18 +122,18 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
     let pick = state.tool_body_ui.pick;
     ui.horizontal(|ui| {
         if super::pick_button::pick_button(ui, pick == BodyPickMode::Tip, "Pick tip")
-            .on_hover_text("click the body in the preview: the nearest corner becomes the tool tip")
+            .on_hover_text(camcraft_i18n::tr("click the body in the preview: the nearest corner becomes the tool tip"))
             .clicked()
         {
             state.tool_body_ui.pick = if pick == BodyPickMode::Tip { BodyPickMode::Off } else { BodyPickMode::Tip };
         }
         if super::pick_button::pick_button(ui, pick == BodyPickMode::Axis, "Pick axis")
-            .on_hover_text("click a face that looks toward the spindle: its normal becomes the tool axis")
+            .on_hover_text(camcraft_i18n::tr("click a face that looks toward the spindle: its normal becomes the tool axis"))
             .clicked()
         {
             state.tool_body_ui.pick = if pick == BodyPickMode::Axis { BodyPickMode::Off } else { BodyPickMode::Axis };
         }
-        if ui.button("Fit").on_hover_text("reset the preview's orbit and zoom (or double-click it)").clicked() {
+        if ui.button(camcraft_i18n::tr("Fit")).on_hover_text(camcraft_i18n::tr("reset the preview's orbit and zoom (or double-click it)")).clicked() {
             state.fit_body_preview();
         }
     });
@@ -154,12 +154,12 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
     if !note.is_empty() {
         ui.label(note);
     }
-    if ui.button("Apply body").on_hover_text("attach the body with this placement (one undo step)").clicked() {
+    if ui.button(camcraft_i18n::tr("Apply body")).on_hover_text(camcraft_i18n::tr("attach the body with this placement (one undo step)")).clicked() {
         state.queue_apply_tool_body();
     }
     if ui
-        .button("Convert to profile")
-        .on_hover_text("convert this aligned body into an editable conservative half-profile (non-revolved features are enveloped, never cut away)")
+        .button(camcraft_i18n::tr("Convert to profile"))
+        .on_hover_text(camcraft_i18n::tr("convert this aligned body into an editable conservative half-profile (non-revolved features are enveloped, never cut away)"))
         .clicked()
     {
         state.convert_body_draft_to_profile();

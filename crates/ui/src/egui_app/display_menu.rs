@@ -89,16 +89,16 @@ fn entries(ui: &mut egui::Ui, state: &mut State) {
     ui.separator();
     ui.strong(GROUP_LOOK_AT);
     let look = ui
-        .selectable_label(state.look_at_armed, LOOK_AT_FACE)
-        .on_hover_text("Click a face in the view. The view turns to face it.");
+        .selectable_label(state.look_at_armed, camcraft_i18n::tr(LOOK_AT_FACE))
+        .on_hover_text(camcraft_i18n::tr("Click a face in the view. The view turns to face it."));
     if look.clicked() {
         crate::look_at::arm(state, !state.look_at_armed);
         // The next click belongs to the view, so the menu moves away.
         state.display_menu_open = !state.look_at_armed;
     }
     let plane = ui
-        .selectable_label(state.look_at_plane_armed, LOOK_AT_PLANE)
-        .on_hover_text("Click an axis of an origin in the view. The view turns to face the plane of that axis. A click on Z gives the XY work plane.");
+        .selectable_label(state.look_at_plane_armed, camcraft_i18n::tr(LOOK_AT_PLANE))
+        .on_hover_text(camcraft_i18n::tr("Click an axis of an origin in the view. The view turns to face the plane of that axis. A click on Z gives the XY work plane."));
     if plane.clicked() {
         crate::look_at_plane::arm(state, !state.look_at_plane_armed);
         state.display_menu_open = !state.look_at_plane_armed;
@@ -106,15 +106,15 @@ fn entries(ui: &mut egui::Ui, state: &mut State) {
     ui.separator();
     ui.strong(GROUP_GRAPHICS);
     kept |= ui
-        .checkbox(&mut state.show_grid, SHOW_GRID)
-        .on_hover_text("Show the ground grid below the model. The grid needs the origin axes.")
+        .checkbox(&mut state.show_grid, camcraft_i18n::tr(SHOW_GRID))
+        .on_hover_text(camcraft_i18n::tr("Show the ground grid below the model. The grid needs the origin axes."))
         .changed();
-    ui.checkbox(&mut state.show_world_axes, SHOW_AXES)
-        .on_hover_text("Show the axes of the world origin, and the ground grid with them.");
-    ui.radio_value(&mut state.cam.projection, ProjectionMode::Perspective, PERSPECTIVE)
-        .on_hover_text("Far objects look smaller, as the eye sees them.");
-    ui.radio_value(&mut state.cam.projection, ProjectionMode::Orthographic, ORTHOGRAPHIC)
-        .on_hover_text("Parallel edges stay parallel. Sizes do not change with distance.");
+    ui.checkbox(&mut state.show_world_axes, camcraft_i18n::tr(SHOW_AXES))
+        .on_hover_text(camcraft_i18n::tr("Show the axes of the world origin, and the ground grid with them."));
+    ui.radio_value(&mut state.cam.projection, ProjectionMode::Perspective, camcraft_i18n::tr(PERSPECTIVE))
+        .on_hover_text(camcraft_i18n::tr("Far objects look smaller, as the eye sees them."));
+    ui.radio_value(&mut state.cam.projection, ProjectionMode::Orthographic, camcraft_i18n::tr(ORTHOGRAPHIC))
+        .on_hover_text(camcraft_i18n::tr("Parallel edges stay parallel. Sizes do not change with distance."));
     lines(ui, state);
     ui.separator();
     kept |= quality(ui, state);
@@ -126,7 +126,7 @@ fn entries(ui: &mut egui::Ui, state: &mut State) {
 /// #2958: the overlay line width and the anti-aliasing. Each pick is kept
 /// at once by its `State` method (which also refuses an unoffered count).
 fn lines(ui: &mut egui::Ui, state: &mut State) {
-    ui.label(LINE_WIDTH).on_hover_text("The width of toolpaths, height planes, outlines and axes.");
+    ui.label(camcraft_i18n::tr(LINE_WIDTH)).on_hover_text(camcraft_i18n::tr("The width of toolpaths, height planes, outlines and axes."));
     ui.horizontal(|ui| {
         for w in LineWidth::ALL {
             if ui.radio(state.line_width == w, line_label(w)).clicked() && state.line_width != w {
@@ -134,7 +134,7 @@ fn lines(ui: &mut egui::Ui, state: &mut State) {
             }
         }
     });
-    ui.label(ANTIALIAS).on_hover_text("Smooths the edges of models and stock. 4x uses the most graphics memory.");
+    ui.label(camcraft_i18n::tr(ANTIALIAS)).on_hover_text(camcraft_i18n::tr("Smooths the edges of models and stock. 4x uses the most graphics memory."));
     ui.horizontal(|ui| {
         for a in Antialias::ALL {
             let why = antialias_refusal(state, a);
@@ -168,13 +168,13 @@ fn quality(ui: &mut egui::Ui, state: &mut State) -> bool {
     const NOT_IN_WIREFRAME: &str = "The wireframe modes do not draw this. Select a shaded mode.";
     kept |= ui
         .add_enabled(shaded, egui::Checkbox::new(&mut state.ground_shadow, GROUND_SHADOW))
-        .on_hover_text("Draw a soft shadow of the model on the floor.")
-        .on_disabled_hover_text(NOT_IN_WIREFRAME)
+        .on_hover_text(camcraft_i18n::tr("Draw a soft shadow of the model on the floor."))
+        .on_disabled_hover_text(camcraft_i18n::tr(NOT_IN_WIREFRAME))
         .changed();
     kept |= ui
         .add_enabled(shaded, egui::Checkbox::new(&mut state.ambient_occlusion, AMBIENT_OCCLUSION))
-        .on_hover_text("Make the faces of the model darker in their corners.")
-        .on_disabled_hover_text(NOT_IN_WIREFRAME)
+        .on_hover_text(camcraft_i18n::tr("Make the faces of the model darker in their corners."))
+        .on_disabled_hover_text(camcraft_i18n::tr(NOT_IN_WIREFRAME))
         .changed();
     kept
 }

@@ -40,16 +40,16 @@ fn grid(ui: &mut Ui, id: &str, u: Unit, rows: Vec<(&str, &mut f64)>) {
 
 pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut PlateDraft) -> Option<ViseAct> {
     let mut act = None;
-    ui.heading("Add fixture plate");
+    ui.heading(camcraft_i18n::tr("Add fixture plate"));
     ui.label(
-        RichText::new(
+        RichText::new(camcraft_i18n::tr(
             "A generic grid plate; edit the figures to match yours. Holes are named by row letter (A, B, ... along +Y) \
-             and column number (1, 2, ... along +X); A1 is nearest the plate's origin corner.",
+             and column number (1, 2, ... along +X); A1 is nearest the plate's origin corner."),
         )
         .small(),
     );
     ui.add_space(4.0);
-    ui.label("Preset");
+    ui.label(camcraft_i18n::tr("Preset"));
     let mut picked = None;
     ui.horizontal_wrapped(|ui| {
         for (k, row) in plate::PRESETS.iter().enumerate() {
@@ -78,10 +78,10 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut PlateDraft) -> Option<ViseAct> 
         ],
     );
     ui.horizontal(|ui| {
-        let l = ui.label("Thread");
+        let l = ui.label(camcraft_i18n::tr("Thread"));
         ui.add(egui::TextEdit::singleline(&mut p.thread).desired_width(80.0)).labelled_by(l.id);
     });
-    ui.checkbox(&mut d.dowels_on, "Dowel holes");
+    ui.checkbox(&mut d.dowels_on,camcraft_i18n::tr( "Dowel holes"));
     if d.dowels_on {
         let w = &mut d.dowels;
         grid(
@@ -97,12 +97,12 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut PlateDraft) -> Option<ViseAct> 
             ],
         );
     }
-    ui.checkbox(&mut d.counterbore_on, "Counterbored holes");
+    ui.checkbox(&mut d.counterbore_on,camcraft_i18n::tr( "Counterbored holes"));
     if d.counterbore_on {
         let c = &mut d.counterbore;
         grid(ui, "plate-cbore", u, vec![("Counterbore diameter", &mut c.diameter), ("Counterbore depth", &mut c.depth)]);
     }
-    ui.checkbox(&mut d.on_table, "Lay it on the machine table (centred)");
+    ui.checkbox(&mut d.on_table,camcraft_i18n::tr( "Lay it on the machine table (centred)"));
     if !d.on_table {
         egui::Grid::new("plate-place").num_columns(2).show(ui, |ui| {
             for (k, axis) in ["Corner X", "Corner Y", "Top Z"].iter().enumerate() {
@@ -110,21 +110,21 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut PlateDraft) -> Option<ViseAct> 
                 num_by(ui, u, &mut d.pos[k], l.id);
                 ui.end_row();
             }
-            let l = ui.label("Turn about Z (yaw)");
+            let l = ui.label(camcraft_i18n::tr("Turn about Z (yaw)"));
             num_plain_by(ui, &mut d.yaw_deg, l.id);
             ui.end_row();
         });
     }
-    ui.label(RichText::new("The collision check sees the plate as a solid slab (holes drawn solid).").small());
+    ui.label(RichText::new(camcraft_i18n::tr("The collision check sees the plate as a solid slab (holes drawn solid).")).small());
     if let Some(err) = &d.error {
         super::error_text::error_text(ui, ui.visuals().error_fg_color, err);
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Place").clicked() {
+        if ui.button(camcraft_i18n::tr("Place")).clicked() {
             act = Some(ViseAct::Place(Box::new(place_command(d))));
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
             act = Some(ViseAct::Close);
         }
     });

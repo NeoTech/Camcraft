@@ -58,7 +58,7 @@ fn opt_row(ui: &mut Ui, label: &str, v: &mut Option<f64>, seed: f64, show: impl 
         match v {
             Some(x) => show(ui, x, &format!("{label} value")),
             None => {
-                ui.label("not stated");
+                ui.label(camcraft_i18n::tr("not stated"));
             }
         }
     });
@@ -69,7 +69,7 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
     opt_row(ui, "upper guide Z", &mut e.upper_guide_z, 50.0, |ui, v, n| fields::num_named(ui, u, v, n));
     opt_row(ui, "max taper (deg)", &mut e.max_taper_deg, 10.0, fields::num_plain_named);
     ui.horizontal(|ui| {
-        ui.label("automatic threading");
+        ui.label(camcraft_i18n::tr("automatic threading"));
         let shown = match e.awt {
             None => "not stated",
             Some(true) => "yes",
@@ -83,15 +83,15 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
         fields::named(cb.response, "Automatic wire threading");
     });
     dielectric(ui, e);
-    ui.label("wire diameters the machine takes");
+    ui.label(camcraft_i18n::tr("wire diameters the machine takes"));
     if e.wire_diameters.is_empty() {
-        ui.label("not stated");
+        ui.label(camcraft_i18n::tr("not stated"));
     }
     let mut remove = None;
     for (i, d) in e.wire_diameters.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             fields::num_named(ui, u, d, &format!("Wire diameter {}", i + 1));
-            if ui.button("✖").on_hover_text("remove this diameter").clicked() {
+            if ui.button(camcraft_i18n::tr("✖")).on_hover_text(camcraft_i18n::tr("remove this diameter")).clicked() {
                 remove = Some(i);
             }
         });
@@ -99,7 +99,7 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
     if let Some(i) = remove {
         e.wire_diameters.remove(i);
     }
-    if ui.button("add wire diameter").clicked() {
+    if ui.button(camcraft_i18n::tr("add wire diameter")).clicked() {
         e.wire_diameters.push(0.25);
     }
 }
@@ -109,7 +109,7 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
 /// no word for them).
 fn dielectric(ui: &mut Ui, e: &mut Edm) {
     ui.horizontal(|ui| {
-        ui.label("tank");
+        ui.label(camcraft_i18n::tr("tank"));
         let shown = e.tank.map_or("not stated", Tank::word);
         let cb = ComboBox::from_id_salt("edm_tank").selected_text(shown).show_ui(ui, |ui| {
             ui.selectable_value(&mut e.tank, None, "not stated");
@@ -120,7 +120,7 @@ fn dielectric(ui: &mut Ui, e: &mut Edm) {
         fields::named(cb.response, "Tank");
     });
     ui.horizontal(|ui| {
-        ui.label("flushing");
+        ui.label(camcraft_i18n::tr("flushing"));
         let shown = e.flushing.map_or("not stated", Flushing::word);
         let cb = ComboBox::from_id_salt("edm_flushing").selected_text(shown).show_ui(ui, |ui| {
             ui.selectable_value(&mut e.flushing, None, "not stated");
@@ -138,7 +138,7 @@ fn dielectric(ui: &mut Ui, e: &mut Edm) {
     }
     ui.add_enabled_ui(e.flushing.is_some(), |ui| {
         ui.horizontal(|ui| {
-            ui.label("skim flushing");
+            ui.label(camcraft_i18n::tr("skim flushing"));
             let shown = e.skim_flushing.map_or("not stated", Flushing::word);
             let cb = ComboBox::from_id_salt("edm_skim_flushing").selected_text(shown).show_ui(ui, |ui| {
                 ui.selectable_value(&mut e.skim_flushing, None, "not stated");
@@ -167,7 +167,7 @@ fn codes(ui: &mut Ui, codes: &mut std::collections::BTreeMap<String, String>) {
                     labelled_text(ui, &format!("Code {name}"), t, 150.0);
                 }
                 None => {
-                    ui.label("not stated");
+                    ui.label(camcraft_i18n::tr("not stated"));
                 }
             }
         });
@@ -178,7 +178,7 @@ fn codes(ui: &mut Ui, codes: &mut std::collections::BTreeMap<String, String>) {
             if let Some(t) = codes.get_mut(&k) {
                 labelled_text(ui, &format!("Code {k}"), t, 150.0);
             }
-            if ui.button("✖").on_hover_text("remove this code").clicked() {
+            if ui.button(camcraft_i18n::tr("✖")).on_hover_text(camcraft_i18n::tr("remove this code")).clicked() {
                 codes.remove(&k);
             }
         });
@@ -187,7 +187,7 @@ fn codes(ui: &mut Ui, codes: &mut std::collections::BTreeMap<String, String>) {
 
 fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
     if e.conditions.is_empty() {
-        ui.label("none stated - every wire operation refuses until one is");
+        ui.label(camcraft_i18n::tr("none stated - every wire operation refuses until one is"));
     }
     let mut remove = None;
     for (i, c) in e.conditions.iter_mut().enumerate() {
@@ -197,7 +197,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
             opt_row(ui, &format!("gap {}", i + 1), &mut c.gap, 0.02, |ui, v, n| fields::num_named(ui, u, v, n));
             opt_row(ui, &format!("wire {}", i + 1), &mut c.wire_diameter, 0.25, |ui, v, n| fields::num_named(ui, u, v, n));
             role(ui, i, c);
-            if ui.button("✖").on_hover_text("remove this condition").clicked() {
+            if ui.button(camcraft_i18n::tr("✖")).on_hover_text(camcraft_i18n::tr("remove this condition")).clicked() {
                 remove = Some(i);
             }
         });
@@ -205,7 +205,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
     if let Some(i) = remove {
         e.conditions.remove(i);
     }
-    if ui.button("add condition").clicked() {
+    if ui.button(camcraft_i18n::tr("add condition")).clicked() {
         e.conditions.push(Condition::default());
     }
 }
@@ -213,7 +213,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
 fn role(ui: &mut Ui, i: usize, c: &mut Condition) {
     let shown = if c.role.is_empty() { "role not stated" } else { c.role.as_str() };
     let cb = ComboBox::from_id_salt(("edm-role", i)).selected_text(shown).show_ui(ui, |ui| {
-        if ui.selectable_label(c.role.is_empty(), "role not stated").clicked() {
+        if ui.selectable_label(c.role.is_empty(),camcraft_i18n::tr( "role not stated")).clicked() {
             c.role.clear();
         }
         for r in CONDITION_ROLES {

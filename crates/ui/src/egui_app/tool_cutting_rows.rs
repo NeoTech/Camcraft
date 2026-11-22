@@ -82,7 +82,7 @@ pub(super) fn cutting_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) {
             .iter()
             .all(|m| t.cutting.iter().any(|r| r.material == Some(*m) && !r.is_recipe()));
     if ui
-        .add_enabled(!full, egui::Button::new("Add material row"))
+        .add_enabled(!full, egui::Button::new(camcraft_i18n::tr("Add material row")))
         .on_hover_text(if waterjet { "Add a recipe, then enter its material, thickness and pierce values" } else { "a row for the next material, starting from the rpm and feed above; the setup stock's material (else the document's) picks its row, else Unknown" })
         .clicked()
     {
@@ -112,11 +112,11 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) -> Option<usize
     let labels: Vec<&str> = keys.iter().skip(1).map(|m| material_label(*m)).collect();
     let mut remove = None;
     egui::Grid::new("tool_cutting_table").num_columns(6).striped(true).show(ui, |ui| {
-        ui.label("Material");
+        ui.label(camcraft_i18n::tr("Material"));
         ui.label(if torch { "" } else { "Spindle rpm" });
         ui.label(format!("Feed ({})", u.feed_suffix()));
-        ui.label("Stepdown");
-        ui.label("Stepover");
+        ui.label(camcraft_i18n::tr("Stepdown"));
+        ui.label(camcraft_i18n::tr("Stepover"));
         ui.label("");
         ui.end_row();
         for (i, row) in t.cutting.iter_mut().enumerate() {
@@ -129,7 +129,7 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) -> Option<usize
                 ui.horizontal(|ui| match row.material {
                     None => {
                         ui.label(material_label(None))
-                            .on_hover_text("the tool's default row: what it runs when no row names the material, and the stepdown / stepover a row leaves blank");
+                            .on_hover_text(camcraft_i18n::tr("the tool's default row: what it runs when no row names the material, and the stepdown / stepover a row leaves blank"));
                     }
                     Some(m) => {
                         let mut idx = WorkMaterial::ALL.iter().position(|x| *x == m).unwrap_or(0);
@@ -149,7 +149,7 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) -> Option<usize
             step_field(ui, u, &mut row.stepdown, "Stepdown");
             step_field(ui, u, &mut row.stepover, "Stepover");
             if row.material.is_some() {
-                if ui.small_button("Remove").on_hover_text("drop this material's row").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Remove")).on_hover_text(camcraft_i18n::tr("drop this material's row")).clicked() {
                     remove = Some(i);
                 }
             } else {
@@ -170,7 +170,7 @@ fn waterjet_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit) -> Option<usize> {
             let mut idx = row.material.and_then(|m| WorkMaterial::ALL.iter().position(|x| *x == m)).unwrap_or(0);
             prop_row(ui, "Material", |ui| {
                 combo(ui, "material", &mut idx, &labels);
-                if ui.small_button("Remove").on_hover_text("drop this material's row").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Remove")).on_hover_text(camcraft_i18n::tr("drop this material's row")).clicked() {
                     remove = Some(i);
                 }
             });

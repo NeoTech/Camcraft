@@ -177,7 +177,7 @@ fn show(
                                 .map(|dir| example_projects(&dir))
                                 .unwrap_or_default();
                             if paths.is_empty() {
-                                ui.add_enabled(false, egui::Button::new("No example projects"));
+                                ui.add_enabled(false, egui::Button::new(camcraft_i18n::tr("No example projects")));
                             }
                             for path in paths {
                                 let label = path.file_name().unwrap_or_default().to_string_lossy();

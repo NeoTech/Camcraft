@@ -78,7 +78,7 @@ fn skim_fields(ui: &mut Ui, skims: &mut Vec<WireSkim>, ids: &[String]) {
         skims.swap(a, b);
     }
     prop_row(ui, "Skim passes", |ui| {
-        if ui.add_enabled(skims.len() < SKIMS_MAX, egui::Button::new("Add skim")).clicked() {
+        if ui.add_enabled(skims.len() < SKIMS_MAX, egui::Button::new(camcraft_i18n::tr("Add skim"))).clicked() {
             skims.push(WireSkim { condition: String::new(), reverse: false });
         }
     });
@@ -122,7 +122,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<WireTabs>, ids: &[String])
         t.at.remove(i);
     }
     prop_row(ui, "Tab positions", |ui| {
-        if ui.add_enabled(t.at.len() < 1024, egui::Button::new("Add tab position")).clicked() {
+        if ui.add_enabled(t.at.len() < 1024, egui::Button::new(camcraft_i18n::tr("Add tab position"))).clicked() {
             t.at.push([0.0, 0.0]);
         }
     });
@@ -169,7 +169,7 @@ fn four_axis_fields(ui: &mut Ui, u: Unit, f: &mut WireFourAxis, cx: &mut Cx<'_>)
     if let Some(i) = drop {
         f.sync.remove(i);
     }
-    if ui.button("Add sync pair").clicked() {
+    if ui.button(camcraft_i18n::tr("Add sync pair")).clicked() {
         f.sync.push(WireSyncPair { upper: Some([0.0, 0.0]), lower: Some([0.0, 0.0]) });
     }
     // #1171: state the pairs by two vertex clicks in the viewport.

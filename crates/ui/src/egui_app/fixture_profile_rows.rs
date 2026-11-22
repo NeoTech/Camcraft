@@ -39,12 +39,12 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
         ui.label(format!("STEP solid kept as source ({} bytes)", step_src.len()));
         if let Some(d) = state.profile_edits.get_mut(name) {
             ui.horizontal(|ui| {
-                if ui.small_button("Derive spun profile").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Derive spun profile")).clicked() {
                     derive_axis = Some(None);
                 }
-                ui.label("Axis");
+                ui.label(camcraft_i18n::tr("Axis"));
                 axis_picker(ui, &format!("derive-axis-{name}"), &mut d.derive_axis);
-                if ui.small_button("Derive extruded profile").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Derive extruded profile")).clicked() {
                     derive_axis = Some(Some(d.derive_axis));
                 }
             });
@@ -75,19 +75,19 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
             }
             FixtureProfile::Extruded { points, axis, depth } => {
                 ui.horizontal(|ui| {
-                    ui.label("Extrude axis");
+                    ui.label(camcraft_i18n::tr("Extrude axis"));
                     axis_picker(ui, &format!("row-axis-{name}"), axis);
-                    let l = ui.label("Depth");
+                    let l = ui.label(camcraft_i18n::tr("Depth"));
                     num_by(ui, u, depth, l.id);
                 });
                 extruded_points_editor(ui, u, &format!("row-ext-{name}"), points);
             }
         }
         ui.horizontal(|ui| {
-            if ui.small_button("Apply profile").clicked() {
+            if ui.small_button(camcraft_i18n::tr("Apply profile")).clicked() {
                 apply_profile = Some(d.profile.clone());
             }
-            if ui.small_button("Reset").clicked() {
+            if ui.small_button(camcraft_i18n::tr("Reset")).clicked() {
                 reset = true;
             }
             if crate::browser_files::button(ui, export_why, "Export DXF…", "Export fixture profile as ASCII DXF") {

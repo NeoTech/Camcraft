@@ -71,7 +71,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
     let mut chosen = current;
     ui.horizontal(|ui| {
         // #1648: no indent - the row now sits in its own titled group on the WCS page.
-        ui.label("Work offset");
+        ui.label(camcraft_i18n::tr("Work offset"));
         ComboBox::from_id_salt(("setup_wcs", setup))
             .selected_text(entry_text(&table, current))
             .show_ui(ui, |ui| {
@@ -81,9 +81,9 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text(
+            .on_hover_text(camcraft_i18n::tr(
                 "Which work offset the posted program uses for this setup, as this setup's post \
-                 names it. It only names the controller's register - the origin stays where it is placed.",
+                 names it. It only names the controller's register - the origin stays where it is placed."),
             );
     });
     if chosen != current {

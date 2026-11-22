@@ -33,11 +33,11 @@ pub(crate) fn window(ctx: &Context, state: &mut State) {
 
 fn body(ui: &mut egui::Ui, state: &mut State) {
     ui.set_max_width(400.0);
-    ui.label("Save the open panels as they stand, or put a saved setup back.");
+    ui.label(camcraft_i18n::tr("Save the open panels as they stand, or put a saved setup back."));
     ui.add_space(6.0);
     let named = !state.setup_name_draft.trim().is_empty();
     ui.horizontal(|ui| {
-        ui.label("Name");
+        ui.label(camcraft_i18n::tr("Name"));
         ui.add(
             TextEdit::singleline(&mut state.setup_name_draft)
                 .hint_text("My setup")
@@ -49,7 +49,7 @@ fn body(ui: &mut egui::Ui, state: &mut State) {
             "Type a name for the setup first"
         };
         if ui
-            .add_enabled(named, Button::new("Save current setup"))
+            .add_enabled(named, Button::new(camcraft_i18n::tr("Save current setup")))
             .on_hover_text(hint)
             .clicked()
         {
@@ -59,9 +59,9 @@ fn body(ui: &mut egui::Ui, state: &mut State) {
     });
     ui.add_space(6.0);
     ui.separator();
-    ui.label("Saved setups");
+    ui.label(camcraft_i18n::tr("Saved setups"));
     if state.panel_setups.setups.is_empty() {
-        ui.label(RichText::new("No saved setups yet.").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("No saved setups yet.")).weak());
     }
     let saved: Vec<String> = state
         .panel_setups
@@ -78,10 +78,10 @@ fn body(ui: &mut egui::Ui, state: &mut State) {
                 name.clone()
             };
             ui.label(label);
-            if ui.small_button("Load").clicked() {
+            if ui.small_button(camcraft_i18n::tr("Load")).clicked() {
                 state.panel_setup_ask = Some(PanelSetupAsk::Load(name.clone()));
             }
-            if ui.small_button("Delete").clicked() {
+            if ui.small_button(camcraft_i18n::tr("Delete")).clicked() {
                 state.panel_setup_ask = Some(PanelSetupAsk::Delete(name.clone()));
             }
         });
@@ -89,12 +89,12 @@ fn body(ui: &mut egui::Ui, state: &mut State) {
     ui.separator();
     let mut auto = state.panel_setups.auto_load;
     if ui
-        .checkbox(&mut auto, "Load the last setup when CamCraft starts")
+        .checkbox(&mut auto,camcraft_i18n::tr( "Load the last setup when CamCraft starts"))
         .changed()
     {
         state.set_setup_auto_load(auto);
     }
-    if ui.button("Reset to default").clicked() {
+    if ui.button(camcraft_i18n::tr("Reset to default")).clicked() {
         state.layout_request = Some(LayoutRequest::Reset);
     }
 }

@@ -44,14 +44,14 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
             ui.label(format!("Carries: {}", on.join(", ")));
         }
         super::fixture_modvise_rows::pair_rows(ui, state, name, p);
-        if p.params.is_none() && ui.small_button("Not a plate").on_hover_text("Forget the detected grid").clicked() {
+        if p.params.is_none() && ui.small_button(camcraft_i18n::tr("Not a plate")).on_hover_text(camcraft_i18n::tr("Forget the detected grid")).clicked() {
             state.pending.push_back(CommandKind::DetectPlateGrid { name: name.to_owned(), clear: true });
         }
     } else if def.vise.is_none()
         && def.mod_jaw.is_none()
         && ui
-            .small_button("Detect plate grid")
-            .on_hover_text("Use this fixture as a grid plate: its holes (on its own Z) must form a regular grid")
+            .small_button(camcraft_i18n::tr("Detect plate grid"))
+            .on_hover_text(camcraft_i18n::tr("Use this fixture as a grid plate: its holes (on its own Z) must form a regular grid"))
             .clicked()
     {
         state.pending.push_back(CommandKind::DetectPlateGrid { name: name.to_owned(), clear: false });
@@ -86,14 +86,14 @@ fn place_picker(ui: &mut Ui, state: &mut State, name: &str) {
         });
         named(pick.response, "Plate to place on");
         ui.horizontal(|ui| {
-            ui.radio_value(&mut draft.dowels, false, "Hole");
+            ui.radio_value(&mut draft.dowels, false,camcraft_i18n::tr( "Hole"));
             if def.dowels.is_some() {
-                ui.radio_value(&mut draft.dowels, true, "Dowel pair");
+                ui.radio_value(&mut draft.dowels, true,camcraft_i18n::tr( "Dowel pair"));
             }
         });
         if draft.dowels {
             ui.horizontal(|ui| {
-                let l = ui.label("Dowels");
+                let l = ui.label(camcraft_i18n::tr("Dowels"));
                 ui.add(egui::TextEdit::singleline(&mut draft.dowel_a).desired_width(40.0)).labelled_by(l.id);
                 ui.add(egui::TextEdit::singleline(&mut draft.dowel_b).desired_width(40.0)).labelled_by(l.id);
             });
@@ -102,7 +102,7 @@ fn place_picker(ui: &mut Ui, state: &mut State, name: &str) {
             draft.row = draft.row.min(g.rows.saturating_sub(1));
             draft.col = draft.col.min(g.cols.saturating_sub(1));
             ui.horizontal(|ui| {
-                let l = ui.label("Row");
+                let l = ui.label(camcraft_i18n::tr("Row"));
                 egui::ComboBox::from_id_salt(("plate-row", name)).selected_text(plate::row_letters(draft.row)).show_ui(ui, |ui| {
                     for r in 0..g.rows {
                         ui.selectable_value(&mut draft.row, r, plate::row_letters(r));
@@ -110,7 +110,7 @@ fn place_picker(ui: &mut Ui, state: &mut State, name: &str) {
                 })
                 .response
                 .labelled_by(l.id);
-                let l = ui.label("Column");
+                let l = ui.label(camcraft_i18n::tr("Column"));
                 egui::ComboBox::from_id_salt(("plate-col", name)).selected_text((draft.col + 1).to_string()).show_ui(ui, |ui| {
                     for c in 0..g.cols {
                         ui.selectable_value(&mut draft.col, c, (c + 1).to_string());
@@ -121,10 +121,10 @@ fn place_picker(ui: &mut Ui, state: &mut State, name: &str) {
             });
         }
         ui.horizontal(|ui| {
-            let l = ui.label("Turn (deg)");
+            let l = ui.label(camcraft_i18n::tr("Turn (deg)"));
             num_plain_by(ui, &mut draft.yaw_deg, l.id);
         });
-        go = ui.button("Place on grid").clicked();
+        go = ui.button(camcraft_i18n::tr("Place on grid")).clicked();
     });
     if go {
         state.pending.push_back(CommandKind::PlaceOnPlate {

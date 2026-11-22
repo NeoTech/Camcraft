@@ -22,10 +22,10 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
             .auto_shrink([false, false])
             .max_height(content_h)
             .show(ui, |ui| {
-                ui.label("Open the Tool library from Tools to browse or create tools.");
+                ui.label(camcraft_i18n::tr("Open the Tool library from Tools to browse or create tools."));
             });
         ui.separator();
-        if ui.button("Close").clicked() {
+        if ui.button(camcraft_i18n::tr("Close")).clicked() {
             state.close_property_editor();
         }
         return;
@@ -52,7 +52,7 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
         .show(ui, |ui| {
             if exists && !name.is_empty() {
                 ui.heading(format!("Tool: {name}"));
-                if ui.button("Delete").clicked() {
+                if ui.button(camcraft_i18n::tr("Delete")).clicked() {
                     state
                         .pending
                         .push_back(CommandKind::DeleteTool(name.to_owned()));
@@ -60,14 +60,14 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
                 // #2397: the body, the profile and the holder have their own
                 // window; Properties keeps the settings and the one preview.
                 if ui
-                    .button("Edit tool shape")
-                    .on_hover_text("open the body, profile and holder editor in its own window")
+                    .button(camcraft_i18n::tr("Edit tool shape"))
+                    .on_hover_text(camcraft_i18n::tr("open the body, profile and holder editor in its own window"))
                     .clicked()
                 {
                     actions::open_tool_shape_editor(state, name);
                 }
             } else {
-                ui.heading("New tool");
+                ui.heading(camcraft_i18n::tr("New tool"));
             }
             contents(ui, state);
         });
@@ -115,7 +115,7 @@ fn footer(ui: &mut Ui, state: &mut State) {
                 .then(|| state.tool_ui.to_tool().torch_refusal())
                 .flatten();
             if ui
-                .add_enabled(recipe_refusal.is_none(), egui::Button::new("Apply"))
+                .add_enabled(recipe_refusal.is_none(), egui::Button::new(camcraft_i18n::tr("Apply")))
                 .on_disabled_hover_text(recipe_refusal.as_deref().unwrap_or_default())
                 .clicked()
             {
@@ -126,7 +126,7 @@ fn footer(ui: &mut Ui, state: &mut State) {
             }
         } else {
             let add = ui
-                .add_enabled(block.is_empty(), egui::Button::new("Add tool"))
+                .add_enabled(block.is_empty(), egui::Button::new(camcraft_i18n::tr("Add tool")))
                 .on_disabled_hover_text(&block);
             if add.clicked() {
                 let landed = name_now.trim().to_owned();
@@ -142,7 +142,7 @@ fn footer(ui: &mut Ui, state: &mut State) {
                 actions::target(state, UiTarget::Tool(landed));
             }
         }
-        if ui.button("Close").clicked() {
+        if ui.button(camcraft_i18n::tr("Close")).clicked() {
             state.close_property_editor();
         }
     });

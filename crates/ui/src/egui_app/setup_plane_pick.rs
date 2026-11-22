@@ -55,10 +55,10 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
     // Apply stay on screen in the narrow properties pane - one long row
     // ran them past its right edge at a 1280-wide window, out of reach.
     ui.horizontal(|ui| {
-        ui.label("    Lay on a plane - pick a face");
+        ui.label(camcraft_i18n::tr("    Lay on a plane - pick a face"));
         let pick_text = if armed { "Stop picking" } else { "Pick a face" };
         if super::pick_button::pick_button(ui, armed, pick_text)
-            .on_hover_text("Click one flat face in the viewport; it is laid on the plane.")
+            .on_hover_text(camcraft_i18n::tr("Click one flat face in the viewport; it is laid on the plane."))
             .clicked()
         {
             if armed {
@@ -69,7 +69,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("     ");
+        ui.label(camcraft_i18n::tr("     "));
         ComboBox::from_id_salt(("setup_plane", setup))
             .selected_text(pick::plane_label(d.plane))
             .show_ui(ui, |ui| {
@@ -78,16 +78,16 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text("The plane the picked face is laid on.");
-        ui.checkbox(&mut d.flip, "Face down").on_hover_text(
+            .on_hover_text(camcraft_i18n::tr("The plane the picked face is laid on."));
+        ui.checkbox(&mut d.flip,camcraft_i18n::tr( "Face down")).on_hover_text(camcraft_i18n::tr(
             "On: the picked face goes down onto the plane, its outside facing -Z for G17, -Y for G18, \
-             -X for G19, with the part on top of it. Off: the face looks out along +Z / +Y / +X.",
+             -X for G19, with the part on top of it. Off: the face looks out along +Z / +Y / +X."),
         );
     });
     ui.horizontal(|ui| {
-        ui.label("     ");
-        ui.checkbox(&mut d.place, "Face to plane level")
-            .on_hover_text("Set the picked face onto the plane (e.g. Z 0 for G17); off keeps the part where it is.");
+        ui.label(camcraft_i18n::tr("     "));
+        ui.checkbox(&mut d.place,camcraft_i18n::tr( "Face to plane level"))
+            .on_hover_text(camcraft_i18n::tr("Set the picked face onto the plane (e.g. Z 0 for G17); off keeps the part where it is."));
     });
     if mine {
         let picks = state.plane_pick.as_ref().map(|p| p.picks.clone()).unwrap_or_default();
@@ -109,7 +109,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         };
         ui.label(RichText::new(format!("      Picked: {text}")).weak());
         ui.horizontal(|ui| {
-            ui.label("     ");
+            ui.label(camcraft_i18n::tr("     "));
             let tip = match &check {
                 Ok(()) => format!(
                     "Turn the part from where it sits now so the picked face lies on {} (one undo step).",
@@ -118,7 +118,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
                 Err(why) => why.clone(),
             };
             if ui
-                .add_enabled(check.is_ok(), egui::Button::new("Apply face"))
+                .add_enabled(check.is_ok(), egui::Button::new(camcraft_i18n::tr("Apply face")))
                 .on_hover_text(&tip)
                 .on_disabled_hover_text(&tip)
                 .clicked()
@@ -128,7 +128,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         });
         if let Some(side) = &side {
             ui.label(RichText::new(format!("      {side}")).weak())
-                .on_hover_text("The side of the pick taken as its outside: it faces down onto the plane (or up, with Face down off).");
+                .on_hover_text(camcraft_i18n::tr("The side of the pick taken as its outside: it faces down onto the plane (or up, with Face down off)."));
         }
     }
     ui.data_mut(|m| m.insert_temp(id, d));

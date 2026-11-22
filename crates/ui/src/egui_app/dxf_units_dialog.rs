@@ -53,20 +53,20 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
     let mut answer: Option<Option<Unit>> = None;
     let response = Modal::new(Id::new("dxf-units-prompt")).show(ctx, |ui| {
         ui.set_max_width(420.0);
-        ui.heading("DXF units");
+        ui.heading(camcraft_i18n::tr("DXF units"));
         ui.label(format!("{file} does not state its units. Choose the unit of its coordinates."));
         ui.add_space(4.0);
         ui.label(mm);
         ui.label(inch);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if ui.button("Millimeters").clicked() {
+            if ui.button(camcraft_i18n::tr("Millimeters")).clicked() {
                 answer = Some(Some(Unit::Millimeters));
             }
-            if ui.button("Inches").clicked() {
+            if ui.button(camcraft_i18n::tr("Inches")).clicked() {
                 answer = Some(Some(Unit::Inches));
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                 answer = Some(None);
             }
         });

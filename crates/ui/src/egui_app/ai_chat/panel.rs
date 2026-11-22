@@ -74,7 +74,7 @@ fn draw_header(ui: &mut Ui, state: &mut State, pal: &theme::Tokens) {
     }
 
     ui.horizontal(|ui| {
-        let model_lbl = ui.label("Model");
+        let model_lbl = ui.label(camcraft_i18n::tr("Model"));
         ui.add(
             egui::TextEdit::singleline(&mut state.ai_chat.model_input)
                 .desired_width(f32::INFINITY),
@@ -84,17 +84,17 @@ fn draw_header(ui: &mut Ui, state: &mut State, pal: &theme::Tokens) {
 
     ui.horizontal_wrapped(|ui| {
         // #1945: the switch is the person's policy - kept in prefs.json.
-        if ui.checkbox(&mut state.ai_chat.offline_only, "Offline only").changed() {
+        if ui.checkbox(&mut state.ai_chat.offline_only,camcraft_i18n::tr( "Offline only")).changed() {
             state.persist_prefs();
         }
-        ui.checkbox(&mut state.ai_chat.attach_selection, "Attach selection");
+        ui.checkbox(&mut state.ai_chat.attach_selection,camcraft_i18n::tr( "Attach selection"));
         ui.add_enabled(
             false,
             egui::Checkbox::new(&mut state.ai_chat.attach_screenshot, "Attach screenshot"),
         );
     });
 
-    ui.label("Viewport screenshot capture is unavailable.");
+    ui.label(camcraft_i18n::tr("Viewport screenshot capture is unavailable."));
 
     let preset = state.ai_chat.selected_preset();
     ui.label(
@@ -126,7 +126,7 @@ fn draw_banners(ui: &mut Ui, state: &State, inks: colorvision::TextInks) {
             .stroke(egui::Stroke::new(1.0, inks.warn))
             .show(ui, |ui| {
                 ui.label(
-                    RichText::new("Read-only Q&A mode: tool execution is disabled.")
+                    RichText::new(camcraft_i18n::tr("Read-only Q&A mode: tool execution is disabled."))
                         .color(inks.warn)
                         .strong(),
                 );
@@ -150,7 +150,7 @@ fn draw_confirm_banner(
         .stroke(egui::Stroke::new(1.5, inks.warn))
         .show(ui, |ui| {
             ui.label(
-                RichText::new("Confirmation required")
+                RichText::new(camcraft_i18n::tr("Confirmation required"))
                     .color(inks.warn)
                     .strong(),
             );
@@ -159,10 +159,10 @@ fn draw_confirm_banner(
                 ui.label(RichText::new(args).monospace().small().color(pal.text_dim));
             }
             ui.horizontal(|ui| {
-                if ui.button("Allow").clicked() {
+                if ui.button(camcraft_i18n::tr("Allow")).clicked() {
                     actions.confirm_choice = Some(true);
                 }
-                if ui.button("Deny").clicked() {
+                if ui.button(camcraft_i18n::tr("Deny")).clicked() {
                     actions.confirm_choice = Some(false);
                 }
             });
@@ -179,7 +179,7 @@ fn draw_transcript(
 ) {
     if turns.is_empty() {
         ui.label(
-            RichText::new("Ask a question or propose CAM edits.")
+            RichText::new(camcraft_i18n::tr("Ask a question or propose CAM edits."))
                 .color(pal.text_dim)
                 .small(),
         );
@@ -190,7 +190,7 @@ fn draw_transcript(
             .fill(pal.ink_alt)
             .inner_margin(egui::Margin::same(6))
             .show(ui, |ui| {
-                ui.label(RichText::new("You").strong().small().color(pal.text_dim));
+                ui.label(RichText::new(camcraft_i18n::tr("You")).strong().small().color(pal.text_dim));
                 ui.label(&turn.prompt);
 
                 ui.add_space(4.0);
@@ -222,10 +222,10 @@ fn draw_transcript(
 
                 match &turn.status {
                     TurnStatus::Running => {
-                        ui.label(RichText::new("Working...").small().color(pal.accent));
+                        ui.label(RichText::new(camcraft_i18n::tr("Working...")).small().color(pal.accent));
                     }
                     TurnStatus::Cancelled => {
-                        ui.label(RichText::new("Cancelled").small().color(inks.warn));
+                        ui.label(RichText::new(camcraft_i18n::tr("Cancelled")).small().color(inks.warn));
                     }
                     TurnStatus::Failed(err) => {
                         ui.label(RichText::new(format!("Failed: {err}")).small().color(inks.error));
@@ -243,7 +243,7 @@ fn draw_transcript(
                         };
                         ui.label(RichText::new(note).small().color(pal.text_dim));
                         if ui
-                            .add_enabled(turn.can_undo(history), egui::Button::new("Undo Turn"))
+                            .add_enabled(turn.can_undo(history), egui::Button::new(camcraft_i18n::tr("Undo Turn")))
                             .clicked()
                         {
                             actions.undo_turn_id = Some(turn.id);
@@ -256,7 +256,7 @@ fn draw_transcript(
 }
 
 fn draw_composer(ui: &mut Ui, state: &mut State, actions: &mut PanelActions) {
-    let prompt_lbl = ui.label("Prompt");
+    let prompt_lbl = ui.label(camcraft_i18n::tr("Prompt"));
     let resp = ui
         .add(
             egui::TextEdit::singleline(&mut state.ai_chat.prompt_draft)
@@ -270,13 +270,13 @@ fn draw_composer(ui: &mut Ui, state: &mut State, actions: &mut PanelActions) {
     let running = state.ai_chat.is_running();
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(!running, egui::Button::new("Send"))
+            .add_enabled(!running, egui::Button::new(camcraft_i18n::tr("Send")))
             .clicked()
         {
             actions.submit = true;
         }
         if ui
-            .add_enabled(running, egui::Button::new("Cancel"))
+            .add_enabled(running, egui::Button::new(camcraft_i18n::tr("Cancel")))
             .clicked()
         {
             actions.cancel = true;

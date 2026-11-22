@@ -36,11 +36,11 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
     let shown = setup_relative::describe(&state.world, name).unwrap_or_else(|| "Not linked".to_owned());
     let mut queued: Option<CommandKind> = None;
     ui.horizontal(|ui| {
-        ui.label("    Relative to previous setup");
+        ui.label(camcraft_i18n::tr("    Relative to previous setup"));
         ComboBox::from_id_salt(("setup_relative", name))
             .selected_text(&shown)
             .show_ui(ui, |ui| {
-                if ui.selectable_label(linked.is_none(), "Not linked").clicked() && linked.is_some() {
+                if ui.selectable_label(linked.is_none(),camcraft_i18n::tr( "Not linked")).clicked() && linked.is_some() {
                     queued = Some(CommandKind::SetSetupRelative { setup: name.to_owned(), to: None, angles: [0.0; 3] });
                 }
                 for p in AlignPreset::ALL {
@@ -65,13 +65,13 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
     let held = setup_relative::angles(&state.world, name);
     let mut draft: [f64; 3] = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || held));
     ui.horizontal(|ui| {
-        ui.label("      Turn from previous");
+        ui.label(camcraft_i18n::tr("      Turn from previous"));
         for (axis, v) in ["X", "Y", "Z"].into_iter().zip(draft.iter_mut()) {
             ui.label(axis);
             ui.add(DragValue::new(v).speed(1.0).range(-360.0..=360.0).suffix("°"));
         }
         if ui
-            .button("Apply")
+            .button(camcraft_i18n::tr("Apply"))
             .on_hover_text(format!("Place this setup as {prev} turned about X, then Y, then Z."))
             .clicked()
         {

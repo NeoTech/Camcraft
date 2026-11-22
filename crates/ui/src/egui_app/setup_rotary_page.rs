@@ -33,7 +33,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let u = state.units();
     let shown = |v: f64| format!("{:.4} {}", units::to_display(v, u), u.suffix());
     ui.separator();
-    ui.label(RichText::new(HEADING).strong());
+    ui.label(RichText::new(camcraft_i18n::tr(HEADING)).strong());
     for (r, n) in &noses {
         ui.label(match n {
             Some(n) => format!("Machine file: {r} {NOSE} {}", shown(*n)),
@@ -45,7 +45,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let mut fresh = base.is_finite().then_some(base);
     match &rise {
         Rise::Table => {
-            ui.label(RichText::new("No rotary subplate in this setup: judged on the machine's figure.").weak());
+            ui.label(RichText::new(camcraft_i18n::tr("No rotary subplate in this setup: judged on the machine's figure.")).weak());
         }
         Rise::Stated(_) => {}
         Rise::Stack(s) => {
@@ -62,7 +62,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     };
     let stated = rotary_stack::stated(&state.world, ctx);
     let mut on = stated.is_some();
-    if ui.checkbox(&mut on, STATE_OWN).changed() {
+    if ui.checkbox(&mut on, camcraft_i18n::tr(STATE_OWN)).changed() {
         let value = if on { Some(fresh.unwrap_or(254.0)) } else { None };
         state.pending.push_back(CommandKind::SetupNoseToAxis { setup: name.to_owned(), value });
     }

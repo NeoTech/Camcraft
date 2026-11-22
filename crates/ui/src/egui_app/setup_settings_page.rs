@@ -62,8 +62,8 @@ pub(super) fn settings_page(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
 fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
         group(ui, FIRST_GROUP, None, |ui| {
-            ui.label(NO_SETUPS);
-            ui.label(RichText::new(WORKHOLDING_POINTER).weak());
+            ui.label(camcraft_i18n::tr(NO_SETUPS));
+            ui.label(RichText::new(camcraft_i18n::tr(WORKHOLDING_POINTER)).weak());
             if even_row(ui, &["Create first setup"], Vec2::new(cell_w(ui, pane_w(ui), 1), BUTTON_H)).is_some() {
                 state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
             }
@@ -78,7 +78,7 @@ fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     });
     group(ui, GROUPS[1], None, |ui| super::setup_stock_pick::picker(ui, state, name));
     group(ui, GROUPS[2], None, |ui| {
-        ui.label(RichText::new(ORIENT_HELP).small().weak());
+        ui.label(RichText::new(camcraft_i18n::tr(ORIENT_HELP)).small().weak());
         // The two dropdowns (#771): plane orientation (axes, points, face,
         // manual, cylinder) and orientation point; they draw the picker
         // rows main keeps (#738).

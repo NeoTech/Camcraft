@@ -56,13 +56,13 @@ pub(super) fn turning_rows(ui: &mut Ui, state: &mut State) {
     t.feed_per_rev = f / ls;
     let mut capped = t.max_rpm.is_some();
     prop_row(ui, "Max rpm", |ui| {
-        ui.checkbox(&mut capped, "");
+        ui.checkbox(&mut capped,"");
         if capped {
             let m = t.max_rpm.get_or_insert(3000.0);
             ui.add(DragValue::new(m).range(1.0..=100_000.0).speed(10.0).max_decimals(0).suffix(" rpm"));
         } else {
             t.max_rpm = None;
-            ui.label("the machine's maximum alone");
+            ui.label(camcraft_i18n::tr("the machine's maximum alone"));
         }
     });
     consequence(ui, "G96 needs a clamp: the lower of this and the machine's spindle maximum - with neither stated the post refuses");

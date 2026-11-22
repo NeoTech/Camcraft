@@ -56,15 +56,15 @@ fn fit_lines(ui: &mut Ui, u: Unit, d: &ViseDraft) -> Option<ViseAct> {
     let mut act = None;
     match &d.fit {
         Some(VisePreview::NoStock) => {
-            ui.label(
-                "This setup has no stock yet. A vise grips the stock - the block the part is cut from -                  not the imported model. Set the stock on the Stock page to fit the vise to it,                  or place the vise by position below.",
+            ui.label(camcraft_i18n::tr(
+                "This setup has no stock yet. A vise grips the stock - the block the part is cut from -                  not the imported model. Set the stock on the Stock page to fit the vise to it,                  or place the vise by position below."),
             );
-            if ui.button("Open the Stock page").clicked() {
+            if ui.button(camcraft_i18n::tr("Open the Stock page")).clicked() {
                 act = Some(ViseAct::OpenStock);
             }
         }
         Some(VisePreview::Fits { opening, at, centred }) if d.fit_stock => {
-            ui.label(RichText::new("The vise grips the stock (set on the Stock page), not the imported model.").small());
+            ui.label(RichText::new(camcraft_i18n::tr("The vise grips the stock (set on the Stock page), not the imported model.")).small());
             let l = |v: f64| format!("{} {}", len(v, u, 3), u.suffix());
             let (x, y, z) = (l(at.x), l(at.y), l(at.z));
             let seat = d.params.seat_height();
@@ -90,7 +90,7 @@ fn fit_lines(ui: &mut Ui, u: Unit, d: &ViseDraft) -> Option<ViseAct> {
             ui.colored_label(ui.visuals().error_fg_color, format!("This vise cannot be fitted to the stock: {why}"));
         }
         _ => {
-            ui.label(RichText::new("The vise grips the stock (set on the Stock page), not the imported model.").small());
+            ui.label(RichText::new(camcraft_i18n::tr("The vise grips the stock (set on the Stock page), not the imported model.")).small());
         }
     }
     act
@@ -98,8 +98,8 @@ fn fit_lines(ui: &mut Ui, u: Unit, d: &ViseDraft) -> Option<ViseAct> {
 
 pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     let mut act = None;
-    ui.heading("Add built-in vise");
-    ui.label(RichText::new("A generic vise built from these figures; edit them to match yours.").small());
+    ui.heading(camcraft_i18n::tr("Add built-in vise"));
+    ui.label(RichText::new(camcraft_i18n::tr("A generic vise built from these figures; edit them to match yours.")).small());
     ui.add_space(4.0);
     let mut picked = None;
     for (title, self_centering) in [("Size (jaw width)", false), ("5-axis self-centering", true)] {
@@ -157,7 +157,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     if matches!(d.fit, Some(VisePreview::NoStock)) {
         let mut off = false;
         ui.add_enabled(false, egui::Checkbox::new(&mut off, fit))
-            .on_disabled_hover_text("Fit to the stock needs a stock: this setup has none yet.");
+            .on_disabled_hover_text(camcraft_i18n::tr("Fit to the stock needs a stock: this setup has none yet."));
     } else {
         ui.checkbox(&mut d.fit_stock, fit);
     }
@@ -166,7 +166,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     }
     if !fitting(d) {
         egui::Grid::new("builtin-vise-place").num_columns(2).show(ui, |ui| {
-            let l = ui.label("Jaw opening");
+            let l = ui.label(camcraft_i18n::tr("Jaw opening"));
             num_by(ui, u, &mut d.params.opening, l.id);
             ui.end_row();
             let axes = if centred { ["Centre X", "Centre Y", "Floor Z"] } else { ["Fixed jaw X", "Fixed jaw Y", "Floor Z"] };
@@ -175,7 +175,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
                 num_by(ui, u, &mut d.pos[k], l.id);
                 ui.end_row();
             }
-            let l = ui.label("Turn about Z (yaw)");
+            let l = ui.label(camcraft_i18n::tr("Turn about Z (yaw)"));
             num_plain_by(ui, &mut d.yaw_deg, l.id);
             ui.end_row();
         });
@@ -185,10 +185,10 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Place").clicked() {
+        if ui.button(camcraft_i18n::tr("Place")).clicked() {
             act = Some(ViseAct::Place(Box::new(place_command(d))));
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
             act = Some(ViseAct::Close);
         }
     });

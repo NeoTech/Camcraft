@@ -51,12 +51,12 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
     let armed = state.points_pick.as_ref().is_some_and(|p| p.setup == setup);
     // Short lines like the face row (#330): its options stay on screen in
     // the narrow properties pane.
-    ui.label("    Lay on a plane - pick three points");
+    ui.label(camcraft_i18n::tr("    Lay on a plane - pick three points"));
     ui.horizontal(|ui| {
-        ui.label("     ");
+        ui.label(camcraft_i18n::tr("     "));
         let pick_text = if armed { "Stop picking points" } else { "Pick three points" };
         if super::pick_button::pick_button(ui, armed, pick_text)
-            .on_hover_text("Click three corners of the model in the viewport; the plane through them is laid on the plane.")
+            .on_hover_text(camcraft_i18n::tr("Click three corners of the model in the viewport; the plane through them is laid on the plane."))
             .clicked()
         {
             if armed {
@@ -73,21 +73,21 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text("The plane the three points are laid on.");
+            .on_hover_text(camcraft_i18n::tr("The plane the three points are laid on."));
     });
     ui.horizontal(|ui| {
-        ui.label("     ");
-        ui.checkbox(&mut d.flip, "Points down").on_hover_text(
+        ui.label(camcraft_i18n::tr("     "));
+        ui.checkbox(&mut d.flip,camcraft_i18n::tr( "Points down")).on_hover_text(camcraft_i18n::tr(
             "On: the points' outside faces down onto the plane (-Z for G17 rests them on the table). \
-             Off: it looks out along +Z / +Y / +X.",
+             Off: it looks out along +Z / +Y / +X."),
         );
-        ui.checkbox(&mut d.place, "Point 1 to plane level")
-            .on_hover_text("Set the points onto the plane (e.g. Z 0 for G17); off keeps the part where it is.");
+        ui.checkbox(&mut d.place,camcraft_i18n::tr( "Point 1 to plane level"))
+            .on_hover_text(camcraft_i18n::tr("Set the points onto the plane (e.g. Z 0 for G17); off keeps the part where it is."));
     });
     ui.horizontal(|ui| {
-        ui.label("     ");
-        ui.checkbox(&mut d.frame, "3-2-1 frame").on_hover_text(
-            "Also turn the part so point 1 -> 2 runs along +X (+Y for G19) and move point 1 to the origin.",
+        ui.label(camcraft_i18n::tr("     "));
+        ui.checkbox(&mut d.frame,camcraft_i18n::tr( "3-2-1 frame")).on_hover_text(camcraft_i18n::tr(
+            "Also turn the part so point 1 -> 2 runs along +X (+Y for G19) and move point 1 to the origin."),
         );
     });
     if armed {
@@ -116,17 +116,17 @@ fn points_lines(ui: &mut Ui, state: &mut State, setup: &str, d: Draft) {
     let check = AlignPartToSetup::check_points(&state.world, setup, &picks, pl).map_err(|e| pick_words::plain(&e.to_string()));
     let side = pick::points_side(&state.world, &picks).ok();
     ui.horizontal(|ui| {
-        ui.label("     ");
+        ui.label(camcraft_i18n::tr("     "));
         if ui
-            .add_enabled(!picks.is_empty(), egui::Button::new("Remove last"))
-            .on_hover_text("Drop the last point picked.")
+            .add_enabled(!picks.is_empty(), egui::Button::new(camcraft_i18n::tr("Remove last")))
+            .on_hover_text(camcraft_i18n::tr("Drop the last point picked."))
             .clicked()
         {
             crate::points_pick::remove_last(state);
         }
         if ui
-            .add_enabled(!picks.is_empty(), egui::Button::new("Clear points"))
-            .on_hover_text("Drop every point picked and start again from point 1.")
+            .add_enabled(!picks.is_empty(), egui::Button::new(camcraft_i18n::tr("Clear points")))
+            .on_hover_text(camcraft_i18n::tr("Drop every point picked and start again from point 1."))
             .clicked()
         {
             crate::points_pick::clear(state);
@@ -139,7 +139,7 @@ fn points_lines(ui: &mut Ui, state: &mut State, setup: &str, d: Draft) {
             Err(why) => why.clone(),
         };
         if ui
-            .add_enabled(check.is_ok(), egui::Button::new("Apply points"))
+            .add_enabled(check.is_ok(), egui::Button::new(camcraft_i18n::tr("Apply points")))
             .on_hover_text(&tip)
             .on_disabled_hover_text(&tip)
             .clicked()
@@ -154,6 +154,6 @@ fn points_lines(ui: &mut Ui, state: &mut State, setup: &str, d: Draft) {
     };
     if !words.is_empty() {
         ui.label(RichText::new(format!("      {words}")).weak())
-            .on_hover_text("The side away from the part's material is the points' outside: it faces down onto the plane (or up, with Points down off).");
+            .on_hover_text(camcraft_i18n::tr("The side away from the part's material is the points' outside: it faces down onto the plane (or up, with Points down off)."));
     }
 }

@@ -14,15 +14,15 @@ use crate::state::{CommandKind, State};
 /// The own / follow-the-document choice of a setup's post options.
 pub(super) fn options_ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
-        ui.label(RichText::new("A document without setups posts with the document's post options.").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("A document without setups posts with the document's post options.")).weak());
         return;
     };
-    ui.label(RichText::new("Post options").strong());
+    ui.label(RichText::new(camcraft_i18n::tr("Post options")).strong());
     let owns = setup_post_options::own(&state.world, Some(name)).is_some()
         || setup_post_options::script_own(&state.world, Some(name)).is_some();
     let mut pick = owns;
-    ui.radio_value(&mut pick, false, "Use the document's post options");
-    ui.radio_value(&mut pick, true, "This setup has its own post options");
+    ui.radio_value(&mut pick, false,camcraft_i18n::tr( "Use the document's post options"));
+    ui.radio_value(&mut pick, true,camcraft_i18n::tr( "This setup has its own post options"));
     if pick != owns {
         state.pending.push_back(CommandKind::SetupOwnPostOptions { setup: name.to_owned(), own: pick });
     }
@@ -55,6 +55,6 @@ pub(super) fn tool_list_export(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         if crate::browser_files::button(ui, why, "Export tool list…", "") {
             state.pending.push_back(CommandKind::ToolListExportDialog(ctx.map(str::to_owned)));
         }
-        ui.label(RichText::new("(this setup's tools: CSV or text)").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("(this setup's tools: CSV or text)")).weak());
     });
 }

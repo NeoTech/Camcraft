@@ -37,7 +37,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
     let current = setup_align::stored(&state.world, setup);
     let mut queued: Option<CommandKind> = None;
     ui.horizontal(|ui| {
-        ui.label("    Part alignment").on_hover_text(FLOW_TIP);
+        ui.label(camcraft_i18n::tr("    Part alignment")).on_hover_text(FLOW_TIP);
         ComboBox::from_id_salt(("setup_align", setup))
             .selected_text(align_text(current))
             .show_ui(ui, |ui| {
@@ -59,25 +59,25 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text(
+            .on_hover_text(camcraft_i18n::tr(
                 "Shows how the part sits now. A choice flips or turns it from there, about the part's \
                  centre - it adds to the face, point and axis moves, never replaces them; \"As modelled\" \
                  clears them all. The stock follows and is rebuilt square to the table; the work offset \
-                 is set separately below.",
+                 is set separately below."),
             );
     });
     let id = ui.id().with(("setup_align_draft", setup));
     let (mut draft, mut pivot): ([f64; 3], TurnPivot) =
         ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || ([0.0; 3], TurnPivot::default())));
     ui.horizontal(|ui| {
-        ui.label("      Turn");
+        ui.label(camcraft_i18n::tr("      Turn"));
         for (axis, v) in ["X", "Y", "Z"].into_iter().zip(draft.iter_mut()) {
             ui.label(axis);
             ui.add(DragValue::new(v).speed(1.0).range(-360.0..=360.0).suffix("°"));
         }
     });
     ui.horizontal(|ui| {
-        ui.label("      about");
+        ui.label(camcraft_i18n::tr("      about"));
         ComboBox::from_id_salt(("setup_align_pivot", setup))
             .selected_text(pivot.label())
             .show_ui(ui, |ui| {
@@ -86,9 +86,9 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
                 }
             })
             .response
-            .on_hover_text(
+            .on_hover_text(camcraft_i18n::tr(
                 "What stays put as the part turns: the WCS origin keeps the part's point on \
-                 the origin there; the part centre keeps the centre of its bounds put.",
+                 the origin there; the part centre keeps the centre of its bounds put."),
             );
         let tip = match pivot {
             TurnPivot::WcsOrigin => {
@@ -100,7 +100,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
                  centre of its bounds."
             }
         };
-        if ui.button("Apply").on_hover_text(tip).clicked() {
+        if ui.button(camcraft_i18n::tr("Apply")).on_hover_text(tip).clicked() {
             queued = Some(CommandKind::TurnPart { setup: setup.to_owned(), angles: draft, pivot });
         }
     });

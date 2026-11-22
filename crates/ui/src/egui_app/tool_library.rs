@@ -11,11 +11,11 @@ use egui::Ui;
 
 pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
     egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.heading("Tool library");
+        ui.heading(camcraft_i18n::tr("Tool library"));
     // Wrapped: the pane is narrow, and a clipped button is a hidden one.
     let (new, export, import) = ui
         .horizontal_wrapped(|ui| {
-            let new = ui.button("New tool…").clicked();
+            let new = ui.button(camcraft_i18n::tr("New tool…")).clicked();
             let export = crate::browser_files::button(
                 ui,
                 state.in_browser(crate::browser_files::NO_EXPORT),
@@ -35,8 +35,8 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
     // #889: whether an import takes each tool's holder body from the file.
     let mut holders = state.import_tool_holders;
     if ui
-        .checkbox(&mut holders, "Import tool holders")
-        .on_hover_text("take each tool's holder body from the library file; unticked, tools arrive with their holder cylinder only")
+        .checkbox(&mut holders,camcraft_i18n::tr( "Import tool holders"))
+        .on_hover_text(camcraft_i18n::tr("take each tool's holder body from the library file; unticked, tools arrive with their holder cylinder only"))
         .changed()
     {
         state.set_import_tool_holders(holders);
@@ -54,7 +54,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
         super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
     ui.separator();
-    ui.heading("Catalog");
+    ui.heading(camcraft_i18n::tr("Catalog"));
     let catalog = tools::catalog();
     if state
         .tool_catalog_kind
@@ -73,8 +73,8 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
                     ui.selectable_value(&mut state.tool_catalog_kind, Some(tool.kind), kind_name(tool.kind));
                 }
             }
-        }).response.labelled_by(ui.label("Tool type").id);
-    let name_label = ui.label("Name filter");
+        }).response.labelled_by(ui.label(camcraft_i18n::tr("Tool type")).id);
+    let name_label = ui.label(camcraft_i18n::tr("Name filter"));
     ui.add(egui::TextEdit::singleline(&mut state.tool_catalog_name)
         .desired_width(ui.available_width()))
         .labelled_by(name_label.id);
@@ -99,10 +99,10 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
                     kind_name(ct.kind)
                 ));
                 if taken {
-                    ui.label("(in document)");
+                    ui.label(camcraft_i18n::tr("(in document)"));
                     false
                 } else {
-                    ui.button("Add").clicked()
+                    ui.button(camcraft_i18n::tr("Add")).clicked()
                 }
             })
             .inner;
@@ -114,7 +114,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
         }
     }
     if matches == 0 {
-        ui.label("No tools match the filters.");
+        ui.label(camcraft_i18n::tr("No tools match the filters."));
     }
 
     });
@@ -131,10 +131,10 @@ fn tool_import_mode_combo(ui: &mut egui::Ui, mode: &mut camcraft_app::commands::
         })
         .show_ui(ui, |ui| {
             ui.selectable_value(mode, ImportMode::Add, "Add (rename duplicates)")
-                .on_hover_text("an identical tool is skipped, a different tool of a taken name comes in as \"Name (2)\"");
+                .on_hover_text(camcraft_i18n::tr("an identical tool is skipped, a different tool of a taken name comes in as \"Name (2)\""));
             ui.selectable_value(mode, ImportMode::Update, "Update same-named")
-                .on_hover_text("a same-named tool takes the file's definition in place (number kept; operations using it go Stale); new names are added");
+                .on_hover_text(camcraft_i18n::tr("a same-named tool takes the file's definition in place (number kept; operations using it go Stale); new names are added"));
             ui.selectable_value(mode, ImportMode::Replace, "Replace library")
-                .on_hover_text("update, and tools the file lacks are removed - refused if an operation uses one");
+                .on_hover_text(camcraft_i18n::tr("update, and tools the file lacks are removed - refused if an operation uses one"));
         });
 }

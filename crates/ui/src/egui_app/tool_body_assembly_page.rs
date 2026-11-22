@@ -51,13 +51,13 @@ pub(super) fn section(ui: &mut Ui, state: &mut State) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Target CSYS").on_hover_text("blank = auto-mate MCS <-> CSW");
+        ui.label(camcraft_i18n::tr("Target CSYS")).on_hover_text(camcraft_i18n::tr("blank = auto-mate MCS <-> CSW"));
         ui.add(
             TextEdit::singleline(&mut state.tool_body_ui.assembly.target_csys)
                 .desired_width(64.0)
                 .hint_text("auto"),
         );
-        ui.label("Piece CSYS").on_hover_text("blank = auto-mate MCS <-> CSW");
+        ui.label(camcraft_i18n::tr("Piece CSYS")).on_hover_text(camcraft_i18n::tr("blank = auto-mate MCS <-> CSW"));
         ui.add(
             TextEdit::singleline(&mut state.tool_body_ui.assembly.piece_csys)
                 .desired_width(64.0)
@@ -75,8 +75,8 @@ pub(super) fn section(ui: &mut Ui, state: &mut State) {
                 };
                 ui.label(format!("{i}: {}{csys}", piece.source));
                 let rm = ui
-                    .add_enabled(pieces.len() > 1, egui::Button::new("Remove"))
-                    .on_hover_text("remove this piece from the assembly (undoable)");
+                    .add_enabled(pieces.len() > 1, egui::Button::new(camcraft_i18n::tr("Remove")))
+                    .on_hover_text(camcraft_i18n::tr("remove this piece from the assembly (undoable)"));
                 if rm.clicked() {
                     state.queue_remove_tool_body_piece(i);
                 }

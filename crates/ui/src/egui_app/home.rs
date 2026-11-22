@@ -85,7 +85,7 @@ pub(crate) fn shown_path(path: &std::path::Path) -> String {
 /// The Home button, right-aligned so that its right edge is `right`, in
 /// the top band. Returns its left edge. A click shows or hides the page.
 pub(super) fn button(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconSet>, band: Rect, right: f32) -> f32 {
-    let label = RichText::new(HOME).size(pal.font_label).color(pal.text);
+    let label = RichText::new(camcraft_i18n::tr(HOME)).size(pal.font_label).color(pal.text);
     let button = match icons.and_then(|set| set.texture(Icon::Home)) {
         Some(texture) => Button::image_and_text(Image::new(texture).fit_to_exact_size(Vec2::splat(16.0)).tint(pal.text), label),
         None => Button::new(label),
@@ -119,10 +119,10 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     let mut pick = None;
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         ui.add_space(pal.item_spacing_y * 4.0);
-        ui.label(RichText::new(TITLE).size(pal.font_label * 1.4).strong().color(pal.text));
+        ui.label(RichText::new(camcraft_i18n::tr(TITLE)).size(pal.font_label * 1.4).strong().color(pal.text));
         ui.add_space(pal.item_spacing_y * 2.0);
         if entries.is_empty() {
-            ui.label(RichText::new(NO_RECENT).color(pal.text_faint));
+            ui.label(RichText::new(camcraft_i18n::tr(NO_RECENT)).color(pal.text_faint));
         }
         for e in &entries {
             ui.horizontal(|ui| {

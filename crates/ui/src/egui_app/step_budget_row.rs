@@ -25,7 +25,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, entity: &Entity) {
         let l = ui.label(format!("{} (next import)", step_budget::NAME));
         let r = ui.add(TextEdit::singleline(&mut state.step_budget.draft).desired_width(110.0)).labelled_by(l.id);
         commit |= r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-        commit |= ui.button("Set").clicked();
+        commit |= ui.button(camcraft_i18n::tr("Set")).clicked();
     });
     if commit {
         let text = state.step_budget.draft.clone();

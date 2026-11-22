@@ -126,7 +126,7 @@ fn body(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     group(ui, "Boundaries", None, |ui| {
         let entries = crate::frame_cost::time("ui/properties.boundary.entries", || boundary_draft::entries(state));
         if entries.is_empty() {
-            ui.label("None - the selection bounds the area.");
+            ui.label(camcraft_i18n::tr("None - the selection bounds the area."));
             hint(ui, &hints()[0]);
         }
         for (n, e) in entries.iter().enumerate() {
@@ -136,11 +136,11 @@ fn body(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
         collecting_line(ui, state, &mut acts);
         do_not_touch_ui(ui, state, u, &mut acts);
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("(i) roles, picking and the fill").small().weak())
+            ui.label(RichText::new(camcraft_i18n::tr("(i) roles, picking and the fill")).small().weak())
                 .on_hover_text(hints().join("\n\n"));
         });
     });
-    if ui.small_button("Reset boundary").on_hover_text("every Boundary setting back to the kind's own law (Apply commits it)").clicked() {
+    if ui.small_button(camcraft_i18n::tr("Reset boundary")).on_hover_text(camcraft_i18n::tr("every Boundary setting back to the kind's own law (Apply commits it)")).clicked() {
         acts.push(Act::Reset);
     }
     for act in acts {
@@ -229,7 +229,7 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
         consequence(ui, &boundary_summary::side_caption(state, e.role));
         let other = if e.role == Role::OpenA { Role::OpenB } else { Role::OpenA };
         prop_row(ui, "Machined side", |ui| {
-            if ui.small_button("Machine the other side").on_hover_text(format!("switch to {}", other.label())).clicked() {
+            if ui.small_button(camcraft_i18n::tr("Machine the other side")).on_hover_text(format!("switch to {}", other.label())).clicked() {
                 acts.push(Act::Role(e.at, other));
             }
             ui.label(if e.role == Role::OpenA { "A" } else { "B" });
@@ -239,23 +239,23 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
         if !e.picks.is_empty() {
             let target = boundary_draft::target_of(e.at);
             let on = state.boundary_pick == Some(target);
-            if super::pick_button::pick_button(ui, on, "Pick").on_hover_text("route viewport clicks into this boundary").clicked() {
+            if super::pick_button::pick_button(ui, on, "Pick").on_hover_text(camcraft_i18n::tr("route viewport clicks into this boundary")).clicked() {
                 acts.push(Act::Pick(if on { None } else { Some(target) }));
             }
         }
-        if matches!(e.shape, Some(PickShape::Open { .. })) && ui.small_button("Extend to loop").on_hover_text("close the picked edges around their face loop").clicked() {
+        if matches!(e.shape, Some(PickShape::Open { .. })) && ui.small_button(camcraft_i18n::tr("Extend to loop")).on_hover_text(camcraft_i18n::tr("close the picked edges around their face loop")).clicked() {
             acts.push(Act::Extend(e.at));
         }
         if !e.role.is_open() && matches!(e.shape, Some(PickShape::Open { .. })) {
             let block = boundary_draft::role_block(state, e, Role::OpenA);
-            let r = ui.add_enabled(block.is_none(), egui::Button::new("Use as open boundary").small());
+            let r = ui.add_enabled(block.is_none(), egui::Button::new(camcraft_i18n::tr("Use as open boundary")).small());
             if let Some(why) = block {
                 r.on_disabled_hover_text(why);
             } else if r.clicked() {
                 acts.push(Act::Role(e.at, Role::OpenA));
             }
         }
-        if ui.small_button("Remove").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Remove")).clicked() {
             acts.push(Act::Remove(e.at));
         }
     });
@@ -266,20 +266,20 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
 
 fn add_row(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
     ui.horizontal_wrapped(|ui| {
-        if ui.small_button("+ Pick a boundary").on_hover_text("starts an Include entry - change its role after picking").clicked() {
+        if ui.small_button(camcraft_i18n::tr("+ Pick a boundary")).on_hover_text(camcraft_i18n::tr("starts an Include entry - change its role after picking")).clicked() {
             acts.push(Act::Pick(Some(BoundaryPick::Include)));
         }
         let has_open = state.op_ui.area.open.is_some();
-        let r = ui.add_enabled(!has_open, egui::Button::new("+ Pick an open boundary").small());
+        let r = ui.add_enabled(!has_open, egui::Button::new(camcraft_i18n::tr("+ Pick an open boundary")).small());
         if has_open {
-            r.on_disabled_hover_text("an operation has one open boundary - use its Pick button to re-pick it");
-        } else if r.on_hover_text("pick the edge chain the operation machines up to").clicked() {
+            r.on_disabled_hover_text(camcraft_i18n::tr("an operation has one open boundary - use its Pick button to re-pick it"));
+        } else if r.on_hover_text(camcraft_i18n::tr("pick the edge chain the operation machines up to")).clicked() {
             acts.push(Act::Pick(Some(BoundaryPick::Open)));
         }
-        if ui.small_button("+ Stock outline").on_hover_text("include the setup stock's outline").clicked() {
+        if ui.small_button(camcraft_i18n::tr("+ Stock outline")).on_hover_text(camcraft_i18n::tr("include the setup stock's outline")).clicked() {
             acts.push(Act::Add(ExtraBoundary { mode: BoundaryMode::Include, shape: BoundaryShape::Stock }));
         }
-        if ui.small_button("+ Part silhouette").on_hover_text("keep the tool out of the part's silhouette").clicked() {
+        if ui.small_button(camcraft_i18n::tr("+ Part silhouette")).on_hover_text(camcraft_i18n::tr("keep the tool out of the part's silhouette")).clicked() {
             acts.push(Act::Add(ExtraBoundary { mode: BoundaryMode::Exclude, shape: BoundaryShape::Silhouette }));
         }
     });
@@ -296,7 +296,7 @@ fn collecting_line(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
     };
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(format!("Picking into {what} - viewport clicks fill it, not the selection.")).strong());
-        if ui.small_button("Done").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Done")).clicked() {
             acts.push(Act::Pick(None));
         }
     });
@@ -304,7 +304,7 @@ fn collecting_line(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
 
 fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Vec<Act>) {
     ui.separator();
-    ui.label(RichText::new("Do not touch").strong());
+    ui.label(RichText::new(camcraft_i18n::tr("Do not touch")).strong());
     if let Some(why) = operation::do_not_touch_unsupported(state.op_ui.params.kind()) {
         if state.boundary_pick == Some(BoundaryPick::DoNotTouch) {
             state.boundary_pick = None;
@@ -313,7 +313,7 @@ fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Ve
         return;
     }
     ui.horizontal(|ui| {
-        ui.label("Clearance");
+        ui.label(camcraft_i18n::tr("Clearance"));
         num(ui, u, &mut state.op_ui.area.do_not_touch.clearance);
         if state.op_ui.area.do_not_touch.clearance < 0.0 || !state.op_ui.area.do_not_touch.clearance.is_finite() {
             state.op_ui.area.do_not_touch.clearance = 0.0;
@@ -322,7 +322,7 @@ fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Ve
         let label = if picking { "Picking…" } else { "Pick protected" };
         if ui
             .selectable_label(picking, label)
-            .on_hover_text("click faces or edges in the viewport to keep the full tool (flutes, shank, holder) clear")
+            .on_hover_text(camcraft_i18n::tr("click faces or edges in the viewport to keep the full tool (flutes, shank, holder) clear"))
             .clicked()
         {
             acts.push(Act::Pick(if picking { None } else { Some(BoundaryPick::DoNotTouch) }));
@@ -330,13 +330,13 @@ fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Ve
     });
     let picks = state.op_ui.area.do_not_touch.picks.clone();
     if picks.is_empty() {
-        ui.label(RichText::new("None - pick faces or edges the tool assembly must never touch.").small().weak());
+        ui.label(RichText::new(camcraft_i18n::tr("None - pick faces or edges the tool assembly must never touch.")).small().weak());
     } else {
         for (i, pick) in picks.iter().enumerate() {
             let row = ui
                 .horizontal(|ui| {
                     ui.label(operation::describe_sel(pick));
-                    if ui.small_button("×").on_hover_text("remove from Do not touch").clicked() {
+                    if ui.small_button(camcraft_i18n::tr("×")).on_hover_text(camcraft_i18n::tr("remove from Do not touch")).clicked() {
                         acts.push(Act::RemoveDoNotTouch(i));
                     }
                 })

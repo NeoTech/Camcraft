@@ -23,16 +23,16 @@ use crate::state::State;
 pub(super) fn params_block(ui: &mut Ui, state: &mut State, u: Unit) {
     egui::Grid::new("tool_cutter_params").num_columns(4).spacing([6.0, 2.0]).show(ui, |ui| {
         let t = &mut state.tool_ui;
-        ui.label("cutter Ø");
+        ui.label(camcraft_i18n::tr("cutter Ø"));
         len_cell(ui, u, &mut t.diameter);
         match t.tool_kind() {
             // #263: a ball's corner IS its ball - shown, never edited.
             ToolKind::BallNose | ToolKind::Probe => {
-                ui.label("ball R");
+                ui.label(camcraft_i18n::tr("ball R"));
                 ui.label(units::len(t.diameter * 0.5, u, 3));
             }
             ToolKind::BullNose => {
-                ui.label("corner R");
+                ui.label(camcraft_i18n::tr("corner R"));
                 len_cell(ui, u, &mut t.corner_r);
             }
             ToolKind::Drill => angle(ui, "point angle °", &mut t.tip_angle),
@@ -44,14 +44,14 @@ pub(super) fn params_block(ui: &mut Ui, state: &mut State, u: Unit) {
             }
         }
         ui.end_row();
-        ui.label("flutes");
+        ui.label(camcraft_i18n::tr("flutes"));
         len_cell(ui, u, &mut t.flute_len);
         ui.label("");
         ui.label("");
         ui.end_row();
-        ui.label("shank Ø");
+        ui.label(camcraft_i18n::tr("shank Ø"));
         len_cell(ui, u, &mut t.shank_d);
-        ui.label("shank length");
+        ui.label(camcraft_i18n::tr("shank length"));
         len_cell(ui, u, &mut t.shank_len);
         ui.end_row();
     });
@@ -66,17 +66,17 @@ fn neck_row(ui: &mut Ui, state: &mut State, u: Unit) {
     ui.horizontal(|ui| {
         let mut on = neck.is_some();
         let toggled = ui
-            .checkbox(&mut on, "Neck")
-            .on_hover_text("a relieved neck between the flutes and the shank; drawing it replaces a hand-drawn outline")
+            .checkbox(&mut on,camcraft_i18n::tr( "Neck"))
+            .on_hover_text(camcraft_i18n::tr("a relieved neck between the flutes and the shank; drawing it replaces a hand-drawn outline"))
             .changed();
         if toggled {
             let t = &state.tool_ui;
             let start = Neck { d: 0.9 * t.diameter.min(t.shank_d), len: 0.5 * t.shank_len };
             state.set_cutter_neck(on.then_some(start));
         } else if let Some(mut n) = neck {
-            ui.label("neck Ø");
+            ui.label(camcraft_i18n::tr("neck Ø"));
             let a = len_changed(ui, u, &mut n.d);
-            ui.label("neck length");
+            ui.label(camcraft_i18n::tr("neck length"));
             let b = len_changed(ui, u, &mut n.len);
             if a || b {
                 state.set_cutter_neck(Some(n));

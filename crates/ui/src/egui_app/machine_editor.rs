@@ -60,9 +60,9 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
         .default_size([480.0, 560.0])
         .show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label("Model");
+                ui.label(camcraft_i18n::tr("Model"));
                 fields::named(ui.add(TextEdit::singleline(&mut ed.machine.model).desired_width(150.0)), "Machine model");
-                ui.label("Vendor");
+                ui.label(camcraft_i18n::tr("Vendor"));
                 fields::named(ui.add(TextEdit::singleline(&mut ed.machine.vendor).desired_width(110.0)), "Machine vendor");
             });
             // The fields scroll; Apply and Revert stay in reach (#535: the
@@ -95,10 +95,10 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 super::machine_grid::machine_grid(ui, "machine_editor_overview", &ed.machine, u, &[], super::machine_grid::ROW_GAP);
             });
             ui.horizontal(|ui| {
-                if ui.button("Apply").clicked() {
+                if ui.button(camcraft_i18n::tr("Apply")).clicked() {
                     apply = true;
                 }
-                if ui.button("Revert to mounted").clicked() {
+                if ui.button(camcraft_i18n::tr("Revert to mounted")).clicked() {
                     revert = true;
                 }
             });
@@ -159,26 +159,26 @@ fn draw_kind(ui: &mut Ui, m: &mut Machine) {
     if idx == 0 && m.kind.is_some() {
         m.kind = None;
     }
-    ui.label("auto follows the axes below: X/Y/Z is a mill, X/Z is a lathe, Y plus a rotary is a mill-turn; a plasma table must say plasma");
+    ui.label(camcraft_i18n::tr("auto follows the axes below: X/Y/Z is a mill, X/Z is a lathe, Y plus a rotary is a mill-turn; a plasma table must say plasma"));
 }
 
 fn draw_spindle(ui: &mut Ui, u: Unit, m: &mut Machine) {
     pages::field(ui, "Spindle (rpm)");
     ui.horizontal(|ui| {
-        ui.label("min");
+        ui.label(camcraft_i18n::tr("min"));
         opt(ui, |ui, v| fields::num_plain_named(ui, v, "Spindle min rpm"), &mut m.spindle_min);
-        ui.label("max");
+        ui.label(camcraft_i18n::tr("max"));
         opt(ui, |ui, v| fields::num_plain_named(ui, v, "Spindle max rpm"), &mut m.spindle_max);
     });
     ui.horizontal(|ui| {
-        ui.label("motor power");
-        ui.label("kW");
+        ui.label(camcraft_i18n::tr("motor power"));
+        ui.label(camcraft_i18n::tr("kW"));
         opt(ui, |ui, v| fields::num_plain_named(ui, v, "Spindle motor power (kW)"), &mut m.spindle_power);
-        ui.label("· body");
+        ui.label(camcraft_i18n::tr("· body"));
         opt(ui, |ui, v| fields::num_named(ui, u, v, "Spindle body diameter"), &mut m.spindle_d);
-        ui.label("mm");
+        ui.label(camcraft_i18n::tr("mm"));
         opt(ui, |ui, v| fields::num_named(ui, u, v, "Spindle body length above holder"), &mut m.spindle_len);
-        ui.label("mm above holder");
+        ui.label(camcraft_i18n::tr("mm above holder"));
     });
 }
 
@@ -194,28 +194,28 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
                 if t.is_empty() { format!("#{}", i + 1) } else { t.to_owned() }
             };
             if a.rotary {
-                ui.label("rotary");
+                ui.label(camcraft_i18n::tr("rotary"));
             }
-            ui.label("rapid");
+            ui.label(camcraft_i18n::tr("rapid"));
             opt(ui, |ui, v| fields::num_feed_named(ui, u, v, &format!("Axis {ax} rapid")), &mut a.rapid);
-            ui.label("feed");
+            ui.label(camcraft_i18n::tr("feed"));
             opt(ui, |ui, v| fields::num_feed_named(ui, u, v, &format!("Axis {ax} feed")), &mut a.feed);
-            ui.label("travel");
+            ui.label(camcraft_i18n::tr("travel"));
             let mut stated = a.travel.is_some();
-            if ui.checkbox(&mut stated, "").changed() {
+            if ui.checkbox(&mut stated,"").changed() {
                 a.travel = if stated { Some((0.0, 1.0)) } else { None };
             }
             if let Some((lo, hi)) = &mut a.travel {
                 fields::num_named(ui, u, lo, &format!("Axis {ax} travel min"));
-                ui.label("..");
+                ui.label(camcraft_i18n::tr(".."));
                 fields::num_named(ui, u, hi, &format!("Axis {ax} travel max"));
             }
-            ui.label("res");
+            ui.label(camcraft_i18n::tr("res"));
             opt(ui, |ui, v| fields::num_named(ui, u, v, &format!("Axis {ax} resolution")), &mut a.resolution);
             if !a.rotary {
                 draw_direction(ui, i, a);
             }
-            if ui.button("✖").clicked() {
+            if ui.button(camcraft_i18n::tr("✖")).clicked() {
                 remove = Some(i);
             }
         });
@@ -223,7 +223,7 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
     if let Some(i) = remove {
         m.axes.remove(i);
     }
-    if ui.button("add axis").clicked() {
+    if ui.button(camcraft_i18n::tr("add axis")).clicked() {
         m.axes.push(machine::AxisLimits {
             name: "U".to_owned(),
             ..Default::default()
@@ -272,21 +272,21 @@ fn direction_words(name: &str) -> (&'static str, &'static str) {
 fn draw_tooling(ui: &mut Ui, u: Unit, m: &mut Machine) {
     pages::field(ui, "Tooling");
     ui.horizontal(|ui| {
-        ui.label("max tool length");
+        ui.label(camcraft_i18n::tr("max tool length"));
         opt(ui, |ui, v| fields::num_named(ui, u, v, "Max tool length"), &mut m.max_tool_length);
-        ui.label("· max diameter");
+        ui.label(camcraft_i18n::tr("· max diameter"));
         opt(ui, |ui, v| fields::num_named(ui, u, v, "Max tool diameter"), &mut m.max_tool_diameter);
     });
     ui.horizontal(|ui| {
-        ui.label("changer");
+        ui.label(camcraft_i18n::tr("changer"));
         let mut stated = m.tool_count.is_some();
-        if ui.checkbox(&mut stated, "").changed() {
+        if ui.checkbox(&mut stated,"").changed() {
             m.tool_count = if stated { Some(1) } else { None };
         }
         if let Some(n) = &mut m.tool_count {
             fields::named(ui.add(DragValue::new(n).suffix(" slots")), "Tool changer slots");
         } else {
-            ui.label("unstated");
+            ui.label(camcraft_i18n::tr("unstated"));
         }
     });
 }
@@ -297,12 +297,12 @@ fn draw_coolants(ui: &mut Ui, m: &mut Machine) {
     for (i, c) in m.coolants.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             coolant_name(ui, i, &mut c.name);
-            ui.label("M-code");
+            ui.label(camcraft_i18n::tr("M-code"));
             fields::named(ui.add(TextEdit::singleline(&mut c.m_code).desired_width(50.0)), &format!("Coolant {} M-code", i + 1));
             if c.m_code.is_empty() {
-                ui.label("(named only - posts nothing)");
+                ui.label(camcraft_i18n::tr("(named only - posts nothing)"));
             }
-            if ui.button("✖").clicked() {
+            if ui.button(camcraft_i18n::tr("✖")).clicked() {
                 remove = Some(i);
             }
         });
@@ -311,7 +311,7 @@ fn draw_coolants(ui: &mut Ui, m: &mut Machine) {
         m.coolants.remove(i);
     }
     if ui
-        .button("add coolant")
+        .button(camcraft_i18n::tr("add coolant"))
         .clicked()
     {
         m.coolants.push(Coolant {
@@ -336,7 +336,7 @@ fn coolant_name(ui: &mut Ui, i: usize, name: &mut String) {
                     *name = k.to_owned();
                 }
             }
-            if ui.selectable_label(!known, "custom").clicked() && known {
+            if ui.selectable_label(!known,camcraft_i18n::tr( "custom")).clicked() && known {
                 name.clear();
             }
         });
@@ -351,13 +351,13 @@ fn coolant_name(ui: &mut Ui, i: usize, name: &mut String) {
 /// edits - never a 0 that reads back as unstated.
 fn opt(ui: &mut Ui, show: impl FnOnce(&mut Ui, &mut f64), v: &mut Option<f64>) {
     let mut stated = v.is_some();
-    if ui.checkbox(&mut stated, "").changed() {
+    if ui.checkbox(&mut stated,"").changed() {
         *v = if stated { Some(1.0) } else { None };
     }
     match v {
         Some(x) => show(ui, x),
         None => {
-            ui.label("unstated");
+            ui.label(camcraft_i18n::tr("unstated"));
         }
     }
 }

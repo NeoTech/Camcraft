@@ -80,8 +80,8 @@ pub(super) fn holder_picker(ui: &mut Ui, state: &mut State, u: Unit) {
         }
     }
     if ui
-        .add_enabled(pick.is_some(), egui::Button::new("Apply holder"))
-        .on_hover_text("set the library holder as the tool's holder (one undo step); the tool keeps the holder by name until its profile is edited")
+        .add_enabled(pick.is_some(), egui::Button::new(camcraft_i18n::tr("Apply holder")))
+        .on_hover_text(camcraft_i18n::tr("set the library holder as the tool's holder (one undo step); the tool keeps the holder by name until its profile is edited"))
         .clicked()
     {
         state.queue_apply_tool_holder();

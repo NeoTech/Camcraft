@@ -50,7 +50,7 @@ pub(crate) fn row_text(i: usize, p: &Pocket, u: Unit) -> String {
 pub(super) fn section(ui: &mut Ui, state: &mut State, model: &str) {
     let u = state.units();
     ui.add_space(6.0);
-    ui.label("Pockets and slots");
+    ui.label(camcraft_i18n::tr("Pockets and slots"));
     let rows: Option<Vec<(String, String, Option<String>)>> = state.pocket_scan_for(model).map(|found| {
         found
             .iter()
@@ -82,7 +82,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, model: &str) {
             }
         });
     }
-    if ui.button("Detect pockets / slots").clicked() {
+    if ui.button(camcraft_i18n::tr("Detect pockets / slots")).clicked() {
         state.detect_pockets(model);
     }
     if let Some(i) = create {

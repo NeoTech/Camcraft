@@ -63,7 +63,7 @@ pub(super) fn filters(
         let mut remove = None;
         for (i, g) in exclude_edges.iter().enumerate() {
             ui.horizontal(|ui| {
-                if ui.small_button("×").on_hover_text("break this edge again").clicked() {
+                if ui.small_button(camcraft_i18n::tr("×")).on_hover_text(camcraft_i18n::tr("break this edge again")).clicked() {
                     remove = Some(i);
                 }
                 ui.add(egui::Label::new(camcraft_app::pick::geo_label(world, g)).truncate());
@@ -77,9 +77,9 @@ pub(super) fn filters(
         let chains: Vec<&GeoSel> = picks.iter().filter(|g| matches!(g.feature, FeatureSel::Chain(_))).collect();
         let tip = "add the edges picked in Selection to this list";
         if ui
-            .add_enabled(!chains.is_empty(), egui::Button::new("Exclude the picked edges").small())
+            .add_enabled(!chains.is_empty(), egui::Button::new(camcraft_i18n::tr("Exclude the picked edges")).small())
             .on_hover_text(tip)
-            .on_disabled_hover_text("pick edges in Selection first")
+            .on_disabled_hover_text(camcraft_i18n::tr("pick edges in Selection first"))
             .clicked()
         {
             for g in chains {

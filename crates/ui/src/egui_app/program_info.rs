@@ -23,13 +23,13 @@ pub(super) fn program_rows(ui: &mut Ui, state: &mut State) {
     let shown_number = number_text(info.number);
     let shown_comment = info.comment.clone().unwrap_or_default();
     ui.horizontal(|ui| {
-        ui.label("Program number");
+        ui.label(camcraft_i18n::tr("Program number"));
         if let Some(text) = field(ui, "program_number", &shown_number, 60.0, "1", "O0001 when blank (1 to 9999)") {
             state.pending.push_back(CommandKind::SetProgramNumber(text));
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Program comment");
+        ui.label(camcraft_i18n::tr("Program comment"));
         let hover = "the program's comment - its name on Heidenhain and SINUMERIK; the machine's name when blank. \
                      At most 40 characters, no ( ) % ; *";
         if let Some(text) = field(ui, "program_comment", &shown_comment, 180.0, "machine name", hover) {

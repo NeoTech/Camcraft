@@ -53,8 +53,8 @@ pub(super) fn wcs_page(ui: &mut Ui, state: &mut State) {
     let tilted_mill = setup_wcs_tilt::setup_problem(&state.world, active.as_deref()).is_some();
     if tilted_mill {
         ui.label(
-            RichText::new(
-                "This milling WCS is tilted off machine Z and generation will refuse it. Click Level, then turn the part with Part alignment on the Setup page.",
+            RichText::new(camcraft_i18n::tr(
+                "This milling WCS is tilted off machine Z and generation will refuse it. Click Level, then turn the part with Part alignment on the Setup page."),
             )
             .small()
             .color(ui.visuals().warn_fg_color),
@@ -84,12 +84,12 @@ fn origin_fields(ui: &mut Ui, state: &mut State, u: Unit, is_mill: bool) {
             let enabled = !is_mill || !tilt_axis;
             ui.add_enabled_ui(enabled, |ui| num_plain(ui, v))
                 .response
-                .on_disabled_hover_text(MILL_TILT_HINT);
+                .on_disabled_hover_text(camcraft_i18n::tr(MILL_TILT_HINT));
             ui.end_row();
         }
     });
     if is_mill {
-        ui.label(RichText::new(MILL_TILT_HINT).small().weak());
+        ui.label(RichText::new(camcraft_i18n::tr(MILL_TILT_HINT)).small().weak());
     }
 }
 
@@ -121,7 +121,7 @@ fn turn_row(ui: &mut Ui, row: &[(&str, usize, f64); 3], size: Vec2, is_mill: boo
             let resp = ui
                 .add_enabled_ui(enabled, |ui| ui.add_sized(size, Button::new(label)))
                 .inner
-                .on_disabled_hover_text(MILL_TILT_HINT);
+                .on_disabled_hover_text(camcraft_i18n::tr(MILL_TILT_HINT));
             if resp.clicked() {
                 hit = Some(i);
             }
@@ -131,7 +131,7 @@ fn turn_row(ui: &mut Ui, row: &[(&str, usize, f64); 3], size: Vec2, is_mill: boo
 }
 
 fn quarter_turns(ui: &mut Ui, state: &mut State, is_mill: bool) {
-    ui.label(RichText::new("About the setup axes; applied at once.").small().weak());
+    ui.label(RichText::new(camcraft_i18n::tr("About the setup axes; applied at once.")).small().weak());
     let avail = ui.available_width();
     let size3 = Vec2::new(cell_w(ui, avail, 3), BUTTON_H);
     for row in TURNS {
@@ -201,7 +201,7 @@ fn flip_row(ui: &mut Ui, state: &mut State, size: Vec2) {
 fn anchor_section(ui: &mut Ui, state: &mut State) {
     let src = state.wcs_ui.anchor_source.min(CIRCLE);
     prop_grid(ui, "wcs_anchor_grid", |ui| {
-        ui.label("Anchor on");
+        ui.label(camcraft_i18n::tr("Anchor on"));
         ComboBox::from_id_salt("wcs_src").selected_text(SOURCES[src]).show_ui(ui, |ui| {
             for (i, s) in SOURCES.iter().enumerate() {
                 ui.selectable_value(&mut state.wcs_ui.anchor_source, i, *s);
@@ -221,7 +221,7 @@ fn anchor_section(ui: &mut Ui, state: &mut State) {
 
 fn box_anchor(ui: &mut Ui, state: &mut State) {
     let Some((_, what)) = interact::anchor_reference(state) else {
-        ui.label("Import a model or set stock to anchor the origin on a point.");
+        ui.label(camcraft_i18n::tr("Import a model or set stock to anchor the origin on a point."));
         return;
     };
     let chosen = SOURCES[state.wcs_ui.anchor_source.min(1)];
@@ -231,14 +231,14 @@ fn box_anchor(ui: &mut Ui, state: &mut State) {
     // One plain row, not the label column: three radios beside a 120 px
     // label would widen the section past a narrow pane.
     ui.horizontal(|ui| {
-        ui.label("Z level");
+        ui.label(camcraft_i18n::tr("Z level"));
         for (i, name) in ["Bottom", "Middle", "Top"].iter().enumerate() {
             ui.radio_value(&mut state.wcs_ui.anchor_z, i, *name);
         }
     });
-    ui.checkbox(&mut state.wcs_ui.pick_anchor, "Pick markers in viewport");
+    ui.checkbox(&mut state.wcs_ui.pick_anchor,camcraft_i18n::tr( "Pick markers in viewport"));
     if state.wcs_ui.pick_anchor {
-        ui.label("Click a yellow marker, a corner or a circle centre of the part in the viewport to set the origin.");
+        ui.label(camcraft_i18n::tr("Click a yellow marker, a corner or a circle centre of the part in the viewport to set the origin."));
     }
     compass(ui, state);
 }
@@ -303,7 +303,7 @@ fn circle_anchor(ui: &mut Ui, state: &mut State) {
         state.wcs_ui.pick_circle = !armed;
     }
     if state.wcs_ui.pick_circle {
-        ui.label("Click a hole rim or a boss edge in the viewport: the origin goes to its centre.");
+        ui.label(camcraft_i18n::tr("Click a hole rim or a boss edge in the viewport: the origin goes to its centre."));
     }
     ui.label(circle_line(state));
 }
@@ -328,7 +328,7 @@ fn readout(ui: &mut Ui, state: &mut State, u: Unit) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("Work offset: the offset this setup posts, as its post names it. It does not move the origin.");
+    ui.label(camcraft_i18n::tr("Work offset: the offset this setup posts, as its post names it. It does not move the origin."));
 }
 
 pub(super) fn apply_wcs_drafts(state: &mut State) {

@@ -51,7 +51,7 @@ pub(super) fn spun_points_editor(
             num_named(ui, u, &mut pt.z, &format!("{id_salt} Z {n}"));
             num_named(ui, u, &mut pt.r, &format!("{id_salt} R {n}"));
             num_plain_named(ui, &mut pt.bulge, &format!("{id_salt} bulge {n}"));
-            if ui.add_enabled(can_remove, egui::Button::new("Remove").small()).clicked() {
+            if ui.add_enabled(can_remove, egui::Button::new(camcraft_i18n::tr("Remove")).small()).clicked() {
                 remove_idx = Some(i);
             }
             ui.end_row();
@@ -60,7 +60,7 @@ pub(super) fn spun_points_editor(
     if let Some(i) = remove_idx {
         points.remove(i);
     }
-    if ui.small_button("Add point").clicked() {
+    if ui.small_button(camcraft_i18n::tr("Add point")).clicked() {
         let next = points.last().copied().unwrap_or(camcraft_app::fixture_profile::SpunPoint::line(0.0, 0.0));
         points.push(camcraft_app::fixture_profile::SpunPoint::line(next.z + 10.0, next.r));
     }
@@ -88,7 +88,7 @@ pub(super) fn extruded_points_editor(
             num_named(ui, u, &mut pt.u, &format!("{id_salt} U {n}"));
             num_named(ui, u, &mut pt.v, &format!("{id_salt} V {n}"));
             num_plain_named(ui, &mut pt.bulge, &format!("{id_salt} bulge {n}"));
-            if ui.add_enabled(can_remove, egui::Button::new("Remove").small()).clicked() {
+            if ui.add_enabled(can_remove, egui::Button::new(camcraft_i18n::tr("Remove")).small()).clicked() {
                 remove_idx = Some(i);
             }
             ui.end_row();
@@ -97,7 +97,7 @@ pub(super) fn extruded_points_editor(
     if let Some(i) = remove_idx {
         points.remove(i);
     }
-    if ui.small_button("Add point").clicked() {
+    if ui.small_button(camcraft_i18n::tr("Add point")).clicked() {
         let next = points.last().copied().unwrap_or(camcraft_app::fixture_profile::ProfilePoint::line(0.0, 0.0));
         points.push(camcraft_app::fixture_profile::ProfilePoint::line(next.u + 10.0, next.v));
     }
@@ -116,7 +116,7 @@ pub(super) fn body(
         ui.selectable_value(&mut d.kind, ProfileKindChoice::Extruded, "Extruded (closed 2D)");
     });
     ui.horizontal(|ui| {
-        let l = ui.label("Fixture name");
+        let l = ui.label(camcraft_i18n::tr("Fixture name"));
         ui.text_edit_singleline(&mut d.name).labelled_by(l.id);
     });
     ui.horizontal(|ui| {
@@ -134,13 +134,13 @@ pub(super) fn body(
     });
     if d.kind == ProfileKindChoice::Extruded {
         ui.horizontal(|ui| {
-            ui.label("Extrude axis");
+            ui.label(camcraft_i18n::tr("Extrude axis"));
             axis_picker(ui, "profile-dlg-axis", &mut d.axis);
         });
         ui.horizontal(|ui| {
-            let l = ui.label("Depth");
+            let l = ui.label(camcraft_i18n::tr("Depth"));
             num_by(ui, u, &mut d.depth, l.id);
-            ui.checkbox(&mut d.override_dxf_depth, "Override DXF depth");
+            ui.checkbox(&mut d.override_dxf_depth,camcraft_i18n::tr( "Override DXF depth"));
         });
     }
     ui.add_space(4.0);
@@ -157,7 +157,7 @@ pub(super) fn body(
             num_by(ui, u, &mut d.pos[k], l.id);
             ui.end_row();
         }
-        let l = ui.label("Turn about Z (yaw)");
+        let l = ui.label(camcraft_i18n::tr("Turn about Z (yaw)"));
         num_plain_by(ui, &mut d.yaw_deg, l.id);
         ui.end_row();
     });
@@ -166,7 +166,7 @@ pub(super) fn body(
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Insert").clicked() {
+        if ui.button(camcraft_i18n::tr("Insert")).clicked() {
             act = Some(ProfileDialogAct::Insert(Box::new(CommandKind::InsertProfileFixture {
                 setup: (!d.setup.is_empty()).then(|| d.setup.clone()),
                 name: d.name.clone(),
@@ -175,7 +175,7 @@ pub(super) fn body(
                 yaw_deg: d.yaw_deg,
             })));
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
             act = Some(ProfileDialogAct::Close);
         }
     });

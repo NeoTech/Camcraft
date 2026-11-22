@@ -48,12 +48,12 @@ pub(super) fn footer(ui: &mut Ui, state: &mut State) -> bool {
     let warn = super::colorvision::text_inks(ui, &state.world).warn;
     let mut close = false;
     ui.horizontal(|ui| {
-        if ui.button("Set origin").clicked() {
+        if ui.button(camcraft_i18n::tr("Set origin")).clicked() {
             super::wcs_page::apply_wcs_drafts(state);
         }
-        close = ui.button("Close").clicked();
+        close = ui.button(camcraft_i18n::tr("Close")).clicked();
         if waiting {
-            ui.label(RichText::new(NOT_APPLIED).color(warn));
+            ui.label(RichText::new(camcraft_i18n::tr(NOT_APPLIED)).color(warn));
         }
     });
     close

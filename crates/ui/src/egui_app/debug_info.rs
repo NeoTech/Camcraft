@@ -24,9 +24,9 @@ pub(super) fn button(ui: &mut Ui, icons: Option<&IconSet>) -> Response {
         Some(tex) => {
             let ink = ui.visuals().text_color();
             let glyph = Image::new(tex).fit_to_exact_size(Vec2::splat(16.0)).tint(ink);
-            ui.add(Button::image(glyph).frame(false)).on_hover_text("Debug info")
+            ui.add(Button::image(glyph).frame(false)).on_hover_text(camcraft_i18n::tr("Debug info"))
         }
-        None => ui.small_button("Debug info"),
+        None => ui.small_button(camcraft_i18n::tr("Debug info")),
     };
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Debug info"));
     resp
@@ -102,7 +102,7 @@ fn or_none(s: &str) -> &str {
 /// belong to the dock, so it docks, tabs and floats like the other panels.
 pub(crate) fn draw(ui: &mut Ui, state: &mut State) {
     let text = report(state);
-    if ui.button("Copy").clicked() {
+    if ui.button(camcraft_i18n::tr("Copy")).clicked() {
         ui.ctx().copy_text(text.clone());
         state.status = "debug info copied to the clipboard".into();
     }

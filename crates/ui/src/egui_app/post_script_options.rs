@@ -229,7 +229,7 @@ pub(super) fn render_draft(
         .iter()
         .any(|opt| values.get(&opt.key) != Some(&opt.default));
     if ui
-        .add_enabled(any_diff || has_overrides, egui::Button::new("Reset to defaults"))
+        .add_enabled(any_diff || has_overrides, egui::Button::new(camcraft_i18n::tr("Reset to defaults")))
         .clicked()
     {
         for opt in schema {
@@ -254,7 +254,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State) {
     let mut reset = false;
     let mut changed = false;
     ui.separator();
-    ui.collapsing(egui::RichText::new("Post script options").strong(), |ui| {
+    ui.collapsing(egui::RichText::new(camcraft_i18n::tr("Post script options")).strong(), |ui| {
         changed = render_draft(
             ui,
             "post_page",

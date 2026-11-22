@@ -30,7 +30,7 @@ use super::layout::prop_row;
 pub(super) fn arm_button(ui: &mut Ui, state: &mut State, label: &str, fixture: &str, part: Option<&str>) {
     let armed = armed_for(state, fixture, part);
     if super::pick_button::pick_button(ui, armed, if armed { "Stop locating" } else { label })
-        .on_hover_text("Pick a part face or point, then the fixture face or point it sits on - up to three mates.")
+        .on_hover_text(camcraft_i18n::tr("Pick a part face or point, then the fixture face or point it sits on - up to three mates."))
         .clicked()
     {
         if armed {
@@ -64,10 +64,10 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
     // the stock, so the stock is the default when the setup has one.
     let mut body = d.body;
     ui.horizontal(|ui| {
-        ui.label("Place by");
-        ui.radio_value(&mut body, LocateBody::Stock, "Stock faces")
-            .on_hover_text("Pick faces of the stock. The part moves and the stock follows it, so the part keeps its place in the stock.");
-        ui.radio_value(&mut body, LocateBody::Part, "Part faces").on_hover_text("Pick faces of the part itself.");
+        ui.label(camcraft_i18n::tr("Place by"));
+        ui.radio_value(&mut body, LocateBody::Stock,camcraft_i18n::tr( "Stock faces"))
+            .on_hover_text(camcraft_i18n::tr("Pick faces of the stock. The part moves and the stock follows it, so the part keeps its place in the stock."));
+        ui.radio_value(&mut body, LocateBody::Part,camcraft_i18n::tr( "Part faces")).on_hover_text(camcraft_i18n::tr("Pick faces of the part itself."));
     });
     if body != d.body {
         locate_pick::set_body(state, body);
@@ -88,12 +88,12 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
     let check = locate_pick::check(state, &d);
     ui.add(Label::new(RichText::new(format!("  Next: {}", locate_pick::next_hint(&d, &check))).weak()).wrap());
     ui.horizontal(|ui| {
-        ui.radio_value(&mut mover, Mover::Part, "Move the part")
-            .on_hover_text("The part (and the stock that follows it) goes into the fixture.");
-        ui.radio_value(&mut mover, Mover::Fixture, "Move the fixture")
-            .on_hover_text("The fixture comes to the part; the part keeps its place.");
+        ui.radio_value(&mut mover, Mover::Part,camcraft_i18n::tr( "Move the part"))
+            .on_hover_text(camcraft_i18n::tr("The part (and the stock that follows it) goes into the fixture."));
+        ui.radio_value(&mut mover, Mover::Fixture,camcraft_i18n::tr( "Move the fixture"))
+            .on_hover_text(camcraft_i18n::tr("The fixture comes to the part; the part keeps its place."));
     });
-    ui.add(Label::new(RichText::new("Offset (setup X / Y / Z), part relative to the fixture:").weak()).wrap());
+    ui.add(Label::new(RichText::new(camcraft_i18n::tr("Offset (setup X / Y / Z), part relative to the fixture:")).weak()).wrap());
     prop_row(ui, "Offset X", |ui| num(ui, u, &mut off.dx));
     prop_row(ui, "Offset Y", |ui| num(ui, u, &mut off.dy));
     prop_row(ui, "Offset Z", |ui| num(ui, u, &mut off.dz));
@@ -118,19 +118,19 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
             Err(why) => why.clone(),
         };
         if ui
-            .add_enabled(check.is_ok(), egui::Button::new("Apply locate"))
+            .add_enabled(check.is_ok(), egui::Button::new(camcraft_i18n::tr("Apply locate")))
             .on_hover_text(&tip)
             .on_disabled_hover_text(&tip)
             .clicked()
         {
             state.pending.push_back(CommandKind::Locate { spec: draft.spec(), mover });
         }
-        if ui.small_button("Remove last").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Remove last")).clicked() {
             locate_pick::remove_last(state);
         }
     });
     if locate_pick::is_located(&draft, &check) {
-        ui.add(Label::new(RichText::new("  Located. Edit Offset or Turn to adjust, then Apply locate again.").weak()).wrap());
+        ui.add(Label::new(RichText::new(camcraft_i18n::tr("  Located. Edit Offset or Turn to adjust, then Apply locate again.")).weak()).wrap());
     } else if let Err(why) = &check {
         ui.add(Label::new(RichText::new(format!("  Not yet: {why}")).weak()).wrap());
     }
@@ -142,7 +142,7 @@ pub(super) fn model_row(ui: &mut Ui, state: &mut State, name: &str) {
     let Some(e) = camcraft_app::model::find_by_name(&state.world, name) else { return };
     let is_fixture = camcraft_app::model::is_fixture(&state.world, &e);
     ui.add_space(6.0);
-    ui.label("Locate in a fixture");
+    ui.label(camcraft_i18n::tr("Locate in a fixture"));
     if is_fixture {
         ui.horizontal_wrapped(|ui| arm_button(ui, state, "Locate part…", name, None));
         if armed_for(state, name, None) {
@@ -159,7 +159,7 @@ pub(super) fn model_row(ui: &mut Ui, state: &mut State, name: &str) {
         .map(|(n, _)| n)
         .collect();
     if fixtures.is_empty() {
-        ui.label(RichText::new("  No fixture yet - import one on a setup's Fixtures page.").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("  No fixture yet - import one on a setup's Fixtures page.")).weak());
         return;
     }
     ui.horizontal_wrapped(|ui| {

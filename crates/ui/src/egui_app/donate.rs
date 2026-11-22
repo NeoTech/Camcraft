@@ -91,7 +91,7 @@ pub(super) fn draw(
             }
         }
     }
-    let label = RichText::new("Donate").size(pal.font_label).color(pal.text);
+    let label = RichText::new(camcraft_i18n::tr("Donate")).size(pal.font_label).color(pal.text);
     let button = match icons.and_then(|set| set.texture(Icon::Donate)) {
         Some(texture) => Button::image_and_text(
             Image::new(texture)
@@ -118,7 +118,7 @@ pub(super) fn draw(
     );
     if ui
         .put(rect, button)
-        .on_hover_text("Support CamCraft")
+        .on_hover_text(camcraft_i18n::tr("Support CamCraft"))
         .clicked()
     {
         if state.browser_build || cfg!(target_arch = "wasm32") {

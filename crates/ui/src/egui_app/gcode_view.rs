@@ -69,7 +69,7 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
                 // Stage D: the debugging trace, beside the program it
                 // explains. Off by default - the plain viewer draws
                 // exactly as it always did.
-                ui.checkbox(trace, "trace");
+                ui.checkbox(trace,camcraft_i18n::tr( "trace"));
                 // The header's not-judged line: same row as the
                 // checkbox, so a judged program's viewer geometry is
                 // untouched. Hover shows the whole reason.

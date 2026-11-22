@@ -23,7 +23,7 @@ pub(super) fn sizes(ui: &mut Ui, state: &mut State, name: &str) {
     super::fixture_accessory_dialog::dims_grid(ui, u, &id, state.accessory_size_draft(name, &live), None);
     ui.horizontal(|ui| {
         ui.add_space(12.0);
-        if ui.small_button("Apply sizes").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Apply sizes")).clicked() {
             let params = state.accessory_size_draft(name, &live).clone();
             state.pending.push_back(CommandKind::SetAccessory { name: name.to_owned(), params });
         }

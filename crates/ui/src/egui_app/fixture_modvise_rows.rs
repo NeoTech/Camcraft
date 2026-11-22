@@ -35,7 +35,7 @@ pub(super) fn pair_rows(ui: &mut Ui, state: &mut State, name: &str, def: &PlateD
             }
         });
         ui.horizontal(|ui| {
-            let l = ui.label("Fixed jaw at row");
+            let l = ui.label(camcraft_i18n::tr("Fixed jaw at row"));
             egui::ComboBox::from_id_salt(("mod-vise-row", name)).selected_text(plate::row_letters(draft.row)).show_ui(ui, |ui| {
                 for r in 0..g.rows {
                     ui.selectable_value(&mut draft.row, r, plate::row_letters(r));
@@ -43,7 +43,7 @@ pub(super) fn pair_rows(ui: &mut Ui, state: &mut State, name: &str, def: &PlateD
             })
             .response
             .labelled_by(l.id);
-            let l = ui.label("column");
+            let l = ui.label(camcraft_i18n::tr("column"));
             egui::ComboBox::from_id_salt(("mod-vise-col", name)).selected_text((draft.col + 1).to_string()).show_ui(ui, |ui| {
                 for c in 0..g.cols {
                     ui.selectable_value(&mut draft.col, c, (c + 1).to_string());
@@ -53,16 +53,16 @@ pub(super) fn pair_rows(ui: &mut Ui, state: &mut State, name: &str, def: &PlateD
             .labelled_by(l.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Jaw faces");
+            ui.label(camcraft_i18n::tr("Jaw faces"));
             for (q, label) in ["+Y", "-X", "-Y", "+X"].iter().enumerate() {
                 ui.radio_value(&mut draft.quarter, q as u8, *label);
             }
         });
-        ui.checkbox(&mut draft.soft, "Soft jaws");
+        ui.checkbox(&mut draft.soft,camcraft_i18n::tr( "Soft jaws"));
         ui.label(
-            egui::RichText::new("The adjustable jaw goes on the nearest hole clear of the stock and slides to touch it.").small(),
+            egui::RichText::new(camcraft_i18n::tr("The adjustable jaw goes on the nearest hole clear of the stock and slides to touch it.")).small(),
         );
-        go = ui.button("Place pair").clicked();
+        go = ui.button(camcraft_i18n::tr("Place pair")).clicked();
     });
     if go && let Some((fixed, adjustable)) = draft.blocks() {
         state.pending.push_back(CommandKind::PlaceModVisePair {
@@ -107,17 +107,17 @@ pub(super) fn block_line(ui: &mut Ui, state: &mut State, name: &str) {
             prop_row(ui, label, |ui| num_row(ui, u, v));
         }
         let mut soft = draft.insert == JawInsert::Soft;
-        if ui.checkbox(&mut soft, "Soft jaw").changed() {
+        if ui.checkbox(&mut soft,camcraft_i18n::tr( "Soft jaw")).changed() {
             draft.insert = if soft { JawInsert::Soft } else { JawInsert::Hard };
         }
-        if ui.small_button("Set figures").on_hover_text("Regenerate the block where it stands").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Set figures")).on_hover_text(camcraft_i18n::tr("Regenerate the block where it stands")).clicked() {
             queued = Some(CommandKind::SetModJaw { name: name.to_owned(), params: draft.clone() });
         }
     });
     if j.side == JawSide::Adjustable
         && ui
-            .small_button("Re-fit to stock")
-            .on_hover_text("Move this jaw to the hole nearest the stock that clears it and slide it to touch, as the stock stands now")
+            .small_button(camcraft_i18n::tr("Re-fit to stock"))
+            .on_hover_text(camcraft_i18n::tr("Move this jaw to the hole nearest the stock that clears it and slide it to touch, as the stock stands now"))
             .clicked()
     {
         queued = Some(CommandKind::RefitModVise { adjustable: name.to_owned() });

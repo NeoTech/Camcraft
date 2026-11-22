@@ -65,11 +65,11 @@ fn shape_section(ui: &mut Ui, state: &mut State) {
     // #197: the models' size, right above the numbers it informs.
     match super::stock_info::part_size_lines(&state.world, u) {
         Some([size, extents]) => {
-            ui.label(size).on_hover_text("The models' bounding box - what Fit to Models wraps, plus the fit margin");
+            ui.label(size).on_hover_text(camcraft_i18n::tr("The models' bounding box - what Fit to Models wraps, plus the fit margin"));
             ui.label(RichText::new(extents).weak());
         }
         None => {
-            ui.label(RichText::new("No models yet - load one to see its size.").weak());
+            ui.label(RichText::new(camcraft_i18n::tr("No models yet - load one to see its size.")).weak());
         }
     }
 }
@@ -78,22 +78,22 @@ fn shape_section(ui: &mut Ui, state: &mut State) {
 fn size_fields(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     match state.stock_ui.shape {
         1 => prop_grid(ui, "stock_size_grid", |ui| {
-            ui.label("Diameter");
+            ui.label(camcraft_i18n::tr("Diameter"));
             num(ui, u, &mut state.stock_ui.diameter);
             ui.end_row();
-            ui.label("Height");
+            ui.label(camcraft_i18n::tr("Height"));
             num(ui, u, &mut state.stock_ui.height);
             ui.end_row();
         }),
         2 => source_fields(ui, state),
         _ => prop_grid(ui, "stock_size_grid", |ui| {
-            ui.label("Length (X)");
+            ui.label(camcraft_i18n::tr("Length (X)"));
             num(ui, u, &mut state.stock_ui.dx);
             ui.end_row();
-            ui.label("Width (Y)");
+            ui.label(camcraft_i18n::tr("Width (Y)"));
             num(ui, u, &mut state.stock_ui.dy);
             ui.end_row();
-            ui.label("Height (Z)");
+            ui.label(camcraft_i18n::tr("Height (Z)"));
             num(ui, u, &mut state.stock_ui.dz);
             ui.end_row();
         }),
@@ -108,13 +108,13 @@ fn source_fields(ui: &mut Ui, state: &mut State) {
         .map(|(n, _)| n)
         .collect();
     if models.is_empty() {
-        ui.label("No models to take stock from.");
+        ui.label(camcraft_i18n::tr("No models to take stock from."));
         // The raw-stock row (and its hint) shows with no models too.
         super::raw_stock_row::raw_stock_row(ui, state);
         return;
     }
     prop_grid(ui, "stock_source_grid", |ui| {
-        ui.label("Source");
+        ui.label(camcraft_i18n::tr("Source"));
         let mut idx = models.iter().position(|m| *m == state.stock_ui.source).unwrap_or(models.len() - 1);
         combo_owned(ui, "stk_src", &mut idx, &models);
         // #3261: the draft holds the part the picker shows, also when the
@@ -145,8 +145,8 @@ fn position_fields(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit)
 fn fit_fields(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     // #198: a box can be fitted by a separate allowance on each side.
     if state.stock_ui.shape == 0 {
-        ui.checkbox(&mut state.stock_ui.fit_per_side, "Per side")
-            .on_hover_text("Fit to Models pads each face of the box by its own allowance");
+        ui.checkbox(&mut state.stock_ui.fit_per_side,camcraft_i18n::tr( "Per side"))
+            .on_hover_text(camcraft_i18n::tr("Fit to Models pads each face of the box by its own allowance"));
     }
     let per_side = per_side(state);
     prop_grid(ui, "stock_fit_grid", |ui| {
@@ -157,7 +157,7 @@ fn fit_fields(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
                 ui.end_row();
             }
         } else {
-            ui.label("Fit margin");
+            ui.label(camcraft_i18n::tr("Fit margin"));
             num(ui, u, &mut state.stock_ui.fit_margin);
             ui.end_row();
         }

@@ -24,7 +24,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
         // no row: the wire is the machine's
     } else if tools.is_empty() {
         ui.label(camcraft_i18n::tr_owned("Tool"));
-        ui.label("none").on_hover_text("no tools in the document - the Tools page has a catalog");
+        ui.label(camcraft_i18n::tr("none")).on_hover_text(camcraft_i18n::tr("no tools in the document - the Tools page has a catalog"));
     } else {
         ui.label(camcraft_i18n::tr_owned("Tool"));
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
@@ -107,7 +107,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     ui.label(camcraft_i18n::tr_owned("Setup"));
     let setups = camcraft_app::setup::names(&state.world);
     if setups.is_empty() {
-        ui.label("global (no setups)").on_hover_text("this document has no setups yet - the global stock and offsets apply");
+        ui.label(camcraft_i18n::tr("global (no setups)")).on_hover_text(camcraft_i18n::tr("this document has no setups yet - the global stock and offsets apply"));
     } else {
         let cur = live.and_then(|o| o.setup.clone()).or_else(|| setups.first().cloned());
         let mut s_idx = setups.iter().position(|n| Some(n) == cur.as_ref()).unwrap_or(0);
@@ -129,8 +129,8 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
 fn coolant_row(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>) {
     let Some(op) = live else { return };
     use camcraft_app::operation::CoolantMode;
-    ui.label(camcraft_i18n::tr_owned("Coolant")).on_hover_text(
-        "the cutting fluid the post switches on for this operation - the machine's own code for it; a choice the machine states no code for blocks the post by name",
+    ui.label(camcraft_i18n::tr_owned("Coolant")).on_hover_text(camcraft_i18n::tr(
+        "the cutting fluid the post switches on for this operation - the machine's own code for it; a choice the machine states no code for blocks the post by name"),
     );
     let labels: Vec<String> = CoolantMode::ALL.iter().map(|m| m.label().to_owned()).collect();
     let mut idx = CoolantMode::ALL.iter().position(|m| *m == op.coolant).unwrap_or(1);

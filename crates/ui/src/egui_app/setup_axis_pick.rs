@@ -27,7 +27,7 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
     if !state.setup_pick_rows.iter().any(|s| s == setup) {
         state.setup_pick_rows.push(setup.to_owned()); // #664
     }
-    ui.label("    Part axes - pick an edge or two points for +Y and +X; +Z follows by the right-hand rule");
+    ui.label(camcraft_i18n::tr("    Part axes - pick an edge or two points for +Y and +X; +Z follows by the right-hand rule"));
     for axis in [InPlaneAxis::Y, InPlaneAxis::X] {
         axis_row(ui, state, setup, axis);
     }
@@ -48,11 +48,11 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("      Primary");
+        ui.label(camcraft_i18n::tr("      Primary"));
         let mut primary = d.axes.primary;
         for axis in [InPlaneAxis::Y, InPlaneAxis::X] {
             ui.radio_value(&mut primary, axis, axis.label())
-                .on_hover_text("With both axes picked, this one is kept exactly; the other is made square to it.");
+                .on_hover_text(camcraft_i18n::tr("With both axes picked, this one is kept exactly; the other is made square to it."));
         }
         if primary != d.axes.primary {
             axis_pick::draft_for(state, setup).axes.primary = primary;
@@ -60,21 +60,21 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
     });
     // Short lines (#330): the buttons stay on screen in the narrow pane.
     ui.horizontal(|ui| {
-        ui.label("     ");
+        ui.label(camcraft_i18n::tr("     "));
         let tip = match &check {
             Ok(()) => "Align the part from where it sits now so the picks run along their axes (+Z by the right-hand rule; one undo step)."
                 .to_owned(),
             Err(why) => why.clone(),
         };
         if ui
-            .add_enabled(check.is_ok(), egui::Button::new("Apply axes"))
+            .add_enabled(check.is_ok(), egui::Button::new(camcraft_i18n::tr("Apply axes")))
             .on_hover_text(&tip)
             .on_disabled_hover_text(&tip)
             .clicked()
         {
             state.pending.push_back(CommandKind::AlignPartFromAxes { setup: setup.to_owned(), axes: axes.clone() });
         }
-        if ui.button("Clear axes").on_hover_text("Drop the axis picks.").clicked() {
+        if ui.button(camcraft_i18n::tr("Clear axes")).on_hover_text(camcraft_i18n::tr("Drop the axis picks.")).clicked() {
             state.axis_pick = None;
         }
     });
@@ -123,7 +123,7 @@ fn axis_row(ui: &mut Ui, state: &mut State, setup: &str, axis: InPlaneAxis) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("     ");
+        ui.label(camcraft_i18n::tr("     "));
         let what = match by {
             AxisBy::Edge => "edge",
             AxisBy::Points => "points",
@@ -141,7 +141,7 @@ fn axis_row(ui: &mut Ui, state: &mut State, setup: &str, axis: InPlaneAxis) {
         }
         if ui
             .checkbox(&mut flip, format!("Flip {name}"))
-            .on_hover_text("Take the pick the other way (end to start).")
+            .on_hover_text(camcraft_i18n::tr("Take the pick the other way (end to start)."))
             .changed()
         {
             axis_pick::draft_for(state, setup).slot(axis).flip = flip;

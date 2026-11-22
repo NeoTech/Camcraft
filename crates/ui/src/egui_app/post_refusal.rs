@@ -67,7 +67,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
             ui.label(format!("Nothing was written to {file}; a program already there is unchanged."));
             if changed_since {
                 ui.label(
-                    RichText::new("The document has changed since this post was refused - post again to check it.")
+                    RichText::new(camcraft_i18n::tr("The document has changed since this post was refused - post again to check it."))
                         .weak(),
                 );
             }

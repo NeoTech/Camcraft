@@ -368,7 +368,7 @@ pub(super) fn view_drop(
                 );
                 let clicked = resp.clicked();
                 if *row == ViewRow::Viewport {
-                    resp.on_hover_text("The 3D viewport is always open");
+                    resp.on_hover_text(camcraft_i18n::tr("The 3D viewport is always open"));
                 }
                 if clicked {
                     chose = Some(*row);

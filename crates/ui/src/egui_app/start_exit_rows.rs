@@ -86,7 +86,7 @@ fn point_group(ui: &mut Ui, u: Unit, rows: &PointRows, p: &mut Option<Point2>) {
     let id = ui.make_persistent_id(("camcraft.group", rows.title));
     let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
     let header = collapsing.show_header(ui, |ui| {
-        ui.checkbox(&mut on, "").on_hover_text(format!("use {}", rows.title));
+        ui.checkbox(&mut on,"").on_hover_text(format!("use {}", rows.title));
         ui.label(RichText::new(rows.title).strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if pick_button(ui, is_armed, pick_label).on_hover_text(rows.pick_help).clicked() {

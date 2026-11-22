@@ -41,14 +41,14 @@ pub fn browser(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&Icon
                 ui.separator();
                 if ui
                     .button(camcraft_i18n::tr_owned("Expand all"))
-                    .on_hover_text("Open the Setup, Models and Tools sections")
+                    .on_hover_text(camcraft_i18n::tr("Open the Setup, Models and Tools sections"))
                     .clicked()
                 {
                     state.browser_expanded = [true; 3];
                 }
                 if ui
                     .button(camcraft_i18n::tr_owned("Collapse all"))
-                    .on_hover_text("Close the Setup, Models and Tools sections")
+                    .on_hover_text(camcraft_i18n::tr("Close the Setup, Models and Tools sections"))
                     .clicked()
                 {
                     state.browser_expanded = [false; 3];
@@ -121,22 +121,22 @@ pub(super) fn focus(state: &mut State, name: &str) {
 /// The View door's contents: the same switches the inline block used to
 /// show, now one click behind the header.
 fn view_menu(ui: &mut Ui, state: &mut State) {
-    if ui.button("Tool library…").clicked() {
+    if ui.button(camcraft_i18n::tr("Tool library…")).clicked() {
         actions::target(state, UiTarget::Tool(String::new()));
         ui.close();
     }
     ui.separator();
-    ui.checkbox(&mut state.show_world_axes, "Show world origin axes");
+    ui.checkbox(&mut state.show_world_axes,camcraft_i18n::tr( "Show world origin axes"));
     // #645: the #727 gizmo names get the switch the review asked for.
     // Same local-copy law as "Show all toolpaths": the flip goes
     // through a State method, which takes the user's choice out to
     // the view file with it.
     let mut show_names = state.show_gizmo_names;
-    if ui.checkbox(&mut show_names, "Show origin names").changed() {
+    if ui.checkbox(&mut show_names,camcraft_i18n::tr( "Show origin names")).changed() {
         state.set_gizmo_names(show_names);
     }
     let mut show_all_paths = state.show_all_paths;
-    if ui.checkbox(&mut show_all_paths, "Show all toolpaths").changed() {
+    if ui.checkbox(&mut show_all_paths,camcraft_i18n::tr( "Show all toolpaths")).changed() {
         if show_all_paths {
             state.show_all_toolpaths();
         } else {
@@ -154,15 +154,15 @@ fn view_menu(ui: &mut Ui, state: &mut State) {
     };
     ui.add_enabled(mounted, egui::Checkbox::new(&mut state.show_work_envelope, "Show work envelope"))
         .on_hover_text(tip)
-        .on_disabled_hover_text("Mount a machine on the active setup to show its work envelope.");
+        .on_disabled_hover_text(camcraft_i18n::tr("Mount a machine on the active setup to show its work envelope."));
     // The display mode moved to the viewport's Display menu (#2818).
     // Projection is view state the same way (#434): orthographic keeps
     // a side view straight - parallel edges, no converging - which is
     // what CAM eyeballing wants most of the time.
     ui.horizontal(|ui| {
-        ui.label("Projection");
-        ui.radio_value(&mut state.cam.projection, ProjectionMode::Perspective, "Perspective");
-        ui.radio_value(&mut state.cam.projection, ProjectionMode::Orthographic, "Ortho");
+        ui.label(camcraft_i18n::tr("Projection"));
+        ui.radio_value(&mut state.cam.projection, ProjectionMode::Perspective,camcraft_i18n::tr( "Perspective"));
+        ui.radio_value(&mut state.cam.projection, ProjectionMode::Orthographic,camcraft_i18n::tr( "Ortho"));
     });
 }
 

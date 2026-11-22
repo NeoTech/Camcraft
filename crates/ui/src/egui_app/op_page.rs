@@ -41,14 +41,14 @@ const BAR_RESERVE: f32 = 120.0;
 /// pressed, so this page points at the doors that press it.
 pub(super) fn no_operation_page(ui: &mut Ui) {
     ui.add_space(8.0);
-    ui.heading("No operation selected");
+    ui.heading(camcraft_i18n::tr("No operation selected"));
     ui.add_space(4.0);
-    ui.label("Select an operation in the browser to edit its parameters, or create a new one.");
+    ui.label(camcraft_i18n::tr("Select an operation in the browser to edit its parameters, or create a new one."));
     ui.add_space(10.0);
     ui.strong("Get started");
-    ui.label("1. Set up stock, WCS, and tools in the Setup section.");
-    ui.label("2. Create an operation from the ribbon (2D, 3D, Drill, or Multi-axis).");
-    ui.label("3. Pick geometry, adjust parameters, then Generate and Simulate.");
+    ui.label(camcraft_i18n::tr("1. Set up stock, WCS, and tools in the Setup section."));
+    ui.label(camcraft_i18n::tr("2. Create an operation from the ribbon (2D, 3D, Drill, or Multi-axis)."));
+    ui.label(camcraft_i18n::tr("3. Pick geometry, adjust parameters, then Generate and Simulate."));
     ui.add_space(8.0);
     ui.small("Tip: keep the Browser and Properties panes open while you work.");
 }
@@ -94,14 +94,14 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         let mut new_label = None;
         let mut cancel_rename = false;
         if let Some((key, draft)) = state.rename_draft.as_mut() && key == &target {
-            ui.label("Name");
+            ui.label(camcraft_i18n::tr("Name"));
             let response = ui.text_edit_singleline(draft);
             ui.horizontal(|ui| {
-                if ui.button("Apply name").clicked()
+                if ui.button(camcraft_i18n::tr("Apply name")).clicked()
                     || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
                     new_label = Some(draft.clone());
                 }
-                cancel_rename = ui.button("Cancel").clicked();
+                cancel_rename = ui.button(camcraft_i18n::tr("Cancel")).clicked();
             });
         }
         if let Some(new_label) = new_label {
@@ -261,8 +261,8 @@ fn needs_review_banner(ui: &mut Ui, state: &mut State, target: &str) {
         ui.horizontal_wrapped(|ui| {
             ui.colored_label(warn, format!("Needs review: {}", notes.join("; ")));
             if ui
-                .button("Mark reviewed")
-                .on_hover_text("Clear the migration review warning so this operation can post")
+                .button(camcraft_i18n::tr("Mark reviewed"))
+                .on_hover_text(camcraft_i18n::tr("Clear the migration review warning so this operation can post"))
                 .clicked()
             {
                 state.pending.push_back(CommandKind::MarkOperationReviewed(target.to_owned()));
@@ -287,7 +287,7 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
             Some(p) => {
                 let text = egui::RichText::new(&msg).color(inks.error).underline();
                 let r = super::error_text::error_rich(ui, text, &msg, true);
-                if r.on_hover_text(REFUSAL_LINK_HINT).clicked() {
+                if r.on_hover_text(camcraft_i18n::tr(REFUSAL_LINK_HINT)).clicked() {
                     crate::actions::frame_at(state, p);
                 }
             }

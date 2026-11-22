@@ -118,11 +118,11 @@ fn prompt(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, out: &mut
         Prompt::Save(path) => {
             ui.add(Label::new(format!("Write {}?", path.display())).wrap());
             ui.horizontal(|ui| {
-                if ui.button("Write file").clicked() {
+                if ui.button(camcraft_i18n::tr("Write file")).clicked() {
                     let r = ed.draft.save();
                     finish(ed, out, r);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                     ed.prompt = None;
                 }
             });
@@ -131,18 +131,18 @@ fn prompt(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, out: &mut
             let where_ = dir.map_or_else(|| "no user machines folder".to_owned(), |d| d.display().to_string());
             ui.add(Label::new(RichText::new(format!("Save to {where_}")).color(pal.text_dim)).wrap());
             ui.horizontal(|ui| {
-                let l = ui.label("File name");
+                let l = ui.label(camcraft_i18n::tr("File name"));
                 ui.add(TextEdit::singleline(&mut ed.save_as_name).desired_width(160.0))
                     .labelled_by(l.id)
-                    .on_hover_text("A plain name; .mch is added");
+                    .on_hover_text(camcraft_i18n::tr("A plain name; .mch is added"));
             });
             ui.horizontal(|ui| {
-                if ui.button("Write file").clicked() {
+                if ui.button(camcraft_i18n::tr("Write file")).clicked() {
                     let name = ed.save_as_name.clone();
                     let r = ed.draft.save_as(dir, &name, false);
                     finish(ed, out, r);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                     ed.prompt = None;
                 }
             });
@@ -150,23 +150,23 @@ fn prompt(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, out: &mut
         Prompt::Replace(path) => {
             ui.add(Label::new(format!("{path} exists. Replace it?")).wrap());
             ui.horizontal(|ui| {
-                if ui.button("Replace file").clicked() {
+                if ui.button(camcraft_i18n::tr("Replace file")).clicked() {
                     let name = ed.save_as_name.clone();
                     let r = ed.draft.save_as(dir, &name, true);
                     finish(ed, out, r);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
                     ed.prompt = Some(Prompt::SaveAs);
                 }
             });
         }
         Prompt::Discard => {
-            ui.label("Discard the unsaved edits?");
+            ui.label(camcraft_i18n::tr("Discard the unsaved edits?"));
             ui.horizontal(|ui| {
-                if ui.button("Discard edits").clicked() {
+                if ui.button(camcraft_i18n::tr("Discard edits")).clicked() {
                     out.close = true;
                 }
-                if ui.button("Keep editing").clicked() {
+                if ui.button(camcraft_i18n::tr("Keep editing")).clicked() {
                     ed.prompt = None;
                 }
             });
@@ -216,9 +216,9 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
     ui.horizontal_wrapped(|ui| {
         let blocked = !refusals.is_empty();
         let save = ui
-            .add_enabled(!blocked, egui::Button::new("Save machine"))
-            .on_hover_text("Write this machine file (asks first)")
-            .on_disabled_hover_text("Fix every refusal first - a refused file is never written");
+            .add_enabled(!blocked, egui::Button::new(camcraft_i18n::tr("Save machine")))
+            .on_hover_text(camcraft_i18n::tr("Write this machine file (asks first)"))
+            .on_disabled_hover_text(camcraft_i18n::tr("Fix every refusal first - a refused file is never written"));
         if save.clicked() {
             ed.prompt = Some(match (&ed.draft.path, ed.draft.read_only) {
                 (Some(p), false) => Prompt::Save(p.clone()),
@@ -226,13 +226,13 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
             });
         }
         let save_as = ui
-            .add_enabled(!blocked, egui::Button::new("Save machine as..."))
-            .on_hover_text("Write a copy to your machines folder")
-            .on_disabled_hover_text("Fix every refusal first - a refused file is never written");
+            .add_enabled(!blocked, egui::Button::new(camcraft_i18n::tr("Save machine as...")))
+            .on_hover_text(camcraft_i18n::tr("Write a copy to your machines folder"))
+            .on_disabled_hover_text(camcraft_i18n::tr("Fix every refusal first - a refused file is never written"));
         if save_as.clicked() {
             ed.prompt = Some(Prompt::SaveAs);
         }
-        if ui.button("Close editor").on_hover_text("Leave the editor").clicked() {
+        if ui.button(camcraft_i18n::tr("Close editor")).on_hover_text(camcraft_i18n::tr("Leave the editor")).clicked() {
             if ed.draft.dirty {
                 ed.prompt = Some(Prompt::Discard);
             } else {
@@ -259,7 +259,7 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
     for g in &groups {
         group_open(ui, &g.title, None, true, |ui| {
             if g.fields.is_empty() {
-                ui.label(RichText::new("none stated").color(pal.text_dim));
+                ui.label(RichText::new(camcraft_i18n::tr("none stated")).color(pal.text_dim));
             }
             prop_grid(ui, &format!("machine-edit-{}", g.title), |ui| {
                 for f in &g.fields {
@@ -289,23 +289,23 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
                 ui.horizontal_wrapped(|ui| {
                     for f in &g.fields {
                         let words = format!("Remove {}", f.label.trim_end_matches(" code"));
-                        if ui.button(words).on_hover_text("Remove this coolant from the machine").clicked() {
+                        if ui.button(words).on_hover_text(camcraft_i18n::tr("Remove this coolant from the machine")).clicked() {
                             remove_coolant = Some(f.pointer.clone());
                         }
                     }
                 });
                 // A new coolant is added with its code, never without.
                 prop_grid(ui, "machine-edit-new-coolant", |ui| {
-                    let l = ui.label("New coolant");
+                    let l = ui.label(camcraft_i18n::tr("New coolant"));
                     ui.add(TextEdit::singleline(&mut ed.new_coolant).desired_width(100.0).hint_text("Air"))
                         .labelled_by(l.id);
                     ui.end_row();
-                    let c = ui.label("New coolant code");
+                    let c = ui.label(camcraft_i18n::tr("New coolant code"));
                     ui.add(TextEdit::singleline(&mut ed.new_coolant_code).desired_width(100.0).hint_text("M7"))
                         .labelled_by(c.id);
                     ui.end_row();
                 });
-                if ui.button("Add coolant").on_hover_text("Add a coolant and its M code to the tool station").clicked() {
+                if ui.button(camcraft_i18n::tr("Add coolant")).on_hover_text(camcraft_i18n::tr("Add a coolant and its M code to the tool station")).clicked() {
                     add_coolant = true;
                 }
             }

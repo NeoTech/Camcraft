@@ -215,7 +215,7 @@ impl eframe::App for WebShell {
         self.sync_title();
         self.take_eye();
         let Some(rs) = frame.wgpu_render_state() else {
-            ui.label("CamCraft: the graphics device is gone - reload the page.");
+            ui.label(camcraft_i18n::tr("CamCraft: the graphics device is gone - reload the page."));
             return;
         };
         let (device, queue) = (&rs.device, &rs.queue);

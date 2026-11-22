@@ -15,12 +15,12 @@ use crate::state::{CommandKind, State};
 pub(super) fn raw_stock_row(ui: &mut Ui, state: &mut State) {
     let active = camcraft_app::setup::active(&state.world);
     let Some(marked) = raw_stock_only_of(&state.world, active.as_deref()) else {
-        ui.label("Apply a stock from a model to say whether its source is raw stock only.");
+        ui.label(camcraft_i18n::tr("Apply a stock from a model to say whether its source is raw stock only."));
         return;
     };
     let mut on = marked;
-    ui.checkbox(&mut on, RAW_STOCK_ONLY).on_hover_text(
-        "Tick when the source model is a casting or blank you cut into and the finished part is its own model: the post's gouge check then does not judge the source. An operation that machines the source judges it again.",
+    ui.checkbox(&mut on, RAW_STOCK_ONLY).on_hover_text(camcraft_i18n::tr(
+        "Tick when the source model is a casting or blank you cut into and the finished part is its own model: the post's gouge check then does not judge the source. An operation that machines the source judges it again."),
     );
     // A mark whose model changed under it is void: say so, by name.
     if let Some(note) = void_note_of(&state.world, active.as_deref()) {

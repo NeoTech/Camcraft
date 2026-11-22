@@ -28,8 +28,8 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
                 let picked = draft.and_then(|d| d.picks.iter().find(|(_, r)| *r == role));
                 let name = picked.map(|(g, _)| camcraft_app::pick::geo_label(&state.world, g));
                 if super::pick_button::pick_button(ui, armed, pick_label)
-                    .on_hover_text(
-                        "Pick a face, edge, corner or wall in the viewport for this row.",
+                    .on_hover_text(camcraft_i18n::tr(
+                        "Pick a face, edge, corner or wall in the viewport for this row."),
                     )
                     .clicked()
                 {
@@ -68,7 +68,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         if ui
             .add_enabled_ui(active && check.is_ok(), |ui| layout::button(ui, "Apply"))
             .inner
-            .on_hover_text("Place this setup WCS on the picked frame.")
+            .on_hover_text(camcraft_i18n::tr("Place this setup WCS on the picked frame."))
             .on_disabled_hover_text(&why)
             .clicked()
             && let Ok(a) = &check
@@ -81,7 +81,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
             });
         }
         if layout::button(ui, "Clear")
-            .on_hover_text("Empty all four feature rows.")
+            .on_hover_text(camcraft_i18n::tr("Empty all four feature rows."))
             .clicked()
             && state.wcs_pick.as_ref().is_some_and(|d| d.setup == setup)
         {

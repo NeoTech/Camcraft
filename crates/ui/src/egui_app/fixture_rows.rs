@@ -62,18 +62,18 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, loc: &Location, fi
     ui.horizontal_wrapped(|ui| {
         ui.add_space(12.0);
         if ui
-            .selectable_label(is_draft, "Place…")
-            .on_hover_text("Set this fixture's X / Y / Z and yaw")
+            .selectable_label(is_draft,camcraft_i18n::tr( "Place…"))
+            .on_hover_text(camcraft_i18n::tr("Set this fixture's X / Y / Z and yaw"))
             .clicked()
         {
             state.fixture_ui = if is_draft { FixtureUi::default() } else { draft_of(name, loc) };
         }
         // #561: put the part in this fixture by mates.
         super::locate_form::arm_button(ui, state, "Locate part…", name, None);
-        if ui.small_button("Unmark").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Unmark")).clicked() {
             state.pending.push_back(CommandKind::UntagFixture(name.to_owned()));
         }
-        if ui.small_button("Delete").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Delete")).clicked() {
             state.pending.push_back(CommandKind::DeleteFixture(name.to_owned()));
         }
     });
@@ -93,7 +93,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, loc: &Location, fi
     // `SetFixtureFixed`, one undo unit, never a poke. Its caption is the
     // checkbox's own text, so it wraps in the pane rather than truncating.
     let mut on = fixed;
-    if ui.checkbox(&mut on, "Fixed (does not turn with the part)").on_hover_text(FIXED_HELP).changed() {
+    if ui.checkbox(&mut on,camcraft_i18n::tr( "Fixed (does not turn with the part)")).on_hover_text(FIXED_HELP).changed() {
         state.pending.push_back(CommandKind::SetFixtureFixed { name: name.to_owned(), fixed: on });
     }
     vise_opening(ui, state, name);
@@ -123,13 +123,13 @@ fn vise_opening(ui: &mut Ui, state: &mut State, name: &str) {
     });
     ui.horizontal(|ui| {
         ui.add_space(12.0);
-        if ui.small_button("Set opening").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Set opening")).clicked() {
             let opening = *state.vise_opening_draft(name, params.opening);
             set = Some((params.with_opening(opening), false));
         }
         if ui
-            .small_button("Open to stock")
-            .on_hover_text("Move the moving jaw against the setup's stock, as the vise stands")
+            .small_button(camcraft_i18n::tr("Open to stock"))
+            .on_hover_text(camcraft_i18n::tr("Move the moving jaw against the setup's stock, as the vise stands"))
             .clicked()
         {
             set = Some((params.clone(), true));
@@ -171,7 +171,7 @@ fn place_form(ui: &mut Ui, state: &mut State, name: &str) {
     prop_row(ui, "Turn about Z (yaw)", |ui| num_plain_row(ui, &mut d.yaw_deg));
     ui.horizontal(|ui| {
         ui.add_space(12.0);
-        if ui.small_button("Apply").clicked() {
+        if ui.small_button(camcraft_i18n::tr("Apply")).clicked() {
             let d = &state.fixture_ui;
             state.pending.push_back(CommandKind::MoveFixture {
                 name: name.to_owned(),
@@ -182,7 +182,7 @@ fn place_form(ui: &mut Ui, state: &mut State, name: &str) {
             });
         }
     });
-    ui.label("Quarter-turns about world axes (apply immediately):");
+    ui.label(camcraft_i18n::tr("Quarter-turns about world axes (apply immediately):"));
     for row in [0usize, 3] {
         ui.horizontal(|ui| {
             ui.add_space(12.0);

@@ -142,9 +142,9 @@ pub(super) fn button(ui: &mut Ui, icons: Option<&IconSet>) -> Response {
         Some(tex) => {
             let ink = ui.visuals().text_color();
             let glyph = Image::new(tex).fit_to_exact_size(Vec2::splat(16.0)).tint(ink);
-            ui.add(Button::image(glyph).frame(false)).on_hover_text("Report an issue")
+            ui.add(Button::image(glyph).frame(false)).on_hover_text(camcraft_i18n::tr("Report an issue"))
         }
-        None => ui.small_button("Report an issue"),
+        None => ui.small_button(camcraft_i18n::tr("Report an issue")),
     };
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Report an issue"));
     resp
@@ -184,7 +184,7 @@ pub(crate) fn window(ctx: &Context, state: &mut State) {
                 return;
             }
             ui.separator();
-            ui.label("CamCraft fills the title, the description and the label into GitHub, and copies the whole window to the clipboard. Type a short title:");
+            ui.label(camcraft_i18n::tr("CamCraft fills the title, the description and the label into GitHub, and copies the whole window to the clipboard. Type a short title:"));
             ui.add_sized(
                 [ui.available_width(), 0.0],
                 TextEdit::singleline(&mut state.report_title).hint_text("e.g. Contour leaves a witness line"),
@@ -196,7 +196,7 @@ pub(crate) fn window(ctx: &Context, state: &mut State) {
                     }
                 }
             });
-            ui.label("Before you file: check the open issues. A duplicate wastes both our times.");
+            ui.label(camcraft_i18n::tr("Before you file: check the open issues. A duplicate wastes both our times."));
         });
     if let Some(kind) = filed {
         // The shell answers the request a frame later, once the window

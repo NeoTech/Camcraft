@@ -124,6 +124,9 @@ pub fn check_row(ui: &mut Ui, label: &str, v: &mut bool) -> Response {
 /// Attach `help` as the hover tooltip of the row drawn last this frame;
 /// with no row drawn yet this frame, it shows as a small dimmed line.
 pub fn hint(ui: &mut Ui, help: &str) {
+    // #853: the help text is a catalogue string; every prop_row_hint and
+    // standalone hint funnels through here, so one lookup translates them all.
+    let help = camcraft_i18n::tr(help);
     let frame = ui.ctx().cumulative_frame_nr();
     let last: Option<(u64, Response)> = ui.ctx().data(|d| d.get_temp(last_label_id()));
     match last {
@@ -131,7 +134,7 @@ pub fn hint(ui: &mut Ui, help: &str) {
             r.on_hover_text(help);
         }
         _ => {
-            ui.label(RichText::new(help).small().weak());
+            ui.label(RichText::new(help.as_ref()).small().weak());
         }
     }
 }
@@ -139,9 +142,11 @@ pub fn hint(ui: &mut Ui, help: &str) {
 /// A dimmed caption under a row - the ONE consequence line a safety rule
 /// may keep visible (e.g. what stands in when an entry cannot fit).
 pub fn consequence(ui: &mut Ui, text: &str) {
+    // #853: the one visible consequence line is translated too.
+    let text = camcraft_i18n::tr(text);
     ui.horizontal(|ui| {
         ui.add_space(LABEL_W + ui.spacing().item_spacing.x);
-        ui.add(Label::new(RichText::new(text).small().weak()).wrap());
+        ui.add(Label::new(RichText::new(text.as_ref()).small().weak()).wrap());
     });
 }
 
@@ -253,13 +258,13 @@ pub fn auto_value(
         let hold = ui.make_persistent_id(("camcraft.auto_value_hold", label));
         let held: bool = ui.data(|d| d.get_temp(hold)).unwrap_or(false);
         let mut auto = *v == 0.0 && !held;
-        let toggle_resp = ui.checkbox(&mut auto, toggle);
+        let toggle_resp = ui.checkbox(&mut auto, camcraft_i18n::tr(toggle));
         if toggle_resp.changed() {
             *v = if auto { 0.0 } else { seed };
             ui.data_mut(|d| d.remove_temp::<bool>(hold));
         }
         if auto {
-            ui.add_enabled(false, Label::new(RichText::new(derived).weak()));
+            ui.add_enabled(false, Label::new(RichText::new(camcraft_i18n::tr(derived)).weak()));
         } else {
             edit(ui, v);
             let editing = ui.memory(|m| m.focused()).is_some_and(|f| f != toggle_resp.id);
@@ -288,13 +293,13 @@ pub fn auto_opt(
     let before = *v;
     prop_row(ui, label, |ui| {
         let mut auto = v.is_none();
-        if ui.checkbox(&mut auto, toggle).changed() {
+        if ui.checkbox(&mut auto, camcraft_i18n::tr(toggle)).changed() {
             *v = if auto { None } else { Some(seed) };
         }
         match v {
             Some(x) => edit(ui, x),
             None => {
-                ui.add_enabled(false, Label::new(RichText::new(derived).weak()));
+                ui.add_enabled(false, Label::new(RichText::new(camcraft_i18n::tr(derived)).weak()));
             }
         }
     });
@@ -331,6 +336,9 @@ pub fn status_banner_located(ui: &mut Ui, id: &str, line: &str, ink: Color32, de
     } else {
         "> "
     };
+    // #853: the banner line is a catalogue string; a Chinese line passed in
+    // already is a miss and comes back unchanged.
+    let line = camcraft_i18n::tr(line);
     let text = RichText::new(format!("{arrow}{line}")).color(ink).strong();
     let r = ui.add(Label::new(text).sense(egui::Sense::click()).truncate());
     if !details.is_empty() && r.clicked() {
@@ -338,7 +346,7 @@ pub fn status_banner_located(ui: &mut Ui, id: &str, line: &str, ink: Color32, de
         ui.ctx().data_mut(|d| d.insert_temp(key, open));
     }
     if !details.is_empty() {
-        r.on_hover_text(if open { "hide the details" } else { "show the details" });
+        r.on_hover_text(camcraft_i18n::tr(if open { "hide the details" } else { "show the details" }));
     }
     let mut hit = None;
     if open {
@@ -346,7 +354,7 @@ pub fn status_banner_located(ui: &mut Ui, id: &str, line: &str, ink: Color32, de
             for (i, d) in details.iter().enumerate() {
                 if links.get(i).copied().unwrap_or(false) {
                     let r = ui.add(Label::new(RichText::new(d).small().underline()).sense(egui::Sense::click()).wrap());
-                    if r.on_hover_text("show this move in the viewport").clicked() {
+                    if r.on_hover_text(camcraft_i18n::tr("show this move in the viewport")).clicked() {
                         hit = Some(i);
                     }
                 } else {
@@ -404,10 +412,10 @@ pub fn action_bar(ui: &mut Ui, actions: &[Action<'_>], inks: &BarInks) -> Option
         };
         let mut r = ui.add_enabled(a.enabled, btn.min_size(Vec2::new(0.0, 24.0)));
         if let Some(h) = a.hint {
-            r = r.on_hover_text(h);
+            r = r.on_hover_text(camcraft_i18n::tr(h));
         }
         if let Some(w) = a.why_not {
-            r = r.on_disabled_hover_text(w);
+            r = r.on_disabled_hover_text(camcraft_i18n::tr(w));
         }
         if r.clicked() {
             *clicked = Some(i);

@@ -191,9 +191,9 @@ pub(crate) fn draw(ui: &mut egui::Ui, state: &mut State, rect: egui::Rect) {
             if state.move_handles && state.rotate_handles {
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut state.handle_bar.turn_value, false, "Move value")
-                        .on_hover_text("Enter a distance; arrows and rings stay visible");
+                        .on_hover_text(camcraft_i18n::tr("Enter a distance; arrows and rings stay visible"));
                     ui.selectable_value(&mut state.handle_bar.turn_value, true, "Rotate value")
-                        .on_hover_text("Enter an angle; arrows and rings stay visible");
+                        .on_hover_text(camcraft_i18n::tr("Enter an angle; arrows and rings stay visible"));
                 });
             }
             move_mode = state.move_handles && (!state.rotate_handles || !state.handle_bar.turn_value);
@@ -239,11 +239,11 @@ pub(crate) fn draw(ui: &mut egui::Ui, state: &mut State, rect: egui::Rect) {
                 )
                 .on_hover_text(field_tip);
                 ui.label(suffix);
-                let set = ui.button("Set").on_hover_text(set_tip);
+                let set = ui.button(camcraft_i18n::tr("Set")).on_hover_text(set_tip);
                 let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 submit = set.clicked() || enter;
                 ui.separator();
-                ui.label("Snap").on_hover_text("Step size when holding Shift while dragging");
+                ui.label(camcraft_i18n::tr("Snap")).on_hover_text(camcraft_i18n::tr("Step size when holding Shift while dragging"));
                 if move_mode {
                     draw_move_snap(ui, state, u, h);
                 } else {
@@ -255,10 +255,10 @@ pub(crate) fn draw(ui: &mut egui::Ui, state: &mut State, rect: egui::Rect) {
                             .suffix("\u{b0}"),
                     );
                     crate::egui_app::fields::named(dv, "Rotate snap step")
-                        .on_hover_text("Angle step in degrees while holding Shift");
+                        .on_hover_text(camcraft_i18n::tr("Angle step in degrees while holding Shift"));
                 }
-                ui.label(egui::RichText::new("(Shift)").small().weak())
-                    .on_hover_text("Hold Shift while dragging a handle to snap");
+                ui.label(egui::RichText::new(camcraft_i18n::tr("(Shift)")).small().weak())
+                    .on_hover_text(camcraft_i18n::tr("Hold Shift while dragging a handle to snap"));
             });
         });
     });
@@ -281,7 +281,7 @@ fn draw_move_snap(ui: &mut egui::Ui, state: &mut State, u: Unit, h: f32) {
                 .suffix(" mm"),
         );
         crate::egui_app::fields::named(dv, "Move snap step")
-            .on_hover_text("Grid step in mm while holding Shift");
+            .on_hover_text(camcraft_i18n::tr("Grid step in mm while holding Shift"));
         return;
     }
     let mut disp = units::to_display(state.handle_bar.move_snap_mm, u);
@@ -299,5 +299,5 @@ fn draw_move_snap(ui: &mut egui::Ui, state: &mut State, u: Unit, h: f32) {
         state.handle_bar.move_snap_mm = units::from_display(disp, u).clamp(MIN_SNAP_MM, MAX_SNAP_MM);
     }
     crate::egui_app::fields::named(dv, "Move snap step")
-        .on_hover_text("Grid step in inches while holding Shift");
+        .on_hover_text(camcraft_i18n::tr("Grid step in inches while holding Shift"));
 }

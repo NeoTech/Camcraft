@@ -119,7 +119,7 @@ fn properties_body(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             UiTarget::Operation(_) | UiTarget::Tool(_) => {}
             UiTarget::Stock => {
                 state.sync_setup_ui();
-                ui.heading("Stock");
+                ui.heading(camcraft_i18n::tr("Stock"));
                 ui.separator();
                 super::stock_page::stock_page(ui, state);
                 setup_error(ui, state);
@@ -160,7 +160,7 @@ fn properties_body(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             }
             UiTarget::Setups => {
                 state.sync_setup_ui();
-                ui.heading("Setups");
+                ui.heading(camcraft_i18n::tr("Setups"));
                 ui.separator();
                 setups_page(ui, state);
                 setup_error(ui, state);
@@ -172,7 +172,7 @@ fn properties_body(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         let close = if is_wcs {
             super::wcs_footer::footer(ui, state)
         } else {
-            ui.button("Close").clicked()
+            ui.button(camcraft_i18n::tr("Close")).clicked()
         };
         if close {
             state.close_property_editor();
@@ -199,7 +199,7 @@ pub(super) const REFRESH_POSTS: &str = "Refresh post list";
 /// the previous post back.
 pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
     let current = posting::post_of(&state.world);
-    ui.label("Post");
+    ui.label(camcraft_i18n::tr("Post"));
     ui.label(posting::post_label(&state.world));
     // #902: the unit the program is written in - the document's own.
     super::post_options::units_row(ui, state, "Program units");
@@ -233,7 +233,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
                     }
                 }
             });
-        let refresh = ui.button("Refresh").on_hover_text("Read the post folder again");
+        let refresh = ui.button(camcraft_i18n::tr("Refresh")).on_hover_text(camcraft_i18n::tr("Read the post folder again"));
         if super::fields::named(refresh, REFRESH_POSTS).clicked() {
             posting::rescan();
         }
@@ -246,7 +246,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
         if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::SelectPostDialog), "Load post (.cps)", "") {
             state.pending.push_back(CommandKind::SelectPostDialog);
         }
-        if matches!(current, PostRef::File(_)) && ui.button("Built-in").clicked() {
+        if matches!(current, PostRef::File(_)) && ui.button(camcraft_i18n::tr("Built-in")).clicked() {
             state.pending.push_back(CommandKind::SelectPostBuiltin);
         }
     });
@@ -258,8 +258,8 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
     // its stop or trip home, the post leaves them all out. A command.
     let skip = posting::post_options(&state.world).skip_stops;
     let mut want = skip;
-    ui.checkbox(&mut want, "Skip pauses and homes").on_hover_text(
-        "post without any operation's optional stop, program stop or trip home - the operations keep their choices",
+    ui.checkbox(&mut want,camcraft_i18n::tr( "Skip pauses and homes")).on_hover_text(camcraft_i18n::tr(
+        "post without any operation's optional stop, program stop or trip home - the operations keep their choices"),
     );
     if want != skip {
         state.pending.push_back(CommandKind::SetSkipStops(want));
@@ -269,7 +269,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
     let per_op = posting::post_options(&state.world).per_op;
     let mut pick = per_op;
     ui.horizontal(|ui| {
-        ui.label("Output");
+        ui.label(camcraft_i18n::tr("Output"));
         egui::ComboBox::from_id_salt("post_output")
             .selected_text(if per_op { "One file per operation" } else { "One program" })
             .show_ui(ui, |ui| {
@@ -277,7 +277,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
                 ui.selectable_value(&mut pick, true, "One file per operation");
             })
             .response
-            .on_hover_text("one file per operation writes each operation as its own standalone program into a folder, so it can be rerun on its own");
+            .on_hover_text(camcraft_i18n::tr("one file per operation writes each operation as its own standalone program into a folder, so it can be rerun on its own"));
     });
     if pick != per_op {
         state.pending.push_back(CommandKind::SetPerOpOutput(pick));
@@ -314,7 +314,7 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
     };
     let ink = super::colorvision::text_inks(ui, &state.world).warn;
     super::layout::status_banner(ui, "post_offer", &line, ink, &[]);
-    if ui.button("Switch post").clicked() {
+    if ui.button(camcraft_i18n::tr("Switch post")).clicked() {
         state.pending.push_back(match offer.post {
             PostRef::Builtin => CommandKind::SelectPostBuiltin,
             PostRef::Named(n) => CommandKind::SelectPostNamed(n),
@@ -368,12 +368,12 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     let names = camcraft_app::setup::names(&state.world);
     let active = camcraft_app::setup::active(&state.world);
     if names.is_empty() {
-        ui.label(
+        ui.label(camcraft_i18n::tr(
             "No setups in this document: the one global stock and the \
-             G54 WCS act as the first setup.",
+             G54 WCS act as the first setup."),
         );
         ui.add_space(6.0);
-        if ui.button("Create first setup").clicked() {
+        if ui.button(camcraft_i18n::tr("Create first setup")).clicked() {
             state.pending.push_back(CommandKind::CreateSetup {
                 name: None,
                 datum_from: None,
@@ -396,17 +396,17 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                     .push_back(CommandKind::ActivateSetup(Some(name.clone())));
             }
             if is_active {
-                ui.label("(active)");
+                ui.label(camcraft_i18n::tr("(active)"));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Delete").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Delete")).clicked() {
                     state
                         .pending
                         .push_back(CommandKind::DeleteSetup(name.clone()));
                 }
                 // Alignment, work offset, workholding and tools live on
                 // the setup's own page: one click from here (#1104).
-                if ui.small_button("Open page").clicked() {
+                if ui.small_button(camcraft_i18n::tr("Open page")).clicked() {
                     // Activate it too, as the browser's Stock row does: the
                     // fixture and tool pages edit only the active setup.
                     super::browser_pane::focus(state, name);
@@ -432,8 +432,8 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     }
     ui.separator();
     ui.horizontal(|ui| {
-        ui.checkbox(&mut state.setups_ui.datum, "Carry stock and WCS over");
-        if ui.button("New setup").clicked() {
+        ui.checkbox(&mut state.setups_ui.datum,camcraft_i18n::tr( "Carry stock and WCS over"));
+        if ui.button(camcraft_i18n::tr("New setup")).clicked() {
             let datum_from = if state.setups_ui.datum {
                 active.clone()
             } else {
@@ -448,8 +448,8 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     });
     ui.separator();
     sheet_footer(ui, state);
-    ui.label(
-        "Each setup's alignment, work offset, fixtures and tool list are on its own          Setup page in the browser (Open page).",
+    ui.label(camcraft_i18n::tr(
+        "Each setup's alignment, work offset, fixtures and tool list are on its own          Setup page in the browser (Open page)."),
     );
 }
 
@@ -461,7 +461,7 @@ pub(super) fn sheet_footer(ui: &mut Ui, state: &mut State) {
         if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::SetupSheetDialog), "Export setup sheets…", "") {
             state.pending.push_back(CommandKind::SetupSheetDialog);
         }
-        ui.label("(one page per setup, text)");
+        ui.label(camcraft_i18n::tr("(one page per setup, text)"));
     });
 }
 
@@ -519,7 +519,7 @@ pub(crate) fn tool_shape_editor_window(ctx: &egui::Context, state: &mut State) {
                     msg,
                 );
             }
-            close_clicked = ui.button("Close").clicked();
+            close_clicked = ui.button(camcraft_i18n::tr("Close")).clicked();
         });
     if !open || close_clicked {
         state.close_tool_shape_editor();
@@ -532,7 +532,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     let u = state.units();
     ui.heading(format!("Model: {name}"));
     let Some(entity) = model::find_by_name(&state.world, &name) else {
-        ui.label("It is gone from the document.");
+        ui.label(camcraft_i18n::tr("It is gone from the document."));
         return;
     };
     let tris = model::facets_of(&state.world, &entity).map_or(0, |f| f.len());
@@ -596,7 +596,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     num_plain(ui, &mut state.model_ui.pitch_deg);
     field(ui, "Turn about Z (yaw)");
     num_plain(ui, &mut state.model_ui.yaw_deg);
-    ui.label("Quarter-turns about world axes (apply immediately):");
+    ui.label(camcraft_i18n::tr("Quarter-turns about world axes (apply immediately):"));
     const TURNS: [(&str, usize, f64); 6] = [
         ("X+", 0, 1.0),
         ("X-", 0, -1.0),
@@ -615,7 +615,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
         });
     }
     ui.horizontal(|ui| {
-        if ui.button("Apply").clicked() {
+        if ui.button(camcraft_i18n::tr("Apply")).clicked() {
             apply_model_draft(state);
         }
     });
@@ -627,7 +627,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     // import. The button queues `RepairModel`; the report lands in the
     // status line and stays here while this model is on the page.
     ui.add_space(6.0);
-    ui.label("Mesh repair");
+    ui.label(camcraft_i18n::tr("Mesh repair"));
     field(ui, "Weld tolerance");
     num(ui, u, &mut state.repair_ui.weld_tol);
     field(ui, "Largest hole to fill (edges)");
@@ -638,7 +638,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
          boundary loop up to the stated size by ear clipping in its plane. Non-manifold or \
          non-planar holes are refused by name; undo restores the facets.",
     );
-    if ui.button("Repair mesh").clicked() {
+    if ui.button(camcraft_i18n::tr("Repair mesh")).clicked() {
         state.pending.push_back(CommandKind::RepairModel {
             name: name.clone(),
             weld_tol: state.repair_ui.weld_tol,
@@ -661,16 +661,16 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
         })
         .collect();
     if users.is_empty() {
-        ui.label("No operation uses it as a source.");
+        ui.label(camcraft_i18n::tr("No operation uses it as a source."));
     } else {
         ui.label(format!("Source for: {}", users.join(", ")));
     }
     if model::stock_def_of(&state.world, &entity)
         .is_some_and(|s| matches!(s, StockShape::FromModel { source } if source == name))
     {
-        ui.label("It is also the stock solid (Setup > Stock).");
+        ui.label(camcraft_i18n::tr("It is also the stock solid (Setup > Stock)."));
     }
-    ui.label("Selected now: Del removes it (undo restores).");
+    ui.label(camcraft_i18n::tr("Selected now: Del removes it (undo restores)."));
 }
 
 #[cfg(test)]

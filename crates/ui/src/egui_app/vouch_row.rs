@@ -29,21 +29,21 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, entity: &Entity, name: &str) {
         return;
     }
     ui.label(
-        egui::RichText::new(
+        egui::RichText::new(camcraft_i18n::tr(
             "If this mesh is exact (an STL or OBJ import), or you checked it yourself, you can \
              vouch for it in place of a re-import. Gouge checks then read the mesh as exact. \
-             Your name is kept with the model; undo puts the mark back.",
+             Your name is kept with the model; undo puts the mark back."),
         )
         .small()
         .weak(),
     );
     // The button has a row of its own: the Properties pane is narrow.
     ui.horizontal(|ui| {
-        let l = ui.label(FIELD);
+        let l = ui.label(camcraft_i18n::tr(FIELD));
         ui.add(TextEdit::singleline(&mut state.vouch_by).desired_width(140.0)).labelled_by(l.id);
     });
     let named = model_vouch::checked_by(&state.vouch_by).is_ok();
-    if ui.add_enabled(named, egui::Button::new(BUTTON)).clicked() {
+    if ui.add_enabled(named, egui::Button::new(camcraft_i18n::tr(BUTTON))).clicked() {
         state.pending.push_back(CommandKind::VouchModelFidelity { name: name.to_string(), by: state.vouch_by.clone() });
     }
 }

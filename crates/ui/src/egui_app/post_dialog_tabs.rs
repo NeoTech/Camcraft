@@ -15,7 +15,7 @@ use crate::state::State;
 pub(super) fn draw_output_section(ui: &mut Ui, dlg: &mut PostDialogState) {
     group(ui, "Output target", None, |ui| {
         prop_row(ui, "Output folder", |ui| {
-            if ui.button("Browse…").clicked()
+            if ui.button(camcraft_i18n::tr("Browse…")).clicked()
                 && let Some(dir) = crate::file_dialog::FileDialog::new()
                     .set_title("Choose NC output folder")
                     .pick_folder()
@@ -125,7 +125,7 @@ pub(super) fn draw_program_section(ui: &mut Ui, dlg: &mut PostDialogState) {
         } {
             prop_row(ui, "End units", |ui| {
                 ui.label(format!("{asked} (not supported by this post)"));
-                if ui.button("Clear to Leave modal").clicked() {
+                if ui.button(camcraft_i18n::tr("Clear to Leave modal")).clicked() {
                     dlg.options.end_units = EndUnits::Leave;
                 }
             });
@@ -190,10 +190,10 @@ pub(super) fn draw_operations_tab(ui: &mut Ui, state: &State) {
         .striped(true)
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
-            ui.label(RichText::new("Setup").strong());
-            ui.label(RichText::new("Operation").strong());
-            ui.label(RichText::new("Kind").strong());
-            ui.label(RichText::new("Status").strong());
+            ui.label(RichText::new(camcraft_i18n::tr("Setup")).strong());
+            ui.label(RichText::new(camcraft_i18n::tr("Operation")).strong());
+            ui.label(RichText::new(camcraft_i18n::tr("Kind")).strong());
+            ui.label(RichText::new(camcraft_i18n::tr("Status")).strong());
             ui.end_row();
             for (name, e) in ops {
                 let Some(op) = model::operation_of(&state.world, &e) else {

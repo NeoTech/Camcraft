@@ -86,12 +86,12 @@ pub(super) fn editor(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
         // #2007: the tab row wraps in a narrow pane.
         ui.horizontal_wrapped(|ui| {
             let c = state.tool_profile_ui.column;
-            if ui.selectable_label(c == ToolColumn::Body, "Body").on_hover_text("import a holder or assembly mesh").clicked() {
+            if ui.selectable_label(c == ToolColumn::Body,camcraft_i18n::tr( "Body")).on_hover_text(camcraft_i18n::tr("import a holder or assembly mesh")).clicked() {
                 state.tool_profile_ui.column = ToolColumn::Body;
             }
             if ui
-                .selectable_label(c == ToolColumn::Profile, "Profile")
-                .on_hover_text("draw the holder as a revolved outline")
+                .selectable_label(c == ToolColumn::Profile,camcraft_i18n::tr( "Profile"))
+                .on_hover_text(camcraft_i18n::tr("draw the holder as a revolved outline"))
                 .clicked()
             {
                 state.tool_profile_ui.column = ToolColumn::Profile;
@@ -101,12 +101,12 @@ pub(super) fn editor(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
             if state.tool_profile_ui.column == ToolColumn::Profile {
                 ui.separator();
                 let cutter = state.tool_cutter_ui.shown;
-                if ui.selectable_label(!cutter, "Draw holder").on_hover_text("the holder as a revolved outline").clicked() {
+                if ui.selectable_label(!cutter,camcraft_i18n::tr( "Draw holder")).on_hover_text(camcraft_i18n::tr("the holder as a revolved outline")).clicked() {
                     state.tool_cutter_ui.shown = false;
                 }
                 if ui
-                    .selectable_label(cutter, "Draw cutter")
-                    .on_hover_text("the tool's own cutter, neck and shank as a revolved outline")
+                    .selectable_label(cutter,camcraft_i18n::tr( "Draw cutter"))
+                    .on_hover_text(camcraft_i18n::tr("the tool's own cutter, neck and shank as a revolved outline"))
                     .clicked()
                 {
                     state.tool_cutter_ui.shown = true;
@@ -129,7 +129,7 @@ fn profile_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     }
     if !exists {
         ui.strong("Holder profile");
-        ui.label("Add the tool first, then draw its holder.");
+        ui.label(camcraft_i18n::tr("Add the tool first, then draw its holder."));
         return;
     }
     state.sync_tool_profile_ui();
@@ -163,13 +163,13 @@ fn profile_controls(ui: &mut Ui, state: &mut State) {
     let custom = state.tool_profile_ui.custom;
     ui.horizontal(|ui| {
         if ui
-            .selectable_label(!custom, "Parametric")
-            .on_hover_text("the holder is a cylinder with the holder diameter and length, redrawn as they change")
+            .selectable_label(!custom,camcraft_i18n::tr( "Parametric"))
+            .on_hover_text(camcraft_i18n::tr("the holder is a cylinder with the holder diameter and length, redrawn as they change"))
             .clicked()
         {
             state.set_profile_custom(false);
         }
-        if ui.selectable_label(custom, "Custom").on_hover_text("edit the outline point by point; changed dimensions leave it alone").clicked() {
+        if ui.selectable_label(custom,camcraft_i18n::tr( "Custom")).on_hover_text(camcraft_i18n::tr("edit the outline point by point; changed dimensions leave it alone")).clicked() {
             state.set_profile_custom(true);
         }
     });
@@ -178,7 +178,7 @@ fn profile_controls(ui: &mut Ui, state: &mut State) {
     let state_custom = state.tool_profile_ui.custom;
     let can = state_custom || landed.is_some();
     if ui
-        .add_enabled(can, egui::Button::new("Apply profile"))
+        .add_enabled(can, egui::Button::new(camcraft_i18n::tr("Apply profile")))
         .on_hover_text(if state_custom {
             "use the drawn holder for this tool (one undo step)"
         } else {
@@ -207,7 +207,7 @@ fn profile_controls(ui: &mut Ui, state: &mut State) {
                     "write the half-profile or holder body as ASCII DXF (mm, layers CENTRELINE and PROFILE)",
                 )
             } else {
-                ui.add_enabled(false, egui::Button::new("Export DXF…")).clicked()
+                ui.add_enabled(false, egui::Button::new(camcraft_i18n::tr("Export DXF…"))).clicked()
             };
             let imp_step = crate::browser_files::button(
                 ui,
@@ -307,12 +307,12 @@ pub(super) fn points_grid(ui: &mut Ui, u: Unit, points: &mut [SpunPoint], editab
                     len_cell(ui, u, &mut p.z);
                     len_cell(ui, u, &mut p.r);
                     len_cell(ui, u, &mut p.arc);
-                    if i + 1 < n && ui.small_button("+").on_hover_text("insert a point after this one").clicked() {
+                    if i + 1 < n && ui.small_button(camcraft_i18n::tr("+")).on_hover_text(camcraft_i18n::tr("insert a point after this one")).clicked() {
                         insert = Some(i);
                     } else if i + 1 >= n {
                         ui.label("");
                     }
-                    if ui.small_button("×").on_hover_text("remove this point").clicked() {
+                    if ui.small_button(camcraft_i18n::tr("×")).on_hover_text(camcraft_i18n::tr("remove this point")).clicked() {
                         remove = Some(i);
                     }
                     ui.end_row();

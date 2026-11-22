@@ -33,15 +33,15 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
     let mut draft: f64 = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || held.unwrap_or(2000.0)));
     let mut queued: Option<Option<f64>> = None;
     ui.horizontal(|ui| {
-        ui.label(ROW_LABEL);
+        ui.label(camcraft_i18n::tr(ROW_LABEL));
         ui.add(DragValue::new(&mut draft).speed(10.0).range(1.0..=setup_workholding::MAX_STATED_RPM).suffix(" rpm"));
         let hover = "The chuck's or collet's rated maximum rpm. Constant surface speed is clamped to it \
                      (with the machine's and the tool's), and a constant-rpm turning operation over it is \
                      refused at the post.";
-        if ui.button("Apply rpm").on_hover_text(hover).clicked() && held != Some(draft) {
+        if ui.button(camcraft_i18n::tr("Apply rpm")).on_hover_text(hover).clicked() && held != Some(draft) {
             queued = Some(Some(draft));
         }
-        if held.is_some() && ui.button("Clear rpm").clicked() {
+        if held.is_some() && ui.button(camcraft_i18n::tr("Clear rpm")).clicked() {
             queued = Some(None);
         }
     });

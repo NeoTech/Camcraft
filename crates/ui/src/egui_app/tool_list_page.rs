@@ -40,11 +40,11 @@ fn readout(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let u = state.units();
     let rows = camcraft_app::tool_list::for_setup(&state.world, ctx);
     if rows.is_empty() {
-        ui.label("Tool list: no generated operation in this setup yet.");
+        ui.label(camcraft_i18n::tr("Tool list: no generated operation in this setup yet."));
         return;
     }
     ui.label(
-        RichText::new("In change order. Cut and rapid are path lengths.")
+        RichText::new(camcraft_i18n::tr("In change order. Cut and rapid are path lengths."))
             .small()
             .weak(),
     );
@@ -86,10 +86,10 @@ fn readout(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
 fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let used = tools_of(state, ctx);
     if used.is_empty() {
-        ui.label("No operation in this setup uses a tool yet.");
+        ui.label(camcraft_i18n::tr("No operation in this setup uses a tool yet."));
         return;
     }
-    ui.label(RichText::new("Tools live in the document's tool library: editing one here edits it in every setup that uses it.").small().weak());
+    ui.label(RichText::new(camcraft_i18n::tr("Tools live in the document's tool library: editing one here edits it in every setup that uses it.")).small().weak());
     let mut open: Option<String> = None;
     egui::ScrollArea::horizontal()
         .id_salt("setup_tool_table_scroll")
@@ -117,7 +117,7 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
                             );
                         ui.label(size);
                         ui.label(ops.to_string());
-                        if ui.small_button("Edit").clicked() {
+                        if ui.small_button(camcraft_i18n::tr("Edit")).clicked() {
                             open = Some(tool.clone());
                         }
                         ui.end_row();

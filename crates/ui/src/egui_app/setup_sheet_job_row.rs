@@ -101,7 +101,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
     mm_row(ui, "    Sheet width (Y)", &mut d.width, limit);
     mm_row(ui, "    Sheet thickness", &mut d.thickness, limit);
     ui.horizontal(|ui| {
-        ui.label("    Z zero");
+        ui.label(camcraft_i18n::tr("    Z zero"));
         ComboBox::from_id_salt(("sheet_z_zero", name)).selected_text(zero_words(d.z_zero)).show_ui(ui, |ui| {
             for z in [SheetZero::Top, SheetZero::Spoilboard] {
                 ui.selectable_value(&mut d.z_zero, z, zero_words(z));
@@ -110,7 +110,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
     });
     mm_row(ui, ALLOWANCE_LABEL, &mut d.allowance, MAX_ALLOWANCE);
     ui.horizontal(|ui| {
-        ui.label("    XY zero");
+        ui.label(camcraft_i18n::tr("    XY zero"));
         ComboBox::from_id_salt(("sheet_xy_zero", name)).selected_text(corner_words(d.xy_zero)).show_ui(ui, |ui| {
             for c in [SheetCorner::FrontLeft, SheetCorner::FrontRight, SheetCorner::BackLeft, SheetCorner::BackRight, SheetCorner::Centre] {
                 ui.selectable_value(&mut d.xy_zero, c, corner_words(c));
@@ -124,10 +124,10 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
         let hover = "Sets this setup's stock to the sheet and moves its WCS to the stated zero, as one undo step. \
                      The post refuses a cut deeper than the allowance into the spoilboard, or a rapid across \
                      below the clamp clearance.";
-        if ui.button(APPLY).on_hover_text(hover).clicked() {
+        if ui.button(camcraft_i18n::tr(APPLY)).on_hover_text(hover).clicked() {
             queued = Some(Some(d));
         }
-        if held.is_some() && ui.button(CLEAR).clicked() {
+        if held.is_some() && ui.button(camcraft_i18n::tr(CLEAR)).clicked() {
             queued = Some(None);
         }
     });

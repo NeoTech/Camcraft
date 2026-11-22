@@ -62,7 +62,7 @@ pub(crate) fn fit_label(label: &str) -> String {
 pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory, fitted: Option<&str>) {
     egui::Grid::new(id).num_columns(2).show(ui, |ui| {
         if let Some(grip) = a.grip_mut() {
-            ui.label("Grip");
+            ui.label(camcraft_i18n::tr("Grip"));
             ui.horizontal(|ui| {
                 for key in accessory::chuck::Grip::KEYS {
                     let Some(g) = accessory::chuck::Grip::of(key) else { continue };
@@ -74,7 +74,7 @@ pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory, fitte
             ui.end_row();
         }
         if let Some(steps) = a.steps_mut() {
-            let l = ui.label("Steps");
+            let l = ui.label(camcraft_i18n::tr("Steps"));
             ui.add(egui::DragValue::new(steps).range(1..=accessory::MAX_STEPS)).labelled_by(l.id);
             ui.end_row();
         }
@@ -93,8 +93,8 @@ pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory, fitte
 
 pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<AccessoryAct> {
     let mut act = None;
-    ui.heading("Add accessory");
-    ui.label(RichText::new("Generic workholding built from these figures; edit them to match yours.").small());
+    ui.heading(camcraft_i18n::tr("Add accessory"));
+    ui.label(RichText::new(camcraft_i18n::tr("Generic workholding built from these figures; edit them to match yours.")).small());
     ui.add_space(4.0);
     let mut picked = None;
     ui.horizontal_wrapped(|ui| {
@@ -111,7 +111,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
     let fitting = parallels && d.in_vise.is_some();
     if parallels && !d.vises.is_empty() {
         let mut on = d.in_vise.is_some();
-        if ui.checkbox(&mut on, "Under the stock in a vise (height set to fit)").changed() {
+        if ui.checkbox(&mut on,camcraft_i18n::tr( "Under the stock in a vise (height set to fit)")).changed() {
             d.in_vise = if on { d.vises.first().cloned() } else { None };
         }
         if let Some(cur) = d.in_vise.clone() {
@@ -123,7 +123,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
                 }
             });
             egui::Grid::new("accessory-fit").num_columns(2).show(ui, |ui| {
-                let l = ui.label("Stock top over the jaws");
+                let l = ui.label(camcraft_i18n::tr("Stock top over the jaws"));
                 num_by(ui, u, &mut d.above, l.id);
                 ui.end_row();
             });
@@ -137,7 +137,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
         }
         ui.add_enabled(!inside, egui::Checkbox::new(&mut d.on_stock, FIT_STOCK_LABEL));
         if inside {
-            ui.label(RichText::new(FIT_STOCK_INSIDE_HINT).small());
+            ui.label(RichText::new(camcraft_i18n::tr(FIT_STOCK_INSIDE_HINT)).small());
         }
     }
     let on_stock = d.fits_stock();
@@ -154,7 +154,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
                 num_by(ui, u, &mut d.pos[k], l.id);
                 ui.end_row();
             }
-            let l = ui.label("Turn about Z (yaw)");
+            let l = ui.label(camcraft_i18n::tr("Turn about Z (yaw)"));
             num_plain_by(ui, &mut d.yaw_deg, l.id);
             ui.end_row();
         });
@@ -164,10 +164,10 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Place").clicked() {
+        if ui.button(camcraft_i18n::tr("Place")).clicked() {
             act = Some(AccessoryAct::Place(Box::new(place_command(d))));
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(camcraft_i18n::tr("Cancel")).clicked() {
             act = Some(AccessoryAct::Close);
         }
     });

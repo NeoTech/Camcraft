@@ -314,12 +314,12 @@ pub(super) fn sketch_chain_overrides_ui(
                         _ => None,
                     };
                 } else {
-                    ui.label("Centerline");
+                    ui.label(camcraft_i18n::tr("Centerline"));
                     if side.is_some() && small_button(ui, "Clear side").clicked() {
                         side = None;
                     }
                 }
-                ui.checkbox(&mut reverse, "Reverse");
+                ui.checkbox(&mut reverse,camcraft_i18n::tr( "Reverse"));
             });
             match (existing, side, reverse) {
                 (Some(k), None, false) => {

@@ -20,7 +20,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
     let (Some(prev), Some(now)) = (setup_stock::previous(&state.world, name), setup_stock::effective(&state.world, name))
     else {
         let _ = ui.radio(true, "Its own stock (the Stock node)");
-        ui.label(RichText::new("The first setup has no setup before it to take stock from.").weak());
+        ui.label(RichText::new(camcraft_i18n::tr("The first setup has no setup before it to take stock from.")).weak());
         return;
     };
     let refusal = setup_stock::carry_refusal(&state.world, name);

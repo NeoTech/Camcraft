@@ -335,7 +335,7 @@ fn viewport_panel(
             let label = if sim.playing { "Pause" } else { "Play" };
             if ui
                 .button(label)
-                .on_hover_text("Start or stop the tool at the playhead")
+                .on_hover_text(camcraft_i18n::tr("Start or stop the tool at the playhead"))
                 .clicked()
             {
                 if at_end {
@@ -347,7 +347,7 @@ fn viewport_panel(
                     sim.playing = !sim.playing;
                 }
             }
-            if ui.button("Stop").on_hover_text("Leave simulation").clicked() {
+            if ui.button(camcraft_i18n::tr("Stop")).on_hover_text(camcraft_i18n::tr("Leave simulation")).clicked() {
                 stop = true;
             }
             if total > 0.0 {
@@ -397,13 +397,13 @@ fn viewport_panel(
             ui.label(crate::actions::deviate_readout(&ps.dev, state.units()));
             if ps.dev.rest_cells > 0
                 && let Some(q) = ps.dev.max_rest_at
-                && ui.button("Frame rest").on_hover_text("Look at the worst uncut cell").clicked()
+                && ui.button(camcraft_i18n::tr("Frame rest")).on_hover_text(camcraft_i18n::tr("Look at the worst uncut cell")).clicked()
             {
                 fly = Some([q.x, q.y, q.z]);
             }
             if ps.dev.gouge_cells > 0
                 && let Some(q) = ps.dev.max_gouge_at
-                && ui.button("Frame gouge").on_hover_text("Look at the deepest overcut cell").clicked()
+                && ui.button(camcraft_i18n::tr("Frame gouge")).on_hover_text(camcraft_i18n::tr("Look at the deepest overcut cell")).clicked()
             {
                 fly = Some([q.x, q.y, q.z]);
             }
