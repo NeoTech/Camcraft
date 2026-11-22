@@ -180,7 +180,7 @@ fn four_axis_fields(ui: &mut Ui, u: Unit, f: &mut WireFourAxis, cx: &mut Cx<'_>)
         }
     });
     if cx.sync_armed {
-        ui.label(format!("Next: {}", crate::wire_sync_pick::next_click(&f.sync)));
+        ui.label(camcraft_i18n::tf("Next: {}", &[format!("{}", crate::wire_sync_pick::next_click(&f.sync))]));
     }
     hint(ui, "the first click of a pair is a vertex of the upper profile (the higher one), the second a vertex of the lower profile; Apply stores the pairs");
     hint(ui, "each sync pair is one point of the upper profile and the point of the lower profile the wire passes through with it; between pairs the profiles are walked at the same share of their length");

@@ -154,7 +154,7 @@ fn draw_confirm_banner(
                     .color(inks.warn)
                     .strong(),
             );
-            ui.label(format!("Tool: {}", req.tool_name));
+            ui.label(camcraft_i18n::tf("Tool: {}", &[format!("{}", req.tool_name)]));
             if let Ok(args) = serde_json::to_string_pretty(&req.arguments) {
                 ui.label(RichText::new(args).monospace().small().color(pal.text_dim));
             }

@@ -120,7 +120,7 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
             // A turning tool that already states this Vc and f/rev.
             let data_same = s.turning.is_none()
                 || tool_now.and_then(|t| t.turning).is_some_and(|d| d.vc == s.vc && d.feed_per_rev == s.fz);
-            prop_row(ui, "Spindle", |ui| ui.label(format!("{rpm_now:.0} -> {:.0} rpm", s.rpm)));
+            prop_row(ui, "Spindle", |ui| ui.label(camcraft_i18n::tf("{rpm_now:.0} -> {:.0} rpm", &[format!("{:.0}", rpm_now), format!("{:.0}", s.rpm)])));
             prop_row(ui, "Feed", |ui| ui.label(format!("{} -> {}", units::feed(feed_now, u), units::feed(s.feed, u))));
             for n in &s.notes {
                 hint(ui, n);

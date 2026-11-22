@@ -83,7 +83,9 @@ fn the_language_pick_survives_and_follow_system_clears_it() {
 
     state.select_language(Some(camcraft_i18n::Lang::ZhCn));
     assert_eq!(camcraft_i18n::lang(), camcraft_i18n::Lang::ZhCn);
-    assert_eq!(state.status, "language: 简体中文", "the native name, never translated");
+    // The prefix follows the chosen language; the name itself stays native
+    // so the line still names a language the reader may not speak.
+    assert_eq!(state.status, "语言：简体中文", "the native name, never translated");
     let text = std::fs::read_to_string(&store).expect("written at once");
     assert!(text.contains("\"language\": \"zh-CN\""), "{text}");
 

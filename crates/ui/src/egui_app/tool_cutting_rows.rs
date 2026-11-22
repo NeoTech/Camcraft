@@ -114,7 +114,7 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) -> Option<usize
     egui::Grid::new("tool_cutting_table").num_columns(6).striped(true).show(ui, |ui| {
         ui.label(camcraft_i18n::tr("Material"));
         ui.label(if torch { "" } else { "Spindle rpm" });
-        ui.label(format!("Feed ({})", u.feed_suffix()));
+        ui.label(camcraft_i18n::tf("Feed ({})", &[format!("{}", u.feed_suffix())]));
         ui.label(camcraft_i18n::tr("Stepdown"));
         ui.label(camcraft_i18n::tr("Stepover"));
         ui.label("");

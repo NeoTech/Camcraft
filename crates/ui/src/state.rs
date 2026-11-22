@@ -3470,7 +3470,7 @@ impl State {
                 }
                 if done > 0 {
                     self.doc_version += 1;
-                    self.status = format!("deleted {done} model(s)");
+                    self.status = camcraft_i18n::tf("deleted {done} model(s)", &[format!("{}", done)]);
                 }
             }
             CommandKind::Select(name) => {
@@ -3487,7 +3487,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("deleted {name}");
+                    self.status = camcraft_i18n::tf("deleted {name}", &[format!("{}", name)]);
                 }
                 Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("delete failed: {err}", &[format!("{}", err)])),
             },
@@ -3530,7 +3530,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("units: {}", next.label());
+                    self.status = camcraft_i18n::tf("units: {}", &[format!("{}", next.label())]);
                 }
                 Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("units not set: {err}", &[format!("{}", err)])),
             },
@@ -3652,7 +3652,7 @@ impl State {
                         let n = command.number();
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("tool {name} is now T{n}");
+                        self.status = camcraft_i18n::tf("tool {name} is now T{n}", &[format!("{}", name), format!("{}", n)]);
                     }
                     Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool number not set: {err}", &[format!("{}", err)])),
                 }
@@ -3676,7 +3676,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("tool {name} updated");
+                        self.status = camcraft_i18n::tf("tool {name} updated", &[format!("{}", name)]);
                     }
                     Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool not updated: {err}", &[format!("{}", err)])),
                 }
@@ -3722,7 +3722,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("operation {name} created");
+                    self.status = camcraft_i18n::tf("operation {name} created", &[format!("{}", name)]);
                 }
                 Err(err) => {
                     self.refuse(
@@ -3802,7 +3802,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("after {name}: {}", after.label());
+                        self.status = camcraft_i18n::tf("after {name}: {}", &[format!("{}", name), format!("{}", after.label())]);
                     }
                     Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("after-action not changed: {err}", &[format!("{}", err)])),
                 }
@@ -3835,7 +3835,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("operation {name} retyped");
+                        self.status = camcraft_i18n::tf("operation {name} retyped", &[format!("{}", name)]);
                     }
                     Err(err) => {
                         self.refuse(
@@ -3898,7 +3898,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("operation {name} moved");
+                    self.status = camcraft_i18n::tf("operation {name} moved", &[format!("{}", name)]);
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("reorder failed: {err}", &[format!("{}", err)])),
             },
@@ -3906,7 +3906,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("marked {name} reviewed");
+                    self.status = camcraft_i18n::tf("marked {name} reviewed", &[format!("{}", name)]);
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("mark reviewed failed: {err}", &[format!("{}", err)])),
             },
@@ -4042,7 +4042,7 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         let words = camcraft_app::setup_stock::describe(&self.world, &setup).unwrap_or_default();
-                        self.status = format!("{setup} stock: {words}");
+                        self.status = camcraft_i18n::tf("{setup} stock: {words}", &[format!("{}", setup), format!("{}", words)]);
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, camcraft_i18n::tf("stock source not changed: {err}", &[format!("{}", err)]));
@@ -4072,13 +4072,10 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!(
-                            "moved {name} to {}",
-                            setup.as_deref().map_or_else(
+                        self.status = camcraft_i18n::tf("moved {name} to {}", &[format!("{}", name), format!("{}", setup.as_deref().map_or_else(
                                 || "the first setup".to_owned(),
                                 |s| format!("'{s}'"),
-                            )
-                        );
+                            ))]);
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Operation, camcraft_i18n::tf("setup not moved: {err}", &[format!("{}", err)]));
@@ -4202,7 +4199,7 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.repair_ui.last = Some((name.clone(), summary.clone()));
-                        self.status = format!("repaired {name}: {summary}");
+                        self.status = camcraft_i18n::tf("repaired {name}: {summary}", &[format!("{}", name), format!("{}", summary)]);
                     }
                     Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{name} not repaired: {err}", &[format!("{}", name), format!("{}", err)])),
                 }
@@ -4367,7 +4364,7 @@ impl State {
     }
 
     fn begin_import(&mut self, path: PathBuf) {
-        self.status = format!("importing {}…", file_label(&path));
+        self.status = camcraft_i18n::tf("importing {}…", &[format!("{}", file_label(&path))]);
         self.import_file = Some(path.clone());
         self.import_started = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
@@ -4420,10 +4417,11 @@ impl State {
                 // flipped to agree with its neighbours) is said by name.
                 let changed = if command.notes.is_empty() { String::new() } else { format!(" - {}", command.notes.join("; ")) };
                 let timed = |verb: &str, note: &str| {
+                    let verb = camcraft_i18n::tr(verb);
                     if secs >= 2.0 {
-                        format!("{verb} {name}{note} in {secs:.1}s")
+                        camcraft_i18n::tf("{verb} {name}{note} in {secs:.1}s", &[format!("{verb}"), format!("{name}"), format!("{note}"), format!("{secs:.1}")])
                     } else {
-                        format!("{verb} {name}{note}")
+                        camcraft_i18n::tf("{verb} {name}{note}", &[format!("{verb}"), format!("{name}"), format!("{note}")])
                     }
                 };
                 // M3.1: a name that already carries a model is an UPDATE,
@@ -4479,7 +4477,7 @@ impl State {
                     .and_then(|e| camcraft_app::model_fidelity::chord_of(&self.world, &e).map(|c| (e, c)))
                 {
                     let said = camcraft_app::mesh_open::summary(&self.world, &e, chord);
-                    self.status = format!("{} - {said}", self.status);
+                    self.status = camcraft_i18n::tf("{} - {said}", &[format!("{}", self.status), format!("{}", said)]);
                 }
             }
             Err(err) => {
@@ -4528,7 +4526,7 @@ impl State {
                     .import_file
                     .as_deref()
                     .map_or_else(|| "model".to_string(), file_label);
-                self.status = format!("importing {label}… {secs:.0}s");
+                self.status = camcraft_i18n::tf("importing {label}… {secs:.0}s", &[format!("{}", label), format!("{:.0}", secs)]);
             }
         }
         if self.import_rx.is_none()
@@ -4595,7 +4593,7 @@ impl State {
                     // Reported, never silently dropped (B's law, kept
                     // through C's swap path): the first note rides the
                     // status line beside the theme's name.
-                    self.status = format!("theme: {} - {}", theme_label(&self.world), notes[0]);
+                    self.status = camcraft_i18n::tf("theme: {} - {}", &[format!("{}", theme_label(&self.world)), format!("{}", notes[0])]);
                 }
             }
             Err(why) => {
@@ -4713,7 +4711,7 @@ impl State {
             Ok(()) => {
                 // What is on disk now matches the history position (#107).
                 self.history.mark_clean();
-                self.status = format!("saved {}", path.display());
+                self.status = camcraft_i18n::tf("saved {}", &[format!("{}", path.display())]);
                 self.note_recent(camcraft_app::recent::RecentKind::Project, &path);
                 self.project_path = Some(path);
             }
@@ -4773,7 +4771,7 @@ impl State {
                 // only on its generator-time verdicts - and says so on
                 // the status line, never silently.
                 if let Some(line) = &posted.not_judged {
-                    self.status = format!("{} - WARNING: {line}", self.status);
+                    self.status = camcraft_i18n::tf("{} - WARNING: {line}", &[format!("{}", self.status), format!("{}", line)]);
                 }
                 // The viewer shows what the gate just wrote - text and
                 // positions from the same engine run, so highlighting a

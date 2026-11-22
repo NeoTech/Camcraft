@@ -58,7 +58,7 @@ impl State {
             }
             Err(err) => {
                 self.step_budget.error = Some(err.clone());
-                self.status = format!("refused: {err}");
+                self.status = camcraft_i18n::tf("refused: {err}", &[format!("{}", err)]);
                 Err(err)
             }
         }

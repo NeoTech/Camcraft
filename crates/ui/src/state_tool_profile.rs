@@ -254,7 +254,7 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("tool {name}: holder {entry} set");
+                self.status = camcraft_i18n::tf("tool {name}: holder {entry} set", &[format!("{}", name), format!("{}", entry)]);
             }
             Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("holder not set: {err}", &[format!("{}", err)])),
         }

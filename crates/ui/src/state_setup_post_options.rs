@@ -64,7 +64,7 @@ impl State {
                     None => done.to_owned(),
                 };
             }
-            Err(err) => self.refuse(scope, format!("{refused}: {err}")),
+            Err(err) => self.refuse(scope, camcraft_i18n::tf("{refused}: {err}", &[format!("{}", refused), format!("{}", err)])),
         }
     }
 

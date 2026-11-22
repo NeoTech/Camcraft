@@ -78,7 +78,7 @@ impl State {
         if self.recent.clear(kind) {
             self.persist_recent();
         }
-        self.status = format!("recent {}s cleared", kind.noun());
+        self.status = camcraft_i18n::tf("recent {}s cleared", &[format!("{}", kind.noun())]);
     }
 
     fn persist_recent(&self) {

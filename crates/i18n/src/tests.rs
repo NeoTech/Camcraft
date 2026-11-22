@@ -19,6 +19,31 @@ fn the_source_language_has_nothing_to_report() {
     assert!(report(Lang::ZhCn).expect("the shipped catalogue loads") > 300);
 }
 
+/// The multilingual seam: every registered language must be consistent and
+/// loadable. A new row in `REGISTRY` is picked up by `ALL`, the picker, the
+/// cache and locale parsing without any other code change - this test is what
+/// keeps that law true.
+#[test]
+fn every_registered_language_is_consistent_and_loads() {
+    assert_eq!(Lang::ALL.len(), REGISTRY.len());
+    let mut tags = std::collections::BTreeSet::new();
+    for l in Lang::ALL {
+        assert!(tags.insert(l.tag()), "two rows share the tag {:?}", l.tag());
+        assert!(!l.native_name().is_empty(), "a language has no native name");
+        assert_eq!(l.catalog_name(), l.tag());
+        assert_eq!(Lang::from_tag(l.tag()), Some(l), "{}", l.tag());
+        if l.is_source() {
+            assert!(l.catalog_text().is_none(), "the source ships a catalogue");
+            assert_eq!(report(l), Ok(0));
+        } else {
+            let n = report(l).unwrap_or_else(|why| panic!("{} refused: {why:?}", l.tag()));
+            assert!(n > 0, "{} ships an empty catalogue", l.tag());
+        }
+    }
+    assert_eq!(Lang::En.tag(), "en");
+    assert_eq!(Lang::ZhCn.tag(), "zh-CN");
+}
+
 #[test]
 fn english_is_the_source_and_a_miss_is_the_english_string() {
     assert_eq!(tr_in(Lang::En, "Save"), "Save");

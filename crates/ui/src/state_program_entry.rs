@@ -30,7 +30,7 @@ impl State {
                     let name = command.name().to_owned();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("{name} added: {}", program_entry::action_label(action));
+                    self.status = camcraft_i18n::tf("{name} added: {}", &[format!("{}", name), format!("{}", program_entry::action_label(action))]);
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("entry not added: {err}", &[format!("{}", err)])),
             },
@@ -38,7 +38,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("{name}: {}", program_entry::action_label(action));
+                    self.status = camcraft_i18n::tf("{name}: {}", &[format!("{}", name), format!("{}", program_entry::action_label(action))]);
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("entry not changed: {err}", &[format!("{}", err)])),
             },

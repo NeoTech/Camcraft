@@ -95,15 +95,7 @@ fn cutter_view(ui: &mut Ui, state: &mut State, u: Unit) {
     // (`tool_profile_page::preview_inputs`); no second view here.
     match &check {
         Ok(s) => {
-            ui.label(format!(
-                "cutter Ø {} {}, flutes {} {}, overall {} {}",
-                units::len(tool.diameter, u, 2),
-                u.suffix(),
-                units::len(tool.flute_len, u, 1),
-                u.suffix(),
-                units::len(s.points().last().map_or(0.0, |p| p.z), u, 1),
-                u.suffix()
-            ));
+            ui.label(camcraft_i18n::tf("cutter Ø {} {}, flutes {} {}, overall {} {}", &[format!("{}", units::len(tool.diameter, u, 2)), format!("{}", u.suffix()), format!("{}", units::len(tool.flute_len, u, 1)), format!("{}", u.suffix()), format!("{}", units::len(s.points().last().map_or(0.0, |p| p.z), u, 1)), format!("{}", u.suffix())]));
         }
         Err(e) => {
             ui.colored_label(BAD, e.to_string());

@@ -238,7 +238,7 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
 /// A draft edit like every field - Apply's command is the undo step.
 fn draw_direction(ui: &mut Ui, i: usize, a: &mut machine::AxisLimits) {
     let (std_word, inv_word) = direction_words(&a.name);
-    ui.label(format!("{}+ moves", a.name.trim()));
+    ui.label(camcraft_i18n::tf("{}+ moves", &[format!("{}", a.name.trim())]));
     let shown = if a.direction.is_standard() { std_word } else { inv_word };
     let cb = ComboBox::from_id_salt(("axis-direction", i))
         .selected_text(shown)

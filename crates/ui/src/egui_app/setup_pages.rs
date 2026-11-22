@@ -35,7 +35,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             super::setup_settings_page::settings_page(ui, state, ctx);
         }
         SetupPage::Machine => {
-            ui.heading(format!("Machine - {title}"));
+            ui.heading(camcraft_i18n::tf("Machine - {title}", &[format!("{}", title)]));
             ui.separator();
             if editable(ui, state, ctx) {
                 super::machine_page::machine_page(ui, state, ctx);
@@ -43,7 +43,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             }
         }
         SetupPage::Post => {
-            ui.heading(format!("Post - {title}"));
+            ui.heading(camcraft_i18n::tf("Post - {title}", &[format!("{}", title)]));
             ui.separator();
             if editable(ui, state, ctx) {
                 ownership(ui, state, ctx, Mount::Post);
@@ -58,7 +58,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             }
         }
         SetupPage::Fixtures => {
-            ui.heading(format!("Fixtures - {title}"));
+            ui.heading(camcraft_i18n::tf("Fixtures - {title}", &[format!("{}", title)]));
             ui.separator();
             if editable(ui, state, ctx) {
                 pages::fixtures_section(ui, state, ctx);
@@ -92,7 +92,7 @@ fn editable(ui: &mut Ui, state: &mut State, ctx: Option<&str>) -> bool {
         return true;
     }
     ui.label(camcraft_i18n::tf("{name} is not the active setup - activate it to edit its machine, post and fixtures.", &[format!("{}", name)]));
-    if ui.button(format!("Activate {name}")).clicked() {
+    if ui.button(camcraft_i18n::tf("Activate {name}", &[format!("{}", name)])).clicked() {
         state.pending.push_back(CommandKind::ActivateSetup(Some(name.to_owned())));
     }
     false

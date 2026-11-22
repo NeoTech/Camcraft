@@ -530,13 +530,13 @@ pub(crate) fn tool_shape_editor_window(ctx: &egui::Context, state: &mut State) {
 
 fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     let u = state.units();
-    ui.heading(format!("Model: {name}"));
+    ui.heading(camcraft_i18n::tf("Model: {name}", &[format!("{}", name)]));
     let Some(entity) = model::find_by_name(&state.world, &name) else {
         ui.label(camcraft_i18n::tr("It is gone from the document."));
         return;
     };
     let tris = model::facets_of(&state.world, &entity).map_or(0, |f| f.len());
-    ui.label(format!("{tris} triangle(s)"));
+    ui.label(camcraft_i18n::tf("{tris} triangle(s)", &[format!("{}", tris)]));
     // #864: a model imported coarser than the importer promises says so,
     // with the error it carries and what that does to the checks.
     if let Some(chord) = camcraft_app::model_fidelity::chord_of(&state.world, &entity) {
@@ -608,7 +608,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     for row in [0usize, 3] {
         ui.horizontal(|ui| {
             for (label, axis, sign) in TURNS[row..row + 3].iter() {
-                if ui.button(format!("Turn {label}")).clicked() {
+                if ui.button(camcraft_i18n::tf("Turn {label}", &[format!("{}", label)])).clicked() {
                     turn_model(state, *axis, *sign);
                 }
             }

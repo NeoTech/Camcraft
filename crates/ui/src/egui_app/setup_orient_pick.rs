@@ -187,7 +187,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
     if let Some(p) = state.cylinder_pick.as_ref().filter(|p| p.setup == setup)
         && let Some(g) = &p.pick
     {
-        ui.label(format!("      wall: {}", camcraft_app::pick::geo_label(&state.world, g)));
+        ui.label(camcraft_i18n::tf("      wall: {}", &[format!("{}", camcraft_app::pick::geo_label(&state.world, g))]));
     }
     ui.horizontal(|ui| {
         ui.label(camcraft_i18n::tr("      Lands on"));
@@ -306,7 +306,7 @@ fn vertex_panel(ui: &mut Ui, state: &mut State, setup: &str) {
     if let Some(p) = state.origin_pick.as_ref().filter(|p| p.setup == setup)
         && let Some(g) = &p.pick
     {
-        ui.label(format!("      point: {}", camcraft_app::pick::geo_label(&state.world, g)));
+        ui.label(camcraft_i18n::tf("      point: {}", &[format!("{}", camcraft_app::pick::geo_label(&state.world, g))]));
         if ui.button(camcraft_i18n::tr("Place origin")).clicked() {
             state.pending.push_back(CommandKind::PlaceSetupOrigin {
                 setup: setup.to_owned(),

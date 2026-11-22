@@ -57,7 +57,7 @@ impl State {
         let command = match built {
             Ok(command) => command,
             Err(err) => {
-                self.refuse(ErrorScope::Setup, format!("{refused}: {err}"));
+                self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{refused}: {err}", &[format!("{}", refused), format!("{}", err)]));
                 return;
             }
         };
@@ -84,6 +84,6 @@ impl State {
             Draft::None => {}
         }
         let words = crate::egui_app::align_text(setup_align::stored(&self.world, &setup));
-        self.status = format!("{setup} {done}: {words}");
+        self.status = camcraft_i18n::tf("{setup} {done}: {words}", &[format!("{}", setup), format!("{}", done), format!("{}", words)]);
     }
 }

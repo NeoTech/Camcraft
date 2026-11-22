@@ -30,7 +30,7 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("{what} set");
+                self.status = camcraft_i18n::tf("{what} set", &[format!("{}", what)]);
             }
             Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{what} not set: {err}", &[format!("{}", what), format!("{}", err)])),
         }

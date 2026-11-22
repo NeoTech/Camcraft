@@ -85,7 +85,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, loc: &Location, fi
     }
     // #339 slice 4: how the gate judges this steel, and why a box.
     if let Some(m) = state.fixture_mesh_state(name) {
-        ui.label(format!("Collision: {}", m.detail()));
+        ui.label(camcraft_i18n::tf("Collision: {}", &[format!("{}", m.detail())]));
     }
     // Whether the steel turns with the part (M13.8 (2)): a chuck rides
     // the rotary, a tailstock or a table stands still and is judged in
@@ -112,11 +112,7 @@ fn vise_opening(ui: &mut Ui, state: &mut State, name: &str) {
         return;
     };
     let u = state.units();
-    ui.label(format!(
-        "Built-in vise {} - opens {} at most",
-        params.size,
-        units::len(params.max_opening, u, 3)
-    ));
+    ui.label(camcraft_i18n::tf("Built-in vise {} - opens {} at most", &[format!("{}", params.size), format!("{}", units::len(params.max_opening, u, 3))]));
     let mut set = None;
     prop_row(ui, "Jaw opening", |ui| {
         num_row(ui, u, state.vise_opening_draft(name, params.opening));
@@ -187,7 +183,7 @@ fn place_form(ui: &mut Ui, state: &mut State, name: &str) {
         ui.horizontal(|ui| {
             ui.add_space(12.0);
             for (label, axis, degrees) in &TURNS[row..row + 3] {
-                if ui.small_button(format!("Turn {label}")).clicked() {
+                if ui.small_button(camcraft_i18n::tf("Turn {label}", &[format!("{}", label)])).clicked() {
                     state.pending.push_back(CommandKind::TurnFixture { name: name.to_owned(), axis: *axis, degrees: *degrees });
                 }
             }

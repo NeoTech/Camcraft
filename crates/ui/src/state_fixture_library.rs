@@ -146,7 +146,7 @@ impl State {
         };
         match outcome {
             Ok(Ok(path)) => {
-                self.status = format!("saved {} fixture(s) to {}", names.len(), path.display());
+                self.status = camcraft_i18n::tf("saved {} fixture(s) to {}", &[format!("{}", names.len()), format!("{}", path.display())]);
                 self.fixture_lib = None;
             }
             Ok(Err(LibraryError::Exists(taken))) => {

@@ -85,7 +85,7 @@ impl State {
         }
         // What the download holds matches the history position (#107).
         self.history.mark_clean();
-        self.status = format!("saved {name} (downloaded)");
+        self.status = camcraft_i18n::tf("saved {name} (downloaded)", &[format!("{}", name)]);
         self.project_path = Some(PathBuf::from(name));
         true
     }
@@ -101,7 +101,7 @@ impl State {
                 self.post_refusal = None;
                 self.status = camcraft_i18n::tf("posted {} op(s), {} lines in {} as {name} (downloaded)", &[format!("{}", posted.ops), format!("{}", posted.lines), format!("{}", posting::unit_word(self.units())), format!("{}", name)]);
                 if let Some(line) = &posted.not_judged {
-                    self.status = format!("{} - WARNING: {line}", self.status);
+                    self.status = camcraft_i18n::tf("{} - WARNING: {line}", &[format!("{}", self.status), format!("{}", line)]);
                 }
                 self.post_view = Some(PostView {
                     path: PathBuf::from(name),

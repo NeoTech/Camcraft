@@ -47,7 +47,7 @@ impl State {
                 let lines: usize = files.iter().map(|f| f.posted.lines).sum();
                 self.status = camcraft_i18n::tf("posted {} file(s), one per operation, {lines} lines in {} to {}", &[format!("{}", files.len()), format!("{}", lines), format!("{}", posting::unit_word(self.units())), format!("{}", dir.display())]);
                 if let Some(line) = files.first().and_then(|f| f.posted.not_judged.clone()) {
-                    self.status = format!("{} - WARNING: {line}", self.status);
+                    self.status = camcraft_i18n::tf("{} - WARNING: {line}", &[format!("{}", self.status), format!("{}", line)]);
                 }
                 if let Some(first) = files.into_iter().next() {
                     let p = first.posted;
@@ -79,7 +79,7 @@ impl State {
             .collect();
         self.status = camcraft_i18n::tf("posted {} file(s) in {}, one per machine and post: {}", &[format!("{}", files.len()), format!("{}", posting::unit_word(self.units())), format!("{}", names.join("; "))]);
         if let Some(line) = files.first().and_then(|f| f.posted.not_judged.clone()) {
-            self.status = format!("{} - WARNING: {line}", self.status);
+            self.status = camcraft_i18n::tf("{} - WARNING: {line}", &[format!("{}", self.status), format!("{}", line)]);
         }
         if let Some(first) = files.into_iter().next() {
             let p = first.posted;

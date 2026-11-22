@@ -55,7 +55,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, u: Unit) {
         direction_combo(ui, "tool_body_along", &mut l.place.along);
     });
     ui.horizontal(|ui| {
-        ui.label(format!("Tip ({})", u.suffix())).on_hover_text(camcraft_i18n::tr("the model point the moves carry: the insert's nose centre (model X, Y, Z)"));
+        ui.label(camcraft_i18n::tf("Tip ({})", &[format!("{}", u.suffix())])).on_hover_text(camcraft_i18n::tr("the model point the moves carry: the insert's nose centre (model X, Y, Z)"));
         for v in &mut l.place.tip {
             num_narrow(ui, u, v);
         }

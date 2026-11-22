@@ -93,7 +93,7 @@ impl State {
             }
             // Refused edits keep the editor open: the draft is someone's work.
             Err(err) => {
-                self.refuse(ErrorScope::Setup, format!("{refused}: {err}"));
+                self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{refused}: {err}", &[format!("{}", refused), format!("{}", err)]));
                 false
             }
         }
@@ -108,7 +108,7 @@ impl State {
     pub(super) fn mount_file(&mut self, path: &Path) {
         if self.route_machine(MachineVerb::File(path), "machine loaded", "machine not loaded") {
             let summary = machine::of(&self.world).1.map(|m| m.summary()).unwrap_or_default();
-            self.status = format!("machine: {summary}");
+            self.status = camcraft_i18n::tf("machine: {summary}", &[format!("{}", summary)]);
         }
     }
 
@@ -147,7 +147,7 @@ impl State {
         match executed {
             Ok(()) => {
                 self.doc_version += 1;
-                self.status = format!("post: {}", posting::post_label(&self.world));
+                self.status = camcraft_i18n::tf("post: {}", &[format!("{}", posting::post_label(&self.world))]);
             }
             Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("post not selected: {err}", &[format!("{}", err)])),
         }

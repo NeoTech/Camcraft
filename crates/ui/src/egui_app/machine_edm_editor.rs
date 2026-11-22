@@ -117,7 +117,7 @@ fn orbits(ui: &mut Ui, e: &mut Edm) {
             });
             fields::named(cb.response, &format!("Orbit {} kind", i + 1));
             o.kind = ORBIT_KINDS.get(k).copied().unwrap_or("circular").to_owned();
-            let l = ui.label(format!("Orbit {} word", i + 1));
+            let l = ui.label(camcraft_i18n::tf("Orbit {} word", &[format!("{}", i + 1)]));
             ui.add(TextEdit::singleline(&mut o.word).desired_width(80.0).hint_text("control word")).labelled_by(l.id);
             if ui.button(camcraft_i18n::tf("Remove orbit {}", &[format!("{}", i + 1)])).clicked() {
                 remove = Some(i);
@@ -141,9 +141,9 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
     for (i, c) in e.conditions.iter_mut().enumerate() {
         let n = i + 1;
         ui.horizontal_wrapped(|ui| {
-            let l = ui.label(format!("Condition {n} id"));
+            let l = ui.label(camcraft_i18n::tf("Condition {n} id", &[format!("{}", n)]));
             ui.add(TextEdit::singleline(&mut c.id).desired_width(50.0)).labelled_by(l.id);
-            let l = ui.label(format!("Condition {n} name"));
+            let l = ui.label(camcraft_i18n::tf("Condition {n} name", &[format!("{}", n)]));
             ui.add(TextEdit::singleline(&mut c.name).desired_width(90.0)).labelled_by(l.id);
             // Seeds the condition law accepts (#560: a gap > 0, an
             // undersize in (0, 1] mm); the user types the manual's.
@@ -171,7 +171,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
             // The axial wear rate (#1381): a ratio, so no unit lens. A value
             // outside [0, 1) is named below and refused at Apply.
             stated_plain(ui, &camcraft_i18n::tf("Condition {n} wear rate", &[format!("{}", n)]), &mut c.wear, WEAR_SEED);
-            let l = ui.label(format!("Condition {n} notes"));
+            let l = ui.label(camcraft_i18n::tf("Condition {n} notes", &[format!("{}", n)]));
             ui.add(TextEdit::singleline(&mut c.notes).desired_width(120.0).hint_text("free text")).labelled_by(l.id);
         });
     }
@@ -204,7 +204,7 @@ fn codes(ui: &mut Ui, codes: &mut BTreeMap<String, String>) {
             }
             match codes.get_mut(role) {
                 Some(t) => {
-                    let l = ui.label(format!("{role} template"));
+                    let l = ui.label(camcraft_i18n::tf("{role} template", &[format!("{}", role)]));
                     let hint = if placeholders.is_empty() { "the control's word".to_owned() } else { format!("fills {placeholders}") };
                     ui.add(TextEdit::singleline(t).desired_width(150.0).hint_text(hint)).labelled_by(l.id);
                 }

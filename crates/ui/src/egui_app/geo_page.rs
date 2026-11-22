@@ -133,7 +133,7 @@ fn sketch_layer_picks(ui: &mut Ui, state: &mut State, target: &str, sketches: &[
     ui.add_space(4.0);
     for group in groups.iter() {
         ui.horizontal_wrapped(|ui| {
-            ui.label(format!("Sketch '{}' layers:", group.entity));
+            ui.label(camcraft_i18n::tf("Sketch '{}' layers:", &[format!("{}", group.entity)]));
             for entry in &group.layers {
                 let sel = GeoSel {
                     entity: group.entity.clone(),

@@ -10,7 +10,7 @@ language (Simplified Chinese) end to end:
   so a miss shows the English string (never a key, never a blank), and a
   rewording in the source degrades to English until a translator follows it.
   Transported CL/G-code/project text never passes through the lookup.
-- The catalogue is `assets/i18n/zh-CN.toml` (471 pairs), checked without a
+- The catalogue is `assets/i18n/zh-CN.toml` (3 636 pairs), checked without a
   build by `scripts/i18n/check.py`, with a translator's guide beside it.
 - The language follows the system locale on first start (`LC_ALL`, then
   `LC_MESSAGES`, then `LANG`). The View door carries a **Language** list -
@@ -67,6 +67,8 @@ language (Simplified Chinese) end to end:
 
 **Cost to change later.** The catalogue format and the lookup live in
 `crates/i18n`; swapping them for Fluent replaces that crate and keeps every
-`tr` call site. Adding a language is a `Lang` variant, a catalogue file and,
-if the script is not covered, one font. The seams are ordinary functions, so
-widening the translated surface is additive.
+`tr` call site. Adding a language is a row in the `crates/i18n` `REGISTRY`, a
+catalogue file and, if the script is not covered, one font; `ALL`, locale
+parsing, the cache and the picker all read that row, with no call-site change.
+The seams are ordinary functions, so widening the translated surface is
+additive.

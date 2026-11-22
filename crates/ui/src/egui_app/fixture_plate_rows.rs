@@ -32,11 +32,11 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
         }
         ui.label(line);
         if let Some(d) = &p.dowels {
-            ui.label(format!("Dowels: {}, pitch {}", d.extent(), units::len(d.pitch_x, u, 3)));
+            ui.label(camcraft_i18n::tf("Dowels: {}, pitch {}", &[format!("{}", d.extent()), format!("{}", units::len(d.pitch_x, u, 3))]));
         }
         let on = mount::riders(&state.world, name);
         if !on.is_empty() {
-            ui.label(format!("Carries: {}", on.join(", ")));
+            ui.label(camcraft_i18n::tf("Carries: {}", &[format!("{}", on.join(", "))]));
         }
         super::fixture_modvise_rows::pair_rows(ui, state, name, p);
         if p.params.is_none() && ui.small_button(camcraft_i18n::tr("Not a plate")).on_hover_text(camcraft_i18n::tr("Forget the detected grid")).clicked() {
@@ -53,7 +53,7 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
     }
     super::fixture_modvise_rows::block_line(ui, state, name);
     if let Some(m) = &def.plate.mount {
-        ui.label(format!("On plate {} at {}", m.plate, m.at.label()));
+        ui.label(camcraft_i18n::tf("On plate {} at {}", &[format!("{}", m.plate), format!("{}", m.at.label())]));
     }
     place_picker(ui, state, name);
 }

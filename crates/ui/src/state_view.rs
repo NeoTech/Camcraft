@@ -98,7 +98,7 @@ impl State {
         }
         self.antialias = next;
         self.persist_view();
-        self.status = format!("anti-aliasing: {}", next.word());
+        self.status = camcraft_i18n::tf("anti-aliasing: {}", &[format!("{}", next.word())]);
     }
 
     /// #2177: add `line` to the status line once - a refusal that every

@@ -25,78 +25,125 @@ use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-/// A language the interface can speak. The variants are the shipped
-/// catalogues; adding one is a catalogue file plus a variant.
+/// A language the interface can speak.
+///
+/// This is a descriptor, not a closed enum: every shipped language is one row
+/// of [`REGISTRY`]. Adding one is a catalogue file plus a row - lookup,
+/// caching, locale parsing and the View door's picker all read the registry,
+/// so no matching logic and no call site has to change. The `id` is kept
+/// first so `Ord` follows the registry (and therefore the picker's) order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Lang {
-    /// The source language: every string is written in it.
-    En,
-    /// Simplified Chinese.
-    ZhCn,
+pub struct Lang {
+    id: usize,
+    tag_str: &'static str,
+    native: &'static str,
+    /// `None` for the source language, which ships no catalogue.
+    catalog: Option<&'static str>,
 }
 
+// ---- The language registry ------------------------------------------------
+//
+// ONE ROW PER LANGUAGE. To ship another language: drop in
+// `assets/i18n/<tag>.toml`, add a row here, and - only if call sites name it -
+// a `pub const` alias below. Nothing else in this crate has a language-
+// specific branch; nothing outside this crate changes at all.
+
+const EN: Lang = Lang {
+    id: 0,
+    tag_str: "en",
+    native: "English",
+    catalog: None,
+};
+const ZH_CN: Lang = Lang {
+    id: 1,
+    tag_str: "zh-CN",
+    native: "简体中文",
+    catalog: Some(include_str!("../../../assets/i18n/zh-CN.toml")),
+};
+
+const REGISTRY: &[Lang] = &[EN, ZH_CN];
+
+#[allow(non_upper_case_globals)]
 impl Lang {
-    /// Every language, in the picker's order (English first: it is the source).
-    pub const ALL: [Lang; 2] = [Lang::En, Lang::ZhCn];
+    /// Every language, in the picker's order (the source language first).
+    /// Built from the registry, so a new row appears here automatically.
+    pub const ALL: [Lang; REGISTRY.len()] = {
+        let mut all = [EN; REGISTRY.len()];
+        let mut i = 0;
+        while i < REGISTRY.len() {
+            all[i] = REGISTRY[i];
+            i += 1;
+        }
+        all
+    };
+
+    /// The source language: English, whose strings need no catalogue.
+    pub const En: Lang = EN;
+    /// Simplified Chinese.
+    pub const ZhCn: Lang = ZH_CN;
 
     /// The BCP 47 tag, which is also the catalogue's file name.
     #[must_use]
     pub fn tag(self) -> &'static str {
-        match self {
-            Lang::En => "en",
-            Lang::ZhCn => "zh-CN",
-        }
+        self.tag_str
     }
 
     /// The language's own name, never translated - a picker a user cannot
     /// read is a picker they cannot use.
     #[must_use]
     pub fn native_name(self) -> &'static str {
-        match self {
-            Lang::En => "English",
-            Lang::ZhCn => "简体中文",
-        }
+        self.native
     }
 
     /// The catalogue's name (the tag), for a refusal that names the file.
     #[must_use]
     pub fn catalog_name(self) -> &'static str {
-        match self {
-            Lang::En => "en",
-            Lang::ZhCn => "zh-CN",
-        }
+        self.tag_str
     }
 
     /// Parse a tag or a system locale: `zh`, `zh-CN`, `zh_Hans_CN` and
-    /// `zh-Hans` all name [`Lang::ZhCn`]; an unknown or empty tag is `None`.
+    /// `zh-Hans` all name the registered `zh-CN`; an unknown or empty tag is
+    /// `None`. An exact tag wins over a bare primary, so a future `zh-TW`
+    /// row does not steal `zh-CN`'s locale.
     #[must_use]
     pub fn from_tag(tag: &str) -> Option<Lang> {
-        let primary = tag
-            .trim()
-            .split(['-', '_'])
-            .next()
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        match primary.as_str() {
-            "en" => Some(Lang::En),
-            "zh" => Some(Lang::ZhCn),
-            _ => None,
+        let wanted = tag.trim();
+        if wanted.is_empty() {
+            return None;
         }
+        let normalise = |s: &str| s.replace('_', "-").to_ascii_lowercase();
+        let wanted_norm = normalise(wanted);
+        if let Some(exact) = REGISTRY
+            .iter()
+            .copied()
+            .find(|l| normalise(l.tag_str) == wanted_norm)
+        {
+            return Some(exact);
+        }
+        let primary = wanted.split(['-', '_']).next().unwrap_or("");
+        REGISTRY.iter().copied().find(|l| {
+            l.tag_str
+                .split('-')
+                .next()
+                .is_some_and(|p| p.eq_ignore_ascii_case(primary))
+        })
     }
 
     /// True for the source language: the lookup is a no-op there.
     #[must_use]
     pub fn is_source(self) -> bool {
-        self == Lang::En
+        self.catalog.is_none()
     }
 
     /// The shipped catalogue's text, `None` for the source language.
     #[must_use]
     pub fn catalog_text(self) -> Option<&'static str> {
-        match self {
-            Lang::En => None,
-            Lang::ZhCn => Some(include_str!("../../../assets/i18n/zh-CN.toml")),
-        }
+        self.catalog
+    }
+
+    /// This language's slot in the parse-once cache.
+    fn slot(self) -> usize {
+        self.id
     }
 }
 
@@ -167,26 +214,32 @@ impl Catalog {
 /// The parsed catalogue of a language, built once. `Err` is the refusal
 /// report of a file that could not be read at all.
 fn catalog(lang: Lang) -> Result<&'static Catalog, &'static [String]> {
-    static ZH: OnceLock<Result<Catalog, Vec<String>>> = OnceLock::new();
-    match lang {
-        Lang::En => Err(&[]),
-        Lang::ZhCn => {
-            let slot = ZH.get_or_init(|| {
-                let name = "zh-CN";
-                let text = lang
-                    .catalog_text()
-                    .ok_or_else(|| vec![format!("{name}: no catalogue text shipped")])?;
-                let cat = Catalog::parse(name, text);
+    // The source language has no catalogue by design, not a failed one.
+    if lang.is_source() {
+        return Err(&[]);
+    }
+    // One cache for the whole registry: a row added to REGISTRY gets a slot
+    // here without a language-specific `static` or `match`.
+    static CACHE: OnceLock<Vec<Result<Catalog, Vec<String>>>> = OnceLock::new();
+    let slots = CACHE.get_or_init(|| {
+        REGISTRY
+            .iter()
+            .map(|l| {
+                let Some(text) = l.catalog_text() else {
+                    return Ok(Catalog::default());
+                };
+                let cat = Catalog::parse(l.tag(), text);
                 if cat.is_empty() {
-                    return Err(cat.refused.clone());
+                    Err(cat.refused.clone())
+                } else {
+                    Ok(cat)
                 }
-                Ok(cat)
-            });
-            match slot {
-                Ok(c) => Ok(c),
-                Err(why) => Err(why.as_slice()),
-            }
-        }
+            })
+            .collect()
+    });
+    match &slots[lang.slot()] {
+        Ok(c) => Ok(c),
+        Err(why) => Err(why.as_slice()),
     }
 }
 

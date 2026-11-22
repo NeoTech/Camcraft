@@ -51,7 +51,7 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
         .max_height(scroll_h)
         .show(ui, |ui| {
             if exists && !name.is_empty() {
-                ui.heading(format!("Tool: {name}"));
+                ui.heading(camcraft_i18n::tf("Tool: {name}", &[format!("{}", name)]));
                 if ui.button(camcraft_i18n::tr("Delete")).clicked() {
                     state
                         .pending

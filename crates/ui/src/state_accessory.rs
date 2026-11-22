@@ -120,7 +120,7 @@ impl State {
                 let name = command.name().to_owned();
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("placed {name}");
+                self.status = camcraft_i18n::tf("placed {name}", &[format!("{}", name)]);
                 self.fixture_lib = None;
             }
             Err(err) => {
@@ -140,7 +140,7 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.accessory_sizes.remove(name);
-                self.status = format!("{name}: resized");
+                self.status = camcraft_i18n::tf("{name}: resized", &[format!("{}", name)]);
             }
             Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("accessory not changed: {err}", &[format!("{}", err)])),
         }

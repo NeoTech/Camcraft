@@ -95,7 +95,7 @@ impl State {
         self.persist_prefs();
         // The native name is never translated - it names the language in
         // its own words, so the line reads the same in either language.
-        self.status = format!("language: {}", in_force.native_name());
+        self.status = camcraft_i18n::tf("language: {}", &[format!("{}", in_force.native_name())]);
     }
 
     /// Choose the theme. The cheap existence law (`check_theme`) and the
@@ -118,7 +118,7 @@ impl State {
             theme_set(&self.world, &next);
             self.persist_prefs();
         }
-        self.status = format!("theme: {}", theme_label(&self.world));
+        self.status = camcraft_i18n::tf("theme: {}", &[format!("{}", theme_label(&self.world))]);
     }
 
     /// Choose the colour-vision remap, `select_theme`'s twin: the surface
