@@ -152,10 +152,19 @@ pub(super) fn plan_core(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, p
 /// ramp angle (3 deg when the entry sets none) - every point
 /// on the proved cut.
 pub(super) fn ramp_fallback(l: &Lvl, z: f64, prev_z: f64, m: &Motion) -> Option<Descent> {
+    zig_from(l, z, descent_from(m, prev_z, true), m)
+}
+
+/// The ramp fallback's zig-zag along the first cut from plane `zf` down
+/// to `z` (#3567 enters a dead-end pass by it too).
+pub(super) fn zig_from(l: &Lvl, z: f64, zf: f64, m: &Motion) -> Option<Descent> {
     let a = &m.links.approach;
-    let angle = if a.ramp_zigs() { a.ramp_angle } else { crate::links::DEFAULT_RAMP_ANGLE };
-    let zf = descent_from(m, prev_z, true);
-    plan_zig_capped(l.pass, zf - z, angle, a.ramp_max_len).map(|(pre, n)| Descent::Zig(pre, n, zf))
+    plan_zig_capped(l.pass, zf - z, fallback_ramp_angle(a), a.ramp_max_len).map(|(pre, n)| Descent::Zig(pre, n, zf))
+}
+
+/// The angle (deg) of the ramp fallback: the entry's, 3 deg when it sets none.
+pub(super) fn fallback_ramp_angle(a: &crate::approach::Approach) -> f64 {
+    if a.ramp_zigs() { a.ramp_angle } else { crate::links::DEFAULT_RAMP_ANGLE }
 }
 
 /// The helix onto `e`: placed so its orbit closes ON `e` (M11.3 - no

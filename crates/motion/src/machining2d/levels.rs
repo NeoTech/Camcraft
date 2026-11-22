@@ -166,6 +166,8 @@ pub(super) struct Motion {
     /// path already cut (the start-side plan's open pieces end on walls,
     /// beside stock no cut has reached yet).
     pub(super) cleared_links: bool,
+    /// #3567: dead-end pass starts that enter by a ramp along the pass.
+    pub(super) ramp_starts: Vec<Point2>,
 }
 
 impl Motion {
@@ -194,6 +196,7 @@ impl Motion {
             ring_zig: false,
             solid_restart: false,
             cleared_links: false,
+            ramp_starts: Vec::new(),
         }
     }
 

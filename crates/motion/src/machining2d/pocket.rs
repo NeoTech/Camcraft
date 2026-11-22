@@ -13,7 +13,7 @@ use super::corner_relief::{CornerRelief, ResolvedRelief, plan_corner_reliefs};
 use super::face::GenError;
 use super::arcs::ARC_FIT_TOL;
 use super::fillet_tally::corner_arc_radius;
-use super::level_rings::ring_plan;
+use super::level_rings::ring_plan_ramped;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket_emit::{PocketWalks, emit_pocket_passes};
 use super::pocket_hsm_start::adaptive_passes_from;
@@ -305,16 +305,16 @@ pub(super) fn pocket_over_with_relief(
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     notes.into_iter().for_each(|n| b.note(n));
     // The HSM plan may choose where its entry stands (`pocket_hsm`).
-    let (mut passes, strategy, room, joins) = match strategy {
+    let (mut passes, strategy, room, joins, ramp_starts) = match strategy {
         PocketStrategy::Adaptive => {
             let (passes, notes, s, room, joins) = adaptive_passes_from(region, center, p, "this pocket", side)?;
             notes.into_iter().for_each(|n| b.note(n));
-            (passes, s, room, joins)
+            (passes, s, room, joins, Vec::new())
         }
         s => {
-            let (passes, notes) = ring_plan(region, center, p, s, side)?;
+            let (passes, notes, ramps) = ring_plan_ramped(region, center, p, s, side, true)?;
             notes.into_iter().for_each(|n| b.note(n));
-            (passes, s, None, Vec::new())
+            (passes, s, None, Vec::new(), ramps)
         }
     };
     // #3021: rows alone leave a cusp between row ends on every wall and
@@ -344,6 +344,7 @@ pub(super) fn pocket_over_with_relief(
             holes,
             corner_reliefs,
             cleared_links: side.start != PassStart::Auto,
+            ramp_starts,
         },
     )
 }

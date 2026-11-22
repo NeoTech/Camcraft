@@ -21,6 +21,7 @@ use crate::geo2d::{Loop, Point2, Region, RingClip};
 
 use super::face::GenError;
 use super::level_order::{Piece, WALL, order};
+use super::level_ramp_entry::too_short_at;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::PocketParams;
 use super::pocket_plan::plan_passes;
@@ -48,20 +49,46 @@ pub(super) fn ring_plan(
     strategy: PocketStrategy,
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
+    ring_plan_ramped(region, center, p, strategy, side, false).map(|(passes, notes, _)| (passes, notes))
+}
+
+/// The passes, the notes, and the dead-end starts the ladder enters by a
+/// ramp along the pass (#3567).
+pub(super) type RampedRings = (Vec<Vec<Point2>>, Vec<String>, Vec<Point2>);
+
+/// [`ring_plan`] with the dead-end starts of an Outside plan, for a
+/// caller whose ladder enters them by the ramp along the pass (`ramps`):
+/// a dead end too short for that ramp sends the area to the Auto order,
+/// named, as the completeness guard does. Without `ramps` no start is
+/// returned and nothing falls back for it.
+pub(super) fn ring_plan_ramped(
+    region: &Region,
+    center: &Region,
+    p: &PocketParams,
+    strategy: PocketStrategy,
+    side: &StartSide,
+    ramps: bool,
+) -> Result<RampedRings, GenError> {
     let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings | PocketStrategy::Adaptive);
     if side.start != PassStart::Auto && rings {
         let off = p.tool_diameter * 0.5 + p.stock_to_leave;
         if let Some(pieces) = level_pieces(region, center, off, p.tiling_step(), p.climb, side.start)? {
             let plan = order(pieces, center, p.tool_diameter * 0.5, side)?;
             let left = unswept(center, &plan.passes, p.tool_diameter * 0.5)?;
-            if left <= LEFT_TOL {
-                return Ok((plan.passes, plan.notes));
+            let short = if ramps { too_short_at(&plan.passes, &plan.ramp_starts, p) } else { None };
+            if left <= LEFT_TOL && short.is_none() {
+                let starts = if ramps { plan.ramp_starts } else { Vec::new() };
+                return Ok((plan.passes, plan.notes, starts));
             }
             let auto = plan_passes(center, p.tiling_step(), p.climb, strategy)?;
-            return Ok((auto, vec![side.fallback_note(left)]));
+            let note = match short.filter(|_| left <= LEFT_TOL) {
+                Some(at) => side.ramp_fallback_note(at.x, at.y),
+                None => side.fallback_note(left),
+            };
+            return Ok((auto, vec![note], Vec::new()));
         }
     }
-    Ok((plan_passes(center, p.tiling_step(), p.climb, strategy)?, Vec::new()))
+    Ok((plan_passes(center, p.tiling_step(), p.climb, strategy)?, Vec::new(), Vec::new()))
 }
 
 /// The most area (mm2) of the cutter-centre area that the passes may leave
