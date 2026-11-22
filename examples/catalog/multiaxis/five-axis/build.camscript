@@ -1,0 +1,40 @@
+// Provenance: original simultaneous five-axis example using CamCraft commands.
+cam.import("model/five-axis.obj", "five-axis");
+cam.call("set_model_link", { model: "five-axis", path: null });
+cam.call("fit_stock", { shape: "box", margin: 0.0 });
+cam.call("load_machine", { builtin: "Tilt-head 5-axis" });
+cam.call("add_tool", { catalog: "BN-0600", holder: "none" });
+cam.call("edit_tool", { name: "BN-0600", patch: { flute_len: 60.0, shank_d: 6.0 } });
+
+cam.call("add_operation", {
+  kind: "Swarf", name: "Swarf wall", tool: "BN-0600", source: "five-axis",
+  params: {
+    tolerance: 0.1, stepover: 2.0, clearance_z: 25.0,
+    top_z: 11.0, bottom_z: 5.0, feed: 500.0, plunge_feed: 100.0,
+    climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0
+  }
+});
+cam.call("add_operation", {
+  kind: "5-Axis Contour", name: "Contour surface", tool: "BN-0600", source: "five-axis",
+  params: {
+    tolerance: 0.1, clearance_z: 25.0, top_z: 11.0, bottom_z: 5.0,
+    feed: 500.0, plunge_feed: 100.0, climb: true,
+    lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false
+  }
+});
+cam.call("add_operation", {
+  kind: "5-Axis Flow", name: "Flow surface", tool: "BN-0600", source: "five-axis",
+  params: {
+    tolerance: 0.1, stepover: 3.0, clearance_z: 25.0, top_z: 11.0, bottom_z: 5.0,
+    feed: 500.0, plunge_feed: 100.0, climb: true,
+    lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false
+  }
+});
+cam.generate();
+var verdict = cam.verify();
+if (!verdict.ok) {
+  throw new Error("five-axis catalog verify failed: " + JSON.stringify(verdict));
+}
+cam.save("five-axis.camproj");
+cam.post({ to: "five-axis.nc" });
+cam.report();

@@ -1,0 +1,3 @@
+kinds = ["Swarf", "5-Axis Contour", "5-Axis Flow"]
+machine = "Tilt-head 5-axis"
+expect = "post"
