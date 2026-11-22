@@ -23,10 +23,10 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     if toolless {
         // no row: the wire is the machine's
     } else if tools.is_empty() {
-        ui.label("Tool");
+        ui.label(camcraft_i18n::tr_owned("Tool"));
         ui.label("none").on_hover_text("no tools in the document - the Tools page has a catalog");
     } else {
-        ui.label("Tool");
+        ui.label(camcraft_i18n::tr_owned("Tool"));
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
         ui.horizontal(|ui| { super::super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); super::super::tool_icons::tool_combo(ui, &state.world, "op_tool", &mut t_idx, &tools); });
@@ -62,7 +62,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     };
     let mut src_items = super::super::op_source::source_items(&state.world, op_setup.as_deref(), &state.op_ui.params);
     let models: Vec<String> = src_items.iter().skip(1).cloned().collect();
-    ui.label("Source");
+    ui.label(camcraft_i18n::tr_owned("Source"));
     let mut s_idx: usize = if state.op_ui.src_kind == 2 {
         src_items.push("Selection".to_owned());
         src_items.len() - 1
@@ -104,7 +104,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     // Setup membership (M3.2 A): moving is never a stamp edit -
     // SetOperationSetup keeps the stamp and lets the resolved-Z digest
     // say whether the op went Stale.
-    ui.label("Setup");
+    ui.label(camcraft_i18n::tr_owned("Setup"));
     let setups = camcraft_app::setup::names(&state.world);
     if setups.is_empty() {
         ui.label("global (no setups)").on_hover_text("this document has no setups yet - the global stock and offsets apply");
@@ -129,7 +129,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
 fn coolant_row(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>) {
     let Some(op) = live else { return };
     use camcraft_app::operation::CoolantMode;
-    ui.label("Coolant").on_hover_text(
+    ui.label(camcraft_i18n::tr_owned("Coolant")).on_hover_text(
         "the cutting fluid the post switches on for this operation - the machine's own code for it; a choice the machine states no code for blocks the post by name",
     );
     let labels: Vec<String> = CoolantMode::ALL.iter().map(|m| m.label().to_owned()).collect();

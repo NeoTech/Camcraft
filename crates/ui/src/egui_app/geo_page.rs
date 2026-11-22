@@ -222,7 +222,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                         "set the work origin at this curved face's centroid (a full bore: its axis at mid-height)"
                     };
                     if ui.small_button(camcraft_i18n::tr_owned("Set origin")).on_hover_text(tip).clicked() {
-                        crate::vertex_pick::queue_origin_at_face(state, entity, *feat, false);
+                        crate::vertex_pick::queue_origin_at_face(state, entity, feat.clone(), false);
                     }
                     if t.plane_z.is_some()
                         && ui
