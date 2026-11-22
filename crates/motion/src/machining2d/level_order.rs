@@ -15,7 +15,7 @@
 use crate::geo2d::{Point2, Region};
 
 use super::face::GenError;
-use super::pass_start::StartSide;
+use super::pass_start::{PassStart, StartSide};
 use super::pocket_hsm::components;
 use super::ring::dist;
 use super::slots::chord_clears;
@@ -48,6 +48,10 @@ pub(super) struct Piece {
 pub(super) struct LevelPlan {
     pub(super) passes: Vec<Vec<Point2>>,
     pub(super) notes: Vec<String>,
+    /// #3567: the first later pass of an Outside plan that found no cut
+    /// floor to land on while its start stands in stock: the plan would
+    /// enter uncut stock at the full tool width, so it is never posted.
+    pub(super) cold_entry: Option<Point2>,
 }
 
 /// A walk already cut and its bounding box.
@@ -102,6 +106,8 @@ pub(super) fn order(pieces: Vec<Piece>, center: &Region, tool_r: f64, side: &Sta
     let mut cur: Vec<Point2> = Vec::new();
     let mut wall_first = false;
     let mut narrow: Option<(usize, Point2)> = None;
+    let outside = side.start == PassStart::Outside;
+    let mut cold_entry: Option<Point2> = None;
     for p in &seq {
         if p.core {
         } else if p.level == 0 {
@@ -127,9 +133,20 @@ pub(super) fn order(pieces: Vec<Piece>, center: &Region, tool_r: f64, side: &Sta
                     passes.push(std::mem::take(&mut cur));
                 }
                 let lead = match p.pts.first() {
-                    Some(&s) if p.level > 0 => lead_in(s, center, &planned, &done, reach, step),
+                    Some(&s) if p.level > 0 => lead_in(s, center, &planned, &done, reach, step).or_else(|| {
+                        outside.then(|| lead_across(s, &p.pts, center, &planned, &done, reach, step)).flatten()
+                    }),
                     _ => None,
                 };
+                if let (None, Some(&s)) = (lead, p.pts.first())
+                    && outside
+                    && p.level > 0
+                    && !p.core
+                    && cold_entry.is_none()
+                    && side.stock.as_ref().is_none_or(|st| st.contains(s) || edge_dist(s, st) < tool_r)
+                {
+                    cold_entry = Some(s);
+                }
                 if let (Some(q), Some(&s)) = (lead, p.pts.first()) {
                     done.push(Cut::new(vec![q, s]));
                     cur = vec![q];
@@ -154,7 +171,7 @@ pub(super) fn order(pieces: Vec<Piece>, center: &Region, tool_r: f64, side: &Sta
     if let Some((n, at)) = narrow {
         notes.push(side.narrow_note(n, at.x, at.y));
     }
-    Ok(LevelPlan { passes, notes })
+    Ok(LevelPlan { passes, notes, cold_entry })
 }
 
 /// The component of `center` a piece belongs to: the one that holds (or
@@ -255,6 +272,52 @@ fn lead_in(s: Point2, center: &Region, planned: &[&[Point2]], done: &[Cut], reac
     near.into_iter().take(8).map(|(_, q)| q).find(|&q| linkable(q, s, center, planned, done, reach, step))
 }
 
+/// #3567: the Outside lead-in across one stepover. A ring one stepover
+/// from the cut before it lies past [`SWATH`], so [`lead_in`] finds no
+/// vertex for it. Here the landing is the nearest point of a cut walk
+/// within two swaths of the piece start `s` (pulled 5 um toward `s`, so
+/// the chord leaves that walk and does not run along it). The chord must
+/// stay in the area, cross no planned cut and no cut walk, and at every
+/// sample stand within the swath of a cut walk or of the piece `pts`
+/// itself: the lead cuts only stock that this pass cuts anyway.
+fn lead_across(
+    s: Point2,
+    pts: &[Point2],
+    center: &Region,
+    planned: &[&[Point2]],
+    done: &[Cut],
+    reach: f64,
+    step: f64,
+) -> Option<Point2> {
+    let far = 2.0 * reach;
+    let mut near: Vec<(f64, Point2)> = done
+        .iter()
+        .filter(|c| c.near(s, far))
+        .flat_map(|c| c.pts.windows(2).map(|w| foot(s, w[0], w[1])))
+        .map(|q| (dist(q, s), q))
+        .filter(|(d, _)| *d <= far && *d > 0.01)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let own = Cut::new(pts.to_vec());
+    near.into_iter().take(8).find_map(|(d, q)| {
+        let t = 5e-3 / d;
+        let q = Point2::new(q.x + t * (s.x - q.x), q.y + t * (s.y - q.y));
+        let ok = chord_clears(center, q, s)
+            && !planned.iter().any(|w| chord_crosses_path(q, s, w, false))
+            && !done.iter().any(|c| chord_crosses_path(q, s, &c.pts, false))
+            && samples(&[q, s], step).iter().all(|&x| own.near(x, reach) || done.iter().rev().any(|c| c.near(x, reach)));
+        ok.then_some(q)
+    })
+}
+
+/// The point of the segment `a -> b` nearest `p`.
+fn foot(p: Point2, a: Point2, b: Point2) -> Point2 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let dd = dx * dx + dy * dy;
+    let t = if dd > 0.0 && dd.is_finite() { (((p.x - a.x) * dx + (p.y - a.y) * dy) / dd).clamp(0.0, 1.0) } else { 0.0 };
+    Point2::new(a.x + t * dx, a.y + t * dy)
+}
+
 /// A start ring stands on a wall when its disc lies wholly in the stock
 /// somewhere (with no footprint known, everything is stock).
 fn on_wall(pts: &[Point2], stock: Option<&Region>, tool_r: f64, step: f64) -> bool {
@@ -298,3 +361,7 @@ fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
     let t = if dd > 0.0 && dd.is_finite() { (((p.x - a.x) * dx + (p.y - a.y) * dy) / dd).clamp(0.0, 1.0) } else { 0.0 };
     (p.x - a.x - t * dx).hypot(p.y - a.y - t * dy)
 }
+
+#[cfg(test)]
+#[path = "level_order_tests.rs"]
+mod tests;

@@ -54,11 +54,15 @@ pub(super) fn ring_plan(
         if let Some(pieces) = level_pieces(region, center, off, p.tiling_step(), p.climb, side.start)? {
             let plan = order(pieces, center, p.tool_diameter * 0.5, side)?;
             let left = unswept(center, &plan.passes, p.tool_diameter * 0.5)?;
-            if left <= LEFT_TOL {
-                return Ok((plan.passes, plan.notes));
-            }
+            let note = match plan.cold_entry {
+                // #3567: a later pass with no cut floor to land on would
+                // enter uncut stock at the full tool width.
+                Some(at) => side.entry_fallback_note(at.x, at.y),
+                None if left <= LEFT_TOL => return Ok((plan.passes, plan.notes)),
+                None => side.fallback_note(left),
+            };
             let auto = plan_passes(center, p.tiling_step(), p.climb, strategy)?;
-            return Ok((auto, vec![side.fallback_note(left)]));
+            return Ok((auto, vec![note]));
         }
     }
     Ok((plan_passes(center, p.tiling_step(), p.climb, strategy)?, Vec::new()))

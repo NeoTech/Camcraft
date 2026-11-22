@@ -121,6 +121,20 @@ impl StartSide {
         )
     }
 
+    /// The warning when a later pass from the start side finds no cut
+    /// floor to start on, so that its entry at `(x, y)` would come down
+    /// into uncut stock at the full tool width (#3567): the level is cut
+    /// in the Auto order instead. The note carries [`RINGS_FALLBACK`],
+    /// as [`Self::fallback_note`] does.
+    #[must_use]
+    pub fn entry_fallback_note(&self, x: f64, y: f64) -> String {
+        format!(
+            "{PASS_START_NOTE} {}: a later pass at X {x:.3}, Y {y:.3} has no cut floor to start on and would enter \
+             uncut stock at the full tool width{RINGS_FALLBACK}this area in the Auto order instead",
+            self.start.label()
+        )
+    }
+
     /// The warning for cuts after the first ring that still take the
     /// full tool width (#3316): `n` of them, the first at `(x, y)`.
     #[must_use]
@@ -148,6 +162,10 @@ mod tests {
         let note = side.fallback_note(12.3);
         assert!(note.starts_with(PASS_START_NOTE), "{note}");
         assert_eq!(rings_fallbacks(std::slice::from_ref(&note)), 1, "{note}");
+        // #3567: the cold-entry fallback is an Offset-rings fallback too.
+        let entry = side.entry_fallback_note(1.0, -2.5);
+        assert!(entry.starts_with(PASS_START_NOTE) && entry.contains("X 1.000, Y -2.500"), "{entry}");
+        assert_eq!(rings_fallbacks(std::slice::from_ref(&entry)), 1, "{entry}");
         let wall = side.wall_first_note().unwrap_or_default();
         assert_eq!(rings_fallbacks(std::slice::from_ref(&wall)), 0, "{wall}");
         let narrow = side.narrow_note(1, 0.0, 0.0);
