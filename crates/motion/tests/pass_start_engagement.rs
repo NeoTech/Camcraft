@@ -187,6 +187,17 @@ fn outside_entries_after_the_first_land_in_cleared_stock() {
     assert!(ramps > 0, "no ramp along the pass ran, so the pin proves nothing");
 }
 
+/// #3567 review note of d41c2b76a: the ramp that stands in for the
+/// user's Helix entry at the dead ends is named on the path exactly once
+/// for the operation, however many dead ends it enters.
+#[test]
+fn the_replaced_helix_entry_is_named_once_on_the_band_path() {
+    let (path, _, p) = band_path();
+    assert_eq!(p.entry, Entry3D::Helix);
+    let named = path.notes.iter().filter(|n| n.contains("instead of the helix entry")).count();
+    assert_eq!(named, 1, "{:?}", path.notes);
+}
+
 /// #3567 review item 2: the slope law of `is_ramp`. A straight descending
 /// feed on the pass path is a ramp only at or under the ramp angle; a
 /// steeper one (60 deg, vertical) counts like a plunge.

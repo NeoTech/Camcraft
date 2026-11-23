@@ -178,7 +178,7 @@ mod tests {
     use crate::geo2d::Point2;
     use crate::links::Links;
     use crate::load::DEFAULT_OPTIMAL_LOAD;
-    use crate::machining2d::pass_start::{PassStart, StartSide};
+    use crate::machining2d::pass_start::{PassStart, StartSide, pass_start_fallbacks};
     use crate::machining2d::{PocketParams, PocketStrategy, rings_fallbacks};
 
     fn params() -> PocketParams {
@@ -228,6 +228,10 @@ mod tests {
     fn the_ramp_fallback_note_is_a_rings_fallback() {
         let note = StartSide::from(PassStart::Outside).ramp_fallback_note(1.0, -2.5);
         assert_eq!(rings_fallbacks(std::slice::from_ref(&note)), 1, "{note}");
+        // Review note of d41c2b76a: the op names this fallback as the pass
+        // start's (#3542, `FallbackCause::PassStart`), never as "Adaptive
+        // fell back": the cause comes from `pass_start_fallbacks`.
+        assert_eq!(pass_start_fallbacks(std::slice::from_ref(&note)), 1, "{note}");
         assert!(note.starts_with("Pass start Outside: a pass at X 1.000, Y -2.500"), "{note}");
     }
 
