@@ -5,10 +5,16 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
-if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
-    echo "package-appimage: Linux x86_64 is required" >&2
-    exit 1
-fi
+arch=$(uname -m)
+case "$(uname -s):$arch" in
+    Linux:x86_64|Linux:aarch64) ;;
+    *)
+        echo "package-appimage: Linux x86_64 or aarch64 is required (got $(uname -s) $arch)" >&2
+        exit 1
+        ;;
+esac
+# On aarch64, point LINUXDEPLOY at linuxdeploy-aarch64.AppImage from the same
+# linuxdeploy release; the bundled appimagetool below then runs natively.
 linuxdeploy=${LINUXDEPLOY:-}
 if [[ -z $linuxdeploy || ! -x $linuxdeploy ]]; then
     echo "package-appimage: set LINUXDEPLOY to an executable linuxdeploy AppImage" >&2
@@ -78,12 +84,12 @@ if [[ ! -x $appimagetool ]]; then
     echo "package-appimage: pinned linuxdeploy has no bundled appimagetool" >&2
     exit 1
 fi
-ARCH=x86_64 "$appimagetool" "$appdir" \
-    "$dist/camcraft-$version-linux-x86_64.AppImage" --no-appstream
+ARCH="$arch" "$appimagetool" "$appdir" \
+    "$dist/camcraft-$version-linux-$arch.AppImage" --no-appstream
 after=$(sha256sum "$appdir/usr/bin/camcraft-ui" | awk '{print $1}')
 if [[ $before != "$after" ]]; then
     echo "package-appimage: appimagetool modified camcraft-ui; refusing broken image" >&2
     exit 1
 fi
-test -s "$dist/camcraft-$version-linux-x86_64.AppImage"
-echo "AppImage: $dist/camcraft-$version-linux-x86_64.AppImage"
+test -s "$dist/camcraft-$version-linux-$arch.AppImage"
+echo "AppImage: $dist/camcraft-$version-linux-$arch.AppImage"
