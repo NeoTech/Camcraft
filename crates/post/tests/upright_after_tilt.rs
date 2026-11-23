@@ -9,11 +9,17 @@
 //! control (G43.4 / G49) as the post scripts already implement it; our
 //! own design notes only.
 //!
+//! #3477: a script that does not declare `uprightReturn = true` gets
+//! no such program. The engine refuses it by name, because no law makes
+//! a user's own script state the return.
+//!
 //! Gate map: covers assets/posts/fanuc.cps, assets/posts/doosan-dnm.cps,
-//! assets/posts/tormach.cps (the section opening after a tilted
-//! section), post::dump.
+//! assets/posts/tormach.cps, assets/posts/mach4.cps (the section opening
+//! after a tilted section), post::dump, post::upright_after_tilt.
 
-use camcraft_post::cl::{Move, MoveKind, Toolpath};
+mod ac_trunnion_support;
+
+use camcraft_post::cl::{CycleKind, Move, MoveKind, Toolpath};
 use camcraft_post::geometry::Point3;
 use camcraft_post::post::{self, cnc, engine, Dump};
 use serde_json::json;
@@ -241,5 +247,144 @@ fn an_upright_program_after_an_upright_section_writes_no_return() {
         let out = run(stem, &r);
         assert!(out.warnings.is_empty(), "{stem}: {:?}", out.warnings);
         assert!(!out.program.lines().any(|l| word(l, 'A').is_some() || word(l, 'B').is_some()), "{stem}:\n{}", out.program);
+    }
+}
+
+/// Mach4 indexes an AC trunnion (3+2): the first section stands at one
+/// A angle. It already retracts and writes `G00 A0 C0` at the next
+/// upright section; this pins it (#3477, item 4).
+#[test]
+fn mach4_states_upright_after_an_indexed_section() {
+    let (s, c) = (30f64.to_radians().sin(), 30f64.to_radians().cos());
+    let lean = [0.0, -s, c];
+    let tilted = Toolpath::new(upright_path().moves.iter().map(|m| m.with_axis(lean)).collect());
+    for tool in [1, 2] {
+        let mut r = dump_of(&tilted, "Lean1", 1);
+        r.extend(dump_of(&upright_path(), "Flat2", tool));
+        let out = engine::run(&read("assets/posts/mach4.cps"), &ac_trunnion_support::review_trunnion(), &cnc::serialize(&r))
+            .expect("mach4 posts");
+        assert_returns("mach4", &out, 'A', &format!("tool {tool}"));
+    }
+}
+
+/// Each shipped post that writes tilted moves declares the return.
+#[test]
+fn each_shipped_rotary_post_declares_upright_after_tilt() {
+    for stem in ["fanuc", "doosan-dnm", "mach4", "tormach"] {
+        let cps = read(&format!("assets/posts/{stem}.cps"));
+        assert!(
+            cps.lines().any(|l| l.trim_start().starts_with("uprightReturn = true;")),
+            "{stem}.cps declares uprightReturn = true"
+        );
+    }
+}
+
+/// A user's copy of a shipped post without the declaration.
+fn undeclared(stem: &str) -> String {
+    read(&format!("assets/posts/{stem}.cps"))
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("uprightReturn"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn run_undeclared(stem: &str, r: &[cnc::Record]) -> engine::PostOutput {
+    engine::run_with(&undeclared(stem), &tilthead(), &cnc::serialize(r), &json!({ "rotaryBrake": true }))
+        .unwrap_or_else(|e| panic!("{stem}: the stream posts or refuses by warning: {e}"))
+}
+
+#[test]
+fn a_script_without_upright_after_tilt_is_refused_by_name() {
+    for stem in ["fanuc", "doosan-dnm"] {
+        for tool in [1, 2] {
+            let mut r = dump_of(&tilted_path(), "Lean1", 1);
+            r.extend(dump_of(&upright_path(), "Flat2", tool));
+            let out = run_undeclared(stem, &r);
+            assert!(
+                out.warnings.iter().any(|w| w.contains("uprightReturn") && w.contains("\"Flat2\"") && w.contains("\"Lean1\"")),
+                "{stem} (tool {tool}): the engine refuses the upright section by name: {:?}",
+                out.warnings
+            );
+        }
+    }
+}
+
+#[test]
+fn a_script_without_upright_after_tilt_posts_a_program_with_no_return_to_state() {
+    // No section opens upright after a tilted section: no refusal.
+    let tilted_then_tilted = [dump_of(&tilted_path(), "Lean1", 1), dump_of(&tilted_path(), "Lean2", 1)].concat();
+    let upright_then_tilted = [dump_of(&upright_path(), "Flat1", 1), dump_of(&tilted_path(), "Lean2", 1)].concat();
+    let upright_then_upright = [dump_of(&upright_path(), "Flat1", 1), dump_of(&upright_path(), "Flat2", 2)].concat();
+    for (case, r) in [
+        ("tilted only", dump_of(&tilted_path(), "Lean1", 1)),
+        ("tilted, tilted", tilted_then_tilted),
+        ("upright, tilted", upright_then_tilted),
+        ("upright, upright", upright_then_upright),
+    ] {
+        let out = run_undeclared("fanuc", &r);
+        assert!(!out.warnings.iter().any(|w| w.contains("uprightReturn")), "{case}: {:?}", out.warnings);
+    }
+}
+
+/// The upright section of `dump_of(&upright_path(), ..)` with its moves
+/// replaced by a drill cycle (it states no rotary angle) and then `rest`.
+/// `at` is the stream-global move index the cycle anchors at (the
+/// engine seats each cycle in the section that owns that index).
+fn cycle_section(op: &str, at: usize, rest: Vec<cnc::Record>) -> Vec<cnc::Record> {
+    let cycle = cnc::Record::Cycle(cnc::CycleRec {
+        kind: CycleKind::Drill,
+        x: 10.0,
+        y: 10.0,
+        r_z: 2.0,
+        bottom_z: -5.0,
+        entry_z: 0.0,
+        peck: 0.0,
+        dwell: 0.0,
+        first_move: at,
+        feed: Some(100.0),
+    });
+    let mut out = Vec::new();
+    let mut placed = false;
+    for r in dump_of(&upright_path(), op, 1) {
+        if matches!(r, cnc::Record::Move(_)) {
+            if !placed {
+                out.push(cycle.clone());
+                out.extend(rest.iter().cloned());
+                placed = true;
+            }
+            continue;
+        }
+        out.push(r);
+    }
+    assert!(placed, "the upright section has moves to replace");
+    out
+}
+
+/// #3501 review: a canned cycle is motion. A cycle-only section after a
+/// tilt, and a cycle before a later move that states zero angles, both
+/// open at the old lean.
+#[test]
+fn a_cycle_that_opens_an_upright_section_after_a_tilt_is_refused_by_name() {
+    let zero = cnc::Record::Move(cnc::MoveRec {
+        kind: MoveKind::Rapid,
+        x: 10.0,
+        y: 10.0,
+        z: 20.0,
+        feed: None,
+        center: None,
+        ccw: false,
+        plane: Default::default(),
+        abc: Some([0.0; 3]),
+    });
+    for (case, rest) in [("cycle only", vec![]), ("cycle, then a stated zero", vec![zero])] {
+        let lean = dump_of(&tilted_path(), "Lean1", 1);
+        let at = lean.iter().filter(|r| matches!(r, cnc::Record::Move(_))).count();
+        let r = [lean, cycle_section("FlatDrill", at, rest)].concat();
+        let out = run_undeclared("fanuc", &r);
+        assert!(
+            out.warnings.iter().any(|w| w.contains("uprightReturn") && w.contains("\"FlatDrill\"") && w.contains("\"Lean1\"")),
+            "{case}: the engine refuses the cycle section by name: {:?}",
+            out.warnings
+        );
     }
 }

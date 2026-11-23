@@ -45,9 +45,18 @@ program before you run it.
 - **STEP** declares its length unit in the file. CamCraft reads it before
   any geometry is built: millimetres, metres and other SI prefixes, and
   conversion-based units such as an inch, are scaled to millimetres on
-  import. A file that states no length unit is kept as millimetres. A file
-  whose contexts disagree, or whose unit CamCraft cannot convert, is
-  refused by name instead of guessed.
+  import. The import summary on the status line names the unit, for
+  example `length unit: in (stated by the file)`. A file whose contexts
+  disagree, or whose unit CamCraft cannot convert, is refused by name
+  instead of guessed.
+- **A STEP file that states no length unit** is never read in a guessed
+  unit. The desktop app asks for the unit the model was drawn in:
+  **Millimeters (mm)** or **Inches (in)**. It then imports the file in
+  that unit, and the summary says `stated at import`. **Cancel** imports
+  nothing. The question comes again at the next import of that file. A
+  script or an MCP client states the unit with `units` (`"mm"` or `"in"`);
+  without it the import is refused. A tool holder or a fixture from such a
+  file is refused: re-export the file with its unit.
 - **STL** and **OBJ** carry no unit. The readers apply no scale, so their
   numbers are taken as they stand, that is as millimetres. A model
   exported in inches therefore arrives 25.4 times too small.
@@ -78,7 +87,7 @@ program before you run it.
   degrees. A length unit other than mm or inch refuses the file.
 - **Tool holders and fixtures** are meshes, so they follow the model rule:
   the numbers in the mesh are millimetres unless a STEP file declares
-  otherwise. Lengths given to tool and MCP commands are millimetres, not
+  otherwise. A STEP file that declares no unit is refused there. Lengths given to tool and MCP commands are millimetres, not
   the document unit.
 
 ## Frames and coordinates

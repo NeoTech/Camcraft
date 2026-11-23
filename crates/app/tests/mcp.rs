@@ -10,7 +10,15 @@
 //! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
 
 mod common;
+#[path = "mcp/finish3d_direction.rs"]
+mod mcp_finish3d_direction;
+#[path = "mcp/finish3d_pass_start.rs"]
+mod mcp_finish3d_pass_start;
 mod mcp_open;
+#[path = "mcp/slot_tool_fit.rs"]
+mod slot_tool_fit;
+#[path = "mcp/trochoid_pass_start.rs"]
+mod trochoid_pass_start;
 
 use camcraft_app::mcp::{self, Server};
 
@@ -239,6 +247,33 @@ fn bad_input_is_a_tool_error_never_a_panic() {
     assert_eq!(bad_call["error"]["code"], json!(-32602));
     assert!(c.server.handle(&json!([1, 2])).is_some_and(|r| r["error"]["code"] == json!(-32600)));
     assert!(c.server.handle_line("   ").is_none());
+}
+
+#[test]
+fn slot_refuses_a_pass_start_with_its_reason_without_editing_the_job() {
+    const REASON: &str = "Slot has no pass order. Each depth has one continuous pass. A tool-width cut follows the centerline. A wider cut connects rows.";
+    let mut c = Client::new();
+    c.ok("set_stock", json!({ "box": { "dx": 50.0, "dy": 50.0, "dz": 10.0 } }));
+    c.ok("add_tool", json!({ "catalog": "EM-0400-2FL" }));
+    c.ok("add_operation", json!({ "kind": "Slot", "tool": "EM-0400-2FL", "name": "Slot1" }));
+    let before = c.ok("get_job", json!({}));
+    let params = &before["operations"][0]["params"]["slot"];
+    assert!(params.is_object() && params.get("pass_start").is_none(), "{before}");
+
+    for value in [json!("inside"), json!("outside"), json!("auto"), Value::Null] {
+        let message = c.refused("edit_operation", json!({
+            "name": "Slot1", "params": { "pass_start": value, "width": 10.0 }
+        }));
+        assert!(message.contains(REASON), "{value}: {message}");
+        let message = c.refused("add_operation", json!({
+            "kind": "Slot", "tool": "EM-0400-2FL", "name": "Slot2", "params": { "pass_start": value }
+        }));
+        assert!(message.contains(REASON), "{value}: {message}");
+    }
+    assert_eq!(c.ok("get_job", json!({})), before);
+    c.ok("undo", json!({}));
+    let after_undo = c.ok("get_job", json!({}));
+    assert_eq!(after_undo["operations"], json!([]), "no rejected patch entered the history");
 }
 
 #[test]

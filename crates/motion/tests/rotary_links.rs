@@ -54,6 +54,7 @@ fn finish(top_z: f64, bottom_z: f64, clearance_z: f64) -> Finish3DParams {
 
 fn rough(v_top: f64, v_bot: f64) -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         links: camcraft_motion::links::Links::ROUGH3D,
         tool_diameter: 2.0 * R,
         stepover: 0.8,

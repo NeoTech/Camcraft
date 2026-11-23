@@ -729,7 +729,7 @@ fn finish3d_scallop_plateau() {
 
 #[test]
 fn finish3d_ramp_parallel_plateau() {
-    use camcraft_app::finishing3d::{parallel, Finish3DParams, FinishPattern};
+    use camcraft_app::finishing3d::{parallel, parallel_with_angle, Finish3DParams, FinishPattern};
     use camcraft_app::geometry::{Point3, Triangle};
     let p3 = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
     // The scallop golden's block again: 20x20x10, top at z 10, no bottom.
@@ -748,30 +748,28 @@ fn finish3d_ramp_parallel_plateau() {
     facets.extend(quad([b, c, g, f]));
     facets.extend(quad([c, d, h, g]));
     facets.extend(quad([d, a, e, h]));
-    let t = parallel(
-        &facets,
-        &Finish3DParams {
-            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
-            pattern: FinishPattern::Parallel,
-            stepover: None,
-            tool_diameter: 6.0,
-            tolerance: 0.1,
-            clearance_z: 25.0,
-            retract_z: None,
-            top_z: 10.0,
-            bottom_z: 0.0,
-            feed: 500.0,
-            plunge_feed: 100.0,
-            climb: true,
-            ramp: true,
-            min_step: None,
-            ramp_angle: 45.0,
-            entry_ramp: false,
-            steep_stepover: None,
-            pencil_reference: None,
-        },
-    )
-    .unwrap();
+    let params = Finish3DParams {
+        gap_link: camcraft_motion::finishing3d::GapLink::Jump,
+        pattern: FinishPattern::Parallel,
+        stepover: None,
+        tool_diameter: 6.0,
+        tolerance: 0.1,
+        clearance_z: 25.0,
+        retract_z: None,
+        top_z: 10.0,
+        bottom_z: 0.0,
+        feed: 500.0,
+        plunge_feed: 100.0,
+        climb: true,
+        ramp: true,
+        min_step: None,
+        ramp_angle: 45.0,
+        entry_ramp: false,
+        steep_stepover: None,
+        pencil_reference: None,
+    };
+    let t = parallel_with_angle(&facets, &params, 0.0).unwrap();
+    assert_eq!(t.moves, parallel(&facets, &params).unwrap().moves);
     write_golden("finish3d_ramp_parallel_plateau.cl", &gen_to_cltext(&t));
 }
 
@@ -1057,6 +1055,46 @@ fn plasma_plate_with_holes_matches_golden() {
     write_golden("plasma_plate_with_holes.cl", &text);
 }
 
+/// #1883: a waterjet plate - a 120x80 outline held by two 2 mm tabs on
+/// its long edges, with a Ø30 hole, a Ø4 hole and a 30x10 slot - cut
+/// with a 0.8 mm kerf in the computer: every hole before the outline,
+/// arc leads with the pierce in the scrap (shortened in the Ø4 hole),
+/// the outline as two stretches between its tab gaps, each led in and
+/// out straight so that no lead cuts into a tab's bridge.
+#[test]
+fn waterjet_tabbed_plate_with_holes_matches_golden() {
+    use camcraft_app::waterjet::{waterjet_profile, JetTabs, LeadShape, OpenSide, WaterjetParams};
+    let loops = vec![
+        rect(0.0, 0.0, 120.0, 80.0).loops()[0].clone(),
+        circle(Point2::new(35.0, 40.0), 15.0, 64),
+        circle(Point2::new(80.0, 60.0), 2.0, 32),
+        rect(70.0, 15.0, 100.0, 25.0).loops()[0].clone(),
+    ];
+    let part = Region::new(loops.clone()).unwrap();
+    let p = WaterjetParams {
+        kerf: 0.8,
+        control_comp: false,
+        reversed: false,
+        lead_shape: LeadShape::Arc,
+        lead_in: 3.0,
+        lead_out: 2.0,
+        open_side: OpenSide::Center,
+        tabs: Some(JetTabs { count: 2, width: 2.0, at: vec![Point2::new(60.0, 0.0), Point2::new(60.0, 80.0)] }),
+        pierce_time: 1.5,
+        abrasive_delay: 0.5,
+        linearize: None,
+        feed: 250.0,
+        clearance_z: 10.0,
+        cut_z: 6.0,
+        model_excess: 0.0,
+    };
+    let path = waterjet_profile(&loops, &[], &part, &p).unwrap();
+    assert!(path.notes.iter().any(|n| n.contains("3 hole(s), 2 tab(s)), 5 pierce(s)")), "{:?}", path.notes);
+    let text = gen_to_cltext(&path);
+    assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+    write_golden("waterjet_tabbed_plate_with_holes.cl", &text);
+}
+
 #[test]
 fn trochoid_slot_small_matches_golden() {
     // #220: a D6 in a 10 mm channel, 12 mm long, one level - the bore
@@ -1264,6 +1302,7 @@ fn circular_ring_arcs_matches_golden() {
     // shows up here as a diff.
     let c = Point2::new(-35.0, 2.9);
     let p = camcraft_app::machining2d::CircularParams {
+        pass_start: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         center: c,
         radius: 3.0,

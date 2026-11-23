@@ -130,7 +130,7 @@ pub fn current_stamp(
         }
     }
     params.stamp_with(world, setup, Some(src), &mut h);
-    if let OpParams::Deburr { exclude_edges, .. } = params {
+    if let OpParams::Deburr { exclude_edges, .. } | OpParams::MultiAxisDeburr { exclude_edges, .. } = params {
         super::deburr_picks::stamp_inputs(world, setup, src, exclude_edges, &mut h)?;
     }
     // #2848: a rotary op's picks named the whole model before. A path

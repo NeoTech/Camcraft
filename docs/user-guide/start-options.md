@@ -18,6 +18,8 @@ gives an error that names it. The program does not start in that case.
 | `--gpu-backend` | `dx12`, `metal`, `vulkan` or `gl` | `CAMCRAFT_GPU_BACKEND` | automatic | Try this graphics system first. |
 | `--gpu` | part of an adapter name | `CAMCRAFT_GPU` | automatic | Use the graphics card whose name holds this text. |
 | `--mcp-port` | port number | `CAMCRAFT_MCP_PORT` | off | Open the MCP server for AI agents on this local port. |
+| `--no-activate` | none | none | off | Show the window but do not make it the foreground window. The window that has the focus keeps it. |
+| `--minimized` | none | none | off | Start with the window minimized. It does not take the focus and it covers no other window. This also sets `--no-activate`. |
 
 ## Environment variables without an option
 

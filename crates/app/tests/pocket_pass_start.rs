@@ -143,23 +143,38 @@ fn to_part(world: &World, name: &str, pt: Point3) -> f64 {
     best
 }
 
+/// The Outside law on one ring strategy: at least 2 levels, each level
+/// starts outside the stock box and ends on the part wall.
+fn assert_outside_starts_at_the_stock_edge(strategy: PocketStrategy) {
+    let (world, mut h, name, stock) = fig8_world();
+    let path = pocket_op(&world, &mut h, &name, stock.0.z, strategy, PassStart::Outside, None);
+    let levels = level_ends(&path);
+    assert!(levels.len() >= 2, "{strategy:?} levels: {levels:?}");
+    for (z, first, last) in &levels {
+        let out = outside_box(*first, stock);
+        assert!(out >= R8 - 0.05, "{strategy:?} Outside Z {z:.3}: the first ring starts {out:.3} mm outside the stock");
+        let d = to_part(&world, &name, *last);
+        assert!((d - R8).abs() < 0.05, "{strategy:?} Outside Z {z:.3}: the level ends {d:.3} mm from the part");
+    }
+}
+
 /// #3354 pin: on both ring strategies, Outside starts each level at the
 /// stock edge (the first ring cuts one stepover, never a slot) and ends
 /// it on the part wall.
 #[test]
+#[ignore = "heavy lane: app heavy: pocket_pass_start (94 s in debug, #3587)"]
 fn fig8_pocket_outside_starts_each_level_at_the_stock_edge() {
     for strategy in [PocketStrategy::Waterline, PocketStrategy::OffsetRings] {
-        let (world, mut h, name, stock) = fig8_world();
-        let path = pocket_op(&world, &mut h, &name, stock.0.z, strategy, PassStart::Outside, None);
-        let levels = level_ends(&path);
-        assert!(levels.len() >= 2, "{strategy:?} levels: {levels:?}");
-        for (z, first, last) in &levels {
-            let out = outside_box(*first, stock);
-            assert!(out >= R8 - 0.05, "{strategy:?} Outside Z {z:.3}: the first ring starts {out:.3} mm outside the stock");
-            let d = to_part(&world, &name, *last);
-            assert!((d - R8).abs() < 0.05, "{strategy:?} Outside Z {z:.3}: the level ends {d:.3} mm from the part");
-        }
+        assert_outside_starts_at_the_stock_edge(strategy);
     }
+}
+
+/// Light twin of `fig8_pocket_outside_starts_each_level_at_the_stock_edge`:
+/// the same law on Waterline only (one generation in place of two).
+#[test]
+#[ignore = "light lane: the Waterline case of the full test only (#3587); the full test is fig8_pocket_outside_starts_each_level_at_the_stock_edge"]
+fn fig8_pocket_outside_starts_each_level_at_the_stock_edge_light() {
+    assert_outside_starts_at_the_stock_edge(PocketStrategy::Waterline);
 }
 
 /// #3354 pin: Inside starts each level on the part wall.

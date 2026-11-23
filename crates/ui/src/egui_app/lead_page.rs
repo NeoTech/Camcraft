@@ -24,7 +24,6 @@ use super::layout::{auto_value, check_row, group, hint, prop_row, prop_row_hint}
 
 const ENTRY_KINDS: [&str; 4] = ["Plunge", "Ramp", "Helix", "Arc"];
 const TRANSITIONS: [&str; 5] = ["Same as entry", "Plunge", "Ramp", "Helix", "Arc"];
-const LINKS: [&str; 3] = ["Clearance plane", "Retract plane", "Keep down"];
 
 fn entry_idx(e: Entry3D) -> usize {
     match e {
@@ -64,11 +63,24 @@ fn link_of(i: usize) -> Link {
 /// radius, `None` for a kind whose first engagement is not a choice (the
 /// bore's centre dive).
 pub(super) fn leads_tab(ui: &mut Ui, u: Unit, tag: &str, first: Option<(&mut Entry3D, &mut f64)>, links: &mut Links) {
+    leads_tab_with_retract(ui, u, tag, first, links, true);
+}
+
+/// Roughing links use clearance while Heights has no retract hop (#3318).
+/// Keep the stored Retract choice so enabling the hop restores its plane.
+pub(super) fn leads_tab_with_retract(
+    ui: &mut Ui,
+    u: Unit,
+    tag: &str,
+    first: Option<(&mut Entry3D, &mut f64)>,
+    links: &mut Links,
+    has_retract: bool,
+) {
     let entry = first.as_ref().map(|(e, _)| **e);
     if let Some((entry, helix_radius)) = first {
         group(ui, "Entry", None, |ui| entry_group(ui, u, tag, entry, helix_radius, links));
     }
-    group(ui, "Linking", None, |ui| linking_group(ui, u, tag, entry, links));
+    group(ui, "Linking", None, |ui| linking_group(ui, u, tag, entry, links, has_retract));
     plunge_group(ui, u, &mut links.approach);
     feeds_group(ui, u, &mut links.approach);
     engagement_group(ui, &mut links.approach);
@@ -89,7 +101,19 @@ fn entry_group(ui: &mut Ui, u: Unit, tag: &str, entry: &mut Entry3D, helix_radiu
     arm_fields(ui, u, *entry, &mut links.approach);
 }
 
-fn linking_group(ui: &mut Ui, u: Unit, tag: &str, entry: Option<Entry3D>, links: &mut Links) {
+fn linking_group(ui: &mut Ui, u: Unit, tag: &str, entry: Option<Entry3D>, links: &mut Links, has_retract: bool) {
+    let (retract_label, keep_down_hint) = if has_retract {
+        (
+            "Retract plane",
+            "the tool stays at depth only where the link is proved clear of the part; every other link lifts to the retract plane, named in the status line",
+        )
+    } else {
+        (
+            "Clearance plane (hop off)",
+            "the tool stays at depth only where the link is proved clear of the part; every other link lifts to Clearance Z because Hop below clearance is off",
+        )
+    };
+    let link_names = ["Clearance plane", retract_label, "Keep down"];
     let mut t_idx = links.transition.map_or(0, |e| entry_idx(e) + 1);
     prop_row(ui, "Level to level", |ui| combo(ui, &format!("{tag}_transition"), &mut t_idx, &TRANSITIONS));
     links.transition = t_idx.checked_sub(1).map(entry_of);
@@ -121,18 +145,15 @@ fn linking_group(ui: &mut Ui, u: Unit, tag: &str, entry: Option<Entry3D>, links:
     check_row(ui, "Equal depth steps", &mut links.approach.equal_steps);
     hint(ui, "the same number of levels, each step the same depth, none over the stepdown");
     let mut l_idx = link_idx(links.level);
-    prop_row(ui, "Between levels", |ui| combo(ui, &format!("{tag}_level_link"), &mut l_idx, &LINKS));
+    prop_row(ui, "Between levels", |ui| combo(ui, &format!("{tag}_level_link"), &mut l_idx, &link_names));
     links.level = link_of(l_idx);
     let mut p_idx = link_idx(links.pass);
-    prop_row(ui, "Between passes", |ui| combo(ui, &format!("{tag}_pass_link"), &mut p_idx, &LINKS));
+    prop_row(ui, "Between passes", |ui| combo(ui, &format!("{tag}_pass_link"), &mut p_idx, &link_names));
     links.pass = link_of(p_idx);
     if links.level == Link::KeepDown || links.pass == Link::KeepDown {
         auto_value(ui, "Max stay-down distance", "No limit", &mut links.max_stay_down, "no limit", 50.0, |ui, v| {
             num(ui, u, v);
         });
-        hint(
-            ui,
-            "the tool stays at depth only where the link is proved clear of the part; every other link lifts to the retract plane, named in the status line",
-        );
+        hint(ui, keep_down_hint);
     }
 }

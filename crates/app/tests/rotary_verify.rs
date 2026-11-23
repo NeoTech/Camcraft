@@ -130,6 +130,10 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
 /// stock a rotary job is clamped from (standing for the contour and
 /// the rough, laid along x for the parallel).
 fn world_for(kind: Kind, dia: f64, clearance: f64) -> World {
+    world_with(kind, dia, params(kind, clearance))
+}
+
+fn world_with(kind: Kind, dia: f64, op: OpParams) -> World {
     let world = new_world();
     let mut h = History::default();
     let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
@@ -144,7 +148,7 @@ fn world_for(kind: Kind, dia: f64, clearance: f64) -> World {
     h.execute(&world, stock.expect("bar stock"));
     let mesh = if lying { laid() } else { revolve(16) };
     h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(mesh)));
-    let op = CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), params(kind, clearance));
+    let op = CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), op);
     h.execute(&world, op.expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "OP").expect("generate"));
     // The tilting head owns the letters; G54 sits above the work (the
@@ -253,6 +257,26 @@ fn rotary_contour_on_a_round_bar_verifies_clean_and_posts() {
 #[test]
 fn rotary_parallel_on_a_laid_bar_verifies_clean_and_posts() {
     posts_clean(Kind::Parallel, "rp");
+}
+
+/// #2970: with Bottom at the bar's underside the passes go all the
+/// way round, and the tilting head (B -120..120) cannot point the tool
+/// up at the underside: the machine check refuses by axis, angle and
+/// travel, and nothing posts. A Bottom over the axis (the case above)
+/// keeps to the arc the head reaches.
+#[test]
+fn a_full_turn_rotary_parallel_refuses_on_a_head_that_cannot_reach_under() {
+    let OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, .. } =
+        params(Kind::Parallel, 25.0)
+    else {
+        unreachable!("the parallel params")
+    };
+    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg };
+    let world = world_with(Kind::Parallel, 12.4, op);
+    let report = posting::verification_report(&world);
+    let text = format!("{:?}", report.problems);
+    assert!(text.contains(": move ") && text.contains(" commands B ") && text.contains("the travel is -120.000..120.000"), "{text}");
+    blocks(&world, "rp-full");
 }
 
 #[test]

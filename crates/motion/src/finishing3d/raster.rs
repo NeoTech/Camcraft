@@ -13,7 +13,7 @@ use super::march::{emit_runs, march_curve};
 use super::raster_bridge::bridge_line;
 use super::rim::rim_rows;
 use super::rings::emit_rings_with_trim;
-/// One Z-following raster pass: lines perpendicular to `(ux, uy)`
+/// One Z-following raster pass: lines along the unit vector `(ux, uy)`
 /// across the shallow facets' padded bounds, stepped by the cos-law
 /// (or an explicit `stepover`), each walked by `march_curve`'s laws
 /// and delivered by `emit_runs`' choreography. Serpentine within
@@ -176,6 +176,13 @@ pub(super) fn raster_pass_spaced(
     Ok(true)
 }
 
+/// Return the input diagnostic for an angle outside one turn.
+#[must_use]
+pub fn parallel_angle_refusal(direction_angle: f64) -> Option<&'static str> {
+    (!(0.0..360.0).contains(&direction_angle))
+        .then_some("Parallel direction angle must be at least 0 and less than 360 degrees")
+}
+
 /// The raster strategies (Parallel, ParallelMulti, Scallop): the
 /// shallow terrain cut Z-following in each direction the pattern
 /// asks for - once (Parallel), across the axes (ParallelMulti), or
@@ -184,6 +191,20 @@ pub(super) fn raster_pass_spaced(
 /// toolpath, with the two strategies meeting at the shared 45°
 /// jurisdiction line.
 pub fn parallel(facets: &[Triangle], p: &Finish3DParams) -> Result<Toolpath, GenError> {
+    parallel_with_angle(facets, p, 0.0)
+}
+
+/// Generate a raster with the Parallel pass directed counterclockwise from
+/// +X in the supplied facets' XY frame. The angle is in degrees, in [0, 360).
+/// The crossing patterns and the waterline rings keep their own directions.
+pub fn parallel_with_angle(
+    facets: &[Triangle],
+    p: &Finish3DParams,
+    direction_angle: f64,
+) -> Result<Toolpath, GenError> {
+    if let Some(why) = parallel_angle_refusal(direction_angle) {
+        return Err(GenError::Invalid(why.into()));
+    }
     validate(p, facets)?;
     let r = p.tool_diameter * 0.5;
     let sups = build_sups(facets, r);
@@ -197,6 +218,19 @@ pub fn parallel(facets: &[Triangle], p: &Finish3DParams) -> Result<Toolpath, Gen
     let (ax, ay, bx, by) = match p.pattern {
         FinishPattern::Scallop => (d, d, d, -d),
         FinishPattern::ParallelMulti => (1.0, 0.0, 0.0, 1.0),
+        FinishPattern::Parallel => {
+            let (ux, uy) = match direction_angle {
+                0.0 => (1.0, 0.0),
+                90.0 => (0.0, 1.0),
+                180.0 => (-1.0, 0.0),
+                270.0 => (0.0, -1.0),
+                _ => {
+                    let (sin, cos) = direction_angle.to_radians().sin_cos();
+                    (cos, sin)
+                }
+            };
+            (ux, uy, 0.0, 0.0)
+        }
         _ => (1.0, 0.0, 0.0, 0.0),
     };
     let mut emitted = raster_pass(&mut b, p, r, &sups, ax, ay, false)?;

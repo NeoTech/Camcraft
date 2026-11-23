@@ -392,6 +392,9 @@ impl Tool {
         let cr = self.corner_r.clamp(0.0, r).min(zc);
         let mut p: Vec<(f64, f64)> = Vec::new();
         add_pt(&mut p, 0.0, 0.0);
+        // Where the neck step starts: the flute top, or (#1444) above it
+        // where a lollipop ball meets its neck.
+        let mut neck_from = zc;
         match self.kind {
             ToolKind::BallNose | ToolKind::Probe => {
                 let steps = 24;
@@ -429,7 +432,7 @@ impl Tool {
             | ToolKind::TSlot | ToolKind::Keyseat => add_pt(&mut p, 0.0, r),
             // A dovetail narrows upward and a lollipop is a ball
             // (#1444): the head draws its own flute top.
-            ToolKind::Dovetail | ToolKind::Lollipop => crate::undercut::head_outline(self, &mut p),
+            ToolKind::Dovetail | ToolKind::Lollipop => neck_from = crate::undercut::head_outline(self, &mut p),
             // The chamfer mill's cone is the same picture read the
             // other way in purpose - apex at the tip center opening
             // upward to the full radius - so it shares the drill's
@@ -451,8 +454,8 @@ impl Tool {
             add_pt(&mut p, zc, r);
         }
         let sr = self.shank_d.max(0.0) * 0.5;
-        if zs > zc {
-            add_pt(&mut p, zc, sr);
+        if zs > neck_from {
+            add_pt(&mut p, neck_from, sr);
             add_pt(&mut p, zs, sr);
         }
         let hr = self.holder_d.max(0.0) * 0.5;
@@ -624,8 +627,14 @@ mod tests {
             let p = t.profile();
             assert!(p.len() >= 3, "{name}: an outline needs vertices");
             assert_eq!(p[0], (0.0, 0.0), "{name}: tip center first");
+            // #1444: a lollipop's neck starts inside its ball; the union
+            // draws the neck from where the ball narrows to it.
+            let neck_z = match crate::undercut::Undercut::of(&t) {
+                Some(u) if u.head == crate::undercut::Head::Ball => u.r + (u.r * u.r - u.neck_r * u.neck_r).sqrt(),
+                _ => g.flute_len,
+            };
             assert!(
-                near(&p, g.flute_len, g.shank_radius),
+                p.iter().any(|&(pz, pr)| (pz - neck_z).abs() < 1e-9 && (pr - g.shank_radius).abs() < 1e-6),
                 "{name}: the shank band must start where verify says"
             );
             assert!(

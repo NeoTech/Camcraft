@@ -4,6 +4,8 @@
 
 mod common;
 mod do_not_touch_support;
+#[path = "do_not_touch/trace.rs"]
+mod trace;
 
 use camcraft_app::commands::SetOperationDoNotTouch;
 use camcraft_app::verify::{FixturePart, Warning};

@@ -46,6 +46,8 @@ mod live;
 mod model_tools;
 // #1862: DXF profiles placed on a setup's stock.
 mod sketch_tools;
+// #3072: typed text in an outline font as a profile of closed shapes.
+mod outline_text_tools;
 // #45: an operation's display name and its place in its setup.
 mod machine_tools;
 mod order_tools;
@@ -87,6 +89,8 @@ mod thread_infeed_tools;
 mod workholding_tools;
 // #3070: the guided sheet job.
 mod sheet_job_tools;
+// #3073: saved cut recipes.
+mod recipe_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

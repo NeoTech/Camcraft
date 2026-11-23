@@ -24,6 +24,8 @@ pub mod electrode_outline;
 pub mod holder_profile;
 // #793: the built-in BT/CAT taper holder library, drawn as spun profiles.
 pub mod holder_library;
+// #3367: the tool meridian (lines and arcs) and its convex atoms.
+pub mod meridian;
 // #93: a drawn revolved (spun) profile for milling tools and holders.
 pub mod spun;
 // #93 slice 2: a milling tool's own drawn cutter, checked against its numbers.

@@ -142,6 +142,28 @@ fn layout_window_unsaved_prompt() {
 }
 
 #[test]
+fn layout_window_overwrite_prompt() {
+    // #3608: a Save held because the project file on disk changed.
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.state_mut().state.save_guard.held = Some(std::path::PathBuf::from("job.camproj"));
+    h.run_steps(3);
+    assert_modal_layout(
+        &h,
+        "overwrite-prompt",
+        "Overwrite modal",
+        &[
+            "job.camproj: the file on disk changed",
+            "job.camproj on disk changed after this window opened or saved it. \
+             Overwrite puts your document in place of that file. \
+             Save As writes your document to a new file and does not change the file on disk.",
+            "Overwrite",
+        ],
+        "Cancel",
+    );
+}
+
+#[test]
 fn layout_window_dxf_units() {
     // #1863: a drawing with no $INSUNITS opens the units prompt.
     let _g = snapshot_guard();

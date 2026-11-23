@@ -126,7 +126,7 @@ fn fanuc_refuses_a_comp_word_that_would_land_on_an_arc_a_rapid_or_the_section_en
 /// engage carries no D (the tool call's `T2 D2` selected the edge) and
 /// states the NORM approach.
 const DIALECTS: &[(&str, &str, &str)] = &[
-    ("haas", "G1 G42 X0. Y0. Z-2. D2 F500", "G1 G40 X8. Y0. Z-2. F500"),
+    ("haas", "G1 G42 X0. Y0. Z-2. D2 F500.", "G1 G40 X8. Y0. Z-2. F500."),
     ("mazak", "G01 G42 X0. Y0. Z-2. D2 F500", "G01 G40 X8. Y0. Z-2. F500"),
     ("sinumerik", "G1 G42 NORM X0 Y0 Z-2 F500", "G1 G40 X8 Y0 Z-2 F500"),
 ];
@@ -189,7 +189,7 @@ fn every_wear_post_notes_the_register_once_and_control_writes_no_note() {
 
 #[test]
 fn every_other_shipped_post_refuses_control_compensation_by_name() {
-    for stem in ["heidenhain", "fanuc-lathe", "tormach", "grblhal", "tinyg", "linuxcnc", "grbl"] {
+    for stem in ["heidenhain", "fanuc-lathe", "tormach", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
         let cps = post(stem);
         let out = engine::run(&cps, &Value::Null, STREAM).unwrap_or_else(|e| panic!("{stem}: {e}"));
         assert!(

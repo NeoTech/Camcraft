@@ -270,7 +270,7 @@ fn smoothing_blocks_the_native_agie_job_before_publication() {
     let temp = tempfile::tempdir().unwrap();
     let dest = temp.path().join("SMOOTH");
     let error = posting::post_mounts_with_script_options(&world, &dest, Some(&separation(1.0))).unwrap_err();
-    assert_eq!(error, "Agie jobs require default post options and One program output");
+    assert_eq!(error, "Native wire EDM jobs require default post options and One program output");
     assert!(!dest.exists());
 }
 

@@ -60,6 +60,7 @@ fn pocket(strategy: PocketStrategy, top: f64, bottom: f64) -> OpParams {
 
 fn adaptive2d(top: f64, bottom: f64) -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         blend_radius: None, blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
         stepover: 4.0,

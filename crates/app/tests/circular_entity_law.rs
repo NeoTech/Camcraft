@@ -87,6 +87,7 @@ fn job() -> (World, History) {
 /// the wall, cut from the top to Z 1.
 fn circular(radius: f64) -> OpParams {
     OpParams::Circular {
+        pass_start: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         center: Point2::new(0.0, 0.0),
         radius,

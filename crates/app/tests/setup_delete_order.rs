@@ -1,10 +1,11 @@
 //! #1362: undoing `DeleteSetup` must give back the program exactly as it
 //! was - the setup in its old place in the setup order, and therefore
 //! the operations and the posted program in their old order. Redo takes
-//! it out again. The setup order is the name order (`setup::setups`), so
-//! a re-spawned setup lands where its name sorts, wherever it was
-//! created; these tests pin that through the post, so a later change to
-//! how the order is stored cannot lose a position on undo unnoticed.
+//! it out again. The setup order is the creation order stored on each
+//! setup (`SetupDef::order`, #3447; `setup::setups`), so a re-spawned
+//! setup takes back its stored place; these tests pin that through the
+//! post, so a change to how the order is stored cannot lose a position
+//! on undo unnoticed.
 //!
 //! Gate map (#1362): covers app::commands (DeleteSetup, CreateSetup),
 //! app::setup, app::posting.
@@ -60,10 +61,9 @@ fn face(world: &World, history: &mut History, name: &str) {
 }
 
 /// Three setups, each with its own box stock. The first and the last machine
-/// one Face each; the middle one is empty, so it may be deleted. The names
-/// are created out of name order ("Middle" last) to show which order is
-/// the law: the restored setup comes back where its name sorts, not at
-/// the end of the creation sequence.
+/// one Face each; the middle one is empty, so it may be deleted. The
+/// setup order is the creation order (#3447), stored on the setup: the
+/// restored setup comes back in the middle, not at the end.
 fn three_setups() -> (World, History) {
     let world = new_world();
     let mut history = History::default();
@@ -72,11 +72,11 @@ fn three_setups() -> (World, History) {
     run(&world, &mut history, AddTool::new(&world, TOOL, tool), "tool");
     run(&world, &mut history, CreateSetup::new(&world, Some("A_First"), None), "A_First");
     face(&world, &mut history, "Face_A");
+    run(&world, &mut history, CreateSetup::new(&world, Some("B_Middle"), None), "B_Middle");
+    box_stock(&world, &mut history);
     run(&world, &mut history, CreateSetup::new(&world, Some("C_Last"), None), "C_Last");
     box_stock(&world, &mut history);
     face(&world, &mut history, "Face_C");
-    run(&world, &mut history, CreateSetup::new(&world, Some("B_Middle"), None), "B_Middle");
-    box_stock(&world, &mut history);
     run(&world, &mut history, ActivateSetup::new(&world, Some("A_First")), "activate first");
     (world, history)
 }

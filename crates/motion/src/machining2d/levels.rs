@@ -30,6 +30,8 @@ use super::slots::chord_clears;
 /// never bless a gouge.
 pub(super) enum Cert<'a> {
     Region(&'a Region),
+    /// Cutter-center disk of a Circular vault band or the authored rim.
+    RingDisk { center: Point2, radius: f64, tess: &'a Region },
     Stadium { a: Point2, b: Point2, h: f64, tess: &'a Region },
 }
 
@@ -38,7 +40,7 @@ impl Cert<'_> {
     pub(super) fn room(&self) -> &Region {
         match self {
             Cert::Region(r) => r,
-            Cert::Stadium { tess, .. } => tess,
+            Cert::Stadium { tess, .. } | Cert::RingDisk { tess, .. } => tess,
         }
     }
 
@@ -49,6 +51,9 @@ impl Cert<'_> {
     pub(super) fn chord_ok(&self, p: Point2, q: Point2) -> bool {
         match self {
             Cert::Region(r) => chord_clears(r, p, q),
+            Cert::RingDisk { center, radius, .. } => {
+                [p, q].iter().all(|v| (v.x - center.x).hypot(v.y - center.y) <= radius + 1e-7)
+            }
             Cert::Stadium { a, b, h, .. } => {
                 dist_to_seg(p, *a, *b) <= h + 1e-7 && dist_to_seg(q, *a, *b) <= h + 1e-7
             }
@@ -166,6 +171,8 @@ pub(super) struct Motion {
     /// path already cut (the start-side plan's open pieces end on walls,
     /// beside stock no cut has reached yet).
     pub(super) cleared_links: bool,
+    /// #3567: the plan's dead-end starts, entered by a ramp along the pass.
+    pub(super) ramp_starts: Vec<Point2>,
 }
 
 impl Motion {
@@ -194,13 +201,8 @@ impl Motion {
             ring_zig: false,
             solid_restart: false,
             cleared_links: false,
+            ramp_starts: Vec::new(),
         }
-    }
-
-    /// #3316: prove keep-down pass links through cut material too.
-    pub(super) fn with_cleared_links(mut self, on: bool) -> Self {
-        self.cleared_links = on;
-        self
     }
 
     /// #2265: enter a solid pass start by the entry arm (the pocket).

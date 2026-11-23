@@ -101,7 +101,7 @@ fn assert_inert(stem: &str, l: &str) {
 fn hostile_names_post_well_formed_comments_in_every_mill_dialect() {
     let stream = mill_stream(8000.0);
     let m = mill(MACHINE);
-    for stem in ["fanuc", "haas", "mazak", "tormach", "grblhal", "tinyg", "grbl"] {
+    for stem in ["fanuc", "haas", "mazak", "tormach", "grblhal", "tinyg", "grbl", "mach3"] {
         let nc = post(stem, &m, &stream);
         for l in nc.lines() {
             assert_paren_line(stem, l);
@@ -276,6 +276,7 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         if stem.contains("wire") { mch["kind"] = json!("wire-edm"); }
         if stem.contains("sinker") { mch["kind"] = json!("sinker-edm"); }
         if stem.contains("plasma") { mch["kind"] = json!("plasma"); }
+        if stem.contains("waterjet") { mch["kind"] = json!("waterjet"); }
         let result = engine::run_program_with(
             &std::fs::read_to_string(&p).expect("post reads"), &mch, "", &json!(null), &id,
         );
@@ -283,7 +284,7 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
             let error = result.expect_err("the native Agie job must refuse a single-file program");
             assert!(
                 matches!(&error, camcraft_post::post::PostError::Script(message) if message.contains(
-                    "Agie native wire EDM requires the desktop or CLI One program post to a new job directory"
+                    "Native wire EDM job files require the desktop or CLI One program post to a new job directory"
                 )),
                 "{stem}: {error}"
             );
@@ -318,6 +319,6 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         }
         text_posts += 1;
     }
-    assert_eq!(text_posts, 20, "every shipped text post writes both notes");
+    assert_eq!(text_posts, 25, "every shipped text post writes both notes");
     assert_eq!(native_refusals, 1, "the native Agie dispatcher refused the notes");
 }

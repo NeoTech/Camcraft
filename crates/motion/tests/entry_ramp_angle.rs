@@ -78,6 +78,7 @@ fn circular_with_links(links: Links, climb: bool) -> Toolpath {
     circular(
         &region(),
         &CircularParams {
+            pass_start: Default::default(),
             links,
             center: Point2::new(0.0, 0.0),
             radius: 3.0,

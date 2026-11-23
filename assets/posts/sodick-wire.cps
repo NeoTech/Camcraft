@@ -127,6 +127,30 @@ function clean(s) {
 }
 // #3213: the control rejects hashes, brackets and escapes in every comment.
 function note(s) { block(["(" + String(s).replace(/[#\[\]\\]/g, " ") + ")"]); }
+// #3214: the posted condition's row in the machine file. The path's kerf
+// offset used its gap; the program states that gap so the operator can
+// compare it with the control's own row, and says so loudly when the row
+// is an example (notes starting "EXAMPLE"). A note, not a message(): any
+// message blocks the post, and the program itself must carry the warning.
+function conditionRow(id) {
+  var e = typeof machine !== "undefined" && machine ? machine.edm : null;
+  var list = e && e.conditions ? e.conditions : [];
+  var key = String(id).replace(/\s+/g, "").toUpperCase();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && String(list[i].id).replace(/\s+/g, "").toUpperCase() === key) return list[i];
+  }
+  return null;
+}
+function conditionNotes() {
+  var c = conditionRow(condition);
+  if (!c) return;
+  var gap = has(c.gap) ? Number(c.gap).toFixed(3) + " MM" : "NOT STATED";
+  if (/^\s*EXAMPLE/i.test(String(c.notes || ""))) {
+    note("WARNING CONDITION " + condition + " IS AN EXAMPLE ROW - THE KERF USES AN EXAMPLE GAP OF " + gap + " - REPLACE IT BEFORE CUTTING");
+  } else {
+    note("CONDITION " + condition + " KERF GAP " + gap + " - COMPARE WITH THE CONTROL ROW");
+  }
+}
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
 
@@ -317,6 +341,7 @@ function onSection() {
   // The C word selects a row of the control's own condition table; the
   // program carries no table, so the operator checks the row exists.
   note("CONDITION " + condition + " MUST EXIST IN THE CONTROL CONDITION TABLE - CHECK ITS VALUES");
+  conditionNotes();
   block([wcsWord]);
 }
 
@@ -391,6 +416,7 @@ function startSkim() {
   }
   skim++;
   note("SKIM " + skim + " - CONDITION " + condition + " MUST EXIST IN THE CONTROL CONDITION TABLE");
+  conditionNotes();
   // The skim's flushing, then its condition (the #1499 order: T, then C).
   if (skimFlushWord !== "") block([skimFlushWord]);
   block([condition]);
@@ -468,7 +494,7 @@ function onCircular() {
   }
   if (!cutOk(p)) return;
   // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
-  var fate = arcFate(arcWord);
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
   if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   var c = p.IJKIncrement || {};
   if (!has(c.I) || !has(c.J) || !has(p.StartX) || !has(p.StartY)) {

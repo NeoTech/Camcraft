@@ -342,7 +342,7 @@ fn groove_and_part_post_to_the_lathe_golden() {
         bar_advance: 30.0,
         bar_unload: true,
         bar_transfer: false,
-        inspect_tol: 0.0,
+        inspect_tol: 0.0, kerf: Default::default(),
     };
     create(&world, &mut history, "G1", "GT-0200", groove);
     create(&world, &mut history, "P1", "GT-0300", part);

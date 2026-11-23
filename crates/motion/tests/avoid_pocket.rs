@@ -77,6 +77,7 @@ fn base_2d(strategy: PocketStrategy, entry: Entry3D, links: Links) -> PocketPara
 
 fn base_3d(strategy: PocketStrategy, entry: Entry3D, links: Links) -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         links,
         tool_diameter: 6.0,
         stepover: 2.5,

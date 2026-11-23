@@ -250,7 +250,7 @@ fn post_mounts_with(
         Some((None, _)) => false,
         None => mounts.iter().any(|mount| super::agie::is_native(&mount.post)),
     } {
-        return Err("An Agie job requires a single mount and setup".into());
+        return Err("A native wire EDM job requires a single mount and setup".into());
     }
     if mounts.len() <= 1 {
         let posted = match explicit {

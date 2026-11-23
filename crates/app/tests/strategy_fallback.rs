@@ -46,6 +46,12 @@ fn an_adaptive_fallback_to_offset_rings_is_a_warning() {
     assert_eq!(fallback.len(), 1, "one fallback warning: {texts:?}\nnotes {:?}", t.notes);
     let text = fallback[0].to_string();
     assert!(text.contains("1 area") && text.contains("Adaptive"), "{text}");
+    // #3542: the Adaptive text does not change, byte for byte.
+    let at = t.moves.iter().position(|m| m.kind != camcraft_app::cl::MoveKind::Rapid).unwrap_or(0);
+    assert_eq!(
+        text,
+        format!("Adaptive fell back to Offset rings on 1 area from move {at}: the notes name each one and why (the post is not held: the rings are verified)")
+    );
     assert!(!fallback[0].blocks_post(), "the rings are verified; the post is not held: {text}");
     assert_eq!(warns.len(), 1, "no other warning: {texts:?}");
 }

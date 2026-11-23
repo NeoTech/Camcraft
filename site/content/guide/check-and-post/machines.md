@@ -22,7 +22,7 @@ messages below.
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn (live tooling) | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21); Sinker EDM (ISO) | Sodick ALC400G (complete its EDM data); supply a sinker machine file |
+| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), G-EDM Wire EDM; Sinker EDM (ISO) | Sodick ALC400G (complete its EDM data); supply a sinker machine file |
 
 A **waterjet** machine file needs linear X and Y axes; Z is optional. It
 is refused by name if it states a spindle, live tooling, a rotary axis or
@@ -228,10 +228,13 @@ rotary axis`.
 The library includes **Sodick ALC400G** (`sodick-alc400g.mch`): X/Y
 travel is 400/300 mm and U/V travel is 150/150 mm, centred on zero in
 the file. Its stated taper maximum is 25 degrees at 130 mm work height.
-The file supplies no conditions, wire diameter, guide heights, automatic
-threading or EDM codes. Add those from your actual machine and control
-documentation before use. The taper figure alone does not enable taper:
-the missing guide planes cause a nonzero taper edit to be refused.
+The file ships an example starter set (#3214): the conditions `C110`,
+`C120` and `C130`, guide heights 0 and 130 mm, and automatic threading.
+These are not Sodick figures. Replace them with the rows of your
+control's condition table and your machine's guide heights before you
+cut ([Conditions](@/guide/operations/operations-edm.md#wire-edm-the-machine-the-wire-and-the-post)).
+The file supplies no wire diameter list and no EDM codes. The Sodick
+post writes a vertical 2-axis cut only, so it refuses a taper.
 The ALC400G control has not been confirmed to match the Mark 21 post.
 
 Wire Contour runs on a machine file that declares `wire_edm`. The
@@ -239,6 +242,11 @@ Wire Contour runs on a machine file that declares `wire_edm`. The
 `edm.codes`. A user `.cps` file can also declare `wireEdm` in its manifest.
 The **Sodick Wire EDM (Mark 21)** post writes 2-axis contours. It refuses
 taper and 4-axis cuts. Its output has not been verified on a Sodick control.
+The **G-EDM Wire EDM** post writes one 2-axis contour for a G-EDM
+controller (G-RBLv3). It needs no `edm.codes`: you set the spark power at
+the controller. Thread the wire at the start point before you start the
+program. It refuses taper, 4-axis cuts, skims and wire offset (G41 / G42).
+Its output has not been verified on a G-EDM controller.
 
 For an angle-word taper, the machine must state `edm.taper_angle`,
 including its side rule and mitre or cone corner rule. The generic wire

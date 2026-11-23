@@ -139,7 +139,7 @@ fn a_parting_cut_in_a_wider_bar_approaches_from_the_bar_and_posts_clean() {
         bar_advance: 0.0,
         bar_unload: false,
         bar_transfer: false,
-        inspect_tol: 0.0,
+        inspect_tol: 0.0, kerf: Default::default(),
     };
     let (world, warns, moves, _) = run(grooved(), Some((20.0, 44.0)), "GT-0200", params);
     let tips: Vec<f64> = moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| rho(m.to)).collect();

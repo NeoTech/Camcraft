@@ -118,6 +118,7 @@ fn a_staged_face_under_stock_over_top_z_keeps_the_level_at_top_z() {
 #[test]
 fn a_vault_under_stock_over_top_z_cuts_its_rim_ring_at_top_z() {
     let t = generated(OpParams::Circular {
+        pass_start: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         center: Point2::new(0.0, 0.0),
         radius: 12.0,

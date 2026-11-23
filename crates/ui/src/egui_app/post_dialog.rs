@@ -274,17 +274,17 @@ fn queue_post_after_apply(
     let dir_trim = dlg.target_dir.trim();
     if posting::agie::is_native(&dlg.post) {
         if !posting::agie::valid_name(&dlg.file_name) {
-            dlg.error = Some("Enter an Agie job name of up to eight uppercase letters or digits, starting with a letter".into());
+            dlg.error = Some("Enter a job name of up to eight uppercase letters or digits, starting with a letter".into());
             state.post_dialog = Some(dlg);
             return;
         }
         if dlg.options.per_op {
-            dlg.error = Some("Choose One program to create an Agie job directory".into());
+            dlg.error = Some("Choose One program to create a native wire EDM job directory".into());
             state.post_dialog = Some(dlg);
             return;
         }
         let parent = if dir_trim.is_empty() {
-            crate::file_dialog::FileDialog::new().set_title("Choose a parent folder for the Agie job").pick_folder()
+            crate::file_dialog::FileDialog::new().set_title("Choose a parent folder for the native wire EDM job").pick_folder()
         } else {
             Some(PathBuf::from(dir_trim))
         };

@@ -250,6 +250,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "p", Some((&mut *entry, helix_radius)), links);
                 super::approach_page::pocket_arc_group(ui, u, *entry, &mut links.approach);
+                super::predrilled_page::predrilled_group(ui, &mut links.approach, rest.is_some());
             }
             if tab == SEC_HEIGHTS {
                 orientation_editor(ui, u, tilt);
@@ -340,6 +341,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             entry,
             helix_radius,
             optimal_load, method, troch, blend_turns, blend_radius,
+            rest: _, // #1446: no rows on this page yet; the draft keeps the value
             corner_relief,
             tilt,
             pass_start,

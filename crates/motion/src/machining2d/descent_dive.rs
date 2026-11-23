@@ -253,6 +253,11 @@ pub(super) fn links_to(l: &Lvl, q: Point2, e: Point2) -> bool {
 /// that does and links back to the start at depth; else the floor's room
 /// (the M8.1 dive, its link proved or the second dive named).
 pub(super) fn dive_point(l: &Lvl, e: Point2, m: &Motion) -> Option<Point2> {
+    // The band boundary is a cutting circle. Landing on its start keeps
+    // the descent in the same column on each level of the ring.
+    if matches!(l.cen, Cert::RingDisk { .. }) && l.cen.chord_ok(e, e) {
+        return Some(e);
+    }
     let margin = wall_margin(m);
     if disc_clears(l.cen.room(), e, margin) {
         return Some(e);

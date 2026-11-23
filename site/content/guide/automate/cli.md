@@ -162,6 +162,12 @@ $ echo $?
 0
 ```
 
+`cam.save()` with no path saves over the file that `cam.load` opened. It
+refuses, and names the file, when that file on disk changed after the load
+or the last save. For example, a second CamCraft window, a `git pull` or a
+colleague in a shared folder wrote it. Save to a different path, or replace
+the file with `cam.save(null, { overwrite: true })`.
+
 ## Exit codes
 
 | Code | Meaning | Observed |

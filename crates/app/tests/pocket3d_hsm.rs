@@ -31,6 +31,7 @@ const TOOL: &str = "EM-1000-4FL";
 
 fn pocket_op(strategy: PocketStrategy) -> OpParams {
     OpParams::Pocket3D {
+        pass_start: Default::default(),
         links: Links::ROUGH3D,
         stepover: 4.0,
         stock_to_leave: 0.0,

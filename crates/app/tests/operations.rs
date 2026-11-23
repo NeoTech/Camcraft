@@ -4074,6 +4074,8 @@ fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
     OpParams::Finish3D {
         gap_link: camcraft_app::finishing3d::GapLink::Jump,
         pattern: camcraft_app::finishing3d::FinishPattern::Waterline,
+        direction_angle: 0.0,
+        pass_start: camcraft_app::machining2d::PassStart::Auto,
         stepover: None,
         tolerance,
         clearance_z: Height::fixed(25.0),
@@ -5939,25 +5941,57 @@ fn rotary_parallel_generates_radial_axes_and_verifies_clean() {
     // The raster's heights are world z in the laid frame (an exact
     // reading for a flat-lying bar), read off the BALL a vertical tip
     // there would carry - its center r up the pose from the posted
-    // tip, its lowest point r under that (M13 pivot law): the ladder
-    // never sinks below its Bottom, and its last line IS the Bottom.
-    // The links are not the raster (M13.8): a pass on the flank under
-    // the equator retracts along ITS radius onto the 25 mm clearance
-    // cylinder, below the Bottom plane and in air - those retract
-    // ends are judged by the verdict above, not by the Bottom law.
-    let low = |m: &camcraft_app::cl::Move| m.to.z + 3.0 * m.axis.map_or(1.0, |a| a[2]) - 3.0;
+    // tip, its lowest point r under that (M13 pivot law). #2970: the
+    // bar is planned in two halves, the laid frame (A) and that frame
+    // turned half a turn about the axis (B); each half's ladder never
+    // sinks below its Bottom in its OWN frame, and its last line IS
+    // the Bottom. B's tips are also held to the Bottom where they touch
+    // the bar: a posed tip on the wall is the contact. The links are
+    // not the raster (M13.8): a pass retracts along ITS radius onto the
+    // 25 mm clearance cylinder, in air - those retract ends are judged
+    // by the verdict above, not by the Bottom law.
+    let center = |m: &camcraft_app::cl::Move| {
+        let a = m.axis.unwrap_or([0.0, 0.0, 1.0]);
+        (m.to.y + 3.0 * a[1], m.to.z + 3.0 * a[2])
+    };
+    let low = |m: &camcraft_app::cl::Move| center(m).1 - 3.0; // A's reading
     let on_clearance = |m: &&camcraft_app::cl::Move| (m.to.y * m.to.y + m.to.z * m.to.z).sqrt() >= 25.0 - 1e-6;
-    let lowest = t
+    let cuts: Vec<_> = t
         .moves
         .iter()
         .filter(|m| matches!(m.kind, MoveKind::Feed | MoveKind::Plunge))
         .filter(|m| !on_clearance(m))
-        .map(low)
-        .fold(f64::INFINITY, f64::min);
-    assert!(
-        lowest >= -4.0 - 1e-9,
-        "the raster sank below its Bottom plane: {lowest}"
-    );
+        .collect();
+    // The Bottom bound of both halves: every feed and plunge touches the
+    // bar at or over the Bottom in world z (a posed tip on the bar is
+    // where the ball touches; tolerance 0.1). It reads half A's cuts
+    // under the axis plane that the two-half filter keeps as well as
+    // half B's. A per-half reading in each half's own frame cannot fail
+    // here (over the axis plane `low` >= -3, under it B's `-cz - 3` >
+    // -3), so it is not asserted; this bound, the counts and the sector
+    // check below are the bounds.
+    let (mut over, mut under) = (0usize, 0usize);
+    for m in &cuts {
+        if center(m).1 >= 0.0 {
+            over += 1;
+        } else {
+            under += 1;
+        }
+        assert!(m.to.z >= -4.0 - 0.1 - 1e-9, "a cut touches under the Bottom: {m:?}");
+    }
+    assert!(over > 20 && under > 20, "both halves cut: {over} over the axis plane, {under} under it");
+    // #2970: the passes go all the way round - every 30-degree sector
+    // about the axis holds a cutting ball center out on the turned
+    // surface (off the axis by more than the ball).
+    let mut hit = [false; 12];
+    for m in cuts.iter().filter(|m| m.kind == MoveKind::Feed) {
+        let (y, z) = center(m);
+        if (y * y + z * z).sqrt() > 3.0 {
+            let k = (z.atan2(y).to_degrees().rem_euclid(360.0) / 30.0) as usize;
+            hit[k.min(11)] = true;
+        }
+    }
+    assert!(hit.iter().all(|h| *h), "sectors (30 deg, 0 = +y) with no pass: {hit:?}");
     let on_bottom = t
         .moves
         .iter()
@@ -6413,6 +6447,7 @@ fn multiaxis_rough_params() -> OpParams {
 
 fn multiaxis_rough_pocket_twin() -> OpParams {
     OpParams::Pocket3D {
+        pass_start: Default::default(),
         links: camcraft_app::links::Links::ROUGH3D,
         stepover: 3.0,
         stock_to_leave: 0.0,

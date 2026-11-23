@@ -269,6 +269,12 @@ pub enum OpParams {
         blend_turns: bool,
         /// The corner arc's radius, mm; `None` is the tool radius.
         blend_radius: Option<f64>,
+        /// Rest machining (#1446): cut only what the previous operations
+        /// of the setup left, read from the stock they leave
+        /// (`machining2d::rest_adaptive_previous`). `None` is off - every
+        /// earlier file. Only `RestSource::PreviousOperations` is taken:
+        /// an entered previous tool is refused by name (`rest_op`).
+        rest: Option<crate::machining2d::RestParams>,
         /// Corner relief (#2400): dogbone or T-bone inside-corner relief.
         corner_relief: crate::machining2d::CornerRelief,
         /// 3+2 index; see [`OpParams::Face`]'s field.
@@ -400,6 +406,7 @@ pub enum OpParams {
         radius: f64,
         /// The dome law instead of the flat floors (variant docs).
         vault: bool,
+        pass_start: crate::machining2d::PassStart,
         stepover: f64,
         stock_to_leave: f64,
         clearance_z: Height,
@@ -596,6 +603,10 @@ pub enum OpParams {
         /// ladder (if any) owes the closing half-step less. Off is
         /// the level ladder exactly as it always generated.
         shell: bool,
+        /// Where each level's rings start (#3361, the shared parameter
+        /// of #3316): read by Waterline and Offset rings. `Auto` is
+        /// every earlier file, byte for byte.
+        pass_start: crate::machining2d::PassStart,
     },
     /// Ball-nose surface finishing. The model is the finished
     /// surface. `Waterline`: each ring is the ball-center tangent
@@ -604,7 +615,7 @@ pub enum OpParams {
     /// stepdown field: the tolerance IS the depth increment's author
     /// (see [`crate::finishing3d`]). `Parallel`/`ParallelMulti`/
     /// `Scallop`: a Z-following raster over the shallow terrain (once
-    /// along X, crossed along the axes, crossed along the diagonals),
+    /// at the direction angle, crossed along the axes or the diagonals),
     /// then the same scallop ladder's rings on the steep flanks - the
     /// 45° auto-split, one jurisdiction line for both halves. Region,
     /// heights and refusals follow the 3-D pocket's laws exactly:
@@ -615,6 +626,9 @@ pub enum OpParams {
         /// M2.2a default; Parallel adds the raster (M2.2b),
         /// ParallelMulti and Scallop cross it (M2.2c).
         pattern: finishing3d::FinishPattern,
+        /// Parallel raster direction in degrees counterclockwise from +X
+        /// in the work coordinate system. The valid range is [0, 360).
+        direction_angle: f64,
         /// Raster line spacing, mm; `None` (always for Waterline)
         /// follows the stepover cos-law from the tolerance instead -
         /// same "the tolerance is the author" law as the stepdown.
@@ -684,6 +698,10 @@ pub enum OpParams {
         /// own diagonal certifies the break.
         /// See [`crate::finishing3d::GapLink`].
         gap_link: finishing3d::GapLink,
+        /// Where the nested offset loops start (#3362, the shared
+        /// parameter of #3316): read by Contour and Flat only. `Auto`
+        /// is every earlier file, byte for byte.
+        pass_start: crate::machining2d::PassStart,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the chamfer's chord across the
@@ -732,6 +750,37 @@ pub enum OpParams {
         /// #1890: the break mode (Constant Width or Constant Depth and
         /// its depth), the profile, and the passes.
         sizing: finishing3d::DeburrBreak,
+    },
+    /// Multi-axis Deburr (#1894): every field of [`Self::Deburr`] with
+    /// the same meaning, and the tool axis tilted onto each break - one
+    /// cone flank on the chamfer plane - so steep and vertical edges
+    /// break too. `axis_mode` says how the axis moves (`Axis5` leans
+    /// freely, `Axis4` stays square to the A axis); `lead_deg` and
+    /// `lag_deg` lean it along the travel; `max_tilt_deg` caps how far
+    /// it may turn off the edge's natural pose, for the lean and for
+    /// the escape from the holder that `shank_avoid` asks for. The
+    /// window bounds the EDGES here, not the tip: a tilted tip stands
+    /// beside the edge, not under it.
+    MultiAxisDeburr {
+        width: f64,
+        clearance_z: Height,
+        top_z: Height,
+        bottom_z: Height,
+        feed: f64,
+        plunge_feed: f64,
+        exclude_edges: Vec<GeoSel>,
+        min_edge_angle_deg: f64,
+        exclude_holes: bool,
+        hole_min_diameter: f64,
+        hole_max_diameter: f64,
+        unreachable: finishing3d::UnreachableEdges,
+        sizing: finishing3d::DeburrBreak,
+        axis_mode: crate::multiaxis::DeburrAxisMode,
+        lead_deg: f64,
+        lag_deg: f64,
+        max_tilt_deg: f64,
+        /// Tilt the axis off the shank and holder; off tests nothing.
+        shank_avoid: bool,
     },
     /// Simultaneous 5-axis level finishing (M5.1 stage C): the waterline
     /// ring ladder a [`Self::Finish3D`] Waterline cuts, with a tool-axis
@@ -1131,7 +1180,9 @@ pub enum OpParams {
     ///   blades leave, so a rough's promise is only silent once a
     ///   finish answers for it). The verdict as a re-run decision,
     ///   not a report tail. 0 is silence, like every signal's off
-    ///   state.
+    ///   state. `kerf` (#3469) names the piece kept (the cut-off piece
+    ///   by default, or the piece in the chuck) and the back stock the
+    ///   whole kerf stands off the plane, into the scrap side.
     Part {
         tolerance: f64,
         clearance_z: Height,
@@ -1145,6 +1196,7 @@ pub enum OpParams {
         bar_unload: bool,
         bar_transfer: bool,
         inspect_tol: f64,
+        kerf: crate::turning::PartKerf,
     },
     /// Threading (M5.2 stage D): the helical ladder on a MODELED
     /// thread. `pitch` is that thread's lead - the lattice of V's
@@ -1371,6 +1423,10 @@ pub enum OpParams {
     /// rule and inner-before-outer order (see [`crate::plasma`]). The
     /// plasma table's only kind (#669's family seam).
     PlasmaProfile(super::plasma::PlasmaOp),
+    /// Waterjet profile (#1883): 2D through-cuts of the picked contours
+    /// with an abrasive jet - kerf offset, leads, tabs as uncut gaps and
+    /// inner-before-outer order (see [`crate::waterjet`]).
+    WaterjetProfile(super::waterjet::WaterjetOp),
     /// Wire EDM contour (#532): one closed profile cut by a vertical
     /// wire at the kerf offset of the machine's condition, on a stated
     /// punch / die side, from a stated start hole (see
@@ -1409,6 +1465,7 @@ impl OpParams {
             OpParams::Pocket3D { .. } => OpType::Pocket3D,
             OpParams::Finish3D { .. } => OpType::Finish3D,
             OpParams::Deburr { .. } => OpType::Deburr,
+            OpParams::MultiAxisDeburr { .. } => OpType::MultiAxisDeburr,
             OpParams::Contour5D { .. } => OpType::Contour5D,
             OpParams::Parallel5D { .. } => OpType::Parallel5D,
             OpParams::Swarf { .. } => OpType::Swarf,
@@ -1435,6 +1492,7 @@ impl OpParams {
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
+            OpParams::WaterjetProfile(_) => OpType::WaterjetProfile,
             OpParams::WireContour(_) => OpType::WireContour,
             OpParams::SinkerBurn(_) => OpType::SinkerBurn,
             OpParams::SinkerSideBurn(_) => OpType::SinkerSideBurn,
@@ -1466,7 +1524,7 @@ impl OpParams {
             // The probe touches along the machine's axes (#108); the
             // torch stands vertical over a flat plate (#670); the
             // trochoid carries no index (#220 slice 1).
-            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::TrochoidalSlot { .. } => None,
+            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::TrochoidalSlot { .. } => None,
             // The wire stands vertical (#532): a taper is a pose per
             // move (#290 D2, #536), never a 3+2 index.
             OpParams::WireContour(_) => None,
@@ -1485,7 +1543,7 @@ impl OpParams {
             // not by a machine index: the axis stands vertical over
             // the edge point and the generatrix does the breaking -
             // a 3+2 index would fight the one fact the ride is (M2.5 E B).
-            | OpParams::Deburr { .. }
+            | OpParams::Deburr { .. } | OpParams::MultiAxisDeburr { .. }
             | OpParams::Contour5D { .. }
             | OpParams::Parallel5D { .. }
             | OpParams::Swarf { .. }
@@ -1544,6 +1602,7 @@ impl OpParams {
     pub fn clearance(&self) -> Height {
         match self {
             OpParams::PlasmaProfile(p) => p.clearance_z,
+            OpParams::WaterjetProfile(p) => p.clearance_z,
             // A wire has no rapids plane (#532): it never lifts out of
             // the work; its travel plane is the workpiece's top.
             OpParams::WireContour(p) => p.top_z,
@@ -1564,7 +1623,7 @@ impl OpParams {
             | OpParams::Drill { clearance_z, .. }
             | OpParams::Pocket3D { clearance_z, .. }
             | OpParams::Finish3D { clearance_z, .. }
-            | OpParams::Deburr { clearance_z, .. }
+            | OpParams::Deburr { clearance_z, .. } | OpParams::MultiAxisDeburr { clearance_z, .. }
             | OpParams::Contour5D { clearance_z, .. }
             | OpParams::Parallel5D { clearance_z, .. }
             | OpParams::Swarf { clearance_z, .. }
@@ -1605,6 +1664,7 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => *clearance_z,
             // The plasma contours are drawn on the plate's top (#670).
             OpParams::PlasmaProfile(p) => p.top_z,
+            OpParams::WaterjetProfile(p) => p.top_z,
             // The wire's profile is drawn on the workpiece's top (#532).
             OpParams::WireContour(p) => p.top_z,
             // The electrode enters at the work top (#541).
@@ -1626,7 +1686,7 @@ impl OpParams {
             | OpParams::Pocket3D { top_z, .. }
             | OpParams::Finish3D { top_z, .. }
             // The window's top: the highest TIP the ride may stand at.
-            | OpParams::Deburr { top_z, .. }
+            | OpParams::Deburr { top_z, .. } | OpParams::MultiAxisDeburr { top_z, .. }
             | OpParams::Contour5D { top_z, .. }
             | OpParams::Parallel5D { top_z, .. }
             | OpParams::Swarf { top_z, .. }
@@ -1682,6 +1742,11 @@ impl OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => f(*clearance_z),
             OpParams::PlasmaProfile(p) => {
+                f(p.clearance_z);
+                f(p.top_z);
+                f(p.bottom_z);
+            }
+            OpParams::WaterjetProfile(p) => {
                 f(p.clearance_z);
                 f(p.top_z);
                 f(p.bottom_z);
@@ -1799,7 +1864,7 @@ impl OpParams {
             // The deburr ride visits the trio (M2.5 E B): the kernel
             // hops every run to `clearance_z` itself, so no retract
             // exists to visit - the facing law's shape, on a mill.
-            OpParams::Deburr { clearance_z, top_z, bottom_z, .. } => {
+            OpParams::Deburr { clearance_z, top_z, bottom_z, .. } | OpParams::MultiAxisDeburr { clearance_z, top_z, bottom_z, .. } => {
                 f(*clearance_z);
                 f(*top_z);
                 f(*bottom_z);

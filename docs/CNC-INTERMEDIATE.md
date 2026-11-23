@@ -39,6 +39,8 @@ committed golden is a legal post input.
 | `GUARD <x> <y> <z> F <feed>` | a protected positioning move of a probe path (#174), µm: feed to the point, stop on contact and ALARM if the stylus trips on the way. Every non-rapid motion of a path carrying probing touches that is neither a touch nor its back-off posts as one (the descent to a touch's start, the travel between touches, the rise). Hook `onProbeGuard` (properties `X Y Z Feed`, `StartX/Y/Z`); a script without it is refused by name, once per operation - a plain feed would drive the stylus into an unexpected obstacle |
 | `PLASMA KERF<µm> [CONTROL] [PIERCE<µm>] [CUTH<µm>] [DELAY<ms>] [AUTOFEED] [REVERSED]` | a plasma section's header (#671), before its `SECTION`: the `.cl` v5 `; PLASMA` record without its `; ` (see "Plasma records" below, which also gives each word). Its properties hold until `ENDSECTION` |
 | `TORCH ON C<id> OUTER\|INNER\|OPEN [PARENT<id>] [SMALL<f×1000>]` / `TORCH OFF C<id>` | the torch struck before the next motion record / put out after the previous one (#671): the `.cl` v5 `; TORCH` records without their `; ` |
+| `WATERJET [ABRASIVE] [DWELL<ms>] [LAG<ms>]` | a waterjet section's header (#1882), before its `SECTION`: the `.cl` `; WATERJET` record without its `; ` (see "Waterjet records" below). Its properties hold until `ENDSECTION` |
+| `JET ON C<id> OUTER\|INNER\|OPEN` / `JET OFF C<id>` | the jet opened before the next motion record / closed after the previous one (#1882) |
 | `START X <i> Y <i> Z <i>` / `END` | legacy `.cl` position lines: consumed silently (END ends the record span) |
 
 `CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE REAM FINEBORE. Word meanings
@@ -90,6 +92,7 @@ behavior only):
 |---|---|
 | `StartX` `StartY` `StartZ` | current point before the record (mm) |
 | `X` `Y` `Z` | record end point (mm; cycles: center XY, bottom Z) |
+| `OriginalZChange` | signed Z change of the original motion record (mm), retained on every generated chord |
 | `A` `B` `C` | commanded tool angles, degrees — ABSENT unless the record carries the words above |
 | `IJKIncrement` | absolute arc center, mm, keyed by the plane's center letters: `{I, J}` (XY), `{I, K}` (XZ), `{J, K}` (YZ) |
 | `CircularPlane` | `XY` / `XZ` / `YZ` (arcs; M11.2 A) - a post states G17/G18/G19 modally from it |
@@ -132,6 +135,7 @@ behavior only):
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
 | `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `WireTaperDialect` `WireCorner` `WirePlane` `WireAngle` | a tapered section on an angle-word machine (#1164, `edm.taper_angle`): `angle`, the control's corner rule (`mitre` or `cone`) and the programmed plane's Z (the work's top), before the section; then before each written move the angle word (the stated taper signed by the machine's `positive` side rule, 0 for the move that stands the wire upright) - that move's X Y are the wire's point on the programmed plane, and no `WireU` `WireV` are sent. The cone rule's turning moves are the control's and are not sent |
+| `WaterjetAbrasive` `PierceDwell` `ValveLagDwell` | the `WATERJET` header (#1882), for the section: the abrasive feeds (`true`) or the cut is pure water (`false`); the pierce dwell and the valve lag dwell in s - each ABSENT when unstated. Cleared at `ENDSECTION` |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
 
 A post that declares `failOnWarning = true` refuses the complete program if the engine or script reports a warning. The standalone post tool then leaves the destination untouched. Informational program header notes can still be written as comments.
@@ -142,9 +146,13 @@ A post that declares `failOnWarning = true` refuses the complete program if the 
 
 - `properties` — one object per record, as above; `W` an alias
 - `currentPosition` — `{X, Y, Z}`, live
+- `programBounds` — the XY box of the cutting records, `{minX, maxX,
+  minY, maxY}` mm, or `null` (#1882); set before `onOpen`
 - `machine` — the `.mch` flattened: `rapidRate`, `feedRateMax`,
   `spindleMax`, `coolants[]`, `rotaries[]` (letter + stated direction
-  + travel in degrees, geometry never speeds), and `rtcp` — a
+  + travel in degrees, geometry never speeds), `travel` (#1882: the
+  linear strokes `{X, Y, Z}`, each `[min, max]` mm or `null` when
+  unstated), and `rtcp` — a
   geometric judgment, true when some rotary states a direction that
   is not the Z column (an A about X tilts; a spindle-column C turns
   in plane). A script may output RTCP modes only when `rtcp` is true;
@@ -347,3 +355,24 @@ spellings - so a `.cl` plasma golden posts as it stands. The plasma
 post (`assets/posts/tormach-plasma.cps`, `posting::PLASMA_POSTS`)
 voices them in PathPilot's words (`M200`, `M207`/`M208`/`M209`,
 `G15`/`G16`, `M205`, `G30`; UM10720 §6-7).
+
+## Waterjet records (#1882)
+
+An abrasive-waterjet path carries [`cl::WaterjetCut`]: whether the
+abrasive feeds, the stated dwells, and one open-jet span per contour in
+cut order. The `.cl` form is comment-prefixed like the plasma records;
+the `.cnc` stream carries the same records without the `; `, and the
+stream reader takes both spellings. The records are independent of the
+plasma records: a waterjet has no torch height control.
+
+| line | meaning |
+|---|---|
+| `; WATERJET [ABRASIVE] [DWELL<ms>] [LAG<ms>]` | the header. `ABRASIVE`: the abrasive feeds with the jet (absent: a pure-water cut). `DWELL` the pierce dwell, `LAG` the valve lag dwell (the time the opened valve needs for a full stream), each present only when stated. Each word at most once; a negative dwell is refused |
+| `; JET ON C<id> OUTER\|INNER\|OPEN` | the jet opens before the next motion record. `C<id>` the contour's id, unique, in cut order |
+| `; JET OFF C<id>` | the jet closes after the previous motion record; names the same id as its `ON` |
+
+Laws (`WaterjetCut::is_sane`, and the engine's `JetLaw` for the stream):
+one header before any `JET`; spans never nest or overlap; every
+open-jet record is a feed or arc, never a rapid; ids are unique; a jet
+never closed is refused. A script that does not define `onJetOn` and
+`onJetOff` is refused by name when a header arrives.

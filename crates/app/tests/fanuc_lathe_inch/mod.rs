@@ -161,7 +161,7 @@ pub fn fixture(name: &str) -> (World, PostOptions) {
             let part = OpParams::Part {
                 tolerance: 0.05, clearance_z: h(20.0), top_z: h(28.0), bottom_z: h(-10.0), stepdown: 0.5,
                 feed: 150.0, plunge_feed: 60.0, bar_load: true, bar_advance: 30.0, bar_unload: true,
-                bar_transfer: false, inspect_tol: 0.0,
+                bar_transfer: false, inspect_tol: 0.0, kerf: Default::default(),
             };
             create(&w, &mut hi, "G1", "GT-0200", groove);
             create(&w, &mut hi, "P1", "GT-0300", part);

@@ -24,6 +24,7 @@ fn channel() -> Region {
 
 fn params(z: f64) -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         tool_diameter: 10.0,
         stepover: 4.0,
         stock_to_leave: 0.0,

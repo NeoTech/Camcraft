@@ -50,6 +50,32 @@ pub(super) fn write_corner_relief(
     }
 }
 
+/// Rest machining (#1489, #2033, #1446): written only when ON, so
+/// operations without rest machining keep their digest. `entered` is
+/// `true` on 2D Pocket (`0xD7` + previous tool fields) and `false` on
+/// 2D Adaptive (`0xD9` + allowance).
+pub(super) fn write_rest(
+    rest: &Option<crate::machining2d::RestParams>,
+    h: &mut std::hash::DefaultHasher,
+    entered: bool,
+) {
+    let Some(r) = rest else {
+        return;
+    };
+    if entered {
+        h.write_u8(0xD7);
+        for v in [r.previous_tool_diameter, r.previous_corner_radius, r.previous_stock_to_leave, r.allowance] {
+            w(h, v);
+        }
+    } else {
+        h.write_u8(0xD9);
+        w(h, r.allowance);
+    }
+    if r.source == crate::machining2d::RestSource::PreviousOperations {
+        h.write_u8(0xD8);
+    }
+}
+
 /// One scalar, as its bit pattern.
 pub(super) fn w(h: &mut std::hash::DefaultHasher, v: f64) {
     h.write(&v.to_bits().to_le_bytes());

@@ -51,7 +51,7 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [3d/rough-finish](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rough-finish)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-pocket3d" /> }} ![View of roughing passes at successive levels around a 3D model.](../../../operation-paths.svg#Pocket3D)
@@ -137,7 +137,7 @@ so a deep job can refuse even where there appears to be side clearance.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [3d/rough-finish](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rough-finish)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-finish3d" /> }} ![View of parallel finishing passes following a curved surface.](../../../operation-paths.svg#Finish3D)

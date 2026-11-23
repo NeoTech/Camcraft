@@ -163,7 +163,7 @@ fn part_params(plane_z: f64) -> OpParams {
         bar_advance: 0.0,
         bar_unload: false,
         bar_transfer: false,
-        inspect_tol: 0.0,
+        inspect_tol: 0.0, kerf: Default::default(),
     }
 }
 

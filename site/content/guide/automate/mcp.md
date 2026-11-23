@@ -70,12 +70,13 @@ time. The current, authoritative tool list is whatever the client's
 | Models | `import_model`, `move_model`, `repair_model`, `set_part_axes`, `lay_part_on_points`, `lay_part_on_face`, `align_part_cylinder`, `delete_model`, `set_model_link`, `vouch_model_fidelity` |
 | DXF profiles | `import_dxf`, `move_dxf_profile` |
 | Engraving text | `insert_text` |
+| Outline-font text (closed shapes) | `insert_outline_text` |
 | Setups and work offsets | `add_setup`, `activate_setup`, `set_wcs`, `set_wcs_from_features`, `set_wcs_circle_centre`, `place_setup_origin`, `set_work_offset`, `load_machine`, `set_workholding_max_rpm`, `set_sheet_job`, `set_stock`, `fit_stock`, `set_raw_stock_only`, `set_operation_setup`, `delete_setup`, `set_program`, `set_setup_post`, `set_wcs_flip`, `edit_machine`, `get_rotary_stack`, `set_setup_nose_to_axis` |
 | Fixtures and workholding | `add_fixture`, `remove_fixture`, `move_fixture`, `locate_part`, `get_fixture_findings`, `add_builtin_vise`, `set_vise`, `add_mod_vise_pair`, `set_mod_jaw`, `refit_mod_vise`, `add_accessory`, `set_accessory`, `add_fixture_plate`, `set_fixture_plate`, `place_on_plate`, `detect_plate_grid`, `get_plate_grid`, `turn_fixture`, `import_dxf_fixture`, `set_fixture_profile`, `derive_fixture_profile`, `get_fixture_profile`, `export_fixture_dxf` |
 | Tools and holders | `list_tool_catalog`, `add_tool`, `set_tool`, `import_tool_library`, `export_tool_library`, `list_holder_library`, `set_tool_holder`, `get_tool_cutter_profile`, `set_tool_cutter_profile`, `set_tool_cutter_params`, `edit_tool`, `delete_tool`, `import_tool_holder_dxf`, `export_tool_holder_dxf`, `convert_tool_step_to_profile` |
 | Materials and cutting data | `set_work_material`, `set_stock_material`, `suggest_cutting_data`, `apply_cutting_data` |
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
-| Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces` |
+| Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
 | Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
 
@@ -204,6 +205,13 @@ unchanged. An argument the tool does not know is refused rather than
 ignored, so a typo never reads as "done". The same reasons the window gives
 apply: see [Reading a refusal](@/guide/reference/refusals.md). An unexpected internal
 fault is caught and reported as a refusal; it does not end the session.
+
+`save_project` over the file last opened or saved is refused when that file
+on disk changed after the session opened or saved it. For example, a second
+CamCraft window, a `git pull` or a colleague in a shared folder wrote it.
+The error names the file. Save to a different path, or call the tool again
+with `overwrite: true` to replace the file. In the window, Save shows a
+prompt for the same case.
 
 ## Safety
 

@@ -70,3 +70,5 @@ pub use recognize::{recognize, recognize_cross};
 mod tests_opposite;
 #[cfg(test)]
 mod tests_punched_bar;
+#[cfg(test)]
+mod tests_tilted;

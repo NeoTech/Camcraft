@@ -15,12 +15,14 @@
 //! assets/posts/fanuc-lathe.cps, assets/posts/grbl.cps,
 //! assets/posts/grblhal.cps, assets/posts/haas.cps,
 //! assets/posts/heidenhain.cps, assets/posts/heidenhain-klartext.cps,
-//! assets/posts/linuxcnc.cps, assets/posts/mach4.cps,
-//! assets/posts/mazak.cps, assets/posts/sinker-iso.cps,
+//! assets/posts/linuxcnc.cps, assets/posts/mach3.cps, assets/posts/mach4.cps,
+//! assets/posts/mazak.cps, assets/posts/richauto.cps,
+//! assets/posts/sinker-iso.cps,
 //! assets/posts/sinumerik.cps, assets/posts/sodick-wire.cps,
 //! assets/posts/tinyg.cps, assets/posts/tormach.cps,
 //! assets/posts/tormach-lathe.cps, assets/posts/tormach-plasma.cps,
-//! assets/posts/wire-iso.cps, camcraft_post::post::arc_guard,
+//! assets/posts/waterjet-iso.cps, assets/posts/wire-iso.cps,
+//! camcraft_post::post::arc_guard,
 //! camcraft_post::post::engine.
 
 use camcraft_post::post::engine;
@@ -45,6 +47,7 @@ enum Kind {
     Mill,
     Lathe,
     Plasma,
+    Waterjet,
     Wire,
     Sinker,
 }
@@ -61,8 +64,10 @@ const POSTS: &[(&str, Kind)] = &[
     ("heidenhain", Kind::Mill),
     ("heidenhain-klartext", Kind::Mill),
     ("linuxcnc", Kind::Mill),
+    ("mach3", Kind::Mill),
     ("mach4", Kind::Mill),
     ("mazak", Kind::Mill),
+    ("richauto", Kind::Mill),
     ("sinker-iso", Kind::Sinker),
     ("sinumerik", Kind::Mill),
     ("sodick-wire", Kind::Wire),
@@ -70,6 +75,7 @@ const POSTS: &[(&str, Kind)] = &[
     ("tormach", Kind::Mill),
     ("tormach-lathe", Kind::Lathe),
     ("tormach-plasma", Kind::Plasma),
+    ("waterjet-iso", Kind::Waterjet),
     ("wire-iso", Kind::Wire),
 ];
 
@@ -100,7 +106,7 @@ fn mill_cuts(reference: bool) -> String {
     s
 }
 
-/// The flat witness of the 2D posts (plasma, wire): the XY part of the
+/// The flat witness of the 2D posts (plasma, waterjet, wire): the XY part of the
 /// mill witness, at Z 0.
 fn flat_cuts(reference: bool) -> String {
     let f = ARC_FEED;
@@ -153,6 +159,11 @@ fn stream(kind: Kind, reference: bool) -> String {
              Rapid X 26123 Y 5432 Z 0\nTORCH ON C0 OPEN\nFeed X 18123 Y 5432 Z 0 F 2000\n{}TORCH OFF C0\nRapid X 26123 Y 5432 Z 0\nENDSECTION\n",
             flat_cuts(reference)
         ),
+        Kind::Waterjet => format!(
+            "; HSMW-CNC v1\nPARAM OperationName Waterjet witness\nPARAM WorkOffset 1\nWATERJET ABRASIVE DWELL800 LAG300\nSECTION\n\
+             Rapid X 26123 Y 5432 Z 0\nJET ON C0 OPEN\nFeed X 18123 Y 5432 Z 0 F 300000\n{}JET OFF C0\nRapid X 26123 Y 5432 Z 0\nENDSECTION\n",
+            flat_cuts(reference)
+        ),
         Kind::Wire => format!(
             "; HSMW-CNC v1\nPARAM OperationName Punch1\nPARAM WorkOffset G54\nPARAM EdmCondition C110\nPARAM WireSide punch\nSECTION\n\
              Rapid X 26123 Y 5432 Z 0\nFeed X 18123 Y 5432 Z 0 F 2000\n{}ENDSECTION\n",
@@ -169,6 +180,7 @@ fn machine(stem: &str) -> Value {
     match stem {
         "heidenhain-klartext" => mirrored("assets/machines/fehlmann-picomax55.mch"),
         "tormach-plasma" => mirrored("assets/machines/tormach-1300pl.mch"),
+        "waterjet-iso" => json!({"name": "ARC WATERJET", "kind": "waterjet"}),
         "wire-iso" => serde_json::from_str(&read("crates/app/tests/edm/wire-iso-fixture.mch")).expect("wire fixture"),
         "sodick-wire" => json!({"kind": "wire_edm", "name": "Synthetic wire", "edm": {"awt": true}}),
         "sinker-iso" => serde_json::from_str(&read("crates/app/tests/edm/sinker-iso-dialect.mch")).expect("sinker fixture"),

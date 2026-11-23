@@ -86,6 +86,7 @@ fn params(parting_z: f64, clearance_z: f64, top_z: f64) -> PartParams {
         feed: 0.0,
         plunge_feed: 0.05,
         blade_width: W,
+        kerf: Default::default(),
     }
 }
 

@@ -114,6 +114,7 @@ fn saved_world() -> World {
         bar_unload: false,
         bar_transfer: false,
         inspect_tol: 0.0,
+        kerf: Default::default(),
     };
     for (name, params) in [("G1", groove), ("P1", part)] {
         h.execute(&world, CreateOperation::new(&world, name, "GT-0300", SrcRef::Entity("pin".into()), params).expect("op"));

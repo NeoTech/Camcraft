@@ -177,11 +177,13 @@ pub fn region_z(
         | OpParams::Thread { top_z, .. }
         // The deburr window's ceiling names the same high station:
         // the ride's tips stand at or below it (M2.5 E B).
-        | OpParams::Deburr { top_z, .. } => resolve(*top_z),
+        | OpParams::Deburr { top_z, .. } | OpParams::MultiAxisDeburr { top_z, .. } => resolve(*top_z),
         // The probe's station is its expected contact (#108).
         OpParams::Probe { target, .. } => Some(target[2]),
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => resolve(p.top_z),
+        // The waterjet cut rides the sheet's top (#1883).
+        OpParams::WaterjetProfile(p) => resolve(p.top_z),
         // The wire's profile is read on the workpiece's top (#532).
         OpParams::WireContour(p) => resolve(p.top_z),
         // The electrode enters at the work top (#541).
@@ -370,7 +372,7 @@ pub fn resolve_params_with(
         // and floor, since the kernel stands the tip `drop` below
         // each edge it breaks (M2.5 E B). The rapids plane hops every
         // run itself; no hop height exists to resolve.
-        OpParams::Deburr { clearance_z, top_z, bottom_z, .. } => (
+        OpParams::Deburr { clearance_z, top_z, bottom_z, .. } | OpParams::MultiAxisDeburr { clearance_z, top_z, bottom_z, .. } => (
             req("Clearance Z", *clearance_z)?,
             Some(req("Window Top Z", *top_z)?),
             Some(req("Window Bottom Z", *bottom_z)?),
@@ -412,6 +414,15 @@ pub fn resolve_params_with(
         // The plasma cut (#670): the torch-off plane, the plate's top
         // (the cut plane) and bottom (its thickness) - no hop plane.
         OpParams::PlasmaProfile(p) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Top of Plate Z", p.top_z)?),
+            Some(req("Bottom of Plate Z", p.bottom_z)?),
+            None,
+            None,
+        ),
+        // The waterjet cut (#1883): the jet-off plane, the sheet's top
+        // (the cut plane) and bottom - no hop plane.
+        OpParams::WaterjetProfile(p) => (
             req("Clearance Z", p.clearance_z)?,
             Some(req("Top of Plate Z", p.top_z)?),
             Some(req("Bottom of Plate Z", p.bottom_z)?),

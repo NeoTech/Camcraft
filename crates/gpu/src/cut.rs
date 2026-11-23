@@ -123,14 +123,14 @@ impl CutItem {
         if !self.ball && self.flank <= 0.0 {
             return Err(bad(format!("item {n} is a flat end mill with no flank")));
         }
-        for a in 0..3 {
+        for (a, dim) in dims.into_iter().enumerate() {
             let (lo, hi) = (self.lo[a], self.hi[a]);
             if lo > hi || hi >= CUT_BRICK {
                 return Err(bad(format!("item {n} has the cells {lo}..={hi} on axis {a}: not inside one brick")));
             }
             let first = i64::from(self.base[a]) + i64::from(lo);
             let last = i64::from(self.base[a]) + i64::from(hi);
-            if first < 0 || last >= i64::from(dims[a]) {
+            if first < 0 || last >= i64::from(dim) {
                 return Err(bad(format!("item {n} reaches the cells {first}..={last} on axis {a}, outside the lattice")));
             }
         }

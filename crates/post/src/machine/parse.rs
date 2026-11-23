@@ -204,6 +204,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
     let (mount, holder) = super::tooling::parse_tooling(&v, holders).map_err(|e| format!("machine file: {e}"))?;
     m.spindle_mount = mount;
     m.default_holder = holder;
+    m.reserved_tools = super::reservations::parse(&v).map_err(|e| format!("machine file: {e}"))?;
 
     // #760: optional controller coordinate rotation capability (`G68` / `ROT`).
     m.coordinate_rotation = match v.pointer("/controller/coordinate_rotation") {

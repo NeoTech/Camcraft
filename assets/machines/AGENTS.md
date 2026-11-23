@@ -99,7 +99,8 @@ unstated capability into existence.
   key). Like plasma, an EDM head states no `spindle`, `live_tool` or
   coolant list (`post::machine::edm_refusals`, read by the reader and
   the Machines pane's validator alike); a rotary is allowed. No vendor
-  values are shipped. The empty sinker template (`sinker-edm.mch`, #1135)
+  values are shipped; the ALC400G's example starter set (#3214) is
+  marked EXAMPLE in its description and its condition notes. The empty sinker template (`sinker-edm.mch`, #1135)
   is in the built-in library with the sinker post (`sinker-iso.cps`,
   #542): posting on it refuses by name for each missing `edm.codes` role
   until the user fills them. No wire machine is in the library yet (the
@@ -109,7 +110,9 @@ unstated capability into existence.
   are posted against).
 
 - `edm.conditions[]` (#531): the generator conditions the user states
-  from their machine's manual. None ship. CamCraft reads only the
+  from their machine's manual. Only `sodick-alc400g.mch` ships rows
+  (#3214): an example starter set, each row's `notes` starting
+  `EXAMPLE`, for the user to replace. CamCraft reads only the
   geometry a path needs; power and flushing stay the control's, picked
   by `id`. Each entry is an object of these keys only (any other key
   refuses by name: `edm condition "C1" gapp is not a condition key`):
@@ -328,6 +331,19 @@ unstated capability into existence.
   change, and a holder that cannot take the tool's shank is left off
   with a named note. `tooling.mount_source` is free text the reader
   never reads: the public page the mount was taken from.
+- `tooling.reserved` (#2604, optional list): controller tool selectors
+  that a cutting tool must not take. Each entry is
+  `{ "number": n, "name": "...", "use": "probe" | "tool_setter" }`.
+  State `number`, `name`, or both. `number` is a whole number in
+  1-99999 (T0 clears the spindle). `name` is printable ASCII with no
+  surrounding spaces, and compares without ASCII case. The reader refuses
+  BY NAME (`tooling.reserved[i]...`): an unknown key, a missing selector,
+  another `use`, a number out of range, and a number or name stated two
+  times. Absent reserves nothing. A cutting tool on a reserved number or
+  name refuses at each tool command, at verify and at post; a probe can
+  take a `probe` entry. A shipped file states an entry only where a
+  public manual of the maker names the pocket: name that document in the
+  file.
 
 ## What the script sees
 

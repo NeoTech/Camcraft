@@ -250,6 +250,9 @@ pub struct Machine {
     /// tool with no holder body, as before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_holder: Option<String>,
+    /// Controller pockets and names reserved for probes or tool setters (#2604).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reserved_tools: Vec<super::reservations::ReservedTool>,
     /// #760: whether the controller supports work-plane / coordinate
     /// rotation (`G68 X0 Y0 R` / `ROT RPL`) via `controller.coordinate_rotation`.
     /// Absent or false (the unstated-limit law) keeps `Control` mode refused
@@ -308,6 +311,7 @@ impl Machine {
     #[must_use]
     pub fn tooling_refusal(&self, lookup: Option<super::HolderLookup>) -> Option<String> {
         super::mount_check(self.spindle_mount.as_deref(), self.default_holder.as_deref(), lookup).err()
+            .or_else(|| super::reservations::validate(&self.reserved_tools).err())
     }
 
     fn limits_sane(&self) -> bool {

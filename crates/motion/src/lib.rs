@@ -40,6 +40,9 @@ pub mod machining2d;
 pub mod machining3d;
 pub mod plunge_law;
 pub mod plasma;
+// #1883: the 2D sheet kernel shared by plasma, wire EDM and waterjet.
+pub mod sheet;
+pub mod waterjet;
 pub mod wire_edm;
 pub mod probing;
 // #541: sinker EDM burn to depth.

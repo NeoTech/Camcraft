@@ -80,6 +80,22 @@ pub const OPTIONS: &[Opt] = &[
         default: "off",
         help: "Open the MCP server for AI agents on this local port (0 to 65535).",
     },
+    Opt {
+        flag: "--no-activate",
+        short: None,
+        value: None,
+        env: None,
+        default: "off",
+        help: "Show the window but do not make it the foreground window. The window that has the focus keeps it.",
+    },
+    Opt {
+        flag: "--minimized",
+        short: None,
+        value: None,
+        env: None,
+        default: "off",
+        help: "Start with the window minimized. It does not take the focus and it covers no other window. This also sets --no-activate.",
+    },
 ];
 
 /// An environment variable that has no option of its own.
@@ -150,6 +166,22 @@ struct Scan {
     /// The arguments that are neither an option nor an option's value, in
     /// order: the files to open (#2462).
     files: Vec<String>,
+    start: StartMode,
+}
+
+/// How the window first appears (#3582).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StartMode {
+    /// `--minimized`: the window opens minimized.
+    pub minimized: bool,
+    /// `--no-activate` (also set by `--minimized`): the window does not take the focus.
+    pub no_activate: bool,
+}
+
+/// The window start mode of the arguments. The default (all false) is the
+/// normal start. Default when [`parse`] refuses the arguments.
+pub fn start_mode(args: &[String]) -> StartMode {
+    scan(args).map(|s| s.start).unwrap_or_default()
 }
 
 /// Check each argument against [`OPTIONS`]. An unknown option is an error
@@ -175,6 +207,7 @@ pub fn files(args: &[String]) -> Vec<String> {
 
 fn scan(args: &[String]) -> Result<Scan, String> {
     let (mut help, mut version, mut files) = (false, false, Vec::new());
+    let mut start = StartMode::default();
     let mut it = args.iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "-" {
@@ -205,10 +238,15 @@ fn scan(args: &[String]) -> Result<Scan, String> {
         match opt.flag {
             "--help" => help = true,
             "--version" => version = true,
+            "--no-activate" => start.no_activate = true,
+            "--minimized" => {
+                start.minimized = true;
+                start.no_activate = true;
+            }
             _ => {}
         }
     }
-    Ok(Scan { help, version, files })
+    Ok(Scan { help, version, files, start })
 }
 
 /// The text of `--help`, built from the tables.

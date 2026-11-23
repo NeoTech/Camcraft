@@ -153,9 +153,14 @@ pub(super) fn plan_core(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, p
 /// on the proved cut.
 pub(super) fn ramp_fallback(l: &Lvl, z: f64, prev_z: f64, m: &Motion) -> Option<Descent> {
     let a = &m.links.approach;
-    let angle = if a.ramp_zigs() { a.ramp_angle } else { crate::links::DEFAULT_RAMP_ANGLE };
     let zf = descent_from(m, prev_z, true);
-    plan_zig_capped(l.pass, zf - z, angle, a.ramp_max_len).map(|(pre, n)| Descent::Zig(pre, n, zf))
+    plan_zig_capped(l.pass, zf - z, fallback_ramp_angle(a), a.ramp_max_len).map(|(pre, n)| Descent::Zig(pre, n, zf))
+}
+
+/// The angle (deg) of the ramp fallback: the entry's, 3 deg when it sets
+/// none (#3567 plans a dead end's ramp by it too).
+pub(super) fn fallback_ramp_angle(a: &crate::approach::Approach) -> f64 {
+    if a.ramp_zigs() { a.ramp_angle } else { crate::links::DEFAULT_RAMP_ANGLE }
 }
 
 /// The helix onto `e`: placed so its orbit closes ON `e` (M11.3 - no
@@ -177,6 +182,13 @@ fn plan_helix(
             why = "the helix pitch asks too many turns";
             continue;
         };
+        if let Cert::RingDisk { center, radius, .. } = l.cen {
+            if let Some(c) = super::circular_helix::tangent_center(*center, *radius, e, r) {
+                return Ok(Hel { start: e, center: c, turns: t, r, from });
+            }
+            why = "no helix fits inside this ring with a chord long enough to post";
+            continue;
+        }
         // On the pass start, else on the first pass a little along it
         // (linked back to the start at depth on the pass's own line).
         let starts = std::iter::once(e).chain(along_pass(l, m).into_iter().filter(|&q| links_to(l, q, e)));

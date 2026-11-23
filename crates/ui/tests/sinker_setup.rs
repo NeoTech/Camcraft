@@ -72,6 +72,7 @@ fn burn() -> OpParams {
         pass: SinkerPass::Single,
         cavity_x: 0.0,
         cavity_y: 0.0,
+        cavity_outline: Vec::new(),
         orbit: None,
         layer: None,
         wear_lost: None,

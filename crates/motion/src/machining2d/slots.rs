@@ -138,14 +138,12 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
     if len == 0.0 || !len.is_finite() {
         return Err(GenError::Invalid("slot endpoints must be distinct".into()));
     }
-    let r = p.tool_diameter * 0.5;
-    let h = p.width * 0.5 - r - p.stock_to_leave;
-    if h < 0.0 {
+    let Some(h) = super::slot_band::slot_centre_band(p.width, p.tool_diameter, p.stock_to_leave)? else {
         return Err(GenError::Invalid(format!(
             "slot is narrower than the tool: the slot is {:.3} mm wide ({:.3} mm left on each wall) and the tool is {:.3} mm",
             p.width, p.stock_to_leave, p.tool_diameter
         )));
-    }
+    };
     let u = Point2::new(dx / len, dy / len);
     let n = Point2::new(-u.y, u.x);
     let ds = band(-h, h, 0.0, p.stepover)?;

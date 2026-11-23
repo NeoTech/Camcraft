@@ -176,6 +176,8 @@ mod fine_bore;
 mod finish;
 mod first_traverse;
 mod first_traverse_posed;
+// #3525: a cut deeper than the flute length, named by its cause.
+mod flute_reach;
 mod hidden;
 mod hidden_span;
 mod hole_wall;
@@ -193,11 +195,21 @@ mod prior;
 mod prior_traverse;
 mod body_bands;
 mod probe;
+// #3367: the tool meridian's atoms against `Cutter::atoms`.
+#[cfg(test)]
+mod probe_meridian_tests;
 mod rapids;
 mod rapids_posed;
 mod rapids_radial;
 mod reach;
+#[cfg(test)]
+mod reach_reference;
+#[cfg(test)]
+mod reach_tests;
+mod sample_grid;
 mod rest;
+// #3615: the exact Y-slab point-location index over a cached slice.
+mod slice_index;
 mod rotary;
 mod rotary_geom;
 mod seat;
@@ -229,11 +241,12 @@ pub use excess::{band_growth, excess_floor, excess_floor_for, strict_floor, PROM
 pub use first_traverse::{box_top, first_traverse_low, first_traverse_low_swept, swept_top, SweptSteel};
 pub use first_traverse_posed::{first_traverse_low_posed, posed_top, PosedTurn, PosedWork};
 pub use live_traverse::{live_first_traverse, LiveHit, LiveSolids, LiveStart, LiveUnjudged};
-pub use types::{FixturePart, Mode, VerifyContext, Warning};
+pub use types::{FallbackCause, FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use laws::CROSSING_TOUCH;
 pub use engine::{verify, verify_bodies};
+pub use flute_reach::{flute_note, flute_reach};
 pub use thread_bore::{CHORD_CREDIT, ThreadBore};
 pub use air::cuts_no_material;
 pub use prior::{acquit_by_prior, prior_surface};

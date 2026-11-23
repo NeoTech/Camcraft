@@ -281,7 +281,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
             // answer.
             (params, SrcRef::Selection(items))
                 if selection_drives_region(params)
-                    && !matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_)) =>
+                    && !matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_)) =>
             {
                 Some(selection_region(world, setup, items, params, &op.area))
             }
@@ -304,7 +304,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let contour_sel = match (&op.params, &op.src) {
         // The plasma cut reads its picks the contour's way (#670):
         // closed rings AND open runs, each cut as picked.
-        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
+        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
             if wire_ruled.is_none() && sketch_contour.is_none() && wire_sketch.is_none() =>
         {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
@@ -320,7 +320,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         OpParams::MultiAxisContour { .. } => Some(drive_chains_of(world, op)),
         // #1888: the deburr's picked chains ride the same slot - the
         // WCS yaw turns them with the facets they lie on.
-        OpParams::Deburr { exclude_edges, .. } => Some(super::deburr_picks::chains_of(world, op, exclude_edges)),
+        OpParams::Deburr { exclude_edges, .. } | OpParams::MultiAxisDeburr { exclude_edges, .. } => Some(super::deburr_picks::chains_of(world, op, exclude_edges)),
         _ => None,
     };
     // #318: an op in a setup whose incoming stock must be carried across
@@ -353,13 +353,13 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
             )
         }
         // #2033: a 2D Pocket whose rest area is read from the previous
-        // operations takes the same grid. The stock must be established:
+        // operations takes the same grid (#1446: a 2D Adaptive too). The stock must be established:
         // a tilted plane, or an earlier operation without a current
         // toolpath, is refused by name. Declared material past a carried
         // grid is no grid: the whole pocket stands.
         p if super::rest_op::reads_previous_ops(p) => {
             if frame.is_some() {
-                return Err(GenError::Invalid(format!("{op_name}: {}", super::rest_op::REST_PREVIOUS_TILTED)));
+                return Err(GenError::Invalid(format!("{op_name}: {}", super::rest_op::tilted_refusal(p))));
             }
             if let Some(why) = super::rest_op::previous_ops_refusal(world, op_name, setup) {
                 return Err(GenError::Invalid(format!("{op_name}: {why}")));

@@ -446,7 +446,7 @@ fn verified_multiaxis(params: &crate::operation::OpParams) -> bool {
         OpParams::Contour5D { .. } | OpParams::Parallel5D { .. } | OpParams::Swarf { .. }
             | OpParams::AdvancedSwarf { .. } | OpParams::RotaryContour { .. } | OpParams::RotaryParallel { .. }
             | OpParams::RotaryOffset { .. } | OpParams::MultiAxisRough { .. } | OpParams::Flow5D { .. }
-            | OpParams::MultiAxisContour { .. }
+            | OpParams::MultiAxisContour { .. } | OpParams::MultiAxisDeburr { .. }
     )
 }
 

@@ -232,6 +232,48 @@ fn the_offset_guard_fallback_is_a_strategy_fallback() {
     assert_eq!(rings_fallbacks(std::slice::from_ref(&wall)), 0, "{wall}");
 }
 
+/// #3542: the guard's fallback on a 2D Offset names the "Pass starts at"
+/// choice and the Auto order, not the Adaptive plan the op does not use.
+/// An Adaptive note next to it (an Adaptive op on its ring fallback)
+/// keeps the Adaptive cause.
+#[test]
+fn the_offset_guard_fallback_warning_names_the_pass_start() {
+    use camcraft_app::operation::strategy_fallback;
+    use camcraft_app::verify::{FallbackCause, Warning};
+    let note = camcraft_app::machining2d::StartSide::from(PassStart::Outside).fallback_note(12.3);
+    let path = Toolpath { notes: vec![note.clone()], ..Default::default() };
+    let w = strategy_fallback(&path).expect("the guard's note posts a fallback warning");
+    assert_eq!(w, Warning::StrategyFallback { at: 0, areas: 1, cause: FallbackCause::PassStart });
+    assert_eq!(
+        w.to_string(),
+        "Pass starts at: the selected start side would leave material uncut in 1 area, so the Auto order was used there instead, from move 0: the notes name each one (the post is not held: the cut is verified)"
+    );
+    assert!(!w.blocks_post(), "{w}");
+    // #3542 review: 3D pocket writes the same note after its level
+    // ("Z <level>: "); the cause and the text are the same.
+    let level = Toolpath { notes: vec![format!("Z 1.000: {note}")], ..Default::default() };
+    let w3 = strategy_fallback(&level).expect("the 3D pocket guard note posts a fallback warning");
+    assert_eq!(w3, w, "the 3D pocket form reads as the same pass-start fallback");
+    let adaptive = "adaptive: Pass starts at Outside - the HSM plan failed - Offset rings cut the pocket in that order instead";
+    let mixed = Toolpath { notes: vec![adaptive.to_owned(), note], ..Default::default() };
+    let w = strategy_fallback(&mixed).expect("a fallback warning");
+    assert!(matches!(w, Warning::StrategyFallback { cause: FallbackCause::Adaptive, .. }), "{w:?}");
+}
+
+/// #3542: a warning saved before the cause existed reads as the Adaptive
+/// cause, and the serde name `strategy_fallback` does not change.
+#[test]
+fn a_strategy_fallback_saved_without_a_cause_reads_as_adaptive() {
+    use camcraft_app::verify::{FallbackCause, Warning};
+    let old: Warning = serde_json::from_value(json!({ "strategy_fallback": { "at": 4, "areas": 2 } })).expect("an old cache reads");
+    assert_eq!(old, Warning::StrategyFallback { at: 4, areas: 2, cause: FallbackCause::Adaptive });
+    let new = Warning::StrategyFallback { at: 4, areas: 2, cause: FallbackCause::PassStart };
+    let v = serde_json::to_value(new).expect("serializes");
+    assert_eq!(v, json!({ "strategy_fallback": { "at": 4, "areas": 2, "cause": "pass_start" } }));
+    let back: Warning = serde_json::from_value(v).expect("reads back");
+    assert_eq!(back, new);
+}
+
 /// #3319 guard on Auto, the maintainer's own setting: the order is the
 /// one every earlier file cut, and no lateral rapid runs below the
 /// clearance plane with "Hop below clearance" off.

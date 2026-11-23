@@ -15,8 +15,10 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 
 **A wire EDM machine.** Wire Contour needs a setup whose machine file
 declares the kind `wire_edm`. The library includes **Sodick ALC400G**;
-its travel and taper limit are stated, but conditions, wire diameter,
-guide heights and EDM codes must come from your machine's documentation.
+its travel and taper limit are stated. It also ships an example starter
+set: three conditions, guide heights and automatic threading (see
+**Conditions** below). The examples let a first Wire Contour generate and
+post. They are not Sodick figures: replace them before you cut.
 For another machine, supply a file with its own data (the keys are in
 [Machine types](@/guide/check-and-post/machines.md)). The **Wire EDM** ribbon group
 shows only when such a machine is mounted. On any other machine the
@@ -33,9 +35,26 @@ condition; leave the tool empty (it names '...')").
 
 **Conditions.** The machine file lists its conditions under
 `edm.conditions`, each with an `id` and, for a wire cut, a `gap` (per
-side) and a `wire_diameter`, taken from your machine's manual. No conditions ship.
+side) and a `wire_diameter`, taken from your machine's manual.
 CamCraft reads only those two numbers; power and flushing stay with the
 control, which picks them by the condition's id.
+
+The **Sodick ALC400G** file ships three example conditions for a
+0.25 mm wire: `C110` (rough, gap 0.04 mm), `C120` (skim, gap 0.02 mm)
+and `C130` (finish, gap 0.01 mm). Each has the note "EXAMPLE - not a
+Sodick figure". The file also states example guide heights
+(`edm.lower_guide_z` 0, `edm.upper_guide_z` 130 mm) and `edm.awt: true`,
+so the Sodick post writes T91 / T90. To replace the examples:
+
+1. Copy `sodick-alc400g.mch` and give the copy your own model name.
+2. In `edm.conditions`, write one row for each condition of your
+   control's table: its C number as `id`, its spark gap per side as
+   `gap`, and its wire as `wire_diameter`.
+3. Delete the example rows that your table does not have.
+4. Set `edm.lower_guide_z` and `edm.upper_guide_z` to your guide heights.
+   Set `edm.awt` to `false` if your machine has no automatic threader.
+5. Mount the copy on the setup. An operation that names a removed
+   example id is refused by name.
 
 **Posting and checks.** The built-in **Generic ISO Wire EDM** and **Sodick
 Wire EDM (Mark 21)** posts serve wire machines. A user `.cps` post can declare

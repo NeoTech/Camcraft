@@ -29,6 +29,17 @@ testdata/**/*.obj text eol=lf
 docs/tester-kits/**/*.nc text eol=lf
 # Shipped example programs, including the catalog, are pinned byte for byte.
 examples/**/*.nc text eol=lf
+# The catalog refusal goldens are compared byte for byte by example_catalog.
+examples/catalog/**/refusal.txt text eol=lf
+
+# Tracked text that tests read and search for multi-line text (#3553): a CR
+# before the LF breaks the search. Pin each tree to LF in every checkout.
+# xtask light_tests and heavy_plan_tests read AGENTS.md.
+AGENTS.md text eol=lf
+# xtask catalog_links_tests and catalog_tests read the site guide pages.
+site/**/*.md text eol=lf
+# script_heidenhain_klartext edits this stream by text (a "...Z 15000\n" match).
+crates/post/tests/klartext/contour.cnc text eol=lf
 
 # Shell scripts run on macOS / Linux: a CR would break the shebang.
 *.sh text eol=lf

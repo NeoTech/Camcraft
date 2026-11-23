@@ -195,8 +195,12 @@ pub(crate) fn shell_layout(
     super::fixture_library_dialog::window(ui.ctx(), state);
     // #2339: the Panel setups window - same window law, closed by default.
     super::panel_setups::window(ui.ctx(), state);
+    // #1874: the length unit of a STEP file that states none.
+    super::step_units_prompt::window(ui.ctx(), state);
     // #1863: the DXF units prompt (None on a fresh State).
     super::dxf_units_dialog::window(ui.ctx(), state);
+    // #3608: the changed-on-disk prompt of a held Save (None on a fresh State).
+    super::overwrite_prompt::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
     drop(windows);

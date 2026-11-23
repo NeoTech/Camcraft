@@ -176,6 +176,7 @@ fn slab_with_boss() -> Vec<Triangle> {
 
 fn rough_params() -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         links: camcraft_motion::links::Links::ROUGH3D,
         tool_diameter: 2.0 * R,
         stepover: 2.5,

@@ -23,21 +23,21 @@ pub(super) struct Tool {
 
 const TOOLS: &[Tool] = &[
     Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
-    Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
-    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail, or one whose file's edges lie off their surfaces, answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget, or export the file again with a tighter tolerance, to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward.", schema: s_import, run: import_model },
+    Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved. If that file on disk changed after this session opened or saved it, the save is refused by name; overwrite: true replaces the file.", schema: s_save, run: save_project },
+    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail, or one whose file's edges lie off their surfaces, answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget, or export the file again with a tighter tolerance, to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward; for a STEP file it also states the length unit the model was read in. A STEP file that states no length unit is refused until units gives one.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups (each with model_reference: a solid part, or the virtual reference of its placed DXF profiles), stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), DXF profiles, tools, and operations with their parameters and status (one on a DXF profile says what it checks against). With summary, a short form for a small context window: no machine definition, and each operation lists only the fields changed from its defaults.", schema: super::compact::s_get_job, run: job::get_job },
     Tool { name: "get_selection", description: "Read currently selected entities, active setup, active operation, viewport pick mode (model, face, edge, vertex), and active geometry picks.", schema: s_empty, run: super::selection::get_selection },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts. kind or section lists only those kinds.", schema: super::compact::s_list_operation_types, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
     Tool { name: "list_holder_library", description: "The built-in holder library: BT30, BT40 and CAT40 holders with ER collet or Weldon side-lock noses, and standalone ER11-ER40 chucks - names set_tool_holder takes, with their dimensions and the shanks they clamp.", schema: s_empty, run: holders::list_holder_library },
     Tool { name: "set_tool_holder", description: "Set a document tool's holder: from the holder library by name (optional gauge_len and projection, mm; the tool stores the reference to the entry, shown as holder.library, not a copy of its outline), from a drawn spun profile (points; a custom holder), or back to the holder cylinder (clear). One undo step; an unknown entry, a shank the holder cannot take or a bad profile is refused by name.", schema: holders::s_set_tool_holder, run: holders::set_tool_holder },
-    Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). Assigns the lowest unused tool number in 1-99999 and starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
+    Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). Assigns the lowest unused tool number in 1-99999 that the mounted machine does not reserve (a probe takes the machine's reserved probe pocket; a cutter on a reserved number or name is refused) and starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
     Tool { name: "edit_tool", description: "Edit a document tool: \"patch\" is a partial tool definition (the shape add_tool's definition and get_job show, JSON merge patch - null removes an optional key). It runs the app's undoable ChangeTool, one undo step, so every gate applies (a retype that strands an operation, bad cutting_data rows, catalog values) and refuses by tool name. An unknown key is refused by name. Operations using the tool go stale.", schema: s_edit_tool, run: tool_edit::edit_tool },
     Tool { name: "delete_tool", description: "Delete a document tool through the app's undoable DeleteTool, one undo step (undo restores it with its number, holder body and cutter). Refused by tool name, changing nothing: an unknown name, an entity that is not a tool, or a tool an operation still uses (give that operation another tool with set_tool first).", schema: s_name_only_tool, run: tool_delete::delete_tool },
     Tool { name: "export_tool_library", description: "Write the document's tools to a CamCraft library (.camtools), a Tormach PathPilot tool table (.csv), or a Hurco WinMax tool library (.TCM), detected from path or chosen with format. units (mm or inch) applies to controller tables and defaults to document units. Refuses a document with no tools, an unwriteable path, or a tool that cannot fit the target table.", schema: s_library, run: export_tool_library },
     Tool { name: "import_tool_library", description: "Import a CamCraft library (.camtools/.json), Tormach PathPilot tool table (.csv), or Hurco WinMax tool library (.TCM) as one undo step. format (default auto) overrides detection; units (mm or inch) applies to controller tables and defaults to document units. mode add (default): skips an identical tool, renames a clashing name; update: updates matching names in place; replace: removes absent tools unless used. holders (default true) takes holders from .camtools files. Malformed rows, unsupported Hurco tool types, or tool-number clashes refuse by name.", schema: s_import_library, run: import_tool_library },
     Tool { name: "set_stock", description: "Set the active setup's stock: a box, a cylinder, or a copy of a model, through the undoable SetStock. Optional axis (z, x or y) or angles_deg {yaw, pitch, roll} turns it; the simulation refuses a stock tilted off the axes, by name.", schema: s_stock, run: super::stock_tools::set_stock },
-    Tool { name: "add_operation", description: "Add an operation of a kind (see list_operation_types) with a tool, on the stock, a model or a placed DXF profile (2D milling, plasma and wire EDM kinds only; a kind that needs a solid model refuses a profile by name), seeded with the kind's defaults and an optional params patch. Not generated until generate runs.", schema: s_add_op, run: edit::add_operation },
+    Tool { name: "add_operation", description: "Add an operation of a kind (see list_operation_types) with a tool, on the stock, a model or a placed DXF profile (2D milling, plasma, waterjet and wire EDM kinds only; a kind that needs a solid model refuses a profile by name), seeded with the kind's defaults and an optional params patch. Not generated until generate runs.", schema: s_add_op, run: edit::add_operation },
     Tool { name: "edit_operation", description: "Patch an operation's parameters: the given fields replace the current ones (JSON merge patch over the kind's fields; null clears an optional field). One undo step.", schema: s_edit_op, run: edit::edit_operation },
     Tool { name: "detect_holes", description: "Fill a Drill, Bore or Thread operation's hole list from its source model's holes (the app's Detect holes button); a Thread operation whose params say external: true gets the model's upright round bosses instead. A Bore operation leaves out holes wider than its tool's ring clears without a core (3 x tool diameter + 2 x stock to leave) and names each in `skipped`. A Drill operation keeps a hole wider than its Drill-kind drill (a pilot is valid) and names each in `undersize`; its toolpath then carries a `drill_undersize` warning per such hole that does not hold the post. One undo step.", schema: s_name, run: edit::detect_holes },
     Tool { name: "detect_pockets", description: "A model's recognised pockets and slots (closed or open pockets, straight slots with open, round or square ends): boundary, floor and top Z, depth, tightest inside corner, slot width and open sides. With create, adds the operation that machines one of them (a Pocket over its floor, or a Slot along its centreline). One undo step.", schema: pockets::s_detect_pockets, run: pockets::detect_pockets },
@@ -48,7 +48,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "set_operation_geometry", description: "Set the features an operation machines (faces, edge chains, loops, or DXF sketch chains and layers with optional per-chain side and direction overrides) by list_features ids. One undo step; undo restores the previous source.", schema: pick::s_set_geometry, run: pick::set_operation_geometry },
     Tool { name: "set_operation_area", description: "Replace an operation's area controls (containment, offset, outer_offset, corner, extension, extra include/exclude boundaries, open boundary). One undo step.", schema: area::s_set_area, run: area::set_operation_area },
     Tool { name: "get_operation_do_not_touch", description: "Read an operation's 'Do not touch' protected faces/edges and standoff clearance (mm).", schema: pick::s_op, run: do_not_touch::get_operation_do_not_touch },
-    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that 2D Offset, 3D Pocket and Face paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
+    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face and 3D Finish paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
     Tool { name: "undo", description: "Undo the last document change.", schema: s_empty, run: edit::undo },
     Tool { name: "redo", description: "Redo the last undone change.", schema: s_empty, run: edit::redo },
     Tool { name: "generate", description: "Generate toolpaths: one named operation (always regenerated) or, with no name, every operation that is not current when reached in program order, including operations made stale by earlier generations in this call. A refusal stops the call and names the operation.", schema: s_opt_name, run: generate },
@@ -94,7 +94,9 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::tool_number_tools::TOOLS)
         .chain(super::post_options_tools::TOOLS)
         .chain(super::sketch_tools::TOOLS)
+        .chain(super::outline_text_tools::TOOLS)
         .chain(super::holder_dxf_tools::TOOLS)
+        .chain(super::recipe_tools::TOOLS)
 }
 
 /// The `tools/list` rows.
@@ -150,14 +152,19 @@ fn open_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
 }
 
 fn save_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let args = opt_str(a, "path")?.map(|p| vec![json!(p)]).unwrap_or_default();
+    let mut args = vec![opt_str(a, "path")?.map_or(Value::Null, |p| json!(p))];
+    // #3608: `overwrite` rides to cam.save as its options object.
+    if let Some(overwrite) = a.get("overwrite") {
+        args.push(json!({ "overwrite": overwrite }));
+    }
     api::v_save(env, args)
 }
 
 fn import_model(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let name = opt_str(a, "name")?.map_or(Value::Null, |n| json!(n));
     let budget = a.get("facet_budget").cloned().unwrap_or(Value::Null);
-    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget])
+    let units = opt_str(a, "units")?.map_or(Value::Null, |u| json!(u));
+    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget, units])
 }
 
 fn export_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -264,8 +271,14 @@ fn s_path() -> Value {
     obj(json!({ "path": { "type": "string", "description": "File path." } }), &["path"])
 }
 
-fn s_opt_path() -> Value {
-    obj(json!({ "path": { "type": "string", "description": "File path (optional)." } }), &[])
+fn s_save() -> Value {
+    obj(
+        json!({
+            "path": { "type": "string", "description": "File path (optional)." },
+            "overwrite": { "type": "boolean", "description": "Replace the file even if the file on disk changed after this session opened or saved it. Without this, that save is refused." }
+        }),
+        &[],
+    )
 }
 
 fn s_library() -> Value {
@@ -297,7 +310,8 @@ fn s_import() -> Value {
         json!({
             "path": { "type": "string", "description": "An .stl, .step/.stp, .obj or Solidcraft .sc/.solidcraft file (a Solidcraft design imports its cached final body)." },
             "name": { "type": "string", "description": "Model name; defaults to the file stem." },
-            "facet_budget": { "type": "integer", "minimum": crate::geometry::import::step_budget::MIN, "maximum": crate::geometry::import::step_budget::CEILING, "description": "STEP facet budget: the most triangles a STEP model may be meshed into (default 30000000). Raise it to import a large model at full detail; STEP files only." }
+            "facet_budget": { "type": "integer", "minimum": crate::geometry::import::step_budget::MIN, "maximum": crate::geometry::import::step_budget::CEILING, "description": "STEP facet budget: the most triangles a STEP model may be meshed into (default 30000000). Raise it to import a large model at full detail; STEP files only." },
+            "units": { "type": "string", "enum": ["mm", "in"], "description": "The length unit of a STEP file that states none. Such a file is refused without it: the model is never read in a guessed unit. A file that states its own unit keeps it, and notes says so. STEP files only." }
         }),
         &["path"],
     )

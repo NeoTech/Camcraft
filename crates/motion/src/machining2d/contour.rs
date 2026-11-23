@@ -27,7 +27,6 @@ use super::lead_ext::{extend_leads, push_lead_down, retrace};
 pub use super::contour_params::{ContourParams, Lead, Side};
 pub use super::contour_region::{contour, contour_on_bodies, contour_on_part, contour_on_picked};
 
-
 /// Offset loops, programmed region and walking polylines prepared for one
 /// contour band; shared with `contour_whole`.
 pub(super) struct PreparedBand {
@@ -156,16 +155,17 @@ pub(super) fn emit_band(
         // it reversed; eroded (Inside), it is the bore's air and the
         // material already stands right of the stored walk.
         let pts: Vec<Point2> = super::ring::walked(l.points(), p.climb == inside, inside);
-        // A closed ring whose start leaves the lead no room (a bore
-        // inset's corner) starts mid-run instead; tabbed levels keep the
-        // start their windows are measured from.
-        // M11.3 C: an axis-aligned start first (an arc entry tangent to
-        // it posts as a true G18/G19), then the lead room's own reseat.
-        // A control-compensated ring seams mid-run (contour_comp). #1448:
-        // the user's start point re-sequences its ring instead.
+        // The ring's start (contour_start::seat): the pick, or an axis start,
+        // a comp seam, the lead room's reseat; tabbed levels keep the start
+        // their windows are measured from; #3453 starts the untabbed levels
+        // of a tabbed ring that shares no level (no other ring or band) at
+        // its first window, so a shared level keeps its seam.
         let ap = &p.links.approach;
         let picked = pick.filter(|&(pi, _)| pi == li).map(|(_, q)| q);
-        let ring = Ring::new(contour_start::seat(pts, picked, tabbed, prog.is_some(), p, &legal, lead_notes));
+        let seated = contour_start::seat(pts.clone(), picked, tabbed, prog.is_some(), p, &legal, lead_notes);
+        let alone = !tabbed && picked.is_none() && band.room.is_none() && !(0..band.loops.len()).any(|lj| lj != li && rz.iter().any(|&q| lad.walks(lj, q)));
+        let seated = super::tab_clear::level_start(seated, pts, fits.get(&li).filter(|_| alone && !tab_levels[li].is_empty()));
+        let ring = Ring::new(seated);
         // The overlap past the start on closed rings (M11.3 C): not on
         // tabbed levels (their windows are the tab law's) and not under a
         // keep-down level link (the next level descends from the seam).

@@ -16,8 +16,8 @@ The post is chosen on the **Post** page: a setup can pick its own, and a
 setup that picks none uses the document's. CamCraft ships posts for Fanuc,
 Haas, Siemens 840D, Heidenhain, Mazak, Tormach PathPilot, Makera Carvera and
 Fanuc Lathe. Other built-ins include grblHAL, TinyG, Tormach PathPilot
-Lathe and Plasma, Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), and
-Sinker EDM (ISO). Select a post for your machine kind and control.
+Lathe and Plasma, Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), G-EDM
+Wire EDM, and Sinker EDM (ISO). Select a post for your machine kind and control.
 A post is a `.cps` script, so you can load your own with
 **Load post (.cps)**.
 

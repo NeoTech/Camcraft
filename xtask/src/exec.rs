@@ -9,7 +9,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::artifacts::{Built, Package};
 use crate::checkout::{self, Reading};
-use crate::plan::{self, Plan, Step};
+use crate::plan::{Plan, Step};
 use crate::scan::re;
 pub use crate::known_fail::expect_fail_note;
 
@@ -34,6 +34,8 @@ pub struct Run {
     pub(crate) built: Built,
     /// The unit directories under target/ when the run started (#3150); the summary prints what it added.
     units: usize,
+    /// The steps that a failed build stopped (#3601), with their note; the summary lists them as not run.
+    pub(crate) not_run: Vec<(String, String)>,
 }
 
 pub(crate) struct Done {
@@ -166,6 +168,7 @@ impl Run {
             void: None,
             built: Built::new(),
             units: crate::unit_env::units(root),
+            not_run: Vec::new(),
         })
     }
 
@@ -184,14 +187,18 @@ impl Run {
         if lanes {
             self.run_lanes(plan)?;
         } else {
-            for s in &plan.steps {
+            for (i, s) in plan.steps.iter().enumerate() {
                 if self.check(&format!("before {}", s.name)) {
                     break;
                 }
                 self.step(s)?;
-                // A failed whole-gate build fails every later step with the same error: stop (as release does).
+                // A failed build (the whole-gate one or a quick per-crate one, #3601) fails every later step
+                // with the same error: stop (as release does) and list the later steps as not run.
                 let failed = self.done.last().is_some_and(|d| !d.ok);
-                if failed && s.name == plan::DEBUG_BUILD {
+                if failed && crate::build_stop::stops(&s.name) {
+                    let note = crate::build_stop::not_run_note(&s.name);
+                    self.not_run = plan.steps[i + 1..].iter().map(|r| (r.name.clone(), note.clone())).collect();
+                    crate::build_stop::write_not_run(&self.log_dir, self.done.len() + 1, &self.not_run)?;
                     break;
                 }
             }
@@ -286,6 +293,10 @@ impl Run {
         } && stall.is_none();
         let stall = stall.map(|n| note = n).is_some();
         println!("     {} in {secs}s {note}", row(ok, stall));
+        if !ok && !stall {
+            let gate = crate::build_stop::gate_command();
+            crate::build_stop::metadata_note(&text, &args, &gate)?.iter().for_each(|l| println!("{l}"));
+        }
         Ok(Done { name: s.name.clone(), ok, stall, secs, note, built: recorded })
     }
 
@@ -294,6 +305,9 @@ impl Run {
         println!("\n== gate summary ({}) - logs in {}", self.label, self.log_dir.display());
         for d in &self.done {
             println!("  {:<4} {:>5}s  {}  {}", row(d.ok, d.stall), d.secs, d.name, d.note);
+        }
+        for (name, note) in &self.not_run {
+            println!("  SKIP     -   {name}  {note}");
         }
         let bad = self.done.iter().filter(|d| !d.ok).count();
         let stalled = self.done.iter().filter(|d| d.stall).count();

@@ -209,6 +209,7 @@ fn first_in_solid(t: &Toolpath) -> Option<Point3> {
 
 fn adaptive2d(climb: bool) -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         stepover: 4.0,

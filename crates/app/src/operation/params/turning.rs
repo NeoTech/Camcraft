@@ -134,6 +134,7 @@ impl OpParams {
                 bar_unload,
                 bar_transfer,
                 inspect_tol,
+                kerf,
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -155,6 +156,13 @@ impl OpParams {
                 // The measurement ask rides the same fold (M5.3 D):
                 // it changes the posted stream, no geometry reads it.
                 w(h, *inspect_tol);
+                // #3469: the kept piece and back stock move the kerf.
+                // Folded only when not the default, so the stamp of
+                // every op saved before the setting stays the same.
+                if *kerf != crate::turning::PartKerf::default() {
+                    w(h, if kerf.kept == crate::turning::PartKept::Chuck { 1.0 } else { 0.0 });
+                    w(h, kerf.back_stock);
+                }
             }
             // The threading ladder (M5.2 stage D, tag 24): the wave's
             // own three numbers ride beside the twins' - pitch, depth

@@ -308,6 +308,7 @@ fn a_bore_cuts_the_levels_of_its_mode() {
 fn a_circular_cuts_the_levels_of_its_mode() {
     two_modes("circular", |equal| {
         let p = CircularParams {
+            pass_start: Default::default(),
             links: links(Links::PLANAR, equal),
             center: Point2::new(0.0, 0.0),
             radius: 10.0,
@@ -344,6 +345,7 @@ fn plate() -> Vec<Triangle> {
 
 fn p3d(equal: bool) -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         links: links(Links::ROUGH3D, equal),
         tool_diameter: 6.0,
         stepover: 2.4,

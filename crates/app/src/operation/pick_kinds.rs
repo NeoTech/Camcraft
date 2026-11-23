@@ -82,6 +82,7 @@ impl KindInfo {
             | OpType::Pocket3D
             | OpType::Finish3D
             | OpType::Deburr
+            | OpType::MultiAxisDeburr
             | OpType::Contour5D
             | OpType::Parallel5D
             | OpType::Swarf
@@ -105,6 +106,8 @@ impl KindInfo {
             | OpType::FormTurning
             | OpType::BoringTurning
             | OpType::PlasmaProfile
+            // #1883: the waterjet's lead picks are owed, as the plasma's.
+            | OpType::WaterjetProfile
             | OpType::TrochoidalSlot
             | OpType::SinkerBurn
             | OpType::SinkerSideBurn

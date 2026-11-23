@@ -134,6 +134,7 @@ fn pocket(strategy: PocketStrategy, eng: f64) -> OpParams {
 
 fn adaptive(eng: f64) -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         blend_radius: None, blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
         stepover: 3.0,

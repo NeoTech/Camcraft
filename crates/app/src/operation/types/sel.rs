@@ -346,6 +346,15 @@ pub enum OpType {
     /// [`crate::machining2d::v_carve`]). Appended: the declaration order
     /// is the table order (`OpType as usize` is the row everywhere).
     VCarve,
+    /// Waterjet profile (#1883): the abrasive jet's 2D through-cut of
+    /// picked contours - the waterjet's family (see
+    /// [`crate::waterjet`]). Appended: stored kind ids never move.
+    WaterjetProfile,
+    /// Multi-axis deburr (#1894): the Deburr's edge break with the tool
+    /// axis tilted onto the break, around the holder (see
+    /// [`crate::multiaxis::deburr_axis`]). Appended: stored kind ids
+    /// never move.
+    MultiAxisDeburr,
 }
 
 impl core::fmt::Display for OpType {

@@ -233,6 +233,7 @@ fn the_program_scan_judges_the_part_not_the_passes() {
             feed: 0.0,
             plunge_feed: 60.0,
             blade_width: WIDTH,
+            kerf: Default::default(),
         },
     )
     .expect("the bar parts");
@@ -338,6 +339,7 @@ fn a_parting_kerf_is_a_cut_not_a_gouge() {
             feed: 0.0,
             plunge_feed: 60.0,
             blade_width: WIDTH,
+            kerf: Default::default(),
         },
     )
     .expect("the bar parts");
@@ -455,6 +457,7 @@ fn parting_ladders_to_the_axis_in_one_center() {
             feed: 0.0,
             plunge_feed: 60.0,
             blade_width: WIDTH,
+            kerf: Default::default(),
         },
     )
     .expect("parts");
@@ -514,6 +517,7 @@ fn every_refusal_names_itself() {
             feed: 0.0,
             plunge_feed: 60.0,
             blade_width: WIDTH,
+            kerf: Default::default(),
         },
     )
     .expect_err("nothing stands at z 50");

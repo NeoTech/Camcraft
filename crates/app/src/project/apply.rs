@@ -545,6 +545,10 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // procedure are optional. An older machine keeps both unstated.
         // v75 -> v76 (#1890): a Deburr width becomes the chamfer chord; the
         // old setback steps up by sqrt(2), its chord on a 90-degree edge.
+        // v76 -> v77 (#3447): a setup may state its creation `order`;
+        // absent stays absent and sorts by name, as every v76 file posted.
+        // v77 -> v78 (#2604): absent machine `reserved_tools` reserves
+        // nothing; a v77 file steps up unchanged.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {
@@ -712,7 +716,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     crate::posting::post_set(
         world,
         &match file.post {
-            Some(PostDto::Named(name)) => crate::schema::PostRef::Named(name),
+            // #3537: a hidden alias name reads as the registry name it selects.
+            Some(PostDto::Named(name)) => crate::posting::agie::current_ref(crate::schema::PostRef::Named(name)),
             Some(PostDto::File(path)) => crate::schema::PostRef::File(path),
             None => crate::schema::PostRef::Builtin,
         },
@@ -973,6 +978,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     nose_to_axis: sdto.nose_to_axis,
                     workholding_max_rpm: sdto.workholding_max_rpm,
                     sheet_job: sdto.sheet_job,
+                    // #3447: absent in every earlier file - name order.
+                    order: sdto.order,
                 });
             }
         }

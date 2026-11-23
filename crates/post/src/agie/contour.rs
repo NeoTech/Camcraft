@@ -11,7 +11,7 @@ const STOCK_MARGIN: i64 = 40_000;
 
 fn quantize(v: f64) -> Result<i64, String> {
     if !v.is_finite() || v.abs() > 9999.9999 {
-        return Err("Agie coordinates must be finite and within ±9999.9999 mm".into());
+        return Err("Job coordinates must be finite and within ±9999.9999 mm".into());
     }
     Ok((v * UNITS).round() as i64)
 }
@@ -43,10 +43,10 @@ fn micrometres(value: f64) -> Result<i32, String> {
     // quantize rejects nonfinite or out-of-range geometry before conversion.
     let hundredth_microns = quantize(value)?;
     let microns = i32::try_from(hundredth_microns / 100)
-        .map_err(|_| "Agie setup coordinate exceeds the micrometre range")?;
+        .map_err(|_| "The setup coordinate exceeds the micrometre range")?;
     if (value - f64::from(microns) / 1000.0).abs() > 1e-9 {
         return Err(
-            "Agie stock and start-hole coordinates must be representable to 0.001 mm".into(),
+            "The stock and start-hole coordinates must be representable to 0.001 mm".into(),
         );
     }
     Ok(microns)
@@ -55,17 +55,17 @@ fn micrometres(value: f64) -> Result<i32, String> {
 fn punch_setup<'a>(job: &AgieJob, program: &'a str) -> Result<PunchSetup20<'a>, String> {
     let [width, depth, height] = std::array::from_fn(|i| job.stock_max[i] - job.stock_min[i]);
     if !(width > 0.0 && width <= 350.0 && depth > 0.0 && depth <= 250.0) {
-        return Err("Agie stock must fit the stated 350 × 250 mm working span".into());
+        return Err("The stock must fit the stated 350 × 250 mm working span".into());
     }
     if job.stock_max[2] != 0.0 || height != 20.0 {
         return Err(
-            "The Agie Berco Fine Ra0.30 profile requires stock top Z0 and thickness 20 mm".into(),
+            "The Berco Fine Ra0.30 profile requires stock top Z0 and thickness 20 mm".into(),
         );
     }
     if !(0..2)
         .all(|i| job.start[i] - 1.0 >= job.stock_min[i] && job.start[i] + 1.0 <= job.stock_max[i])
     {
-        return Err("The complete 2 mm Agie start hole must lie inside the stock".into());
+        return Err("The complete 2 mm start hole must lie inside the stock".into());
     }
     Ok(PunchSetup20 {
         stem: program,
@@ -89,7 +89,7 @@ pub(super) fn prepare<'a>(
     let input = &job.contour;
     if input.len() < 3 || input.len() > MAX_VERTICES + 1 {
         return Err(format!(
-            "Agie needs one closed nominal polygon with 3–{MAX_VERTICES} vertices"
+            "The job needs one closed nominal polygon with 3–{MAX_VERTICES} vertices"
         ));
     }
     let mut ring = Vec::with_capacity(input.len());
@@ -99,7 +99,7 @@ pub(super) fn prepare<'a>(
             let value = p[i] as f64 / UNITS;
             value >= job.stock_min[i] && value <= job.stock_max[i]
         }) {
-            return Err("Agie nominal contour extends outside the stock".into());
+            return Err("The nominal contour extends outside the stock".into());
         }
         ring.push(p);
     }
@@ -108,7 +108,7 @@ pub(super) fn prepare<'a>(
     }
     let n = ring.len();
     if !(3..=MAX_VERTICES).contains(&n) {
-        return Err("Agie contour vertex count exceeds the supported range".into());
+        return Err("The contour vertex count exceeds the supported range".into());
     }
     // Validate quantized segments, including the closing edge, before choosing a start point.
     // Keep collinear intermediate vertices out of the search for the perpendicular entry edge.
@@ -118,7 +118,7 @@ pub(super) fn prepare<'a>(
         let b = ring[i];
         let c = ring[(i + 1) % n];
         if a == b || (cross(a, b, c) == 0 && !between(a, c, b)) {
-            return Err("Agie nominal contour contains a collapsed or reversed edge".into());
+            return Err("The nominal contour contains a collapsed or reversed edge".into());
         }
         if cross(a, b, c) != 0 {
             outline.push(b);
@@ -134,12 +134,12 @@ pub(super) fn prepare<'a>(
                 continue;
             }
             if intersects(a, b, outline[j], outline[(j + 1) % n]) {
-                return Err("Agie nominal contour crosses or touches itself".into());
+                return Err("The nominal contour crosses or touches itself".into());
             }
         }
     }
     if area == 0 {
-        return Err("Agie nominal contour has no enclosed area".into());
+        return Err("The nominal contour has no enclosed area".into());
     }
     if n != 4
         || (0..n).any(|i| {
@@ -148,7 +148,7 @@ pub(super) fn prepare<'a>(
         })
     {
         return Err(
-            "The verified Agie rough-pass envelope requires an axis-aligned rectangular punch"
+            "The verified rough-pass envelope requires an axis-aligned rectangular punch"
                 .into(),
         );
     }
@@ -158,7 +158,7 @@ pub(super) fn prepare<'a>(
         let left = quantize(job.stock_min[i])? + STOCK_MARGIN;
         let right = quantize(job.stock_max[i])? - STOCK_MARGIN;
         if outline.iter().any(|p| !(left..=right).contains(&p[i])) {
-            return Err("The Agie rough pass and wire need at least 0.4 mm of stock beyond every punch face".into());
+            return Err("The rough pass and wire need at least 0.4 mm of stock beyond every punch face".into());
         }
     }
     if area < 0 {
@@ -166,7 +166,7 @@ pub(super) fn prepare<'a>(
     }
     let hole = [quantize(job.start[0])?, quantize(job.start[1])?];
     let (edge, foot) = entry_face(&outline, hole).ok_or(
-        "Agie needs the start hole at least 3 mm outside a straight face, with at least 3 mm of straight face on both sides of the perpendicular entry for the lead and separation"
+        "The job needs the start hole at least 3 mm outside a straight face, with at least 3 mm of straight face on both sides of the perpendicular entry for the lead and separation"
     )?;
     // Begin the nominal program at the middle of the chosen edge, facing along that edge. The
     // hole and the full three-millimetre lead share its exterior half-plane. Compensation is

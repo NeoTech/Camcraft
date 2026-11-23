@@ -29,6 +29,11 @@
 mod avoid;
 mod curv;
 mod curve_walk;
+pub mod deburr_axis;
+#[cfg(test)]
+mod deburr_axis_tests;
+mod deburr_pose;
+mod deburr_clear;
 mod entry_ramp;
 mod linalg;
 mod stamp;
@@ -67,6 +72,8 @@ pub mod tilt;
 pub use avoid::Shank;
 pub use contour5d::contour5d;
 pub use curve::{contour_curve, CurveParams};
+pub use deburr_axis::{multiaxis_deburr, AxisDeburrParams, MAX_TILT_CAP_DEG};
+pub use deburr_pose::DeburrAxisMode;
 pub use flow::{flow3d, flow5d};
 pub use parallel5d::parallel5d;
 pub use rough::{multiaxis_rough, multiaxis_rough_prev};

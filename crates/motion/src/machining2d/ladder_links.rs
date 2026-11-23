@@ -180,6 +180,15 @@ pub(super) fn pass_link(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: O
     // The climb-and-dive every planar ladder has posted between passes:
     // the floor its neighbours already cleared, crossed in air.
     b.push(MoveKind::Rapid, Point3::new(at.x, at.y, plane), None);
+    // #3567: a dead end of the Outside plan (a later pass no lead-in
+    // reaches, marked by the plan) enters by the ramp along its own pass,
+    // never by a plunge or helix into the stock in front of it. The ramp
+    // cuts nearly the full tool width at the ramp angle; the first entry
+    // of a level and every other pass start keep the links below.
+    if let Some(cuts) = super::level_ramp_entry::dead_end_ramp(b, lv, m, cert, plane) {
+        st.level.extend(cuts);
+        return;
+    }
     // M11.3 (the centre-cutting law between passes): a tool that may not
     // plunge into solid enters a pass start its neighbours have not
     // cleared like a level - the helix onto it, else the ramp along the

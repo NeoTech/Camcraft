@@ -103,12 +103,18 @@ pub mod state;
 pub mod theme_dir;
 pub mod trace;
 pub mod unsaved;
+// #3608: a Save over a project file that changed after the open asks first.
+pub mod save_guard;
+#[cfg(test)]
+mod save_guard_tests;
 pub mod vertex_pick;
 pub mod viewport;
 pub mod wcs_circle_pick;
 
 #[cfg(test)]
 mod file_pick_tests;
+#[cfg(test)]
+mod step_units_tests;
 #[cfg(test)]
 mod law_tests;
 #[cfg(test)]

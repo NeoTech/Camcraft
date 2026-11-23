@@ -34,6 +34,21 @@ pub(crate) const BORE_PASS_START_HINT: &str = "Bore: a hole has no inner wall, s
 pub(crate) const FACE_NO_PASS_ORDER: &str =
     "Not used on Face: its rows run edge to edge across the face, so there is no inside or outside order";
 
+/// Why Slot has no pass order (#3357): the line under its disabled row.
+pub(crate) const SLOT_NO_PASS_ORDER: &str =
+    "Slot has no pass order. Each depth has one continuous pass. A tool-width cut follows the centerline. A wider cut connects rows.";
+
+/// The line under the 3D Pocket row (#3361) when its strategy has no
+/// ring order: the value is kept, and it changes no move.
+pub(crate) const POCKET3D_NO_RING_ORDER: &str =
+    "Not used with this strategy: Zigzag rows and the Adaptive spiral have no inside or outside order. Only Waterline and Offset rings use it";
+
+/// The line under the 3D Finish row (#3362) when its pattern has no
+/// inside or outside order: the value is kept, and it changes no move.
+pub(crate) fn finish3d_no_ring_order(pattern: &str) -> String {
+    format!("Not used with {pattern}: this pattern has no inside or outside ring order. Only Contour and Flat use it")
+}
+
 /// The names of the combo, in its order (`PassStart::ALL`).
 pub(crate) fn pass_start_names() -> Vec<&'static str> {
     PassStart::ALL.iter().map(|s| s.label()).collect()

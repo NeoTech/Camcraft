@@ -51,15 +51,16 @@
 //!   measures what the shank does near neighboring faces, and an
 //!   edge nothing exposes answers `Empty` by name, never a path.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use crate::cl::{EdgeBreak, PathBuilder, Toolpath};
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
 
-use super::crease::{chain, cmp_pt, scale3, sub3, third, vkey, vkey_scale, Seg};
+use super::crease::{chain, cmp_pt, vkey, vkey_scale, Seg};
 use super::deburr_contact::contact_drop;
 use super::deburr_filter::{DeburrEdges, EdgeFilter};
+use super::deburr_scan::{scan, EdgeScan, Exposed};
 use super::deburr_size::{clip, emit_runs, steep, BreakProfile, DeburrBreak, MAX_PASSES, RIM_WEDGE_DEG};
 
 /// What the ride does with an edge that is out of the cone's reach
@@ -129,7 +130,7 @@ impl DeburrParams {
         (d.is_finite() && d > 0.0).then_some(d)
     }
 
-    fn validate(&self, facets: &[Triangle]) -> Result<(), GenError> {
+    pub(crate) fn validate(&self, facets: &[Triangle]) -> Result<(), GenError> {
         if !(self.width.is_finite()
             && self.tip_angle_deg.is_finite()
             && self.clearance_z.is_finite()
@@ -181,11 +182,6 @@ impl DeburrParams {
     }
 }
 
-/// The edge tally: an unordered vertex pair to the witnesses standing
-/// on it, each a (facet, from, to) - the directed half so a run can
-/// walk the edge in its own face's order.
-type EdgeBook = HashMap<(usize, usize), Vec<(usize, usize, usize)>>;
-
 /// Break every exposed edge of the model: one chained circuit per
 /// rim or crease run, deterministic in the chain law's own order
 /// (runs sorted by their first point's `cmp_pt`).
@@ -207,33 +203,11 @@ pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'
         )));
     }
 
-    // Weld vertices; bucket directed edges by the unordered pair so
-    // a rim and both faces of one crease meet in one entry (pencil's
-    // index, the same walk).
+    // The weld, the edge pairing and the convexity gate are the shared
+    // scan's (#1894); the filter, the size and the reach stay here.
     let s = vkey_scale(facets);
     let mut filter = EdgeFilter::new(facets, p, edges, s)?;
-    let mut verts: Vec<Point3> = Vec::new();
-    let mut ids: HashMap<(i64, i64, i64), usize> = HashMap::new();
-    let mut vix: Vec<[usize; 3]> = Vec::with_capacity(facets.len());
-    for f in facets {
-        vix.push([
-            vid(f.a, s, &mut verts, &mut ids),
-            vid(f.b, s, &mut verts, &mut ids),
-            vid(f.c, s, &mut verts, &mut ids),
-        ]);
-    }
-    let mut edges: EdgeBook = HashMap::new();
-    for (fi, tri) in vix.iter().enumerate() {
-        for (from, to) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
-            if from == to {
-                continue; // a degenerate triangle's own repeat is no edge
-            }
-            let key = if from < to { (from, to) } else { (to, from) };
-            edges.entry(key).or_default().push((fi, from, to));
-        }
-    }
-    let mut keys: Vec<(usize, usize)> = edges.keys().copied().collect();
-    keys.sort_unstable();
+    let EdgeScan { edges: exposed, flips, manifold } = scan(facets, s);
 
     // The cone's flank rises `slope` mm per plan mm (cot of the half-
     // angle). An edge climbing faster than that cannot be broken by a
@@ -245,60 +219,24 @@ pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'
     let mut steeps = 0usize;
     let mut segs: Vec<(f64, Seg)> = Vec::new();
     let mut out_of_size = 0usize;
-    let mut flips = 0usize;
-    let mut manifold = 0usize;
-    for &(lo, hi) in &keys {
-        let list = &edges[&(lo, hi)];
-        let (e0, e1) = (verts[lo], verts[hi]);
-        if list.len() == 1 {
-            if !filter.keeps(e0, e1, None) || e0.z.max(e1.z) <= p.bottom_z {
+    for (e0, e1, kind) in exposed {
+        let (qa, qb, bend) = match kind {
+            Exposed::Rim { inside, .. } => {
+                if !filter.keeps(e0, e1, None) || e0.z.max(e1.z) <= p.bottom_z {
+                    continue;
+                }
+                if steep(e0, e1, slope) {
+                    steeps += usize::from(clip(e0, e1, p, drop).is_some());
+                } else {
+                    let dr = contact_drop(e0, e1, inside, None, p)?;
+                    if let Some((q0, q1)) = clip(e0, e1, p, dr) {
+                        segs.push((dr, seg(q0, q1, s)));
+                    }
+                }
                 continue;
             }
-            if steep(e0, e1, slope) {
-                steeps += usize::from(clip(e0, e1, p, drop).is_some());
-            } else {
-                let face = third(facets[list[0].0], e0, e1);
-                let dr = contact_drop(e0, e1, face, None, p)?;
-                if let Some((q0, q1)) = clip(e0, e1, p, dr) {
-                    segs.push((dr, seg(q0, q1, s)));
-                }
-            }
-            continue;
-        }
-        if list.len() > 2 {
-            manifold += 1;
-            continue; // a weld gone wrong is no edge to break
-        }
-        let (fi, a0, a1) = list[0];
-        let (fj, b0, b1) = list[1];
-        if (a0, a1) == (b0, b1) {
-            flips += 1; // same direction in both faces: one winding is flipped
-            continue;
-        }
-        if fi == fj {
-            continue; // the same face twice is a degenerate triangle, not a crease
-        }
-        let (na, nb) = (facets[fi].normal(), facets[fj].normal());
-        if !(na.dot(na) > 0.0 && nb.dot(nb) > 0.0) {
-            continue; // a degenerate facet owns no corner
-        }
-        let (na, nb) = (
-            scale3(na, 1.0 / na.dot(na).sqrt()),
-            scale3(nb, 1.0 / nb.dot(nb).sqrt()),
-        );
-        let bend = na.dot(nb).clamp(-1.0, 1.0);
-        if bend > 1.0 - 1e-12 {
-            continue; // flat meeting: tangent faces show no edge to break
-        }
-        // The mirrored gate: pencil keeps corners whose opposite
-        // vertices stand above the other face; what bends the OTHER
-        // way (or stands under on one side - a knife edge) is convex
-        // enough to burr.
-        let qa = third(facets[fj], e0, e1); // inside face B
-        let qb = third(facets[fi], e0, e1); // inside face A
-        if sub3(qa, e0).dot(na) > 0.0 && sub3(qb, e0).dot(nb) > 0.0 {
-            continue; // concave: the pencil pair's corner, not a burr
-        }
+            Exposed::Crease { qa, qb, bend, .. } => (qa, qb, bend),
+        };
         if !filter.keeps(e0, e1, Some(bend)) {
             continue;
         }
@@ -320,7 +258,6 @@ pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'
             }
         }
     }
-
     // #1889: under `Refuse` one edge out of reach stops the whole ride,
     // before any path exists - and before `Empty`, which would hide it.
     if steeps > 0 && p.unreachable == UnreachableEdges::Refuse {
@@ -392,15 +329,4 @@ fn seg(p0: Point3, p1: Point3, s: f64) -> Seg {
         k0: vkey(p0, s),
         k1: vkey(p1, s),
     }
-}
-
-fn vid(pt: Point3, s: f64, verts: &mut Vec<Point3>, ids: &mut HashMap<(i64, i64, i64), usize>) -> usize {
-    let k = vkey(pt, s);
-    if let Some(&i) = ids.get(&k) {
-        return i;
-    }
-    let i = verts.len();
-    verts.push(pt);
-    ids.insert(k, i);
-    i
 }

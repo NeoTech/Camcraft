@@ -58,6 +58,11 @@ pub(crate) fn resolve_unsaved(state: &mut State, choice: crate::unsaved::Unsaved
     state.pending.push_back(CommandKind::ResolveUnsaved(choice));
 }
 
+/// The overwrite prompt's answer (#3608): its effect goes through the queue.
+pub(crate) fn resolve_overwrite(state: &mut State, choice: crate::save_guard::OverwriteChoice) {
+    state.resolve_overwrite(choice);
+}
+
 pub(crate) fn undo(state: &mut State) {
     state.pending.push_back(CommandKind::Undo);
 }
@@ -423,6 +428,8 @@ pub(crate) fn add_operation(state: &mut State, kind: usize) {
         .and_then(|e| camcraft_app::model::tool_of(&state.world, &e))
     {
         camcraft_app::operation::seed_helix_for_tool(&mut params, t.diameter);
+        // #3475: a new Slot is at least as wide as its tool.
+        camcraft_app::operation::seed_slot_for_tool(&mut params, t.diameter);
         // #890: and its feed, from the tool's row for the document material.
         camcraft_app::cutting_rows::seed_feed_for_tool(&state.world, &mut params, &t);
     }

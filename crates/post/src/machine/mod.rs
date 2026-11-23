@@ -27,6 +27,7 @@ pub use waterjet::waterjet_refusals;
 mod rows;
 mod swing;
 mod tooling;
+pub mod reservations;
 mod tree;
 mod trunnion;
 

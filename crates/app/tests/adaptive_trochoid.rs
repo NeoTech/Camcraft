@@ -41,6 +41,7 @@ fn part(a: f64, b: f64) -> camcraft_app::geometry::Mesh {
 
 fn adaptive(method: AdaptiveMethod) -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         blend_radius: None, blend_turns: false,
         links: Links::PLANAR,
         stepover: 1.0,

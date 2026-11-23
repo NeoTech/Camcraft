@@ -133,9 +133,11 @@ fn a_rough_cut_and_two_skims_post_each_pass_on_its_own_ln_condition() {
     assert!(th < c1 && c1 < c2 && c2 < c3 && c3 < cut, "{text}");
     // Each pass starts with a straight move from the threading point; the
     // one before each skim's C word is the return to it.
+    // #3214: the skim's gap note sits between its SKIM note and its C word.
     for c in [c2, c3] {
-        assert_eq!(lines[c - 2], "G01 X-30. Y0.", "a skim starts at the threading point:\n{text}");
-        assert!(lines[c - 1].starts_with("(SKIM "), "{text}");
+        assert_eq!(lines[c - 3], "G01 X-30. Y0.", "a skim starts at the threading point:\n{text}");
+        assert!(lines[c - 2].starts_with("(SKIM "), "{text}");
+        assert!(lines[c - 1].contains(" KERF GAP "), "{text}");
         assert!(lines[c + 1].starts_with("G01 X-20."), "the skim's lead-in follows its C word:\n{text}");
     }
     // The skims cut nearer the part: the rough lead-in, then each skim's.

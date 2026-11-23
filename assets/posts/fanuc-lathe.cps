@@ -845,8 +845,16 @@ function meridianArc(p) {
   var fate = arcFateOf({
     plane: "XZ", ccw: !cwB, rotary: false,
     start: { X: r0, Y: 0, Z: p.StartZ }, end: { X: r1, Y: 0, Z: p.Z }, center: { X: rc, Y: 0, Z: c.K }
-  }, function (k, v) { return k === "X" ? xWord(v) : (k === "Z" ? zWord(v) : ""); });
-  if (fate !== "arc") { chainOn = false; modalR = r1; return; }
+  }, function (k, v) { return k === "X" ? xWord(v) : (k === "Z" ? zWord(v) : ""); },
+  // #3474: the centre the control reads: the written start plus the
+  // written I (a radius, doubled to the diameter X scale) and K.
+  function (k, d) { return (k === "X" ? 2 : 1) * _arcWordNum(fu(d)); });
+  if (fate !== "arc") {
+    chainOn = false; modalR = r1;
+    // #3474: a short arc whose written ends differ on one ray: the feed move.
+    if (fate === "linear") block(["G01", xWord(r1), zWord(p.Z), feedWord(p.FeedRate)]);
+    return;
+  }
   chainOn = false;
   modalR = r1;
   var cw = p.CircularDirection === "CW";

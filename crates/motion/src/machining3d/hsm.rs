@@ -36,6 +36,7 @@ use crate::machining2d::{
     ARC_FIT_TOL, GenError, PocketParams, PocketStrategy, ProofTally, Return, Seg, adaptive_passes, choose_entry,
     crossing_free, in_air, fit_proved, microlift_link, plan_passes, push_segs, zigzag_ringed_passes,
 };
+use super::level_side::{side_rings, start_side};
 
 /// Said once per path where the rest pass runs under Adaptive.
 pub const REST_RINGS: &str =
@@ -135,6 +136,8 @@ pub(super) fn plan_level(
     stock: Option<&Region>,
 ) -> Result<LevelPlan, GenError> {
     let step = p.tiling_step();
+    // #3361: Pass starts at (Waterline and Offset rings only).
+    let side = start_side(b, p, (rest, shell, seam.is_some()), stock);
     if seam.is_none() && matches!(p.strategy, PocketStrategy::Zigzag | PocketStrategy::Auto) {
         // #3129: the level's rows close with a ring on each boundary loop,
         // so no cusp stands between row ends on a wall or an island. The
@@ -143,11 +146,11 @@ pub(super) fn plan_level(
         return Ok(LevelPlan::rings(zigzag_ringed_passes(center, step, p.climb)?, p.helix_radius));
     }
     if p.strategy != PocketStrategy::Adaptive {
-        return Ok(LevelPlan::rings(plan_passes(center, step, p.climb, p.strategy)?, p.helix_radius));
+        return Ok(LevelPlan::rings(side_rings(b, center, p, p.strategy, &side, z)?, p.helix_radius));
     }
     if rest || shell {
         b.note_once(if rest { REST_RINGS } else { SHELL_RINGS });
-        let passes = plan_passes(center, step, p.climb, PocketStrategy::OffsetRings)?;
+        let passes = side_rings(b, center, p, PocketStrategy::OffsetRings, &side, z)?;
         return Ok(LevelPlan::rings(passes, p.helix_radius));
     }
     let what = match seam {

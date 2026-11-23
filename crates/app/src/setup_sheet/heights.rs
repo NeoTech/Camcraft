@@ -16,6 +16,13 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
             ("TOP", "Top of Plate Z", Some(p.top_z)),
             ("BOT", "Bottom of Plate Z", Some(p.bottom_z)),
         ],
+        // The waterjet cut (#1883): the same three planes as the plasma.
+        OpParams::WaterjetProfile(p) => [
+            ("CLR", "Clearance Z", Some(p.clearance_z)),
+            ("RET", "Retract Z", None),
+            ("TOP", "Top of Plate Z", Some(p.top_z)),
+            ("BOT", "Bottom of Plate Z", Some(p.bottom_z)),
+        ],
         // The wire cut (#532): the two programmed planes; no rapids
         // plane, no hop.
         OpParams::WireContour(p) => [
@@ -246,6 +253,12 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
         // there is no RET row - the kernel hops every run to the
         // clearance plane itself (M2.5 E B).
         OpParams::Deburr {
+            clearance_z,
+            top_z,
+            bottom_z,
+            ..
+        }
+        | OpParams::MultiAxisDeburr {
             clearance_z,
             top_z,
             bottom_z,

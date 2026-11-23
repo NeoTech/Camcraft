@@ -95,7 +95,7 @@ pub(super) fn roughing2d_pane(
             adaptive_troch_passes(ui, u, t);
         }
     } else if tab == SEC_LEADS {
-        lead_page::leads_tab(ui, u, tag, Some((entry, helix_radius)), links);
+        lead_page::leads_tab_with_retract(ui, u, tag, Some((entry, helix_radius)), links, retract_z.is_some());
     } else if tab == SEC_FEEDS {
         prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));
         if let Some((m, t)) = troch

@@ -337,3 +337,6 @@ fn tilted_height_labels_show_local_axis_distance() {
 
 #[path = "heights_note_tests.rs"]
 mod notes;
+
+#[path = "retract_link_tests.rs"]
+mod retract_links;

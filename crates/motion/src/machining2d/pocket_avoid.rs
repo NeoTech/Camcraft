@@ -15,7 +15,7 @@ use super::fillet::{Legal, fillet_corners};
 use super::fillet_tally::{FilletTally, corner_arc_radius, fillet_floor};
 use super::equal_steps::cut_levels_for;
 use super::levels::{Cert, Motion, WalkState, walk_one_level};
-use super::level_rings::ring_plan;
+use super::level_rings::ring_plan_ramped;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::{PocketParams, PocketStrategy, non_sliver_center};
 use super::pocket_zigzag::rest_passes;
@@ -144,20 +144,20 @@ pub fn pocket_avoid_started_on(
             }
             sub
         };
-        let (passes, actual, room, joins) = if strategy == PocketStrategy::Adaptive {
+        let (passes, actual, room, joins, ramp_starts) = if strategy == PocketStrategy::Adaptive {
             let what = format!("level at Z {z:.2}");
             let (ps, anotes, act, rm, js) =
                 super::pocket_hsm::adaptive_passes(&level_center, p, &what, true, None)?;
             notes.extend(anotes);
-            (ps, act, rm, js)
+            (ps, act, rm, js, Vec::new())
         } else if matches!(strategy, PocketStrategy::Zigzag | PocketStrategy::Auto) {
             // #3129: rows alone leave a cusp between row ends on each wall,
             // island and keep-out edge; the level closes with its rings.
-            (rest_passes(&level_center, p.tiling_step(), p.climb)?, strategy, None, Vec::new())
+            (rest_passes(&level_center, p.tiling_step(), p.climb)?, strategy, None, Vec::new(), Vec::new())
         } else {
-            let (ps, pnotes) = ring_plan(region, &level_center, p, strategy, side)?;
+            let (ps, pnotes, ramps) = ring_plan_ramped(region, &level_center, p, strategy, side, true)?;
             notes.extend(pnotes.into_iter().filter(|n| !notes.contains(n)).collect::<Vec<_>>());
-            (ps, strategy, None, Vec::new())
+            (ps, strategy, None, Vec::new(), ramps)
         };
         let fit = match actual {
             PocketStrategy::Waterline | PocketStrategy::OffsetRings => Some(ARC_FIT_TOL),
@@ -206,7 +206,8 @@ pub fn pocket_avoid_started_on(
             .with_xy_arc(p.links.approach.arc_xy)
             .with_microlift(joins)
             .with_solid_restart()
-            .with_cleared_links(side.start != PassStart::Auto);
+            .with_cleared_links(side.start != PassStart::Auto)
+            .with_ramp_starts(ramp_starts);
         let cert_entry = room.as_ref().map(|rm| Cert::Region(&rm.tess));
         let cert_links = Cert::Region(&level_center);
         walk_one_level(

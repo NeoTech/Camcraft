@@ -166,6 +166,7 @@ fn pocket_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
 
 fn adaptive_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         blend_radius: None,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,

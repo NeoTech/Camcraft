@@ -125,7 +125,7 @@ fn region_turn_core(
                 // The deburr ride's edges ARE the model's own exposed
                 // boundary (M2.5 E B); its picks name which of them to
                 // break, they bound no area (#1888, `deburr_picks`).
-                | OpParams::Deburr { .. }
+                | OpParams::Deburr { .. } | OpParams::MultiAxisDeburr { .. }
                 // The drive-curve contour's picks are the PATH, not a
                 // boundary: the 2D selection walk below would try to
                 // bound an area with them (and refuse an open run),
@@ -255,7 +255,7 @@ pub(crate) fn selection_drives_region(params: &OpParams) -> bool {
             // The deburr loci are the model's own exposed edges - the
             // weld finds them (E B). Its picks are edges to break, not
             // a region: the drive-curve contour's answer (#1888).
-            | OpParams::Deburr { .. }
+            | OpParams::Deburr { .. } | OpParams::MultiAxisDeburr { .. }
             // The 5-axis kinds are mesh-driven like the finish: the
             // rings and raster lines chase the model at every plane,
             // so a picked loop could only disagree with the path

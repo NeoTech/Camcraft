@@ -30,6 +30,7 @@ const R_TOOL: f64 = 3.0;
 
 fn params(entry: Entry3D, links: Links, vault: bool) -> CircularParams {
     CircularParams {
+        pass_start: Default::default(),
         links,
         center: C,
         radius: 10.0,
@@ -194,4 +195,56 @@ fn a_multi_ring_helix_keeps_both_the_clearance_lift_and_descent_tracking() {
     tight.helix_radius = 3.0;
     let err = circular(&disk(10.0), &tight).expect_err("crossing helix orbits must still be refused");
     assert!(format!("{err:?}").contains("helix entry: the descent"), "unexpected refusal: {err:?}");
+}
+
+#[test]
+fn a_forced_vault_helix_stays_inside_its_band_after_lattice_rounding() {
+    use camcraft_motion::machining2d::PassStart;
+
+    let mut p = params(Entry3D::Helix, Links::PLANAR, true);
+    p.pass_start = PassStart::Inside;
+    p.center.x += 0.49e-6;
+    p.helix_radius = 0.7;
+    let path = circular(&disk(10.0), &p).expect("the tangent helix fits the inner ring");
+    let mut unequal = false;
+    for m in path.moves.iter().take_while(|m| (m.from.z - m.to.z).abs() > 1e-9 || m.arc.is_none()) {
+        let Some(arc) = m.arc else { continue };
+        let r = |q: camcraft_motion::geometry::Point3| (q.x - arc.center.x).hypot(q.y - arc.center.y);
+        let (a, b) = (r(m.from), r(m.to));
+        unequal |= (a - b).abs() > 1e-7;
+        let center_offset = (arc.center.x - p.center.x).hypot(arc.center.y - p.center.y);
+        // The CL sweep interpolates the radius between the two endpoint
+        // radii. The full swept circle stays inside this bound even if the
+        // maximum lies between the ends.
+        assert!(center_offset + a.max(b) <= 1.0 + 1e-9, "the entire first helix stays in the R1 band: {m:?}");
+    }
+    assert!(unequal, "the first descent uses a helix with unequal rounded endpoint radii");
+}
+
+#[test]
+fn a_forced_vault_never_emits_a_sub_resolution_helix_arc() {
+    use camcraft_motion::machining2d::PassStart;
+    use camcraft_motion::ring_zig::MIN_ARC_CHORD;
+
+    let mut p = params(Entry3D::Helix, Links::PLANAR, true);
+    p.pass_start = PassStart::Inside;
+    p.radius = 10.0002;
+    p.stepover = 1.75;
+    p.top_z = 0.001;
+    p.stepdown = 0.002;
+    p.links.approach.plunge_height = 0.0;
+    p.helix_radius = 0.00015;
+    match circular(&disk(10.01), &p) {
+        Ok(path) => {
+            assert!(!path.moves.is_empty(), "the legal ring ladders still cut");
+            for m in path.moves.iter().filter(|m| m.arc.is_some()) {
+                let chord = (m.to.x - m.from.x).hypot(m.to.y - m.from.y);
+                assert!(chord >= MIN_ARC_CHORD, "this arc can round to one posted XY point: {m:?}");
+            }
+        }
+        Err(err) => {
+            let text = format!("{err:?}");
+            assert!(text.contains("helix") || text.contains("vault ring"), "the refusal names the geometry: {text}");
+        }
+    }
 }

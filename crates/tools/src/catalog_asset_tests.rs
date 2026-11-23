@@ -6,13 +6,15 @@
 use crate::catalog_asset::{CATALOG_JSON, parse_catalog};
 use crate::tools::{Tool, ToolKind, ToolMaterial, catalog, probe_tool, torch_tool};
 
-const ORDER: [&str; 37] = [
+const ORDER: [&str; 38] = [
     "EM-0200-2FL", "EM-0300-2FL", "EM-0400-2FL", "EM-0600-4FL", "EM-0800-4FL", "EM-1000-4FL", "EM-1200-2FL",
     "BN-0600", "BN-1000", "BB-1000-R1", "DR-0200", "DR-0300", "DR-0400", "DR-0600", "CM-0400-90", "CM-0600-90",
     "CM-1000-90", "TAP-M4", "TAP-M6", "BR-1000", "TN-1600-0R8", "GT-0200", "GT-0300", "TD-0866-60", "TD-1732-60",
     "FG-0600-04", "FG-1200-08", "PRB-0400", "PT-KERF-150", "EDM-E10X6", "TM-0600-P125", "TMS-0600-P050-150", "EDM-W025",
     // #1444: the undercut cutters.
     "TS-2000-0600", "KS-1600-0300", "DT-2000-60", "LP-1000",
+    // #1883: the waterjet nozzle.
+    "WJ-KERF-080",
 ];
 
 fn tool(name: &str) -> Tool {
@@ -107,6 +109,8 @@ fn the_json_catalog_keeps_the_old_tables_values() {
     assert_eq!(format!("{:?}", tool("EDM-E10X6")), format!("{:?}", crate::electrode::electrode_tool(10.0, 6.0, 30.0, 15.0)));
     // #2011: the wire row is wire_tool(0.25).
     assert_eq!(format!("{:?}", tool("EDM-W025")), format!("{:?}", crate::wire::wire_tool(0.25)));
+    // #1883: the nozzle row is waterjet_tool(0.8), the kerf the golden plate cuts with.
+    assert_eq!(format!("{:?}", tool("WJ-KERF-080")), format!("{:?}", crate::waterjet::waterjet_tool(0.8)));
 }
 
 #[test]

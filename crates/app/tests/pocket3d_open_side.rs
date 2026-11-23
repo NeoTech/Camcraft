@@ -108,6 +108,7 @@ fn world_on(neighbour: Option<Mesh>, side: f64) -> World {
 /// The user's 3D Pocket: offset rings, shell on, no stock to leave.
 fn pocket3d() -> OpParams {
     OpParams::Pocket3D {
+        pass_start: Default::default(),
         links: Links::ROUGH3D,
         stepover: 4.0,
         stock_to_leave: 0.0,

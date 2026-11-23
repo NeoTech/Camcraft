@@ -84,10 +84,11 @@
 //! structure only - behaviour is byte-identical to the flat file it replaces.
 
 mod center_cut;
-mod crease;
+pub(crate) mod crease;
 mod deburr;
-mod deburr_filter;
-mod deburr_size;
+pub(crate) mod deburr_filter;
+pub(crate) mod deburr_scan;
+pub(crate) mod deburr_size;
 mod deburr_contact;
 mod drape;
 mod edge;
@@ -98,6 +99,8 @@ mod grid;
 #[cfg(test)]
 mod grid_tests;
 mod geodesic;
+#[cfg(test)]
+mod hop_tests;
 mod ladder;
 mod morph;
 mod pencil;
@@ -124,7 +127,7 @@ pub use deburr::{deburr, deburr_edges, DeburrParams, UnreachableEdges};
 pub use deburr_filter::DeburrEdges;
 pub use deburr_size::{BreakMode, BreakProfile, DeburrBreak};
 pub use fill::{fill_openings, Filled};
-pub use flat::flat;
+pub use flat::{flat, flat_from};
 pub use geodesic::geodesic;
 pub use pencil::{corner, pencil};
 pub use flow::flow;
@@ -132,8 +135,8 @@ pub use flow::flow;
 // closest-point law the raster clearance uses, crate-visible.
 pub(crate) use support::closest_pt_tri;
 pub use polar::{morphed_spiral, radial, spiral};
-pub use raster::{blend, parallel};
+pub use raster::{blend, parallel, parallel_angle_refusal, parallel_with_angle};
 pub use swarf::{swarf, swarf_multi};
 pub use rings::waterline;
 pub use morph::morph;
-pub use shadow::{contour, project};
+pub use shadow::{contour, contour_from, project, reads_pass_start};

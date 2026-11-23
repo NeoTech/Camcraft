@@ -21,6 +21,19 @@ fn word(tok: &str) -> Option<(char, f64)> {
     rest.parse::<f64>().ok().map(|v| (l, v))
 }
 
+/// The words of one token. A compact block (RichAuto `.mmg`:
+/// `N60G3X18.123Y5.432I-8.000J0.000`, no spaces between its words) gives
+/// each of its words; any other token is given whole.
+fn split_words(tok: &str) -> Vec<&str> {
+    let starts: Vec<usize> = tok.char_indices().filter(|(_, c)| c.is_ascii_uppercase()).map(|(i, _)| i).collect();
+    if starts.len() < 2 || starts[0] != 0 {
+        return vec![tok];
+    }
+    let parts: Vec<&str> =
+        starts.iter().enumerate().map(|(n, &i)| &tok[i..starts.get(n + 1).copied().unwrap_or(tok.len())]).collect();
+    if parts.iter().all(|p| word(p).is_some()) { parts } else { vec![tok] }
+}
+
 /// Each arc block of `text` (the program, then a `--- ` trailer). A lathe
 /// program starts in G18 (its arcs are in the XZ meridian plane).
 pub fn arc_blocks(text: &str, lathe: bool) -> Vec<ArcBlock> {
@@ -42,7 +55,7 @@ pub fn arc_blocks(text: &str, lathe: bool) -> Vec<ArcBlock> {
                 _ => {}
             }
         }
-        let toks: Vec<&str> = code.split_whitespace().collect();
+        let toks: Vec<&str> = code.split_whitespace().flat_map(split_words).collect();
         if toks.iter().any(|t| matches!(*t, "BLK" | "FORM" | "CC" | "TOOL")) {
             continue;
         }

@@ -27,11 +27,13 @@ use super::shell::*;
 use super::{gpu, gpu_init, icons, theme, world};
 
 mod capture;
+mod eye_boot;
 mod frame;
+mod start;
 
 /// The windowed shell (the `--ui egui` entry without `--headless`); returns
 /// the process exit code.
-pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String]) -> i32 {
+pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode) -> i32 {
     let event_loop = match EventLoop::new() {
         Ok(el) => el,
         Err(err) => {
@@ -44,6 +46,7 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
     // through the guarded Quit instead of ending the process.
     let _ = super::os_quit::install();
     let mut shell = Shell::new(pick, want);
+    shell.start = start;
     // #2462: a file named on the command line goes through the same
     // import / open command as the dialogs, on the first frame.
     crate::launch_file::queue(&mut shell.state, files);
@@ -107,6 +110,8 @@ struct Shell {
     /// M7.2 B3b: the traced-stock eye; `None` where the device cannot
     /// composite it (the stock sheet then stands, said once at init).
     stock_eye: Option<crate::trace::eye::StockEye>,
+    /// The eye being built on its own thread (`eye_boot`); `None` once taken.
+    eye_rx: Option<eye_boot::EyeRx>,
     view_tex: Option<egui::TextureId>,
     /// The bundled glyphs, built once on the first GPU-backed frame (the
     /// retired imgui loader's law: lazy, and `None` means painted fallback,
@@ -145,6 +150,8 @@ struct Shell {
     /// #1696: the whole-window picture the Report door asks for; idle
     /// until a `ViewportCommand::Screenshot` reaches the frame loop.
     capture: capture::Capture,
+    /// How the window first appears (`--minimized`, `--no-activate`).
+    start: crate::cli_options::StartMode,
     state: State,
 }
 
@@ -182,6 +189,7 @@ impl Shell {
             dock_state,
             view: None,
             stock_eye: None,
+            eye_rx: None,
             view_tex: None,
             icons: None,
             viewport_points: [600.0, 400.0],
@@ -199,6 +207,7 @@ impl Shell {
             pending_resize: None,
             last_resize_frame: None,
             capture: capture::Capture::new(),
+            start: crate::cli_options::StartMode::default(),
             state,
         }
     }
@@ -213,9 +222,12 @@ impl Shell {
 
     fn init_gpu(&mut self, el: &ActiveEventLoop) {
         // #1754: with_icons also sets the taskbar icon (ICON_BIG) on Windows.
-        let attrs = super::app_icon::with_icons(Window::default_attributes())
-            .with_title(self.window_title.clone())
-            .with_inner_size(LogicalSize::new(1280.0, 800.0));
+        let attrs = start::attributes(
+            self.start,
+            super::app_icon::with_icons(Window::default_attributes())
+                .with_title(self.window_title.clone())
+                .with_inner_size(LogicalSize::new(1280.0, 800.0)),
+        );
         let window = match el.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(err) => {
@@ -228,8 +240,8 @@ impl Shell {
         crate::file_dialog::set_parent(&window);
         // A window launched from a terminal or a script does not always get
         // the foreground: ask for it once, so the shell is not born behind
-        // whatever launched it.
-        window.focus_window();
+        // whatever launched it. `--minimized` and `--no-activate` skip this.
+        start::show(self.start, &window);
         // M4.2 + #74: the honest fallback chain, adapter by adapter inside
         // each backend mask (gpu_init); a refusal names every adapter tried.
         // The View3D pipelines are built per candidate: an adapter that
@@ -266,13 +278,17 @@ impl Shell {
         view.set_document(&device, &queue, &scene.parts);
         view.set_shade(&device, &queue, &scene.shade);
         view.set_overlay(&device, &queue, &scene.overlay);
-        let stock_eye = match crate::trace::eye::StockEye::new(&device, VIEW3D_FORMAT) {
-            Ok(e) => Some(e),
-            Err(err) => {
-                diag_warn!("stock eye: {err} - the deviate sheet stands in");
-                None
-            }
-        };
+        // The eye lands on a later frame; until then the sheet stands in.
+        self.eye_rx = eye_boot::spawn(device.clone(), VIEW3D_FORMAT, Arc::clone(&window));
+        if self.eye_rx.is_none() {
+            self.stock_eye = match crate::trace::eye::StockEye::new(&device, VIEW3D_FORMAT) {
+                Ok(e) => Some(e),
+                Err(err) => {
+                    diag_warn!("stock eye: {err} - the deviate sheet stands in");
+                    None
+                }
+            };
+        }
         let tex =
             renderer.register_native_texture(&device, view.color_view(), wgpu::FilterMode::Linear);
         let winit_state = egui_winit::State::new(
@@ -293,7 +309,6 @@ impl Shell {
         self.renderer = Some(renderer);
         self.winit_state = Some(winit_state);
         self.view = Some(view);
-        self.stock_eye = stock_eye;
         self.view_tex = Some(tex);
     }
 

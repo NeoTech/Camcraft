@@ -554,6 +554,7 @@ fn get_selection_reads_live_ui_selection_context_and_prompt_json_treats_it_read_
             }],
             active_operation: Some("Face1".to_owned()),
         }),
+        doc_stamp: None,
     };
     let answer = answer_live_with(
         &world,
@@ -605,6 +606,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
             auto_approve_non_critical: true,
         },
         selection: None,
+        doc_stamp: None,
     };
     for (idx, (tool, args)) in [
         ("post", json!({ "output": nc_path.display().to_string() })),
@@ -638,6 +640,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
     let mismatched = LiveOptions {
         gate: LiveGate::allow_once("post", json!({ "output": nc_path.display().to_string() })),
         selection: None,
+        doc_stamp: None,
     };
     let ans = answer_live_with(
         &world,
@@ -667,6 +670,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
         let opts = LiveOptions {
             gate: LiveGate::allow_once(tool, args.clone()),
             selection: None,
+            doc_stamp: None,
         };
         let ans = answer_live_with(
             &world,

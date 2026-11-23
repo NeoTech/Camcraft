@@ -173,7 +173,7 @@ pub(super) fn steep(q0: Point3, q1: Point3, slope: f64) -> bool {
 /// programmed window; None when the whole segment misses it. The
 /// clip rides the segment's own line, so a rim leaving the floor is
 /// cut where the floor is, not dropped whole.
-pub(super) fn clip(p0: Point3, p1: Point3, p: &DeburrParams, drop: f64) -> Option<(Point3, Point3)> {
+pub(crate) fn clip(p0: Point3, p1: Point3, p: &DeburrParams, drop: f64) -> Option<(Point3, Point3)> {
     let (lo, hi) = (p.bottom_z + drop, p.top_z + drop);
     let dz = p1.z - p0.z;
     if dz.abs() < 1e-15 * (p0.z.abs() + p1.z.abs() + 1.0) {

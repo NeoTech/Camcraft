@@ -28,6 +28,7 @@ use camcraft_app::schema::Location;
 use camcraft_app::setup_align;
 use camcraft_app::setup_turn::TurnPivot;
 use camcraft_app::tools::catalog;
+use camcraft_app::turning::{PartKept, PartKerf};
 use camcraft_app::world::new_world;
 
 const TAU: f64 = std::f64::consts::TAU;
@@ -72,9 +73,18 @@ fn revolve(meridian: &[(f64, f64)], segs: usize) -> Mesh {
 }
 
 /// The lathe, the Ø34 bar Z-84..0, the GT-0300 blade on `corner`, the
-/// model `meridian` as "pin", and - with `flip` - one setup that holds
-/// the part end for end (the OP20 flip preset). The Part op "P1" at
-/// `plane` is created, not generated.
+/// model `meridian` as "pin", and - with `hold` - one setup that holds
+/// the part as modelled, flipped end for end, spun, or turned. The Part
+/// op "P1" at `plane` is created, not generated.
+fn lathe_world(meridian: &[(f64, f64)], corner: Option<u8>, hold: Hold, plane: f64) -> (World, History) {
+    lathe_world_kerf(meridian, corner, hold, plane, PartKerf::default())
+}
+
+/// [`lathe_world`] with the Part op's kerf setting (#3469).
+fn lathe_world_kerf(meridian: &[(f64, f64)], corner: Option<u8>, hold: Hold, plane: f64, kerf: PartKerf) -> (World, History) {
+    lathe_world_of_kerf(revolve(meridian, 32), corner, hold, plane, kerf)
+}
+
 /// How the one setup holds the part.
 #[derive(Clone, Copy)]
 enum Hold {
@@ -96,11 +106,12 @@ fn lying(m: Mesh) -> Mesh {
     Mesh::from_facets(m.facets.iter().map(|t| Triangle::new(mv(t.a), mv(t.b), mv(t.c))).collect())
 }
 
-fn lathe_world(meridian: &[(f64, f64)], corner: Option<u8>, hold: Hold, plane: f64) -> (World, History) {
-    lathe_world_of(revolve(meridian, 32), corner, hold, plane)
+fn lathe_world_of(mesh: Mesh, corner: Option<u8>, hold: Hold, plane: f64) -> (World, History) {
+    lathe_world_of_kerf(mesh, corner, hold, plane, PartKerf::default())
 }
 
-fn lathe_world_of(mesh: Mesh, corner: Option<u8>, hold: Hold, plane: f64) -> (World, History) {
+/// [`lathe_world_of`] with the Part op's kerf setting (#3469).
+fn lathe_world_of_kerf(mesh: Mesh, corner: Option<u8>, hold: Hold, plane: f64, kerf: PartKerf) -> (World, History) {
     let world = new_world();
     let mut history = History::default();
     let lathe = Machine {
@@ -145,6 +156,7 @@ fn lathe_world_of(mesh: Mesh, corner: Option<u8>, hold: Hold, plane: f64) -> (Wo
         bar_unload: false,
         bar_transfer: false,
         inspect_tol: 0.0,
+        kerf,
     };
     let cmd = CreateOperation::new(&world, "P1", GT, SrcRef::Entity("pin".into()), part).expect("create");
     history.execute(&world, cmd);
@@ -241,7 +253,7 @@ fn a_flipped_setup_refuses_the_part_off_by_name() {
     // part-off is refused before a move exists.
     let (world, _h) = lathe_world(&STUBBED, Some(2), Hold::Flip, -14.0);
     let why = refusal(&world);
-    for want in ["cannot run here", "on both sides", "holds the part end for end"] {
+    for want in ["cannot run here", "on both sides", "holds the part end for end", "'Chuck piece'"] {
         assert!(why.contains(want), "the refusal names {want:?}: {why}");
     }
     // A part-only model in the flipped setup, parted at its +Z end: the
@@ -280,4 +292,97 @@ fn a_part_modelled_lying_down_parts_only_at_its_end() {
         let why = refusal(&world);
         assert!(why.contains("modelled lying down"), "{deg:?} (model bottom Z{bottom}): {why}");
     }
+}
+
+// ---- #3469: the kept piece and the back stock ----
+
+fn kerf_of(world: &World) -> PartKerf {
+    let e = model::find_by_name(world, "P1").expect("op");
+    match model::operation_of(world, &e).expect("operation").params {
+        OpParams::Part { kerf, .. } => kerf,
+        other => panic!("a Part op expected, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_flipped_setup_keeping_the_chuck_piece_cuts_the_stub_off_the_free_end() {
+    // The stubbed pin flipped end for end: the part Z-84..-14 is in the
+    // chuck, the stub Z-14..0 at the free end. Keeping the chuck piece
+    // puts the kerf Z-14..-11, on the free-end side of the plane.
+    let kerf = PartKerf { kept: PartKept::Chuck, back_stock: 0.0 };
+    let (world, mut history) = lathe_world_kerf(&STUBBED, Some(2), Hold::Flip, -14.0, kerf);
+    let e = model::find_by_name(&world, "P1").expect("op");
+    let op = model::operation_of(&world, &e).expect("operation");
+    let made = operation::generate(&world, &op, "P1").map(|_| ());
+    assert!(made.is_ok(), "the stub comes off: {made:?}");
+    history.execute(&world, GenerateOperation::new(&world, "P1").expect("generate"));
+    assert_eq!(operation::status_of(&world, &e), OpStatus::Ok, "the part-off generates");
+    let zs = posted_feed_z(&world);
+    assert!(!zs.is_empty(), "the part-off posts feeds");
+    for z in &zs {
+        assert!((z + 14.0).abs() < 1e-6, "the -Z corner posts the part's end face Z-14, got Z{z}: {zs:?}");
+    }
+}
+
+#[test]
+fn a_back_stock_posts_the_kerf_that_far_into_the_bar() {
+    // The #3452 case with 0.5 mm back stock: the kerf is Z-73.5..-70.5,
+    // so orientation 2 posts Z-73.5 and the part comes off 70.5 mm long.
+    let kerf = PartKerf { kept: PartKept::CutOff, back_stock: 0.5 };
+    let (world, mut history) = lathe_world_kerf(&PIN, Some(2), Hold::AsModelled, END_FACE, kerf);
+    history.execute(&world, GenerateOperation::new(&world, "P1").expect("generate"));
+    let e = model::find_by_name(&world, "P1").expect("op");
+    assert_eq!(operation::status_of(&world, &e), OpStatus::Ok, "the part-off generates");
+    let zs = posted_feed_z(&world);
+    assert!(!zs.is_empty() && zs.iter().all(|z| (z + 73.5).abs() < 1e-6), "the -Z corner posts Z-73.5: {zs:?}");
+}
+
+#[test]
+fn the_chuck_piece_with_nothing_in_the_chuck_is_refused_by_name() {
+    // The #3452 pin stands wholly above its end face Z-70: keeping the
+    // chuck piece parts nothing, and the refusal says which setting.
+    let kerf = PartKerf { kept: PartKept::Chuck, back_stock: 0.0 };
+    let (world, _h) = lathe_world_kerf(&PIN, Some(2), Hold::AsModelled, END_FACE, kerf);
+    let why = refusal(&world);
+    for want in ["nothing to part", "free-end side (higher Z)", "'Cut-off piece'"] {
+        assert!(why.contains(want), "the refusal names {want:?}: {why}");
+    }
+}
+
+#[test]
+fn the_kerf_setting_is_an_undoable_edit_and_rides_the_project_file() {
+    let (world, mut history) = lathe_world(&PIN, Some(2), Hold::AsModelled, END_FACE);
+    assert_eq!(kerf_of(&world), PartKerf::default(), "a new part-off keeps the cut-off piece, no back stock");
+    // The default writes neither key: an unchanged op saves the same file.
+    let p = std::env::temp_dir().join(format!("camcraft-3469-{}.camproj", std::process::id()));
+    camcraft_app::project::save(&world, &p).expect("save");
+    let saved = std::fs::read_to_string(&p).expect("read");
+    assert!(!saved.contains("\"kept\"") && !saved.contains("\"back_stock\""), "the default writes no key");
+    // A negative back stock is refused when the command is made.
+    let e = model::find_by_name(&world, "P1").expect("op");
+    let mut bad = model::operation_of(&world, &e).expect("operation").params;
+    if let OpParams::Part { kerf, .. } = &mut bad {
+        kerf.back_stock = -0.5;
+    }
+    assert!(EditOperationParams::new(&world, "P1", bad).is_err(), "a negative back stock is not a size");
+    // The edit, its undo and redo.
+    let want = PartKerf { kept: PartKept::Chuck, back_stock: 0.25 };
+    let mut next = model::operation_of(&world, &e).expect("operation").params;
+    if let OpParams::Part { kerf, .. } = &mut next {
+        *kerf = want;
+    }
+    history.execute(&world, EditOperationParams::new(&world, "P1", next).expect("a sane edit"));
+    assert_eq!(kerf_of(&world), want);
+    assert!(history.undo(&world));
+    assert_eq!(kerf_of(&world), PartKerf::default(), "Ctrl+Z restores the default");
+    assert!(history.redo(&world));
+    assert_eq!(kerf_of(&world), want, "Ctrl+Y reapplies it");
+    // The stated setting rides the file and reads back whole.
+    camcraft_app::project::save(&world, &p).expect("save");
+    let saved = std::fs::read_to_string(&p).expect("read");
+    assert!(saved.contains("\"kept\": \"chuck\"") && saved.contains("\"back_stock\": 0.25"), "{saved}");
+    let world2 = new_world();
+    camcraft_app::project::open(&world2, &saved).expect("reopen");
+    assert_eq!(kerf_of(&world2), want, "the file keeps the setting");
+    let _ = std::fs::remove_file(&p);
 }

@@ -207,6 +207,19 @@ fn json_type(v: &Value) -> &'static str {
     }
 }
 
+fn push_missing_fields(fields: &mut Vec<Value>, extra: &[(&str, &str, Value)]) {
+    let mut added = false;
+    for (name, ty, default) in extra {
+        if !fields.iter().any(|f| f["name"] == *name) {
+            fields.push(json!({ "name": name, "type": ty, "default": default }));
+            added = true;
+        }
+    }
+    if added {
+        fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    }
+}
+
 pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let kinds: Vec<Value> = KindInfo::ALL
         .iter()
@@ -219,10 +232,30 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 .unwrap_or_default();
             // `break_through` is skipped when `None` in ParamsDto serialization,
             // so inject it into `list_operation_types` for every through-hole kind (#2441).
-            if matches!(key.as_str(), "drill" | "bore" | "thread")
-                && !fields.iter().any(|f| f["name"] == "break_through")
-            {
-                fields.push(json!({ "name": "break_through", "type": "number", "default": Value::Null }));
+            if matches!(key.as_str(), "drill" | "bore" | "thread") {
+                push_missing_fields(&mut fields, &[("break_through", "number", Value::Null)]);
+            }
+            // `WireContourDto` skips empty/default optional fields in project
+            // serialization, so inject them into `list_operation_types` (#3217).
+            if key == "wire_contour" {
+                push_missing_fields(
+                    &mut fields,
+                    &[
+                        ("condition", "string", json!("")),
+                        ("start", "array", Value::Null),
+                        ("tabs", "object", Value::Null),
+                        ("capture", "boolean", json!(false)),
+                        ("taper_deg", "number", json!(0.0)),
+                        ("burnout_clearance", "number", Value::Null),
+                        ("clearance", "number", json!(crate::operation::DEFAULT_CLEARANCE)),
+                        ("skims", "array", json!([])),
+                        ("four_axis", "object", Value::Null),
+                        ("sharp_corners", "boolean", json!(false)),
+                    ],
+                );
+            }
+            if matches!(key.as_str(), "sinker_burn" | "sinker_side_burn") {
+                fields.push(json!({ "name": "cavity_outline", "type": "array", "default": Value::Null }));
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
             // #2830: the Bore strategy flags are skipped when false, so
@@ -303,6 +336,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::DrillUndersize { at, .. } => ("drill_undersize", *at),
         Warning::UndercutLift { at } => ("undercut_lift", *at),
         Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
+        Warning::FluteShort { at, .. } => ("flute_short", *at),
     };
     json!({
         "op": op,
@@ -338,4 +372,22 @@ pub(super) fn verify(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
     }
     report["findings"] = Value::Array(findings);
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Warning, finding};
+    use crate::verify::FallbackCause;
+
+    /// #3542: the pass-start cause keeps the MCP kind `strategy_fallback`
+    /// and stays advisory; only its message names the other cause.
+    #[test]
+    fn a_pass_start_fallback_keeps_the_strategy_fallback_kind() {
+        for cause in [FallbackCause::Adaptive, FallbackCause::PassStart] {
+            let f = finding("op", &Warning::StrategyFallback { at: 3, areas: 1, cause });
+            assert_eq!(f["kind"], "strategy_fallback", "{f}");
+            assert_eq!(f["move"], 3, "{f}");
+            assert_eq!(f["blocks_post"], false, "{f}");
+        }
+    }
 }

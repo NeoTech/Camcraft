@@ -51,7 +51,15 @@ A fix for one red step then costs one step, not a full run.
   the build ready. A step has its own log, its own time and its own pass or fail line.
 - Run one binary again: `cargo xtask gate batch --only "app suites: cmds"`. `--only "app suites"` selects
   each app step. `--failed gate-logs/<run>` runs only the red steps.
-- Quick runs the steps one after the other. Batch and release run them in the lanes of `lanes.rs`: the builds
+- Quick runs the steps one after the other. If a build step (`debug build (--no-run)` or
+  `<crate> build (--no-run)`) fails, quick stops there (#3601). The summary lists each later step as
+  `SKIP ... not run (build failed: <step>)`, and the gate exits red. Each such step gets a log with that one
+  line, so `cargo xtask gate quick --failed gate-logs/<run>` runs the build step and each step that it
+  stopped. If the build log of a `--no-run` step has a rustc metadata
+  error (E0786 `found invalid metadata files`, E0460 `found possibly newer version`), the step prints a
+  `BUILD FAULT` block: the crate of the error, then two things to try, one at a time: the same gate with
+  `CAMCRAFT_GATE_JOBS=4`, and `cargo clean -p <package of the step>`. The gate does not retry or clean by
+  itself. Batch and release run them in the lanes of `lanes.rs`: the builds
   first and alone, then a shared queue (longest first, by the newest `timings.tsv`), then the `ISOLATED`
   targets, the ui steps and clippy one at a time. A quick gate that falls back to batch uses the lanes too.
   `CAMCRAFT_GATE_JOBS=<cores>` sets the job budget that the lanes share.
@@ -102,6 +110,10 @@ Quick prints its selection before it runs:
   suite has the map: `Gate map (M4.4): covers app::x, app::y...`.
 - A change to shared test code (`tests/common`, goldens, snapshots) runs the
   suites of that crate.
+- A change in `assets/posts/`, `assets/machines/`, `examples/`,
+  `crates/post/src/` or `crates/motion/src/` runs the app suites that post
+  the shipped examples: `example_catalog*`, `first_part_programs` and the
+  others in `xtask/src/example_suites.rs` (#3521).
 - A change in geometry, cl or a `Cargo.toml` falls back to batch.
 - A change in `xtask/` runs the unit tests of xtask.
 - `camcraft-kernel` runs in quick only when kernel is touched.

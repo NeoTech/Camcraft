@@ -141,11 +141,14 @@ only at the cut (AGENTS.md "Pixel snapshots are release-lane", #255). The
 fix is to drop the PNG changes and update the structural assertions
 instead.
 
-A red or orange verdict also turns the PR back into a draft
-(`gh pr ready <N> --undo`): the author fixes it there, pushes, and flags it
-ready again for a fresh review (AGENTS.md "Every PR opens as a draft").
-That applies to our own PRs; a fork contributor's PR is left as they set
-it, and the review comment says what to fix.
+An orange verdict (`conflicts`) turns the PR back into a draft
+(`gh pr ready <N> --undo`): the author refreshes it there, pushes, and flags
+it ready again for a fresh review. A red verdict does not: the PR keeps its
+ready flag with `needs-rework`, and the author pushes the fix to it
+(AGENTS.md "Every PR opens as a draft", #3727). That applies to our own PRs;
+a fork contributor's PR is left as they set it, and the review comment says
+what to fix. The first `needs-rework` comment names the class of each finding
+and asks for one rule that closes the class.
 
 A conflicting PR of ours that waits for the merge batch therefore stays a
 draft until its author's agents fix it (AGENTS.md "Own blocked PRs

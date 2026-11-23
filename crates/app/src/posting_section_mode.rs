@@ -54,7 +54,7 @@ pub fn classify(params: &OpParams, path: &Toolpath) -> Option<SectionMode> {
         | OpParams::Thread { .. }
         | OpParams::Probe { .. } => Some(SectionMode::ThreeAxis),
 
-        OpParams::Deburr { .. } => {
+        OpParams::Deburr { .. } | OpParams::MultiAxisDeburr { .. } => {
             let leans = path
                 .moves
                 .iter()
@@ -87,7 +87,7 @@ pub fn classify(params: &OpParams, path: &Toolpath) -> Option<SectionMode> {
         | OpParams::MultiPassTurning { .. }
         | OpParams::FormTurning { .. }
         | OpParams::BoringTurning { .. }
-        | OpParams::PlasmaProfile(_)
+        | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_)
         | OpParams::WireContour(_)
         | OpParams::SinkerBurn(_)
         | OpParams::SlotUndercut(_)

@@ -32,6 +32,7 @@ const TOOL: &str = "EM-0800-4FL";
 
 fn fig8_params() -> OpParams {
     OpParams::Adaptive2D {
+        rest: None,
         stepover: 3.0,
         stock_to_leave: 0.0,
         clearance_z: Height::fixed(27.0),

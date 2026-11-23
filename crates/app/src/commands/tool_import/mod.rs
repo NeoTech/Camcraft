@@ -124,11 +124,14 @@ fn collect_replace_removals(
 }
 
 fn claim_number(
+    world: &World,
+    kind: crate::tools::ToolKind,
     owners: &mut Vec<(String, u32)>,
     name: &str,
     explicit: Option<u32>,
 ) -> Result<u32, CommandError> {
     if let Some(n) = explicit {
+        crate::tool_reservations::for_tool(world, name, kind, n).map_err(CommandError::Invalid)?;
         if let Some((other, _)) = owners.iter().find(|(o, num)| *num == n && o != name) {
             return Err(CommandError::Invalid(format!(
                 "tool '{name}': tool number T{n} is already '{other}''s"
@@ -140,12 +143,7 @@ fn claim_number(
         return Ok(n);
     }
     let taken: Vec<u32> = owners.iter().map(|(_, n)| *n).collect();
-    let n = crate::tool_numbers::next_free_from(&taken).ok_or_else(|| {
-        CommandError::Invalid(format!(
-            "no free tool numbers remain ({})",
-            crate::tool_numbers::RANGE_TEXT
-        ))
-    })?;
+    let n = crate::tool_reservations::allocate(world, name, kind, &taken).map_err(CommandError::Invalid)?;
     owners.push((name.to_owned(), n));
     Ok(n)
 }
@@ -229,12 +227,15 @@ impl ImportTools {
             let existing = model::find_by_name(world, &name);
             let current = existing.as_ref().and_then(|e| model::tool_of(world, e));
             let prev_number = existing.as_ref().and_then(|e| model::tool_number_of(world, e));
+            if let Some(n) = explicit_num.or(prev_number) {
+                crate::tool_reservations::for_tool(world, &name, tool.kind, n).map_err(CommandError::Invalid)?;
+            }
             let doc_body = existing.as_ref().and_then(|e| tool_body::body_of(world, e));
             let body_same = body.is_none() || body_key(doc_body.as_ref()) == body_key(body.as_ref());
             let num_same = explicit_num.is_none() || explicit_num == prev_number;
             match (existing, current) {
                 (None, _) => {
-                    let assigned = claim_number(&mut number_owners, &name, explicit_num)?;
+                    let assigned = claim_number(world, tool.kind, &mut number_owners, &name, explicit_num)?;
                     report.added.push(name.clone());
                     added.push((name.clone(), tool.clone()));
                     steps.push(Step::Add(name, tool, body, assigned));
@@ -250,7 +251,7 @@ impl ImportTools {
                         return Err(CommandError::Invalid(why));
                     }
                     let next_number = match explicit_num {
-                        Some(n) => Some(claim_number(&mut number_owners, &name, Some(n))?),
+                        Some(n) => Some(claim_number(world, tool.kind, &mut number_owners, &name, Some(n))?),
                         None => prev_number,
                     };
                     match mode {
@@ -269,7 +270,7 @@ impl ImportTools {
                     let Some(free) = (2..=9999u32).map(|i| format!("{name} ({i})")).find(|c| !taken(c)) else {
                         return Err(CommandError::NameConflict(name));
                     };
-                    let assigned = claim_number(&mut number_owners, &free, explicit_num)?;
+                    let assigned = claim_number(world, tool.kind, &mut number_owners, &free, explicit_num)?;
                     report.renamed.push((name, free.clone()));
                     added.push((free.clone(), tool.clone()));
                     steps.push(Step::Add(free, tool, body, assigned));

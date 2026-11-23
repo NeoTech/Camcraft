@@ -71,3 +71,16 @@ fn run_refuses_unknown_option_with_code_2_and_opens_no_window() {
     assert_eq!(crate::run(&argv(&["--help"])), 0);
     assert_eq!(crate::run(&argv(&["--version"])), 0);
 }
+
+#[test]
+fn start_mode_flags_are_read_and_minimized_implies_no_activate() {
+    use crate::cli_options::{start_mode, StartMode};
+    assert_eq!(start_mode(&argv(&[])), StartMode::default());
+    assert_eq!(start_mode(&argv(&["a.camproj"])), StartMode::default());
+    assert_eq!(start_mode(&argv(&["--no-activate", "a.camproj"])), StartMode { minimized: false, no_activate: true });
+    assert_eq!(start_mode(&argv(&["--minimized"])), StartMode { minimized: true, no_activate: true });
+    // A flag is not a file argument.
+    assert_eq!(crate::cli_options::files(&argv(&["--minimized", "a.camproj"])), vec!["a.camproj".to_owned()]);
+    // A refused command line gives the normal start.
+    assert_eq!(start_mode(&argv(&["--minimized", "--bogus"])), StartMode::default());
+}

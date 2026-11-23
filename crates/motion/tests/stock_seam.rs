@@ -9,7 +9,8 @@
 //!
 //! Gate map (M7.3): covers camcraft_motion::machining3d,
 //! camcraft_motion::multiaxis, camcraft_motion::quality,
-//! camcraft_motion::machining2d::rest_prior.
+//! camcraft_motion::machining2d::rest_prior,
+//! camcraft_motion::machining2d::rest_prior_adaptive.
 
 #[test]
 fn motion_names_no_dexel_outside_tests() {

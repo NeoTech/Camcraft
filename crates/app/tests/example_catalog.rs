@@ -171,6 +171,7 @@ include!("example_catalog/case_2d_slots.rs");
 
 // #2856: the refusal case 2d/drill-overfeed and its two case tests.
 include!("example_catalog/case_2d_drill_overfeed.rs");
+include!("example_catalog/case_3d_rough_finish.rs"); // #2866: 3d/rough-finish
 
 mod catalog_turning_bushing {
     use super::*;

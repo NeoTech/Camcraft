@@ -272,7 +272,7 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::Trace { feed, .. }
         | OpParams::Pocket3D { feed, .. }
         | OpParams::Finish3D { feed, .. }
-        | OpParams::Deburr { feed, .. }
+        | OpParams::Deburr { feed, .. } | OpParams::MultiAxisDeburr { feed, .. }
         | OpParams::Contour5D { feed, .. }
         | OpParams::Parallel5D { feed, .. }
         | OpParams::Swarf { feed, .. }

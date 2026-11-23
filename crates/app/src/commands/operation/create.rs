@@ -13,7 +13,7 @@ use crate::schema::{Location, Operation, OperationMeta, Toolpath};
 use crate::setup;
 use crate::verify::Warning;
 
-use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, sinker_gate, tool_door, tool_gate, valid_src, wire_gate};
+use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, sinker_gate, slot_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Create an operation entity. Deliberately does not generate: a new
 /// operation reads "never generated" until `GenerateOperation` runs, the
@@ -116,6 +116,7 @@ impl CreateOperation {
         }
         family_gate(world, setup.as_deref(), &params)?;
         tool_gate(world, &params, tool)?;
+        slot_gate(world, setup.as_deref(), &src, &params, tool)?;
         wire_gate(world, setup.as_deref(), tool, &params)?;
         area_gate(world, setup.as_deref(), &src, &params)?;
         let (reordered, order) = append_position(world, setup.as_deref())?;

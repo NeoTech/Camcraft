@@ -2,6 +2,7 @@
 
 use super::cut_index::CutIndex;
 use super::laws::dist2_seg;
+use super::slice_index::IndexedSlice;
 use super::types::VerifyContext;
 
 use std::cell::RefCell;
@@ -48,11 +49,11 @@ pub(super) struct Rest<'c, 'a> {
     /// plain slice, byte for byte.
     bodies: &'c [std::ops::Range<usize>],
     /// A model-driven path's islands per plane - the generator's own
-    /// `material_above`, so one law has two readers (M2.1a). Cached by
-    /// the plane's bits: the level ladder repeats its planes across all
-    /// three readers. `None` means the slice failed; every use of a
-    /// failed slice fails closed (no proof, no pass).
-    island_cache: RefCell<HashMap<u64, Option<Region>>>,
+    /// `material_above` plus an exact Y-slab point index (#3615), so one law
+    /// has two readers (M2.1a). Cached by the plane's bits: the level ladder
+    /// repeats its planes across all three readers. `None` means the slice
+    /// failed; every use of a failed slice fails closed (no proof, no pass).
+    island_cache: RefCell<HashMap<u64, Option<Rc<IndexedSlice>>>>,
     /// Cutting (non-rapid) XY segments with the level they cut at: a
     /// segment's whole disc sweep clears its column down to `to.z`
     /// (plunges are degenerate segments at their XY, arcs contribute
@@ -142,13 +143,17 @@ impl<'c, 'a> Rest<'c, 'a> {
         &self.cut
     }
 
-    /// The model's section strictly above plane `z` (cached).
-    pub(super) fn islands_at(&self, facets: &[Triangle], z: f64) -> Option<Region> {
+    /// The cached indexed slice at plane `z` (one region, one exact point
+    /// index). `None` is a failed slice, memoized so it fails closed on every
+    /// later read too.
+    fn island_slice(&self, facets: &[Triangle], z: f64) -> Option<Rc<IndexedSlice>> {
         let key = z.to_bits();
         if let Some(hit) = self.island_cache.borrow().get(&key) {
             return hit.clone();
         }
-        let fresh = crate::geometry::slice::material_above_of(facets, self.bodies, z).ok();
+        let fresh = crate::geometry::slice::material_above_of(facets, self.bodies, z)
+            .ok()
+            .map(|r| Rc::new(IndexedSlice::new(r)));
         self.island_cache
             .borrow_mut()
             .entry(key)
@@ -156,23 +161,18 @@ impl<'c, 'a> Rest<'c, 'a> {
         fresh
     }
 
-    /// The same membership asked as a question about one point, without
-    /// cloning the plane's region to ask it (M2.5 E): `surface`'s binary
-    /// search and `part_at` probe thousands of cached slices per program,
-    /// and a Region clone per probe turned a continuous-Z path (a flow
-    /// line rides a new plane with every chord) into a minutes-long walk.
+    /// The model's section strictly above plane `z` (cached).
+    pub(super) fn islands_at(&self, facets: &[Triangle], z: f64) -> Option<Region> {
+        self.island_slice(facets, z).map(|s| s.region().clone())
+    }
+
+    /// Whether the cached slice at plane `z` holds `q`, without cloning the
+    /// plane's region to ask it (M2.5 E): `surface`'s binary search and
+    /// `part_at` probe thousands of cached slices per program. The Y-slab
+    /// index (#3615) answers exactly `Region::contains` for `q`, reading only
+    /// the edges that cross `q.y`.
     pub(super) fn island_holds(&self, facets: &[Triangle], z: f64, q: Point2) -> bool {
-        let key = z.to_bits();
-        if let Some(hit) = self.island_cache.borrow().get(&key) {
-            return hit.as_ref().is_some_and(|s| s.contains(q));
-        }
-        let fresh = crate::geometry::slice::material_above_of(facets, self.bodies, z).ok();
-        let holds = fresh.as_ref().is_some_and(|s| s.contains(q));
-        self.island_cache
-            .borrow_mut()
-            .entry(key)
-            .or_insert_with(|| fresh.clone());
-        holds
+        self.island_slice(facets, z).is_some_and(|s| s.contains(q))
     }
 
     /// Material footprint for the reach laws: the stock prism when given,

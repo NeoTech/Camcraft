@@ -222,8 +222,20 @@ pub(crate) fn int_range_row<N: egui::emath::Numeric>(
 
 /// A lens-free number with its unit as the suffix ("°", "s", "%").
 pub(crate) fn num_unit(ui: &mut Ui, v: &mut f64, unit: &str) {
+    unit_drag(ui, v, unit);
+}
+
+/// [`num_unit`] inside a `prop_row`, named by that row's label.
+pub(crate) fn num_unit_row(ui: &mut Ui, v: &mut f64, unit: &str) {
+    let r = unit_drag(ui, v, unit);
+    if let Some(l) = super::layout::row_label_id(ui) {
+        r.labelled_by(l);
+    }
+}
+
+fn unit_drag(ui: &mut Ui, v: &mut f64, unit: &str) -> egui::Response {
     let r = super::layout::value_with_unit(ui, v, unit, 0.1);
-    ring(ui, r);
+    ring(ui, r)
 }
 
 /// The 3+2 index editor (M5.1 stage B): the group's header checkbox arms

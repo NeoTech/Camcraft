@@ -139,6 +139,14 @@ pub fn refusal(tool: &Tool) -> Option<String> {
                     "a lollipop cutter's flute length {fl} mm must be from {r} mm (the ball's centre) to {meet:.3} mm (where the {sd} mm neck leaves the ball)"
                 ));
             }
+            // The stated cutter ends at flute + shank. It must contain
+            // the whole ball, including the cap above the neck junction.
+            if tool.shank_len < d - fl {
+                return Some(format!(
+                    "a lollipop cutter's neck length (shank length) {} mm must be at least {} mm so flute + shank reaches the {d} mm ball top",
+                    tool.shank_len, d - fl
+                ));
+            }
             None
         }
         _ => None,
@@ -189,7 +197,7 @@ pub fn cutter(kind: ToolKind, d: f64, head_h: f64, neck_d: f64, neck_len: f64, a
 /// upper hemisphere. The raised band encloses the whole ball (and the
 /// neck below the pole, which is narrower). The shank band shrinks by
 /// the same amount, so the neck top and the holder stay where they
-/// are; a neck too short for that keeps no shank band. Every other
+/// are; an accepted stack reaches at least the ball's pole. Every other
 /// tool, and a refused head, reads [`Tool::geom`] unchanged.
 #[must_use]
 pub fn fixture_geom(tool: &Tool) -> ToolGeom {
@@ -203,13 +211,23 @@ pub fn fixture_geom(tool: &Tool) -> ToolGeom {
     ToolGeom { flute_len: top, shank_len: (neck_top - top).max(0.0), ..g }
 }
 
-/// The head's side view for [`Tool::profile`], from the tip rim to the
-/// flute top. Degenerate numbers draw a shorter picture, never a NaN.
-pub(crate) fn head_outline(tool: &Tool, p: &mut Vec<(f64, f64)>) {
+/// The head's side view for [`Tool::profile`], from the tip rim up; the
+/// return is the height where the neck step starts. A dovetail ends at
+/// the flute top. A lollipop draws the ball united with the neck: the
+/// ball goes on above the neck start until its radius falls to the
+/// neck's, so the upper ball is drawn as the laws read it (#1444).
+/// Degenerate numbers draw a shorter picture, never a NaN.
+pub(crate) fn head_outline(tool: &Tool, p: &mut Vec<(f64, f64)>) -> f64 {
     let r = tool.diameter.max(0.0) * 0.5;
     let zc = tool.flute_len.max(0.0);
     if tool.kind == ToolKind::Lollipop {
-        let top = zc.min(2.0 * r);
+        let sr = (tool.shank_d.max(0.0) * 0.5).min(r);
+        // Where the ball's radius falls to the neck's, above the equator.
+        let meet = r + (r * r - sr * sr).max(0.0).sqrt();
+        // Never past the neck top: the holder step starts there.
+        let neck_top = zc + tool.shank_len.max(0.0);
+        let low = zc.min(2.0 * r);
+        let top = meet.min(neck_top).max(low);
         let steps = 24u32;
         let mut zs: Vec<f64> = (1..=steps).map(|i| top * f64::from(i) / f64::from(steps)).collect();
         if r < top {
@@ -220,12 +238,13 @@ pub(crate) fn head_outline(tool: &Tool, p: &mut Vec<(f64, f64)>) {
         for z in zs {
             add_pt(p, z, dome_radius(r, z));
         }
-        return;
+        return top;
     }
     add_pt(p, 0.0, r);
     let tan = tool.tip_angle.to_radians().tan();
     let top = if tan.is_finite() && tan > 0.0 { (r - zc / tan).clamp(0.0, r) } else { r };
     add_pt(p, zc, top);
+    zc
 }
 
 #[cfg(test)]

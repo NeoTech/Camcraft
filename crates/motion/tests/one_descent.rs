@@ -121,6 +121,7 @@ fn descents_per_level(t: &Toolpath, region: &Region, d: f64) -> Vec<(f64, usize,
 
 fn p3(entry: Entry3D, strategy: PocketStrategy, links: Links) -> Pocket3DParams {
     Pocket3DParams {
+        pass_start: Default::default(),
         links,
         tool_diameter: 8.0,
         stepover: 3.0,

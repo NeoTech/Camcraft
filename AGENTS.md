@@ -348,14 +348,23 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     condition, except the one targeted heavy step of a `P1` PR under the
     safety floor ("Heavy lanes at review").
   - The full independent review comes after that, on the ready PR.
-  - A ready PR takes no more pushes. For any change, first make it a draft
-    again (`gh pr ready <M> --undo`), say why in a PR comment, push, gate
-    again, then flag it ready again.
+  - **A review finding does not make a PR a draft again** (#3727). A ready
+    PR keeps its ready flag while the author fixes a `needs-rework`
+    finding. The author pushes the fix to the same PR and runs the gate
+    again. A PR comment says which finding each commit closes and that the
+    new head waits for a fresh review. A push moves the head, so the earlier
+    review and the `merge-ready` label do not count for the new head. The
+    reviewer removes `merge-ready` if it is still on the PR.
+  - The first `needs-rework` comment names the class of each finding and
+    asks for one rule that closes the whole class (an allow-list, a guard
+    on the whole input). A fix of the one case brings the next round for the
+    next case.
   - Merge-time refresh, class SAME (only a merge of main, no hand edits):
     this is not new work. The review stays valid and the refresh is pushed
     without the change to draft.
   - Merge-time refresh with hand edits (MECHANICAL or DELTA): this is new
-    work. The PR goes to draft first, is pushed, and is reviewed as usual.
+    work. The refresh is pushed to the PR, which keeps its ready flag, and
+    is reviewed as usual.
   - The merging session flags the PR ready immediately before the merge, with
     one PR comment that names the class and the review that it relies on.
     Nothing is pushed after that flag.
@@ -444,8 +453,9 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   `merge-ready` and `needs-rework` exclude each other: a PR never has both
   (#3382). `conflicts` is different: it is set alongside the other labels.
 
-  On red or orange the reviewer makes one of our own PRs a draft again. A
-  fork PR stays as its contributor set it, and the comment says what to fix.
+  On orange the reviewer makes one of our own PRs a draft again. On red it
+  keeps the ready flag and sets `needs-rework`. A fork PR stays as its
+  contributor set it, and the comment says what to fix.
 - **`main` is protected on GitHub.** Each change gets to `main` through a
   PR. A direct push is refused. There is no force-push and no deletion. Open
   review conversations must be resolved before a merge. The repository
@@ -592,6 +602,9 @@ the fonts. The UI must render them: each panel's draw code must use them.
   the dependency changes. Do not add an edge for fewer than five items: the
   caller passes the value in. (The maintainer has still to confirm the
   wording of the five-item clause.)
+- **Tests join a directory suite.** A new integration test goes into an
+  existing directory suite. The rule is in "Testing" (**New tests join a
+  directory suite**).
 - **Stays buildable everywhere.** No platform-specific assumptions in core
   code. Windows, Linux and macOS build from the same source.
 - **Neutral naming.** The product name is camcraft. No string, comment or
@@ -613,6 +626,15 @@ tests are in `crates/ui/tests/`; they start the real app through
   `crates/app/tests/` must import something that `crates/app/src` defines. A
   test that needs the output of a different crate reads a recorded file
   (`.cl`, `.cnc`); it does not import that crate's generator.
+- **New tests join a directory suite.** Add a new integration test to an
+  existing domain directory suite (`tests/<suite>/<submod>.rs`) before you
+  make a new top-level test binary (#3187).
+  - The suites in `ISOLATED` (`xtask/src/lanes.rs`) and `SLOW_BINARIES`
+    (`xtask/src/plan.rs`) are exempt. They must stay separate binaries.
+  - A new top-level file in `crates/*/tests/` needs a one-line reason in the
+    PR body.
+  - Why: each test binary of `camcraft-app` is about 100 MB. The count of
+    test binaries went from 412 to 1,020 in ten days.
 - **Three gate tiers - never hours per change.** One command on all
   systems: `cargo xtask gate <tier>`. `scripts/gate.ps1` and
   `scripts/gate.sh` are wrappers for it. The `gate` skill has the flags, the

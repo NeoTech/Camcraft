@@ -17,6 +17,9 @@ use super::*;
 #[path = "structural/corner_relief.rs"]
 mod corner_relief;
 
+#[path = "structural/finish3d_direction.rs"]
+mod finish3d_direction;
+
 #[path = "tool_properties.rs"]
 mod tool_properties;
 

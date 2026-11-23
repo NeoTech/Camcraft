@@ -224,8 +224,10 @@ fn stamp_follows_every_input() {
     // sinker burn, appended as the sinker EDM's own section, to 43 - #545's
     // sinker side burn, appended behind it, to 44 - #1444's slot
     // undercut, appended behind it, to 45 - #1443's V-carve,
-    // appended behind that, to 46.)
-    assert_eq!(KindInfo::ALL.len(), 46);
+    // appended behind that, to 46 - #1883's waterjet profile,
+    // appended as the waterjet's own section, to 47 - #1894's multi-axis deburr,
+    // appended behind that, to 48.)
+    assert_eq!(KindInfo::ALL.len(), 48);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");
@@ -457,6 +459,7 @@ fn multiaxis_rough_stamp_moves_with_its_ladder_and_cone() {
     assert_ne!(digest(&rough(0.0, 0.0, 90.0)), digest(&rough(0.0, 7.0, 90.0)), "lag is the stamp's too");
     assert_ne!(digest(&rough(0.0, 0.0, 90.0)), digest(&rough(0.0, 0.0, 45.0)), "the cone caps the lean");
     let pocket = OpParams::Pocket3D {
+        pass_start: Default::default(),
         links: crate::links::Links::ROUGH3D,
         stepover: 4.0,
         stock_to_leave: 0.0,

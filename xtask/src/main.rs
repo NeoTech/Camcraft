@@ -12,6 +12,9 @@ mod asset_tests;
 mod assets;
 mod braces;
 mod budget;
+mod build_stop;
+#[cfg(test)]
+mod build_stop_tests;
 #[cfg(test)]
 mod budget_tests;
 mod catalog;
@@ -29,6 +32,9 @@ mod direct_tests;
 mod docs_images;
 #[cfg(test)]
 mod directory_tests;
+mod example_suites;
+#[cfg(test)]
+mod example_suites_tests;
 mod exec;
 mod exit_status;
 mod fixture_inputs;

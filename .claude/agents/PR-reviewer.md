@@ -184,7 +184,11 @@ merge.
      names that crate; (b) no new `camcraft-*` dependency line without a
      `docs/decisions/` entry listing the items, why the caller cannot pass
      them in, and what rebuilds; (c) new code in `crates/app/src` reads or
-     writes the ECS world, project file, a command, MCP or the CLI.
+     writes the ECS world, project file, a command, MCP or the CLI; (d) a
+     PR that adds a new top-level file under `crates/*/tests/` has a
+     one-line reason in its body, or the file belongs to `ISOLATED`
+     (`xtask/src/lanes.rs`) or `SLOW_BINARIES` (`xtask/src/plan.rs`). If
+     not, request a change (AGENTS.md **New tests join a directory suite**).
    - Program order / rest-machining / posting / project round-trip laws if it
      touches them; project-format bumps need a forward migration and are a
      breaking change (`!` or `BREAKING CHANGE:`).

@@ -22,8 +22,10 @@ pub(crate) fn zones_for_op(world: &World, op: &Operation, op_name: &str) -> Vec<
         OpParams::Pocket { corner_relief, .. } | OpParams::Offset2D { corner_relief, .. } => {
             corner_relief.is_off()
         }
-        OpParams::Adaptive2D { corner_relief, method, .. } => {
-            corner_relief.is_off() || *method == crate::machining2d::AdaptiveMethod::Trochoidal
+        OpParams::Adaptive2D { corner_relief, method, rest, .. } => {
+            corner_relief.is_off()
+                || *method == crate::machining2d::AdaptiveMethod::Trochoidal
+                || rest.is_some()
         }
         _ => true,
     };

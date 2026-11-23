@@ -331,6 +331,12 @@ same option as on 2D Offset:
 
 The Trochoidal method has no ring order: it refuses Inside and Outside.
 
+**Do not touch** (Geometry tab, **Boundaries**): as 2D Offset, with both
+methods. 2D Adaptive plans one area for all levels, so its keep-out covers
+each level from the floor up to the clearance height. Beside a protected
+item that is lower than the top of the cut, it leaves more stock than
+2D Offset, which keeps out level by level.
+
 **Common refusals:** as Pocket. With **Method = Trochoidal**, a **Pass
 starts at** other than Auto.
 
@@ -417,8 +423,13 @@ typed in or seeded from suitable picked slot geometry;
 | Geometry | Slot width | 4 |
 | Geometry | Extend past A / Extend past B | 0 / 0 |
 | Passes | Stepover / Stock to leave | 3 / 0 |
+| Passes | Pass starts at | Auto (fixed) |
 | Heights | Stepdown | 5 |
 | Lead in / Lead out | Entry | Plunge, helix radius 1 |
+
+Slot cuts one continuous pass at each depth. It follows the centreline
+when the cutting width equals the tool diameter. A wider cut joins the
+rows and finishes with a lap along the walls.
 
 The A and B fields sit in their own **Manual** section on the Geometry tab;
 Slot width and the extension rows stay outside it. While the Geometry tab
@@ -461,7 +472,13 @@ when a full-width slotting cut would overload the tool.
 | Passes | Max engagement | 90 deg |
 | Passes | Return | Microlift, height 0.3 (or Retract) |
 | Passes | Smoothing radius | 1 |
+| Passes | Pass starts at | Auto (fixed) |
 | Feeds | Return feed | 2 x the cutting feed |
+
+At each depth, the tool opens an entry bore and cuts overlapping loops
+along the slot. A Microlift return retraces the arc it just cut at a
+slightly higher Z. The cut advances in this sequence so each loop starts
+from material cleared by the preceding cut.
 
 **Common refusals:** "the channel ... is too narrow for a ... tool to loop
 in - cut it as a plain Slot"; "a loop width of ... leaves the channel";
