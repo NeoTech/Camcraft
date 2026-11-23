@@ -137,3 +137,13 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 1
 debug = false
+
+# aarch64 (any platform where c_char is unsigned): crates.io flecs_ecs 0.2.2
+# hardcodes one cast to `*const i8` in flecs_ecs/src/addons/module/world.rs, so
+# the crate only compiles where c_char == i8 (x86_64). The fix is merged upstream
+# (Indra-db/Flecs-Rust#286, `as *const _`) but unreleased on crates.io; upstream
+# still declares version = "0.2.2", so pinning the fix commit here satisfies the
+# `=0.2.2` pin above unchanged - same pattern as the old ruststep pin. Drop this
+# patch once a flecs_ecs release > 0.2.2 contains the fix.
+[patch.crates-io]
+flecs_ecs = { git = "https://github.com/Indra-db/Flecs-Rust", rev = "e7464a8f2d681c6463169b46b20313ee4e337898" }

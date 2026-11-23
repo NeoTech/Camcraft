@@ -1762,8 +1762,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "933ab0b8128b5046f73e3d3ce2e5fda35f7e442a4b295799ebc0ad0371fac56a"
+source = "git+https://github.com/Indra-db/Flecs-Rust?rev=e7464a8f2d681c6463169b46b20313ee4e337898#e7464a8f2d681c6463169b46b20313ee4e337898"
 dependencies = [
  "bitflags 2.13.2",
  "compact_str",
@@ -1777,8 +1776,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d34bf29a398f71f37df33f3f5aee3c6bf35dda641697168f19f9f1cb653593c4"
+source = "git+https://github.com/Indra-db/Flecs-Rust?rev=e7464a8f2d681c6463169b46b20313ee4e337898#e7464a8f2d681c6463169b46b20313ee4e337898"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1788,8 +1786,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "417e54ea6e57e52834dbf99bf7f7b123e901b9373d94ba3c3b892759846552d6"
+source = "git+https://github.com/Indra-db/Flecs-Rust?rev=e7464a8f2d681c6463169b46b20313ee4e337898#e7464a8f2d681c6463169b46b20313ee4e337898"
 dependencies = [
  "bindgen",
  "cc",
