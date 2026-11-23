@@ -71,7 +71,7 @@ pub(super) fn ring_plan_ramped(
 ) -> Result<RampedRings, GenError> {
     let off = p.tool_diameter * 0.5 + p.stock_to_leave;
     let ramp_entry = if ramps { Some(p) } else { None };
-    side_plan(region, center, off, p.tool_diameter * 0.5, (p.tiling_step(), p.climb), strategy, side, ramp_entry)
+    side_plan(region, center, (off, p.tool_diameter * 0.5), (p.tiling_step(), p.climb), strategy, side, ramp_entry)
 }
 
 /// The 3-D rough's level (#3361): [`ring_plan`] over a cutter-centre
@@ -86,14 +86,13 @@ pub fn level_ring_plan(
     strategy: PocketStrategy,
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    side_plan(center, center, 0.0, tool_r, (step, climb), strategy, side, None).map(|(passes, notes, _)| (passes, notes))
+    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side, None).map(|(passes, notes, _)| (passes, notes))
 }
 
 fn side_plan(
     region: &Region,
     center: &Region,
-    off: f64,
-    tool_r: f64,
+    (off, tool_r): (f64, f64),
     (step, climb): (f64, bool),
     strategy: PocketStrategy,
     side: &StartSide,

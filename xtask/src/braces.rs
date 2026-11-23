@@ -69,7 +69,8 @@ pub fn code(line: &str, st: &mut Lex) -> String {
                     *st = Lex::Block(1);
                     i += 1;
                 }
-                'r' if (i == 0 || !is_ident(c[i - 1]) || c[i - 1] == 'b')
+                // `r".."`, `br".."` and `cr".."` (C string, #3711) open a raw string.
+                'r' if (i == 0 || !is_ident(c[i - 1]) || c[i - 1] == 'b' || c[i - 1] == 'c')
                     && c.get(i + 1 + c[i + 1..].iter().take_while(|&&x| x == '#').count())
                         == Some(&'"') =>
                 {
@@ -79,8 +80,9 @@ pub fn code(line: &str, st: &mut Lex) -> String {
                 }
                 '\'' => {
                     if c.get(i + 1) == Some(&'\\') {
-                        // Escaped char literal: skip to its closing quote.
-                        i += 2;
+                        // Escaped char literal: skip the escaped char, then to the closing quote
+                        // (`'\''` and `'\\'` end at their last quote, #3711).
+                        i += 3;
                         while i < c.len() && c[i] != '\'' {
                             i += 1;
                         }
@@ -97,3 +99,7 @@ pub fn code(line: &str, st: &mut Lex) -> String {
     }
     c.iter().zip(keep).map(|(&ch, k)| if k { ch } else { ' ' }).collect()
 }
+
+#[cfg(test)]
+#[path = "braces_tests.rs"]
+mod tests;

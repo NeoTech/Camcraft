@@ -94,6 +94,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::tool_number_tools::TOOLS)
         .chain(super::post_options_tools::TOOLS)
         .chain(super::sketch_tools::TOOLS)
+        .chain(super::outline_text_tools::TOOLS)
         .chain(super::holder_dxf_tools::TOOLS)
         .chain(super::recipe_tools::TOOLS)
 }

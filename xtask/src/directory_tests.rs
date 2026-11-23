@@ -270,7 +270,8 @@ fn fixture_target(root: &Path) -> PathBuf {
         .join(root.file_name().expect("unique fixture identity"))
 }
 
-fn run_step(root: &Path, step: &Step, count: usize) {
+/// Runs `step` on the fixture, asserts `count` tests passed, and returns libtest's stdout.
+fn run_step(root: &Path, step: &Step, count: usize) -> String {
     let target = fixture_target(root);
     eprintln!(
         "fixture root={} target={}",
@@ -298,6 +299,7 @@ fn run_step(root: &Path, step: &Step, count: usize) {
         stdout.contains(&format!("{count} passed; 0 failed")),
         "must execute the selected tests, not an empty filter: {stdout}"
     );
+    stdout.into_owned()
 }
 
 #[test]

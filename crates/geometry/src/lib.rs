@@ -39,3 +39,5 @@ pub mod step_units;
 pub mod sketch_data;
 // #2679: typed text as single-line engraving strokes.
 pub mod stroke_text;
+// #3072: typed text in an outline font as closed shapes.
+pub mod outline_text;

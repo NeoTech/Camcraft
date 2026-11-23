@@ -187,3 +187,49 @@ fn a_submodule_that_was_shared_at_the_base_runs_the_whole_suite() {
     let Ok(Quick::Plan(p)) = quick::plan(&f.0, &diff, false) else { panic!("quick plan") };
     assert_eq!(args(&p), [WHOLE_MANY]);
 }
+
+/// The plan for an edit on line 1 of `alpha.rs` when it holds `text` (also at the merge base).
+fn alpha_plan(text: &str) -> Vec<String> {
+    let f = many();
+    f.write("crates/app/tests/many/alpha.rs", text);
+    args(&quick_files(&f, &["crates/app/tests/many/alpha.rs"], "@@ -1 +1 @@"))
+}
+
+#[test]
+fn a_trait_impl_or_a_scoped_pub_in_a_submodule_runs_the_whole_suite() {
+    const TEST: &str = "#[test]\nfn a1() {}\n";
+    for item in [
+        // Other submodules see a trait impl (#3711).
+        "struct A;\nimpl std::fmt::Display for A {\n    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, \"a\") }\n}\n",
+        "struct A;\nimpl<T> From<T> for A { fn from(_: T) -> A { A } }\n",
+        "struct A;\n#[allow(dead_code)] unsafe impl Send for A {}\n",
+        // `pub` after an attribute on the same line, and each scoped `pub`.
+        "#[allow(dead_code)] pub fn helper() {}\n",
+        "#[inline] #[allow(dead_code)] pub(crate) fn helper() {}\n",
+        "pub(crate) fn helper() {}\n",
+        "pub(super) fn helper() {}\n",
+        "pub(in crate::many) fn helper() {}\n",
+    ] {
+        assert_eq!(alpha_plan(&format!("{item}{TEST}")), [WHOLE_MANY], "{item}");
+    }
+}
+
+#[test]
+fn an_inherent_impl_of_a_private_type_keeps_the_submodule_filter() {
+    let text = "struct A;\nimpl A {\n    fn one(&self) -> u8 { 1 }\n}\n#[test]\nfn a1() {\n    assert_eq!(A.one(), 1);\n}\n";
+    assert_eq!(
+        alpha_plan(text),
+        ["test -j 6 -p camcraft-app --no-fail-fast --test many -- --test-threads=6 alpha::"]
+    );
+}
+
+#[test]
+fn a_submodule_step_runs_only_that_submodule_in_real_cargo() {
+    // The fixture suite `many` holds five tests: top, alpha::a1, beta::b1, shared::s1, gated::g1.
+    let f = many();
+    let p = quick_files(&f, &["crates/app/tests/many/alpha.rs"], "@@ -1 +1 @@");
+    assert_eq!(p.steps.len(), 1, "{:?}", args(&p));
+    let stdout = run_step(&f.0, &p.steps[0], 1);
+    assert!(stdout.contains("alpha::a1"), "{stdout}");
+    assert!(stdout.contains("4 filtered out"), "the other submodules must not run: {stdout}");
+}
