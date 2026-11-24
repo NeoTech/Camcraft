@@ -63,6 +63,7 @@ mod contour_whole;
 mod contour_whole_fence;
 mod contour_whole_reach;
 mod contour_whole_slice;
+mod air_entry;
 mod descent;
 mod descent_dive;
 mod descent_xy;

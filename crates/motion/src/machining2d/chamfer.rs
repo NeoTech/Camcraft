@@ -203,12 +203,7 @@ pub fn chamfer_open_runs(
         for pair in pts.windows(2) {
             tangent(pair[0], pair[1])?;
         }
-        let run = simple(pts).map_err(|e| match e {
-            GenError::Empty(_) => {
-                GenError::Empty("a chamfer edge collapses to one point - re-pick the edge".into())
-            }
-            other => other,
-        })?;
+        let run = simple(pts)?;
         let mut levels = Vec::new();
         for at in [z + probe, p.top_z - probe] {
             if let Some(region) = section(at)?
@@ -230,8 +225,6 @@ pub fn chamfer_open_runs(
         if p.climb == material_left {
             pass.reverse();
         }
-        // Guard: simple() above guarantees pass has at least two points,
-        // so this branch cannot be reached with finite input.
         let (Some(&first), Some(&second), Some(&last), Some(&before_last)) =
             (pass.first(), pass.get(1), pass.last(), pass.get(pass.len() - 2))
         else {

@@ -44,6 +44,9 @@ pub(super) struct PocketWalks<'a> {
     pub(super) ramp_starts: Vec<Point2>,
     /// #3747: the ring law of an area round a part.
     pub(super) ring_links: Option<super::ring_links::RingLinks>,
+    /// #3746: the start side's air round the stock box (the Arc entry's
+    /// plunge in air and its lead onto the first ring); `None` otherwise.
+    pub(super) air: Option<super::air_entry::AirRoom>,
 }
 
 /// Fit, optionally fillet, descend, link, and post `walks` across all Z levels.
@@ -65,6 +68,7 @@ pub(super) fn emit_pocket_passes(
         cleared_links,
         ramp_starts,
         ring_links,
+        air,
     } = walks;
     // The horizontal arc entry (M11.3) lands on the first pass: a closed
     // first ring starts mid its longest edge, where an arc has room.
@@ -108,7 +112,8 @@ pub(super) fn emit_pocket_passes(
         .with_solid_restart()
         .with_cleared_links(cleared_links)
         .with_ramp_starts(ramp_starts)
-        .with_ring_links(ring_links);
+        .with_ring_links(ring_links)
+        .with_air(air);
     let fitted: Option<Vec<Vec<Seg>>> = fit.map(|tol| passes.iter().map(|p| fit_pass(p, tol)).collect());
     // #1733: the corner arcs asked for. They round the walks as fitted
     // (a pass with no fit: its own chords).
@@ -274,6 +279,7 @@ mod tests {
                 cleared_links: false,
                 ramp_starts: Vec::new(),
                 ring_links: None,
+                air: None,
             },
         ) else {
             panic!("emit_pocket_passes")

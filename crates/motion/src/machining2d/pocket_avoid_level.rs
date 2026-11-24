@@ -241,6 +241,7 @@ pub(super) fn emit_rest_avoid(
             cleared_links: false,
             ramp_starts: Vec::new(),
             ring_links: None,
+            air: None,
         },
     )
 }

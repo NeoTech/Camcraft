@@ -150,7 +150,7 @@ fn rot(v: Point2, t: f64) -> Point2 {
 }
 
 /// The arc at one radius and side, proved, or `None`.
-fn arc_at(l: &Lvl, e: Point2, u: Point2, r: f64, sweep: f64, ccw: bool) -> Option<XyArc> {
+pub(super) fn arc_at(l: &Lvl, e: Point2, u: Point2, r: f64, sweep: f64, ccw: bool) -> Option<XyArc> {
     // The centre on the turning side: left of `u` for G3, right for G2.
     let n = if ccw { Point2::new(-u.y, u.x) } else { Point2::new(u.y, -u.x) };
     let center = Point2::new(lattice(e.x + n.x * r), lattice(e.y + n.y * r));

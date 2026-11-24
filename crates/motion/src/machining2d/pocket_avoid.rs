@@ -256,6 +256,16 @@ pub(super) fn pocket_avoid_over(
                     super::ring_links::for_side(side, p.tool_diameter * 0.5, Some(ko.union(&ko_entry)?))?
                 }
                 _ => None,
+            })
+            // #3810: the start side's air room, less this level's
+            // fixtures and clamps over the whole descent.
+            .with_air(match &src {
+                AvoidSource::Plain { side, .. } => {
+                    let side = super::ring_side::resolve(&level_center, actual, p.tool_diameter * 0.5, side)?;
+                    let room = super::air_entry::AirRoom::for_side(&side, actual, &level_center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
+                    room.and_then(|r| r.without(&ko.union(&ko_entry).ok()?))
+                }
+                AvoidSource::Rest(_) => None,
             });
         let cert_entry = room.as_ref().map(|rm| Cert::Region(&rm.tess));
         let cert_center = Cert::Region(&level_center);

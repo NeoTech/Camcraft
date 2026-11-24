@@ -175,6 +175,9 @@ pub(super) struct Motion {
     pub(super) ramp_starts: Vec<Point2>,
     /// #3747: a ring area round a part links ring to ring in the plane.
     pub(super) ring_links: Option<super::ring_links::RingLinks>,
+    /// #3746: a start-side ladder's air round the stock box; its Arc
+    /// entry plunges there and arcs onto the first ring.
+    pub(super) air: Option<super::air_entry::AirRoom>,
 }
 
 impl Motion {
@@ -205,6 +208,7 @@ impl Motion {
             cleared_links: false,
             ramp_starts: Vec::new(),
             ring_links: None,
+            air: None,
         }
     }
 

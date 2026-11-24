@@ -72,6 +72,9 @@ pub(super) enum Descent {
     /// The pocket's horizontal arc entry (M11.3): the inner descent onto
     /// the arc's start, then the G17 arc onto the pass start.
     XyArc(Box<Descent>, Box<XyArc>),
+    /// #3746: a start-side pass's entry in air outside the stock box,
+    /// then the lead and the G17 arc onto the pass start.
+    Air(Box<super::air_entry::AirLead>),
 }
 
 /// The cuts a descent leaves at the level's plane (dive links, arcs):
@@ -121,7 +124,9 @@ pub(super) fn plan(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, prev_z
     if let Some(d) = super::predrilled::entry(l, z, m) {
         return d;
     }
-    let d = with_arc(arm, zig, l, leg, z, prev_z, m).unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m));
+    let d = super::air_entry::plan(arm, zig, l, leg, z, prev_z, m)
+        .or_else(|| with_arc(arm, zig, l, leg, z, prev_z, m))
+        .unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m));
     super::predrilled::unserved(d, z, m)
 }
 
@@ -295,6 +300,7 @@ pub(super) fn start(d: &Descent, l: &Lvl, leg: Point2, m: &Motion) -> Point2 {
         Descent::Ramp(s, _) => *s,
         Descent::Zig(..) => e,
         Descent::Arc(a, _) => a.start,
+        Descent::Air(a) => a.plunge,
         Descent::Named(inner, _) => start(inner, l, leg, m),
         Descent::XyArc(inner, x) => start(inner, &x.lvl(l), leg, m),
         Descent::Sub(_) | Descent::Refused(_) => dive_point(l, e, m).unwrap_or(e),
@@ -406,6 +412,7 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
             Vec::new()
         }
         Descent::XyArc(inner, x) => push_xy(b, inner, x, l, z, tz, m),
+        Descent::Air(a) => super::air_entry::push(b, a, l, z, tz, m),
     }
 }
 

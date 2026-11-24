@@ -82,6 +82,11 @@ fn fig8_world() -> (World, History, String, (Point3, Point3)) {
 /// The maintainer's 2D Offset1: Outside containment over the floor face,
 /// generated with `start`.
 fn offset_op(world: &World, h: &mut History, name: &str, zmin: f64, start: PassStart) -> (Toolpath, Vec<String>) {
+    offset_op_entered(world, h, name, zmin, start, Entry3D::Helix)
+}
+
+/// [`offset_op`] with the entry `kind` (#3746).
+fn offset_op_entered(world: &World, h: &mut History, name: &str, zmin: f64, start: PassStart, kind: Entry3D) -> (Toolpath, Vec<String>) {
     let src = sel(name, horizontal_face(world, name, zmin));
     let mut p = operation::retype_params(&pocket(zmin + 20.0, zmin), OpType::Offset2D.ordinal());
     if let OpParams::Offset2D { clearance_z, retract_z, top_z, bottom_z, stepdown, entry, helix_radius, pass_start, .. } =
@@ -92,7 +97,7 @@ fn offset_op(world: &World, h: &mut History, name: &str, zmin: f64, start: PassS
         *top_z = Height { reference: HeightReference::TopOfStock, offset: 0.0 };
         *bottom_z = Height { reference: HeightReference::BottomOfSelection, offset: 1.5 };
         *stepdown = 10.0;
-        *entry = Entry3D::Helix;
+        *entry = kind;
         *helix_radius = 1.6;
         *pass_start = start;
     }
@@ -179,6 +184,62 @@ fn fig8_outside_offset_starts_each_level_at_the_stock_edge() {
     let clear_z = stock.1.z + CLEARANCE;
     assert_eq!(lateral_rapids_below(&path, clear_z), vec![], "#3319: a lateral rapid below Z {clear_z}");
     assert!(!warnings.iter().any(|w| w.starts_with("RapidInStock")), "#3319: a rapid through stock: {warnings:?}");
+}
+
+/// #3746 pins on fig8 with the Arc entry. Outside: the first descent of
+/// each level is a plunge in air, off the stock box by at least the tool
+/// radius plus the approach distance, and the first cut after it is a G17
+/// arc at the level's Z (after a straight lead in air, where there is
+/// one). Inside: no level is entered by a plunge into material, and no
+/// level entry falls back to the axial dive.
+#[test]
+#[ignore = "heavy lane (#3746 fig8 Inside and Outside): two generations run past the 60 s debug budget - run with --release -- --ignored"]
+fn fig8_start_sides_enter_from_the_air() {
+    // The approach distance is the default, 2 mm (#3745).
+    let need = R8 + 2.0;
+    for start in [PassStart::Outside, PassStart::Inside] {
+        let (world, mut h, name, stock) = fig8_world();
+        let (path, _) = offset_op_entered(&world, &mut h, &name, stock.0.z, start, Entry3D::Arc);
+        let levels = level_ends(&path);
+        assert!(!levels.is_empty(), "{start:?}: no level");
+        let dived: Vec<&String> = path.notes.iter().filter(|n| n.contains("axial dive")).collect();
+        assert!(dived.is_empty(), "{start:?}: {} axial dive(s): {dived:?}", dived.len());
+        for (z, _, _) in &levels {
+            let Some(i) = path.moves.iter().position(|m| (m.to.z - z).abs() < 1e-6 && m.from.z > z + 1e-6) else { continue };
+            let d = &path.moves[i];
+            let into_stock = d.kind == MoveKind::Plunge && outside_box(d.to, stock) < R8 - 1e-6;
+            assert!(!into_stock, "{start:?} Z {z:.3}: the level is entered by a plunge into the stock: {d:?}");
+            if start != PassStart::Outside {
+                continue;
+            }
+            assert!(d.kind == MoveKind::Plunge && outside_box(d.to, stock) >= need - 1e-6, "Outside Z {z:.3}: the entry is not a plunge {need} mm off the box: {d:?}");
+            let mut next = path.moves.get(i + 1).filter(|m| m.arc.is_none());
+            if let Some(lead) = next {
+                assert!(outside_box(lead.to, stock) >= R8 - 1e-6, "Outside Z {z:.3}: the straight lead ends in the stock: {lead:?}");
+                next = path.moves.get(i + 2);
+            } else {
+                next = path.moves.get(i + 1);
+            }
+            let arc = next.unwrap_or_else(|| panic!("Outside Z {z:.3}: nothing after the entry"));
+            assert!(arc.arc.is_some() && (arc.to.z - z).abs() < 1e-6, "Outside Z {z:.3}: the first cut is not an arc in the plane: {arc:?}");
+        }
+    }
+}
+
+/// #3746 / #3825: on fig8 Outside with the Arc entry, no pass start is
+/// entered by a plunge into material. The level entries come from the air
+/// (pinned above). After #3747, four pass links still lift across the
+/// part to a start inside ring 0, and the re-entries plunge, named: no
+/// lead from the air (it would cross ring 0), no helix and no ramp reaches
+/// those starts clear of the cut rings. #3825 owns the links.
+#[test]
+#[ignore = "known-fail #3825 | offset_pass_start | fig8_outside_offset_has_no_plunge_into_material | Outside: a plunge into material"]
+fn fig8_outside_offset_has_no_plunge_into_material() {
+    let (world, mut h, name, stock) = fig8_world();
+    let (path, _) = offset_op_entered(&world, &mut h, &name, stock.0.z, PassStart::Outside, Entry3D::Arc);
+    let plunged: Vec<&String> = path.notes.iter().filter(|n| n.contains("plunged into material")).collect();
+    // known-fail-assert
+    assert!(plunged.is_empty(), "Outside: a plunge into material ({} named): {plunged:?}", plunged.len());
 }
 
 /// The part's outline and the material of the band: the stock box less

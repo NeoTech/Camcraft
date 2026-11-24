@@ -204,10 +204,14 @@ pub const CENTER_CUT_REFUSAL: &str = "entry refused: the tool is not centre-cutt
 /// A low return crossed an earlier feed and has no proved rapid landing.
 pub const MICROLIFT_REFUSAL: &str = "entry refused: a crossing microlift has no proved rapid landing; use another entry or pocket strategy";
 
+/// #3746: a start-side pass (Inside or Outside) has no air entry and no
+/// named stand-in that is not a plunge into material.
+pub const AIR_ENTRY_REFUSAL: &str = "entry refused: the start-side pass has no safe entry";
+
 /// The refusal a ladder raises for an unsafe entry or return.
 #[must_use]
 pub fn refusal(path: &crate::cl::Toolpath) -> Option<String> {
-    path.notes.iter().find(|n| n.starts_with(CENTER_CUT_REFUSAL) || n.starts_with(MICROLIFT_REFUSAL)).cloned()
+    path.notes.iter().find(|n| n.starts_with(CENTER_CUT_REFUSAL) || n.starts_with(MICROLIFT_REFUSAL) || n.starts_with(AIR_ENTRY_REFUSAL)).cloned()
 }
 
 /// The default axis-alignment tolerance, degrees.

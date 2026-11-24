@@ -262,8 +262,23 @@ pub(super) fn entry_restart(b: &PathBuilder, l: &Lvl, leg: Point2, z: f64, from:
         },
     };
     let site = format!("the pass start ({:.3}, {:.3}) at Z {z:.3} is in material and {why}", e.x, e.y);
-    match ramp_fallback(l, z, from, m).filter(|r| moves_clear(b, r, l, z, plane, m)) {
+    let clear = |d: &Descent| moves_clear(b, d, l, z, plane, m);
+    // #3746: a start-side pass is entered from the air outside the stock
+    // box where a lead reaches its start clear of the plan and the cuts.
+    if let Some(a) = super::air_entry::restart(l, m).filter(|d| clear(d)) {
+        return Descent::Named(Box::new(a), format!("entry: {site} - entered from the air outside the stock box instead"));
+    }
+    match ramp_fallback(l, z, from, m).filter(|r| clear(r)) {
         Some(r) => Descent::Named(Box::new(r), format!("entry: {site} - ramp along the pass instead")),
+        // #3746: on a start-side pass, a helix that closes on the start
+        // (or links to it) and crosses no cut, before the plunge into
+        // material.
+        None if m.air.is_some()
+            && m.entry != Entry3D::Helix
+            && let Some(h) = find_clear_helix_for(b.moves(), l, from, z, m, true).filter(|h| clear(h)) =>
+        {
+            Descent::Named(Box::new(h), format!("entry: {site} - helix entry instead"))
+        }
         None => Descent::Named(
             Box::new(Descent::Plunge(e)),
             format!("entry: {site}, and no ramp fits clear of prior cuts - plunged into material at the plunge feed"),
