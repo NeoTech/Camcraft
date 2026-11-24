@@ -28,6 +28,8 @@ mod group;
 mod quality;
 #[path = "agie_native/reentrant.rs"]
 mod reentrant;
+#[path = "agie_native/tangent.rs"]
+mod tangent;
 
 fn separation(value: f64) -> BTreeMap<String, OptionValue> {
     BTreeMap::from([("separationLengthMm".into(), OptionValue::Float(value))])

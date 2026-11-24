@@ -3,7 +3,7 @@ use super::round_profile::{ArcBlock, iso, prepare};
 use super::tests::punch;
 use super::*;
 use camcraft_geometry::geo2d::Point2;
-use camcraft_geometry::wire_round_profile::{RoundProfile, Spine};
+use camcraft_geometry::wire_round_profile::{RoundProfile, Spine, WireProfile};
 
 const U: f64 = 100_000.0;
 
@@ -136,13 +136,13 @@ fn a_refused_arc_job_publishes_nothing() {
     let job = round_job([-17., 0.]);
     let shape = circle([0., 0.], 10.);
     for separation in [0.0, 1.5] {
-        assert!(export_round_with_review(&job, &shape, &out, "CIRCLE20", separation).is_err());
+        assert!(export_round_with_review(&job, &WireProfile::Round(shape), &out, "CIRCLE20", separation).is_err());
         assert!(!out.exists());
     }
     let shape = circle([0., 0.], 5.0);
-    assert!(export_round_with_review(&job, &shape, &out, "CIRCLE20", 1.0).is_err());
+    assert!(export_round_with_review(&job, &WireProfile::Round(shape), &out, "CIRCLE20", 1.0).is_err());
     assert!(!out.exists());
-    let files = export_round_with_review(&job, &circle([0., 0.], 10.), &out, "CIRCLE20", 1.0)
+    let files = export_round_with_review(&job, &WireProfile::Round(circle([0., 0.], 10.)), &out, "CIRCLE20", 1.0)
         .unwrap()
         .files;
     assert_eq!(files.len(), 3);

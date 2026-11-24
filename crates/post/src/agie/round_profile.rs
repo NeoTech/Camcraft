@@ -1,19 +1,19 @@
-//! Native ISO arcs for one selected DXF circle or racetrack punch on a 20 mm plate, from
-//! classical circle geometry and the offline control checks of #2022.
+//! Native ISO arcs for one selected DXF circle, racetrack or convex tangent loop punch on a
+//! 20 mm plate, from classical circle geometry and the offline control checks of #2022 and #2983.
 
 use std::fmt::Write;
 use std::path::Path;
 
-use camcraft_geometry::wire_round_profile::{RoundProfile, Spine};
+use camcraft_geometry::wire_round_profile::{RoundProfile, Spine, WireProfile};
 
 use super::contour::{self, Point};
 use super::{AgieJob, AgieSide, ExportedJob, publish, valid_name};
 use crate::agie_setup::{PunchSetup20, qn2_offsets_um};
 
 const UNITS: f64 = 100_000.0; // Five decimal places in the native ISO geometry file.
-const LEAD: i64 = 300_000; // 3 mm lead and 3 mm of straight on each side of the seam.
+pub(super) const LEAD: i64 = 300_000; // 3 mm lead and 3 mm of straight on each side of the seam.
 /// The plate height of the control-checked arc jobs (#2022).
-const HEIGHT_UM: i32 = 20_000;
+pub(super) const HEIGHT_UM: i32 = 20_000;
 
 /// One ISO block: its end point, and the centre of the counter-clockwise arc
 /// that ends there. `None` is a straight move.
@@ -25,21 +25,19 @@ pub(super) struct ArcBlock {
 
 /// A coordinate that the five-decimal grid holds exactly (within 1e-9 mm).
 /// No arc endpoint, centre or radius is rounded, so each I/J is exact.
-fn exact(value: f64) -> Result<i64, String> {
+pub(super) fn exact(value: f64) -> Result<i64, String> {
     let units = contour::quantize(value)?;
     if (value - units as f64 / UNITS).abs() > 1e-9 {
-        return Err(
-            "The DXF circle or racetrack must fit the five-decimal native grid exactly".into(),
-        );
+        return Err("The DXF punch must fit the five-decimal native grid exactly".into());
     }
     Ok(units)
 }
 
-fn line(end: Point) -> ArcBlock {
+pub(super) fn line(end: Point) -> ArcBlock {
     ArcBlock { end, center: None }
 }
 
-fn arc(end: Point, center: Point) -> ArcBlock {
+pub(super) fn arc(end: Point, center: Point) -> ArcBlock {
     ArcBlock {
         end,
         center: Some(center),
@@ -188,14 +186,14 @@ pub(super) fn iso(iso_name: &str, blocks: &[ArcBlock]) -> String {
 }
 
 /// Publish one zero-step punch whose nominal ISO has native arcs: a selected
-/// DXF circle or racetrack on a 20 mm plate. The SBL and SBR are those of
+/// DXF circle, racetrack or convex tangent loop on a 20 mm plate. The SBL and SBR are those of
 /// the polygon punch ([`super::export_with_review`]).
 ///
 /// # Errors
 /// Refuses unsupported shapes, placements and settings before it publishes.
 pub fn export_round_with_review(
     job: &AgieJob,
-    shape: &RoundProfile,
+    shape: &WireProfile,
     destination: &Path,
     program: &str,
     separation_length_mm: f64,
@@ -206,7 +204,10 @@ pub fn export_round_with_review(
     if !valid_name(program) {
         return Err("The job program name must be a non-reserved 1–8 character DOS name starting with a letter and using uppercase letters or digits".into());
     }
-    let (blocks, setup) = prepare(job, shape, program)?;
+    let (blocks, setup) = match shape {
+        WireProfile::Round(round) => prepare(job, round, program)?,
+        WireProfile::Tangent(tangent) => super::tangent_profile::prepare(job, tangent, program)?,
+    };
     let setup = setup.encode().map_err(|error| error.to_string())?;
     let iso_name = format!("{program}.ISO");
     let files = [

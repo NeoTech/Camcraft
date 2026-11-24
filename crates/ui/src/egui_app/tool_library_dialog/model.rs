@@ -6,6 +6,12 @@
 //! revolved holder cylinder) and the numbers its dimension lines read.
 //! Display only: no law, check or post reads any of it, and nothing here
 //! queues a command.
+//! #3895 (U4): a holder pick of the window's draft (entry, gauge length,
+//! projection) is drawn in place of the landed body, built by the same
+//! path as Apply holder (`tool_body::build_library`, then `fits`); a pick
+//! that path refuses keeps the landed body and carries the refusal. The
+//! Apply-holder refusal is judged on the stored tool, as the command
+//! judges it; the draft numbers' own verdict is a separate draft note.
 //! Frame cost (`crates/ui/AGENTS.md`): the model is built when its input
 //! changes - the draft tool value, the document's tool, the landed cutter
 //! and the landed body (its mesh by identity) - never on `doc_version`.
@@ -21,6 +27,7 @@ use std::sync::Arc;
 use camcraft_app::cutter_fit;
 use camcraft_app::cutter_profile;
 use camcraft_app::geometry::{Point3, Triangle};
+use camcraft_app::holder_library::{self, HolderRef};
 use camcraft_app::model;
 use camcraft_app::schema::ToolBody;
 use camcraft_app::spun::SpunProfile;
@@ -28,7 +35,7 @@ use camcraft_app::tool_body;
 use camcraft_app::tool_cutter;
 use camcraft_app::tools::Tool;
 
-use crate::state::State;
+use crate::state::{State, is_spun_kind};
 
 /// Facets around the axis per revolved ring (as `tool_body_view`).
 const RING: usize = 32;
@@ -63,6 +70,12 @@ pub(crate) struct ToolModel {
     /// The landed body's source, when the holder is a body.
     pub body: Option<String>,
     pub dims: Dims,
+    /// #3895: why Apply holder refuses the draft's holder pick, by name -
+    /// judged on the stored tool, as the command judges it.
+    pub holder_err: Option<String>,
+    /// What the same checks say of the unapplied draft numbers, when that
+    /// differs from `holder_err` - a draft note, not the command's verdict.
+    pub draft_err: Option<String>,
 }
 
 /// What the model is built from. The body compares by its mesh identity
@@ -72,6 +85,8 @@ struct Key {
     doc: Option<Tool>,
     cutter: Option<SpunProfile>,
     body: Option<ToolBody>,
+    /// #3895: the draft's holder pick (entry, gauge length, projection).
+    holder: Option<(String, f64, f64)>,
 }
 
 impl Key {
@@ -87,7 +102,7 @@ impl Key {
             }
             _ => false,
         };
-        body && self.tool == o.tool && self.doc == o.doc && self.cutter == o.cutter
+        body && self.tool == o.tool && self.doc == o.doc && self.cutter == o.cutter && self.holder == o.holder
     }
 }
 
@@ -115,7 +130,12 @@ pub(crate) fn last() -> Option<Rc<ToolModel>> {
 pub(crate) fn of(state: &State) -> Rc<ToolModel> {
     let tool = state.tool_ui.to_tool();
     let e = model::find_by_name(&state.world, &state.tool_ui.name);
+    let d = &state.tool_profile_ui;
+    let holder = (d.tool == state.tool_ui.name && is_spun_kind(tool.kind))
+        .then(|| d.library.clone().map(|n| (n, d.gauge, d.projection)))
+        .flatten();
     let key = Key {
+        holder,
         doc: e.as_ref().and_then(|e| model::tool_of(&state.world, e)),
         cutter: e.as_ref().and_then(|e| tool_cutter::cutter_of(&state.world, e)),
         body: e.as_ref().and_then(|e| tool_body::body_of(&state.world, e)),
@@ -135,8 +155,33 @@ pub(crate) fn of(state: &State) -> Rc<ToolModel> {
     })
 }
 
+/// The body Apply holder would land for the pick `(entry, gauge length,
+/// projection)` on `t`, or its refusal by name - the command's own checks
+/// (`SetToolBody::library`): the entry, the shank, the lengths, the fit.
+pub(crate) fn draft_body(t: &Tool, entry: &str, gauge: f64, projection: f64) -> Result<ToolBody, String> {
+    let e = holder_library::resolve(entry, t.shank_d).map_err(|e| e.to_string())?;
+    e.fits_shank(t.shank_d).map_err(|e| e.to_string())?;
+    let body = tool_body::build_library(&HolderRef::to(&e, gauge, projection))?;
+    tool_body::fits(t, &body)?;
+    Ok(body)
+}
+
 fn build(k: &Key) -> ToolModel {
     let t = &k.tool;
+    let judge = |tool: &Tool| k.holder.as_ref().map(|(n, g, p)| draft_body(tool, n, *g, *p));
+    let refusal = |r: &Option<Result<ToolBody, String>>| r.as_ref().and_then(|r| r.as_ref().err().cloned());
+    let drafted = judge(t);
+    let draft_refusal = refusal(&drafted);
+    // Apply holder (`SetToolBody::library`) judges the STORED tool, not
+    // the unapplied draft numbers: its verdict comes from `k.doc`. The
+    // draft's own verdict is only a separate note (review of #3931).
+    let holder_err = match &k.doc {
+        Some(doc) if doc != t => refusal(&judge(doc)),
+        Some(_) => draft_refusal.clone(),
+        None => None,
+    };
+    let draft_err = draft_refusal.filter(|e| holder_err.as_ref() != Some(e));
+    let body = drafted.and_then(Result::ok).or_else(|| k.body.clone());
     let zs = t.flute_len.max(0.0) + t.shank_len.max(0.0);
     let rs = t.shank_d.max(0.0) * 0.5;
     // The landed drawn cutter, carried onto the draft numbers the way the
@@ -149,8 +194,8 @@ fn build(k: &Key) -> ToolModel {
         cutter_profile::check(t, points).ok().map(|s| s.outline())
     });
     let steel = drawn.unwrap_or_else(|| Tool { holder_len: 0.0, ..t.clone() }.profile());
-    let profile = k.body.as_ref().and_then(|b| b.profile());
-    let bands = match &k.body {
+    let profile = body.as_ref().and_then(|b| b.profile());
+    let bands = match &body {
         Some(b) => tool_body::checked_bands(t, b).unwrap_or_default(),
         None => tool_body::stack(&t.geom(), None).bands.iter().map(|q| (q.above, q.len, q.r)).collect(),
     };
@@ -161,7 +206,7 @@ fn build(k: &Key) -> ToolModel {
         steel.iter().copied().filter(|&(z, r)| z.is_finite() && r.is_finite() && z < zs - 1e-9).collect();
     prof.extend([(zs, rs), (top, rs), (top, 0.0)]);
     let mut mesh = revolve(&prof);
-    let holder = match (&k.body, profile) {
+    let holder = match (&body, profile) {
         (Some(b), p) => {
             mesh.extend(b.facets.iter().copied());
             p.map(|p| (bands.iter().map(|q| q.2).fold(0.0, f64::max) * 2.0, (p.top() - p.bottom()).max(0.0)))
@@ -181,12 +226,13 @@ fn build(k: &Key) -> ToolModel {
         flute_len: t.flute_len,
         shank_d: t.shank_d,
         shank_len: t.shank_len,
-        stick_out: top,
+        // A library holder states its nose face (#3895).
+        stick_out: body.as_ref().and_then(|b| b.library.as_ref()).map_or(top, |r| r.projection),
         gauge,
         holder,
     };
     let bounds = crate::egui_app::tool_model_view::bounds(&mesh);
-    ToolModel { tool: t.clone(), steel, bands, bounds, mesh: Arc::from(mesh), body: k.body.as_ref().map(|b| b.source.clone()), dims }
+    ToolModel { tool: t.clone(), steel, bands, bounds, mesh: Arc::from(mesh), body: body.as_ref().map(|b| b.source.clone()), dims, holder_err, draft_err }
 }
 
 /// A `(z, r)` meridian spun about +Z into triangles; rings at r = 0 close

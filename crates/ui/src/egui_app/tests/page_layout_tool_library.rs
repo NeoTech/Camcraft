@@ -6,6 +6,7 @@
 //! HSMWorks material involved.
 
 use super::page_layout_windows::assert_window_layout;
+use crate::egui_app::tool_library_dialog::recipes_tab::{MARK, SUGGEST, TAB};
 use super::*;
 use egui_kittest::kittest::NodeT;
 
@@ -68,7 +69,8 @@ fn the_tool_library_window_closes_and_opens_again() {
 /// #3893: a tool open in the window. The list folds into a rail on the
 /// left; the editor stands right of it: the heading, the preview's 3D /
 /// Side toggle (#3894), the Tool and Details tabs, the rows, then Apply at
-/// the foot. The window still leaves the
+/// the foot. #3896: the Recipes tab stands between Tool and Details, and
+/// its Suggest row stands under the tabs. The window still leaves the
 /// Properties pane free. Queries stay inside the window, because a tool
 /// can be open in Properties too.
 #[test]
@@ -106,6 +108,11 @@ fn layout_window_tool_editor() {
         }
         last = Some((a, r.top()));
     }
+    // #3895: the assembly group follows the geometry rows in the Tool tab
+    // (it may stand below the fold of the scroll area).
+    let group = rect(crate::egui_app::tool_library_dialog::assembly_group::HEADING);
+    assert!(group.top() > rect("Diameter").top(), "the assembly group {group:?} stands under the geometry rows");
+    assert!(group.left() >= win.left() - 1.0 && group.right() <= win.right() + 1.0, "the group {group:?} keeps to the window's width");
     let rail = rect("All tools");
     let row = rect(&name);
     assert!(rail.right() < rect("Diameter").left() && row.right() < rect(&heading).left(), "the rail {rail:?} stands left of the editor");
@@ -114,4 +121,25 @@ fn layout_window_tool_editor() {
         panic!("the Properties leaf is not laid out");
     };
     assert!(!win.intersects(props), "the window {win:?} stands beside the Properties pane {props:?}");
+    let (recipes, details) = (rect(TAB), rect("Details"));
+    assert!(
+        (recipes.top() - details.top()).abs() < 2.0 && recipes.right() <= details.left() + 1.0,
+        "the Recipes tab {recipes:?} stands left of Details {details:?} on the tab row"
+    );
+    super::tool_library_editor::click_window_button(&mut h, TAB);
+    let node = h
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool library"))
+        .unwrap_or_else(|| panic!("the Tool library window is not open"));
+    let rect = |label: &str| {
+        node.query_all_by_label(label)
+            .next()
+            .unwrap_or_else(|| panic!("the Recipes tab has no widget labelled {label:?}"))
+            .rect()
+    };
+    let (tab, suggest, apply) = (rect(TAB), rect(SUGGEST), rect("Apply"));
+    assert!(win.expand(1.0).contains_rect(suggest), "Suggest {suggest:?} stays in the window {win:?}");
+    assert!(tab.top() < suggest.top() && suggest.top() < apply.top(), "Suggest {suggest:?} stands between the tabs and Apply");
+    assert!(node.query_all_by_label(MARK).next().is_none() || rect(MARK).top() > suggest.top(), "the table follows the Suggest row");
+    assert!(node.query_all_by_label("Diameter").next().is_none(), "the geometry rows stay on the Tool tab");
 }

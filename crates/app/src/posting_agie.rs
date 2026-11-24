@@ -142,8 +142,9 @@ pub(super) fn post(
             report.problems.join("; ")
         ));
     }
-    // One selected DXF circle or racetrack posts native arcs (#2022). A
-    // group reads modeled punches or the openings of one modeled die plate.
+    // One selected DXF circle, racetrack (#2022) or convex tangent loop (#2983)
+    // posts native arcs. A group reads modeled punches or the openings of one
+    // modeled die plate.
     let round = match operations.as_slice() {
         [(op_name, op)] if crate::operation::wire_sketch::selected(&op.src, &op.params) => {
             Some(crate::operation::agie_sketch_job(world, op, op_name)?)

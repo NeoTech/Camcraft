@@ -125,7 +125,7 @@ type Case = (
 
 #[test]
 fn ra035_refuses_a_group_an_arc_punch_a_die_and_a_cutoff() {
-    let cases: [Case; 4] = [
+    let cases: [Case; 5] = [
         (
             "punch-pair.camscript",
             include_str!("../../../../examples/agie/punch-pair.camscript"),
@@ -150,6 +150,17 @@ fn ra035_refuses_a_group_an_arc_punch_a_die_and_a_cutoff() {
                 include_str!("../../../../examples/agie/circle-punch.dxf"),
             )],
             "CIRCLE20",
+            "Select AGIE_QN2 for a punch group or a DXF arc punch",
+        ),
+        // A convex tangent loop (#2983) is an arc punch too.
+        (
+            "rounded-punch.camscript",
+            include_str!("../../../../examples/agie/rounded-punch.camscript"),
+            &[(
+                "rounded-punch.dxf",
+                include_str!("../../../../examples/agie/rounded-punch.dxf"),
+            )],
+            "ROUND20",
             "Select AGIE_QN2 for a punch group or a DXF arc punch",
         ),
         (

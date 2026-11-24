@@ -147,3 +147,80 @@ fn the_preview_contains_each_true_cap_with_bounded_excess() {
         assert!(distance(p, spine) <= shape.radius + PREVIEW_SAG + 1e-9);
     }
 }
+
+/// The R6/R4 corner loop of examples/agie/rounded-punch.dxf, with `bottom` as its first side.
+fn rounded(bottom: Primitive) -> Vec<Primitive> {
+    let line = |a: [f64; 2], b: [f64; 2]| Primitive::Line {
+        start: Point2::new(a[0], a[1]),
+        end: Point2::new(b[0], b[1]),
+    };
+    let arc = |c: [f64; 2], radius, from: f64| Primitive::Arc {
+        center: Point2::new(c[0], c[1]),
+        radius,
+        start_angle: from.to_radians(),
+        sweep_angle: PI / 2.,
+    };
+    vec![
+        bottom,
+        arc([14., -8.], 6., 270.),
+        line([20., -8.], [20., 10.]),
+        arc([16., 10.], 4., 0.),
+        line([16., 14.], [-14., 14.]),
+        arc([-14., 8.], 6., 90.),
+        line([-20., 8.], [-20., -10.]),
+        arc([-16., -10.], 4., 180.),
+    ]
+}
+
+#[test]
+fn a_convex_tangent_loop_keeps_its_arcs_and_bounds_and_a_racetrack_stays_round() {
+    let flat = Primitive::Line {
+        start: Point2::new(-16., -14.),
+        end: Point2::new(14., -14.),
+    };
+    let WireProfile::Tangent(shape) = WireProfile::from_chain(&closed(rounded(flat))).unwrap() else {
+        panic!("a tangent loop");
+    };
+    assert_eq!(shape.segments().len(), 8);
+    assert_eq!(shape.segments().iter().filter(|s| s.center.is_some()).count(), 4);
+    assert_eq!(shape.bounds(), [Point2::new(-20., -14.), Point2::new(20., 14.)]);
+    assert!(WireProfile::Tangent(shape).preview().is_ok());
+    assert!(matches!(
+        WireProfile::from_chain(&closed(racetrack(PI))),
+        Ok(WireProfile::Round(_))
+    ));
+}
+
+#[test]
+fn a_folded_cornered_or_unqualified_loop_is_refused() {
+    // Semicircles with the two ends of the flat side: one turns into the
+    // punch, the other adds a half turn and two corners.
+    for from in [0., PI] {
+        let bulge = Primitive::Arc {
+            center: Point2::new(-1., -14.),
+            radius: 15.,
+            start_angle: from,
+            sweep_angle: PI,
+        };
+        assert!(WireProfile::from_chain(&closed(rounded(bulge))).is_err());
+    }
+    // A rectangle has corners and no arcs.
+    let line = |a: [f64; 2], b: [f64; 2]| Primitive::Line {
+        start: Point2::new(a[0], a[1]),
+        end: Point2::new(b[0], b[1]),
+    };
+    let square = vec![
+        line([0., 0.], [10., 0.]),
+        line([10., 0.], [10., 10.]),
+        line([10., 10.], [0., 10.]),
+        line([0., 10.], [0., 0.]),
+    ];
+    assert!(WireProfile::from_chain(&closed(square)).is_err());
+    // A circle keeps its own radius refusal.
+    let small = closed(vec![Primitive::Circle {
+        center: Point2::new(0., 0.),
+        radius: 0.4,
+    }]);
+    let why = WireProfile::from_chain(&small).unwrap_err();
+    assert!(why.contains("from 0.5 to 20 mm"), "{why}");
+}

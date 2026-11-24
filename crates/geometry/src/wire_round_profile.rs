@@ -1,9 +1,13 @@
-//! A selected DXF circle or tangent racetrack for a wire punch, and its circumscribed
-//! preview polygon. Provenance: classical circle and tangent-line geometry (#2022).
+//! A selected DXF circle, tangent racetrack or convex tangent loop for a wire punch, and its
+//! circumscribed preview polygon. Provenance: classical circle and tangent-line geometry (#2022,
+//! #2983).
 use crate::dxf::Primitive;
 use crate::geo2d::{Loop, Point2};
 use crate::sketch_chains::ClosedChain;
 use std::f64::consts::PI;
+
+mod tangent;
+pub use tangent::{MAX_SEGMENTS, TangentProfile, TangentSegment};
 
 /// The joint and tangency tolerance in mm.
 const FIT: f64 = 1e-8;
@@ -158,6 +162,70 @@ impl RoundProfile {
             }
         }
         Loop::new(points).map_err(|e| e.to_string())
+    }
+}
+
+/// The analytic curves of one selected wire punch chain (#2983).
+#[derive(Clone, Debug, PartialEq)]
+pub enum WireProfile {
+    /// A circle or a racetrack: the control-checked shapes of #2022.
+    Round(RoundProfile),
+    /// Any other convex loop of tangent lines and counter-clockwise arcs.
+    Tangent(TangentProfile),
+}
+
+impl WireProfile {
+    /// Read a circle or racetrack first. A different chain must be a convex
+    /// tangent loop. A single circle keeps its own refusal.
+    ///
+    /// # Errors
+    /// Refuses an ambiguous nesting, a joint gap and every other chain.
+    pub fn from_chain(chain: &ClosedChain) -> Result<Self, String> {
+        match RoundProfile::from_chain(chain) {
+            Ok(shape) => Ok(Self::Round(shape)),
+            Err(why)
+                if chain.segments.len() == 1
+                    || !chain.nesting.as_ref().is_ok_and(|n| n.depth == 0)
+                    || chain.max_gap > FIT =>
+            {
+                Err(why)
+            }
+            Err(_) => TangentProfile::from_chain(chain).map(Self::Tangent),
+        }
+    }
+
+    /// Move the profile with a rigid transform.
+    pub fn place(&mut self, transform: impl Fn(Point2) -> Point2) {
+        match self {
+            Self::Round(shape) => shape.place_centers(transform),
+            Self::Tangent(shape) => shape.place(transform),
+        }
+    }
+
+    /// The exact axis-aligned bounds of the nominal curves.
+    pub fn bounds(&self) -> [Point2; 2] {
+        match self {
+            Self::Round(shape) => {
+                let [a, b] = shape.centers();
+                let r = shape.radius;
+                [
+                    Point2::new(a.x.min(b.x) - r, a.y.min(b.y) - r),
+                    Point2::new(a.x.max(b.x) + r, a.y.max(b.y) + r),
+                ]
+            }
+            Self::Tangent(shape) => shape.bounds(),
+        }
+    }
+
+    /// A circumscribed preview polygon within [`PREVIEW_SAG`] of each arc.
+    ///
+    /// # Errors
+    /// Refuses a profile that needs too many preview vertices.
+    pub fn preview(&self) -> Result<Loop, String> {
+        match self {
+            Self::Round(shape) => shape.preview(),
+            Self::Tangent(shape) => shape.preview(),
+        }
     }
 }
 

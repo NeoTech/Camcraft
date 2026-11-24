@@ -7,7 +7,7 @@ use std::sync::Arc;
 use camcraft_geometry::dxf::Primitive;
 use flecs_ecs::prelude::World;
 
-use camcraft_geometry::wire_round_profile::RoundProfile;
+use camcraft_geometry::wire_round_profile::WireProfile;
 
 use super::{FeatureSel, OpParams, ResolvedHeights, SrcRef, WireContourOp, WireSide};
 use crate::cl::Toolpath;
@@ -224,19 +224,20 @@ impl SelectedWireChain {
     }
 
     /// The nominal ring of the generic wire path: the exact straight chain, or
-    /// for a punch the circumscribed preview of a circle or racetrack (#2022).
+    /// for a punch the circumscribed preview of a circle, racetrack (#2022) or
+    /// convex tangent loop (#2983).
     pub(super) fn nominal_ring(&self, w: &WireContourOp) -> Result<Loop, String> {
         if self.straight() || w.side != WireSide::Punch {
             return self.straight_ring(w);
         }
         single_pass(w)?;
-        self.round_profile()?.preview()
+        self.wire_profile()?.preview()
     }
 
-    /// The selected circle or tangent racetrack, with its centres in world XY.
-    pub(crate) fn round_profile(&self) -> Result<RoundProfile, String> {
-        let mut shape = RoundProfile::from_chain(&self.chain)?;
-        shape.place_centers(|p| self.world_xy(p));
+    /// The selected circle, racetrack or convex tangent loop, in world XY.
+    pub(crate) fn wire_profile(&self) -> Result<WireProfile, String> {
+        let mut shape = WireProfile::from_chain(&self.chain)?;
+        shape.place(|p| self.world_xy(p));
         Ok(shape)
     }
 

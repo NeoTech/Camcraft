@@ -11,15 +11,24 @@
 //! #3894 (U3): the editor shows the tool above its tabs - an orbitable 3D
 //! model (the default) or a to-scale side view with dimension lines
 //! (`preview`). Display only.
+//! #3895 (U4): the Tool tab's assembly group sets the holder, the gauge
+//! length and the stick-out from the window's own holder draft; Apply
+//! holder is the one undoable `SetToolBody::library`.
+//! #3896 (U5): the Recipes tab shows the cutting data per material with
+//! the surface speed and the feed per tooth. "Suggest" and "Copy from
+//! tool" fill the window's draft only; the same Apply lands it.
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
 
+pub(crate) mod assembly_group;
 mod details_tab;
 mod list;
 pub(crate) mod model;
 pub(crate) mod preview;
 mod rail;
+mod recipes_fill;
+pub(crate) mod recipes_tab;
 mod side_view;
 mod tool_tab;
 
@@ -93,7 +102,7 @@ enum After {
     Shape(String),
 }
 
-/// The heading, the preview, the Tool and Details tabs, and the Apply row. The draft
+/// The heading, the preview, the Tool, Recipes and Details tabs, and the Apply row. The draft
 /// is swapped into `tool_ui` only while it is drawn (`with_library_draft`).
 fn editor(ui: &mut Ui, state: &mut State) {
     let after = state
@@ -102,6 +111,11 @@ fn editor(ui: &mut Ui, state: &mut State) {
                 return After::Gone;
             }
             let name = state.tool_ui.name.clone();
+            // #3895: the holder draft follows the tool before the preview
+            // draws it (a turning tool has none).
+            if crate::state::is_spun_kind(state.tool_ui.tool_kind()) {
+                state.sync_tool_profile_ui();
+            }
             ui.heading(format!("Tool: {name}"));
             preview::draw(ui, state, face);
             let tab = &mut face.tab;
@@ -109,6 +123,8 @@ fn editor(ui: &mut Ui, state: &mut State) {
             ui.horizontal(|ui| {
                 ui.selectable_value(tab, ToolEditorTab::Tool, "Tool")
                     .on_hover_text("type, geometry and the rows the tool's kind reads");
+                ui.selectable_value(tab, ToolEditorTab::Recipes, recipes_tab::TAB)
+                    .on_hover_text("speeds and feeds for each workpiece material");
                 ui.selectable_value(tab, ToolEditorTab::Details, "Details")
                     .on_hover_text("material group, catalog facts and the tool number");
             });
@@ -120,6 +136,7 @@ fn editor(ui: &mut Ui, state: &mut State) {
                 .max_height((ui.available_height() - footer_h).max(80.0))
                 .show(ui, |ui| match *tab {
                     ToolEditorTab::Tool => shape = tool_tab::draw(ui, state),
+                    ToolEditorTab::Recipes => recipes_tab::draw(ui, state),
                     ToolEditorTab::Details => details_tab::draw(ui, state),
                 });
             footer(ui, state, &name);

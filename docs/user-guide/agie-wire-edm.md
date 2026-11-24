@@ -136,6 +136,27 @@ cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/north-circl
 
 The `RACE20` job has an R10 racetrack, moved and turned by 90 degrees, with its cap centres at X−6 Y1 and X10 Y1. The `CIRCLE20` job has an R10 circle with the hole at X−17 Y0. The `NORTH15` job has an R15 circle with the hole at X0 Y22.
 
+## Punch from a convex DXF loop of tangent lines and arcs
+
+A closed DXF chain of `LINE` and `ARC` entities that is not a circle or a racetrack can also be a punch. Select the chain as for a racetrack. These conditions apply:
+
+- Each joint must be tangent, and the loop must be convex: each arc turns counter-clockwise around the punch, by at most 180 degrees. The arcs can have different radii from 0.5 to 20 mm.
+- The loop has at least one straight side and at most 128 segments.
+- At least one straight side is parallel to X or Y. Place the threading hole at least 3 mm outside that side, with at least 3 mm of that side on each side of the perpendicular entry. The other sides can be oblique.
+- All joints and arc centres must be on the five-decimal ISO grid. The post checks the exact squared radius at both ends of each arc and the tangent direction at each joint in grid units.
+- The stock must have at least 0.4 mm beyond each extremum of the loop, and the complete hole must be inside the stock. The rest of the drawing must stay outside the same area.
+
+The generator and the wire laws use a polygon of up to 2,048 vertices that encloses each true arc within 0.000025 mm. The native ISO object keeps each nominal endpoint and arc centre. The control applies its own wire offset to each arc and each straight.
+
+Run the original examples from the repository root, each with a fresh destination:
+
+```sh
+cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/rounded-punch.camscript
+cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/three-corner-punch.camscript
+```
+
+The `ROUND20` job has four corner arcs with alternating radii of 6 and 4 mm, and the hole at X0 Y−21. The `THREEARC` job has three arcs of R5 that sweep about 143.13, 126.87 and 90 degrees, an oblique straight side, and the hole at X12 Y−12.
+
 ## Open the job in Agie Control
 
 Keep all files of the job directory together. A punch group has one ISO object for each work: import each of them. In the control’s file manager, open **Imp/exp** and import the ISO object into **ISO Sys**. Then import the SBL into **SBL Sys**, keeping the matching SBR beside the SBL. In the workpiece list choose **New workpiece → Script Files**, select the imported SBL and confirm with **OK**.

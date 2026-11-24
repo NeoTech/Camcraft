@@ -7,6 +7,7 @@ mod cutoff;
 mod group;
 mod round_profile;
 mod spacing;
+mod tangent_profile;
 pub use crate::agie_setup::{MAX_PUNCH_WORKS, Quality};
 pub use crate::agie_setup::valid_stem as valid_name;
 pub use group::export_group_with_review;
@@ -293,5 +294,7 @@ mod quality_tests;
 mod reentrant_tests;
 #[cfg(test)]
 mod round_profile_tests;
+#[cfg(test)]
+mod tangent_profile_tests;
 #[cfg(test)]
 mod tests;
