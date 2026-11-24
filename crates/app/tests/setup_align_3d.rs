@@ -148,6 +148,7 @@ fn finish() -> OpParams {
         pencil_reference: None,
         fill_openings: None,
         gap_link: camcraft_app::finishing3d::GapLink::Jump,
+        waterlines: true,
     }
 }
 

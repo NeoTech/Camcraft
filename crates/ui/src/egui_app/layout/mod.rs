@@ -119,7 +119,7 @@ fn reopen(dock: &mut DockState<Tab>, tab: Tab) {
     // #287: the Machines pane opens as a tab beside the properties pane
     // when that is open (same side, same width - one more context pane),
     // else alone at the right like the properties pane would.
-    if matches!(tab, Tab::Machines | Tab::Tools | Tab::AiChat | Tab::DebugInfo)
+    if matches!(tab, Tab::Machines | Tab::AiChat | Tab::DebugInfo)
         && let Some(props) = dock.find_tab(&Tab::Properties)
         && let Ok(leaf) = dock.leaf_mut(props.node_path())
     {
@@ -153,7 +153,6 @@ fn close(dock: &mut DockState<Tab>, p: Panel) {
 pub(crate) fn apply(dock: &mut DockState<Tab>, req: LayoutRequest) {
     match req {
         LayoutRequest::Show(p) => show(dock, tab_of(p)),
-        LayoutRequest::ToolLibrary => show(dock, Tab::Tools),
         LayoutRequest::ToggleDebugInfo => match dock.find_tab(&Tab::DebugInfo) {
             Some(path) => {
                 dock.remove_tab(path);

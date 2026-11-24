@@ -72,6 +72,9 @@ pub(super) enum Descent {
     /// The pocket's horizontal arc entry (M11.3): the inner descent onto
     /// the arc's start, then the G17 arc onto the pass start.
     XyArc(Box<Descent>, Box<XyArc>),
+    /// #3746: a start-side pass's entry in air outside the stock box,
+    /// then the lead and the G17 arc onto the pass start.
+    Air(Box<super::air_entry::AirLead>),
 }
 
 /// The cuts a descent leaves at the level's plane (dive links, arcs):
@@ -121,7 +124,9 @@ pub(super) fn plan(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, prev_z
     if let Some(d) = super::predrilled::entry(l, z, m) {
         return d;
     }
-    let d = with_arc(arm, zig, l, leg, z, prev_z, m).unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m));
+    let d = super::air_entry::plan(arm, zig, l, leg, z, prev_z, m)
+        .or_else(|| with_arc(arm, zig, l, leg, z, prev_z, m))
+        .unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m));
     super::predrilled::unserved(d, z, m)
 }
 
@@ -295,10 +300,18 @@ pub(super) fn start(d: &Descent, l: &Lvl, leg: Point2, m: &Motion) -> Point2 {
         Descent::Ramp(s, _) => *s,
         Descent::Zig(..) => e,
         Descent::Arc(a, _) => a.start,
+        Descent::Air(a) => a.plunge,
         Descent::Named(inner, _) => start(inner, l, leg, m),
         Descent::XyArc(inner, x) => start(inner, &x.lvl(l), leg, m),
         Descent::Sub(_) | Descent::Refused(_) => dive_point(l, e, m).unwrap_or(e),
     }
+}
+
+pub(super) fn helix_parts(d: &Descent) -> Option<(Point2, Point2, f64, f64, f64)> {
+    match d { Descent::Helix(h) => Some((h.start, h.center, h.from, h.turns, h.r)), _ => None }
+}
+pub(super) fn make_helix(start: Point2, center: Point2, from: f64, turns: f64, r: f64) -> Descent {
+    Descent::Helix(Hel { start, center, turns, r, from })
 }
 
 /// Post a planned descent. `tz` is the plane the tool traverses at to
@@ -351,19 +364,36 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
             Vec::new()
         }
         Descent::Helix(h) => {
-            let cur = b.at();
-            if cur.x != h.start.x || cur.y != h.start.y {
-                b.push(MoveKind::Rapid, Point3::new(h.start.x, h.start.y, tz), None);
+            let mut chosen = (h.start, h.center, h.turns, h.r);
+            if m.solid_restart && !super::descent_dive::helix_clears_prior(b.moves(), l, h.start, h.center, h.from, z, h.turns, m) {
+                let zig = m.links.transition == Some(Entry3D::Helix)
+                    && crate::links::helix_turns(h.from - z, h.r, m.links.helix_pitch)
+                        .is_some_and(|t| (t - h.turns).abs() < 1e-9);
+                match super::descent_dive::find_clear_helix_raw(b.moves(), l, h.from, z, zig, m, !a.center_cutting) {
+                    Some(found) => chosen = found,
+                    None => return super::descent_dive::helix_cross_fallback(b, l, e, z, h.from, tz, m),
+                }
             }
-            if h.r < m.helix_radius {
+            let (start, center, turns, r) = chosen;
+            let cur = b.at();
+            if cur.x != start.x || cur.y != start.y {
+                let hop = if tz < m.hop_z - 1e-9 {
+                    b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, m.hop_z), None);
+                    m.hop_z
+                } else {
+                    tz
+                };
+                b.push(MoveKind::Rapid, Point3::new(start.x, start.y, hop), None);
+            }
+            if r < m.helix_radius {
                 b.note_once(&format!(
                     "entry: the helix fits only under its radius - flown at {:.3} mm, within the minimum radius",
-                    h.r
+                    r
                 ));
             }
-            b.push(MoveKind::Rapid, Point3::new(h.start.x, h.start.y, h.from), None);
-            helix_about(b, h.start, h.center, h.from, z, h.turns, fd, !a.helix_cw);
-            link(dive_link(b, l, h.start, e, z, m))
+            b.push(MoveKind::Rapid, Point3::new(start.x, start.y, h.from), None);
+            helix_about(b, start, center, h.from, z, turns, fd, !a.helix_cw);
+            link(dive_link(b, l, start, e, z, m))
         }
         Descent::Arc(lead, zf) => {
             push_arc_lead(b, lead, tz, *zf, fd, a.plunge(m.plunge_feed));
@@ -382,6 +412,7 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
             Vec::new()
         }
         Descent::XyArc(inner, x) => push_xy(b, inner, x, l, z, tz, m),
+        Descent::Air(a) => super::air_entry::push(b, a, l, z, tz, m),
     }
 }
 

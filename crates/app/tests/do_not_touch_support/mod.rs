@@ -4,7 +4,7 @@ use camcraft_app::mcp::Server;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-fn tmp_dir(tag: &str) -> PathBuf {
+pub fn tmp_dir(tag: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
     p.push(format!("camcraft-2055-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
@@ -13,7 +13,7 @@ fn tmp_dir(tag: &str) -> PathBuf {
 }
 
 /// Write a box STL with min (x0, y0, z0) and max (x1, y1, z1).
-fn write_box_stl(path: &std::path::Path, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) {
+pub fn write_box_stl(path: &std::path::Path, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) {
     let v = |i: usize| -> [f64; 3] {
         [
             if i & 1 == 0 { x0 } else { x1 },

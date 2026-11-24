@@ -8,18 +8,21 @@
 //!
 //! Gate map (#1883): covers app::operation (waterjet_op, kinds
 //! registry, family gate), app::commands (operation create/edit/
-//! generate), app::project (waterjet_dto), motion::waterjet.
+//! generate), app::project (waterjet_dto), app::posting, app::stock_sim,
+//! motion::waterjet.
 
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::MoveKind;
-use camcraft_app::commands::{AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine};
+use camcraft_app::commands::{AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::{self, Kind};
 use camcraft_app::model;
 use camcraft_app::operation::{
     Family, Height, JetLead, JetSide, JetTabsOp, KindInfo, OpParams, OpType, Section, SrcRef, WaterjetOp,
 };
+use camcraft_app::schema::Location;
+use camcraft_app::stock::StockShape;
 use camcraft_app::waterjet_tools::waterjet_tool;
 use camcraft_app::world::new_world;
 
@@ -88,6 +91,7 @@ fn waterjet_doc() -> (World, History) {
     h.execute(&world, LoadMachine::new(&world, "wj.mch".into(), Some(m)).expect("mounts"));
     h.execute(&world, AddTool::new(&world, NOZZLE, waterjet_tool(0.8)).expect("nozzle"));
     h.execute(&world, ImportModel::from_mesh("plate", holed_plate()));
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 5.0 }, Location::default()).expect("stock"));
     (world, h)
 }
 
@@ -202,4 +206,73 @@ fn the_op_round_trips_byte_identically() {
     let _ = std::fs::remove_file(&file);
     assert!(first.contains("\"waterjet_profile\"") && first.contains("\"tabs\""), "the words are written");
     assert_eq!(first, second, "byte-identical");
+}
+
+#[test]
+fn waterjet_post_gate_names_the_missing_safety_records() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    let report = camcraft_app::posting::verification_report(&world);
+    let refusal = report.problems.iter().find(|p| p.contains("Jet1") && p.contains("standoff"))
+        .expect("the waterjet operation must be refused by name");
+    for missing in ["jet on/off", "pierce dwell", "waterjet laws"] {
+        assert!(refusal.contains(missing), "{refusal}");
+    }
+}
+
+#[test]
+fn waterjet_user_post_cannot_bypass_the_safety_refusal() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    let file = std::env::temp_dir().join(format!("camcraft_waterjet_refused_{}.nc", std::process::id()));
+    let _ = std::fs::remove_file(&file);
+    let script = r#"serves = ["waterjet"]; function onOpen() { writeln("(WATERJET)"); }"#;
+    let refusal = camcraft_app::posting::post_script(&world, &file, script).expect_err("a user post must refuse unsafe waterjet work");
+    assert!(!file.exists(), "a refused waterjet post must not write an NC file");
+    assert!(refusal.contains("Jet1") && refusal.contains("standoff") && refusal.contains("jet on/off"), "{refusal}");
+}
+
+#[test]
+fn waterjet_safety_refusal_omits_suppressed_operations_and_empty_documents() {
+    let (world, mut h) = waterjet_doc();
+    let empty = camcraft_app::posting::verification_report(&world);
+    assert!(!empty.problems.iter().any(|p| p.contains("waterjet")), "{:?}", empty.problems);
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Jet1", true).expect("suppress"));
+    let report = camcraft_app::posting::verification_report(&world);
+    assert!(!report.problems.iter().any(|p| p.contains("Jet1") && p.contains("standoff")), "{:?}", report.problems);
+    assert!(!report.not_judged.as_deref().unwrap_or_default().contains("Jet1"), "{:?}", report.not_judged);
+}
+
+#[test]
+fn waterjet_stock_verdict_is_refused_by_name() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    let refusal = camcraft_app::stock_sim::simulate_document(&world).expect_err("waterjet stock removal is not judged");
+    assert!(refusal.contains("Jet1") && refusal.contains("waterjet") && refusal.contains("not judged"), "{refusal}");
+}
+
+#[test]
+fn waterjet_nozzle_is_absent_from_stock_playback() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    let playback = camcraft_app::stock_play::PlaySeed::gather(&world, false, 1000.0).expect("the stock playback plan is available");
+    assert_eq!(playback.index().total(), 0, "a waterjet nozzle must not remove simulated stock");
+}
+
+#[test]
+fn waterjet_verification_reports_the_unjudged_operation() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(waterjet_op()));
+    let report = camcraft_app::posting::verification_report(&world);
+    let line = report.not_judged.expect("the waterjet operation must have a visible not-judged note");
+    assert!(line.contains("Jet1") && line.contains("waterjet"), "{line}");
+}
+
+#[test]
+fn waterjet_zero_lead_in_reports_the_pierce_on_the_kerf_ring() {
+    let (world, mut h) = waterjet_doc();
+    cut(&world, &mut h, OpParams::WaterjetProfile(WaterjetOp { lead_in: 0.0, ..waterjet_op() }));
+    let p = path(&world);
+    assert!(p.notes.iter().any(|n| n.contains("zero lead-in") && n.contains("kerf ring")), "{:?}", p.notes);
 }

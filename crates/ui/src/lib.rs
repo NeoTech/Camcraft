@@ -84,6 +84,7 @@ mod operator_side;
 pub mod view_frame;
 pub mod mcp_host;
 pub mod operations;
+pub mod update_check;
 pub mod path_lines;
 pub(crate) mod path_overlay;
 pub mod pick_line_memo;

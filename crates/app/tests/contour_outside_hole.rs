@@ -137,7 +137,7 @@ fn params(side: Side, top: Height, bottom: Height) -> OpParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     }
@@ -264,7 +264,7 @@ fn the_full_depth_outside_ring_is_a_gouge_to_the_verifier() {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     };
     let t = contour(&hole, &p).expect("the flat contour builds the ring");

@@ -191,7 +191,7 @@ fn a_parent_alignment_makes_a_linked_childs_toolpath_stale_and_undo_restores_it(
     // only that cap, with fixed heights and a square stock: a Z quarter
     // turn changes the child's alignment, not its stock or cut heights.
     let params = OpParams::Face {
-        holes: Default::default(), tilt: None, blend_turns: false,
+        holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 3.0, clearance_z: Height::fixed(25.0), cut_z: Height::fixed(21.5),
         top_z: None, stepdown: None, feed: 1200.0, plunge_feed: 300.0, climb: true,
     };

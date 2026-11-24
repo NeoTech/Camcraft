@@ -106,6 +106,7 @@ mod ladder;
 mod level_ctx;
 mod open_side;
 mod params;
+mod reentry;
 mod rest;
 mod shell;
 mod troch;

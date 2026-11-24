@@ -312,6 +312,7 @@ fn finish_parallel() -> OpParams {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        waterlines: true,
     }
 }
 

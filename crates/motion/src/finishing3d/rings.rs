@@ -5,6 +5,7 @@ use crate::geo2d::{Loop, Point2};
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::{fit_arcs, GenError};
 
+use super::gaplink::straight_ok;
 use super::ladder::levels;
 use super::params::{BLEND_MZ, Finish3DParams, FinishPattern, SPLIT_MZ, TOUCH_EPS, dirs, validate};
 use super::scan::{level_region, push_walk};
@@ -240,6 +241,10 @@ pub(super) fn emit_rings_with_trim(
     // (M2.5 A verdict lane: a plunge that digs through a canopy on
     // its way to a ring cuts nothing - it lies).
     let sups = build_sups(facets, r);
+    let model_top = facets
+        .iter()
+        .map(|f| f.a.z.max(f.b.z).max(f.c.z))
+        .fold(f64::NEG_INFINITY, f64::max);
     let steep = matches!(p.pattern, FinishPattern::SteepShallow);
     // Blend is the same walk with the border moved down the tilt to
     // the band line (M2.5 D): a run of the ladder survives when it
@@ -332,7 +337,7 @@ pub(super) fn emit_rings_with_trim(
             let cur = b.at();
             // The plane the air moves park above the ring entry:
             // the ramp's approach column certifies from its centers.
-            let approach_z = match *last {
+            let nominal_z = match *last {
                 None => cur.z,
                 Some(lz) if lz != z_tip => p.clearance_z,
                 Some(_) => hop,
@@ -345,6 +350,26 @@ pub(super) fn emit_rings_with_trim(
             // gouge the cone verdict measured (2.4963 mm at the
             // spire's first ring, tip 30 under a clearance of 25).
             .max(z_tip);
+            // #3633: check the XY rapid at the same-level retract before
+            // certifying the entry from that plane. Ramps use their own
+            // start XY, which can differ from the ring's first point.
+            let same_level = *last == Some(z_tip);
+            let approach_z_at = |x, y| {
+                if same_level
+                    && nominal_z < p.clearance_z
+                    && nominal_z < model_top
+                    && !straight_ok(
+                        Point3::new(cur.x, cur.y, nominal_z),
+                        Point3::new(x, y, nominal_z),
+                        r,
+                        &sups,
+                    )
+                {
+                    p.clearance_z
+                } else {
+                    nominal_z
+                }
+            };
             // A closed ring is a CYCLE: its start vertex is a choice,
             // not a law. When the head's plunge column is blocked -
             // the descent grazes a shoulder that the level loop itself
@@ -358,8 +383,9 @@ pub(super) fn emit_rings_with_trim(
             // is the refusal's own, spent identically: never a softer
             // currency than the column law's r - tol.
             if closed && !p.entry_ramp {
-                let (cz, top, lim) = (z_tip + r, approach_z + r, r - p.tolerance);
-                let blocked = |q: &Point2| !column_clear(q.x, q.y, cz, top, lim, &sups);
+                let blocked = |q: &Point2| {
+                    !column_clear(q.x, q.y, z_tip + r, approach_z_at(q.x, q.y) + r, r - p.tolerance, &sups)
+                };
                 if blocked(&entry) {
                     let n = poly.len() - 1; // poly[n] == poly[0]
                     let stride = (n / 256).max(1);
@@ -396,6 +422,7 @@ pub(super) fn emit_rings_with_trim(
                                 None
                             } else {
                                 let cs = Point3::new(c.x + r * n.x, c.y + r * n.y, c.z + r * n.z);
+                                let approach_z = approach_z_at(cs.x, cs.y);
                                 if cs.z > approach_z + r {
                                     Some(Err("the ramp start sits above the approach plane".into()))
                                 } else if !leg_clears(
@@ -409,7 +436,7 @@ pub(super) fn emit_rings_with_trim(
                                 } else if !leg_clears(facets, cs, c, r, p.tolerance) {
                                     Some(Err("the diagonal bites the wall".into()))
                                 } else {
-                                    Some(Ok(cs))
+                                    Some(Ok((cs, approach_z)))
                                 }
                             }
                         }
@@ -418,14 +445,14 @@ pub(super) fn emit_rings_with_trim(
                     None
                 };
                 let ramped = match ramp {
-                    Some(Ok(cs)) => Some(cs),
+                    Some(Ok(entry)) => Some(entry),
                     Some(Err(why)) => {
                         b.note(format!("ramp entry at z {z_tip:.4} refused: {why}"));
                         None
                     }
                     None => None,
                 };
-                if let Some(cs) = ramped {
+                if let Some((cs, approach_z)) = ramped {
                     // Air to the start column at the approach plane...
                     match *last {
                         None => b.push(MoveKind::Rapid, Point3::new(cs.x, cs.y, approach_z), None),
@@ -456,6 +483,7 @@ pub(super) fn emit_rings_with_trim(
                         Some(p.plunge_feed),
                     );
                 } else {
+                    let approach_z = approach_z_at(entry.x, entry.y);
                     // The column law (M2.5 A verdict lane): the tangent
                     // stop is clear by construction - the DESCENT must
                     // answer for itself. Under a canopy no vertical
@@ -516,6 +544,11 @@ pub(super) fn emit_rings_with_trim(
 /// resting tip-deep at that Z touches the surface.
 pub fn waterline(facets: &[Triangle], p: &Finish3DParams) -> Result<Toolpath, GenError> {
     validate(p, facets)?;
+    if !p.waterlines {
+        return Err(GenError::Invalid(
+            "Waterline 3D finish is the waterline ring pass - enable waterlines or pick a shallow-first pattern".into(),
+        ));
+    }
     let r = p.tool_diameter * 0.5;
     let zs = levels(p, r, facets)?;
     let ds = dirs(r, p.tolerance);

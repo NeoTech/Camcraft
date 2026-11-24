@@ -14,7 +14,7 @@
 use egui::Ui;
 
 use camcraft_app::links::{Approach, Compensation};
-use camcraft_app::machining2d::Lead;
+use camcraft_app::machining2d::{Lead, PassStart};
 use camcraft_app::machining3d::Entry3D;
 use camcraft_app::units::Unit;
 
@@ -82,6 +82,25 @@ pub(super) fn plunge_group(ui: &mut Ui, u: Unit, a: &mut Approach) {
     if g.toggled {
         a.plunge_height = if on { 2.0 } else { 0.0 };
     }
+}
+
+/// The row's label (#3745).
+pub(crate) const APPROACH_DISTANCE_LABEL: &str = "Approach distance";
+
+/// The row's hover text (#3745).
+pub(crate) const APPROACH_DISTANCE_HINT: &str =
+    "how far outside the stock edge the tool goes down to the cut depth, in air, before it moves in to the first cut";
+
+/// Where the entry of an Inside or Outside pass starts (#3745): a
+/// distance outside the stock edge. Auto keeps the kind's own entry, so
+/// the group shows only for Inside and Outside.
+pub(super) fn approach_distance_group(ui: &mut Ui, u: Unit, start: PassStart, a: &mut Approach) {
+    if start == PassStart::Auto {
+        return;
+    }
+    group(ui, "Approach", None, |ui| {
+        prop_row_hint(ui, APPROACH_DISTANCE_LABEL, APPROACH_DISTANCE_HINT, |ui| num(ui, u, &mut a.approach_distance));
+    });
 }
 
 /// The entry moves' own feeds.
@@ -207,7 +226,7 @@ pub(super) fn contour_leads_editor(ui: &mut Ui, u: Unit, a: &mut Approach) {
             consequence(ui, "set the D register to the wear delta only - a full radius there cuts the part a radius undersize");
         }
         if a.compensation.in_control() {
-            consequence(ui, "needs straight Linear or Perpendicular leads at least a tool radius long; tabs, corner blends, overlap, keep-down links and non-Fanuc posts are refused by name");
+            consequence(ui, "needs a Perpendicular lead at least a tool radius long; a Linear lead, tabs, corner blends, overlap, keep-down links and non-Fanuc posts are refused by name");
         }
     });
 }
@@ -221,6 +240,10 @@ pub(crate) fn entry_status_lines(notes: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     for n in notes {
         if n.starts_with(camcraft_app::operation::TOP_STOCK_WARNING) || n.starts_with(camcraft_app::machining2d::PASS_START_NOTE) {
+            out.push(format!("warning: {n}"));
+            continue;
+        }
+        if n.starts_with(camcraft_app::finishing3d::WATERLINES_OFF_NOTE) {
             out.push(format!("warning: {n}"));
             continue;
         }
@@ -248,6 +271,12 @@ mod top_stock_tests {
     #[test]
     fn the_top_stock_note_is_a_visible_warning_not_an_entry_fallback() {
         let note = format!("{} top Z5.000, stock Z10.000 - raise Top or face first", camcraft_app::operation::TOP_STOCK_WARNING);
+        assert_eq!(super::entry_status_lines(std::slice::from_ref(&note)), vec![format!("warning: {note}")]);
+    }
+
+    #[test]
+    fn the_waterlines_off_note_is_a_visible_warning() {
+        let note = format!("{} 6 steep flank facet(s) (>45 deg) left uncut", camcraft_app::finishing3d::WATERLINES_OFF_NOTE);
         assert_eq!(super::entry_status_lines(std::slice::from_ref(&note)), vec![format!("warning: {note}")]);
     }
 }

@@ -31,6 +31,9 @@ use std::path::Path;
 #[path = "posting_agie.rs"]
 pub mod agie;
 
+#[path = "posting_waterjet.rs"]
+mod waterjet;
+
 #[path = "posting_files.rs"]
 mod files;
 pub use files::{
@@ -353,7 +356,7 @@ pub struct Posted {
 mod sim_clause_impl;
 #[path = "posting_plasma.rs"]
 mod plasma_clause_impl;
-pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
+pub use plasma_clause_impl::{plasma_clause, GateWarning, PlasmaClause, PLASMA_VERDICT};
 #[path = "posting_wire.rs"]
 mod wire;
 pub use wire::{wire_clause, WireClause, WIRE_VERDICT};
@@ -546,11 +549,13 @@ pub use per_op::{
 pub use sim_clause_impl::{sim_clause, SimClause, NOT_JUDGED};
 
 /// The verification gate's whole answer: the blocking problems, and
-/// the stock sim's visible not-judged line (see [`sim_clause`]).
+/// the stock sim's visible not-judged line (see [`sim_clause`]), and
+/// (#3456) the program laws' non-blocking findings, one per op.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct GateReport {
     pub problems: Vec<String>,
     pub not_judged: Option<String>,
+    pub warnings: Vec<GateWarning>,
 }
 
 /// Post every operation of the document, in tree order, to one NC
@@ -920,6 +925,7 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // a mesh that cannot carry one.
     problems.extend(crate::model_fidelity::gate_problems(world));
     problems.extend(review_problems(world));
+    problems.extend(waterjet::problems(world));
 
     let sim = sim_clause(world);
     problems.extend(sim.problem);
@@ -1011,7 +1017,7 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
         (Some(s), Some(w)) => Some(format!("{s}; {w}")),
         (s, w) => s.or(w),
     };
-    GateReport { problems, not_judged }
+    GateReport { problems, not_judged, warnings: plasma.warnings }
 }
 
 /// The gate's fixture walk: one problem string per operation with a

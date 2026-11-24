@@ -66,6 +66,18 @@ pub(super) fn non_sliver_center(region: &Region, erode: f64) -> Result<Region, G
     Ok(Region::from_slices(kept)?)
 }
 
+/// True when a tool of `tool_diameter`, leaving `stock_to_leave` on each
+/// wall, has a centre position in `region`: the pocket generators' own
+/// "pocket is narrower than the tool" predicate, for a door that warns
+/// before Generate (#3631). An empty region has no material to fit, so
+/// it fits.
+pub fn pocket_tool_fits(region: &Region, tool_diameter: f64, stock_to_leave: f64) -> Result<bool, GenError> {
+    if region.is_empty() {
+        return Ok(true);
+    }
+    Ok(!non_sliver_center(region, tool_diameter * 0.5 + stock_to_leave)?.is_empty())
+}
+
 #[cfg(test)]
 mod non_sliver_tests {
     use super::non_sliver_center;

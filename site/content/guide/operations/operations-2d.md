@@ -83,6 +83,19 @@ bound it to a smaller area.
 | Passes | Holes | Lift over (or Cut across air, lift over islands; Cut straight through) |
 | Passes | Pass starts at | Auto, not used: the rows run edge to edge, so there is no inside or outside order |
 
+On **Passes**, turn on **Arc turns at row ends** to round the turns
+between facing rows. With **Arc radius = half the row spacing**, the
+turn is a semicircle where it fits. To set a smaller **Arc radius**,
+clear that checkbox. Where there is room, CamCraft joins two quarter
+arcs with a straight move outside the facing area.
+
+**Do not touch** is on **Geometry > Boundary > Boundaries**. Choose
+**Pick protected**, pick model faces or edge chains, then choose **Done**
+and **Apply**. **Clearance** adds space around the full tool assembly
+(flutes, shank and holder). Facing rows stop short of protected items;
+the material there stays unfaced. CamCraft refuses a cut with no safe
+facing room. Protected items stay highlighted while the operation is selected.
+
 **Common refusals:** "staged facing needs a positive stepdown";
 "staged top below the finished height"; "clearance plane not above the
 first cut level".
@@ -141,6 +154,11 @@ generated path before posting.
 CamCraft refuses an open run whose air side changes or whose offset cuts
 the kept part. A part-source run with no part material beside it keeps a
 centreline ride and the path notes say so.
+
+On **Passes**, turn on **Arc turns at corners** to round corners that
+turn toward air. Corners that turn toward the part stay sharp, and the
+path notes identify them. **Arc radius = tool radius** is the automatic
+setting. Clear it to enter an **Arc radius**.
 
 An inside **Ramp** entry descends along the lead and ring at the entry
 angle. An unset entry angle means 3 degrees, independently of the link
@@ -357,6 +375,17 @@ wanted rather than a constant load.
 **Picks:** as Pocket. **Settings:** Stepover 3, Stepdown 5, Stock to leave
 0, Entry Helix radius 1.
 
+**Known issue in 0.26.0:** **Inside** and **Outside** on 2D Offset can
+produce ramped linear cuts and lifts instead of the intended level rings.
+Inspect these paths before posting; use **Auto** if this affects the job.
+The report is [#3741](https://github.com/NeoTech/Camcraft/issues/3741),
+with follow-ups [#3744](https://github.com/NeoTech/Camcraft/issues/3744),
+[#3745](https://github.com/NeoTech/Camcraft/issues/3745),
+[#3746](https://github.com/NeoTech/Camcraft/issues/3746),
+[#3747](https://github.com/NeoTech/Camcraft/issues/3747) and
+[#3748](https://github.com/NeoTech/Camcraft/issues/3748).
+This release note applies until a build with the fixes ships.
+
 **Pass starts at** (Passes tab) sets where each level starts:
 
 - **Auto** cuts the rings from the middle of the area outward. This is
@@ -430,6 +459,15 @@ typed in or seeded from suitable picked slot geometry;
 Slot cuts one continuous pass at each depth. It follows the centreline
 when the cutting width equals the tool diameter. A wider cut joins the
 rows and finishes with a lap along the walls.
+
+On **Passes**, turn on **Arc turns at row ends** to round the corners
+where the slot rows join. **Arc radius = tool radius** is the automatic
+setting. Clear it to enter an **Arc radius**. A single-row slot has no
+turn to round. On wider slots, read the path notes for material left by
+rounding.
+
+On Face, 2D Contour and Slot, arc turns are off by default. An explicit
+radius must be at least 0.01 mm and at most the tool radius.
 
 The A and B fields sit in their own **Manual** section on the Geometry tab;
 Slot width and the extension rows stay outside it. While the Geometry tab
@@ -568,6 +606,13 @@ so any mill or a taper tool may be used.
 Stepdown 5 on Heights, feeds on Feeds. It has no Passes tab. **Common refusal:** "empty trace
 region" when nothing usable is picked.
 
+**Do not touch** on **Geometry > Boundary > Boundaries** protects model
+faces or edge chains. Choose **Pick protected**, finish picking, and
+**Apply**. Trace splits the cutting runs around protected items and
+checks entries, lifts and rapid links against the full tool assembly.
+**Clearance** adds standoff; a completely blocked cut is refused by name.
+Do not put the same item in the machining and protected selections.
+
 ## Engrave
 
 <!-- catalog:examples:start -->
@@ -583,6 +628,12 @@ markings with a V-bit. Choose Engrave when the job is marking, Trace when
 it is a functional groove; the path is the same.
 
 **Picks and settings:** as Trace.
+
+**Do not touch** on **Geometry > Boundary > Boundaries** also applies
+to Engrave. Pick protected model faces or edge chains and set **Clearance**
+as on Trace. The path leaves gaps around them and keeps the flutes,
+shank and holder clear, including on entries, lifts and rapid links.
+A cut with no safe room is refused. Choose **Apply** to commit the picks.
 
 ## V-Carve
 
@@ -620,7 +671,7 @@ flute must cover the deepest cut.
 |---|---|---|
 | Heights | Top Z | the model top (the start depth) |
 | Heights | Bottom Z | 2 under Top Z (the maximum depth of the tip) |
-| Heights | Stepdown | the document stepdown |
+| Heights | Stepdown | 5 |
 | Passes | Flat clearing | off |
 | Passes | Floor stepover | 0.25 (shown only with flat clearing on) |
 

@@ -10,7 +10,7 @@
 //!
 //! Gate map: covers camcraft_motion::machining3d (hsm, ladder, params)
 //! and camcraft_motion::machining2d (level_rings, level_order,
-//! pass_start).
+//! pass_start), camcraft_motion::plunge_law (#3670 re-entries).
 //! Provenance: our own regression for #3361; no vendor material
 //! consulted.
 
@@ -153,5 +153,23 @@ fn zigzag_keeps_its_rows_and_names_the_unused_choice() {
             let said = t.notes.iter().filter(|n| *n == PASS_START_ZIGZAG_NOTE).count();
             assert_eq!(said, 1, "{strategy:?} {start:?}: said once: {:?}", t.notes);
         }
+    }
+}
+
+/// #3670: the zigzag rows split at the island, so each row restarts on
+/// its far side after a hop. With a Helix entry and a centre-cutting
+/// tool, no restart feeds straight down into uncut stock: it takes the
+/// helix (or the ramp along the pass), never the plain plunge.
+#[test]
+fn zigzag_helix_re_entries_never_plunge_into_uncut_stock() {
+    use camcraft_motion::plunge_law::{Solid, first_solid_plunge};
+    for strategy in [PocketStrategy::Zigzag, PocketStrategy::Auto] {
+        let p = Pocket3DParams { entry: Entry3D::Helix, ..params(strategy, PassStart::Auto) };
+        assert!(p.links.approach.center_cutting, "the fixture tool cuts at its centre");
+        let t = pocket3d(&model(), &square(0.0, 0.0, 40.0), &p).expect("3D pocket");
+        let hops = t.moves.iter().filter(|m| m.kind == MoveKind::Rapid && m.to.z > m.from.z).count();
+        assert!(hops > 2, "{strategy:?}: the rows restart after hops ({hops})");
+        let solid = Solid { top: p.top_z, footprint: None };
+        assert_eq!(first_solid_plunge(&t, R, &solid), None, "{strategy:?}: a restart plunges into stock: {:?}", t.notes);
     }
 }

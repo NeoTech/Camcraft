@@ -30,7 +30,7 @@ const TOOL: &str = "EM-0400-2FL";
 fn face(reference: HeightReference) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::of(reference, 25.0),

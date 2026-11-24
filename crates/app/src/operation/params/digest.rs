@@ -50,6 +50,24 @@ pub(super) fn write_corner_relief(
     }
 }
 
+/// The arc-turn radius (#1759), after the blend tag: written only when
+/// set, so every earlier blended operation keeps its digest.
+pub(super) fn write_blend_radius(h: &mut std::hash::DefaultHasher, r: Option<f64>) {
+    if let Some(r) = r {
+        h.write_u8(0xB4);
+        w(h, r);
+    }
+}
+
+/// The blend tag and its radius, written only for arc turns: a legacy
+/// (sharp) operation keeps the digest it was cached under.
+pub(super) fn write_blend(h: &mut std::hash::DefaultHasher, on: bool, r: Option<f64>) {
+    if on {
+        h.write_u8(0xB1);
+        write_blend_radius(h, r);
+    }
+}
+
 /// Rest machining (#1489, #2033, #1446): written only when ON, so
 /// operations without rest machining keep their digest. `entered` is
 /// `true` on 2D Pocket (`0xD7` + previous tool fields) and `false` on
@@ -223,6 +241,13 @@ impl OpParams {
                 // #1449: pre-drilled entry - a byte only when on.
                 if a.predrilled {
                     h.write_u8(0xC7);
+                }
+                // #3745: the approach distance outside the stock - bytes
+                // only when it differs from the default, so every earlier
+                // approach keeps its digest.
+                if a.approach_distance.to_bits() != crate::links::Approach::DEFAULT.approach_distance.to_bits() {
+                    h.write_u8(0xCA);
+                    w(h, a.approach_distance);
                 }
                 // M13.11: control compensation moves what the post
                 // writes - a byte only when on, so every earlier

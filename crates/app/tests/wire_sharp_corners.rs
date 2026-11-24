@@ -76,6 +76,8 @@ fn die(sharp_corners: bool) -> WireContourOp {
         start: Some([0.0, 0.0]),
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,

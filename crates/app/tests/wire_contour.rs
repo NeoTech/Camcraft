@@ -97,6 +97,8 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         start,
         tabs: None,
         capture: false,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,

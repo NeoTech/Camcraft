@@ -75,6 +75,8 @@ fn punch(machine_text: &str, condition: &str, skims: Vec<WireSkim>) -> World {
         start: Some([-30.0, 0.0]),
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,

@@ -10,7 +10,7 @@
 //! Gate map (M4.4): covers camcraft_motion::finishing3d, camcraft_motion::verify.
 
 use camcraft_motion::cl::{Move, MoveKind, Toolpath};
-use camcraft_motion::finishing3d::{contour, contour_from, Finish3DParams, FinishPattern, GapLink};
+use camcraft_motion::finishing3d::{contour, contour_from, waterline, Finish3DParams, FinishPattern, GapLink};
 use camcraft_motion::geo2d::Region;
 use camcraft_motion::geometry::{slice, Point3, Triangle};
 use camcraft_motion::machining2d::PassStart;
@@ -67,6 +67,7 @@ fn params(retract_z: Option<f64>) -> Finish3DParams {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     }
 }
 
@@ -272,4 +273,69 @@ fn inside_first_on_a_convex_part_with_a_low_retract_never_digs_in() {
             "rapid in stock {at}: {a:?} -> {b:?} is not a base hop"
         );
     }
+}
+
+/// #3633: two staggered bosses of different sizes set the order and
+/// direction of the link between the two rings on the Z5 level.
+fn waterline_bosses() -> Vec<Triangle> {
+    let mut facets = Vec::new();
+    for (xmin, xmax, ymin, ymax) in [(-19.0, -5.0, -16.0, -4.0), (7.0, 17.0, 4.0, 16.0)] {
+        let corners = [
+            p3(xmin, ymin, 0.0),
+            p3(xmax, ymin, 0.0),
+            p3(xmax, ymax, 0.0),
+            p3(xmin, ymax, 0.0),
+            p3(xmin, ymin, TOP),
+            p3(xmax, ymin, TOP),
+            p3(xmax, ymax, TOP),
+            p3(xmin, ymax, TOP),
+        ];
+        for [a, b, c, d] in [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]] {
+            facets.push(Triangle::new(corners[a], corners[b], corners[c]));
+            facets.push(Triangle::new(corners[a], corners[c], corners[d]));
+        }
+    }
+    facets
+}
+
+fn waterline_params(retract: f64) -> Finish3DParams {
+    let mut p = params(Some(retract));
+    p.pattern = FinishPattern::Waterline;
+    p.top_z = FLOOR;
+    // Keep both rings closed so the verifier sees just the inter-boss rapid.
+    p.tolerance = 0.06;
+    p
+}
+
+#[test]
+fn waterline_ring_hop_clears_the_boss_and_keeps_a_safe_retract() {
+    let facets = waterline_bosses();
+    let clearance = waterline_params(7.0).clearance_z;
+    let mut chords = Vec::new();
+    for (retract, expected_z) in [(7.0, clearance), (13.0, 13.0)] {
+        let path = waterline(&facets, &waterline_params(retract)).expect("two waterline rings");
+        assert_eq!(verify_finish(&facets, &path), Vec::new(), "retract Z{retract}");
+        let hops: Vec<_> = path
+            .moves
+            .iter()
+            .filter(|m| m.kind == MoveKind::Rapid && m.from.x < -1.0 && m.to.x > 1.0)
+            .collect();
+        assert_eq!(hops.len(), 1, "one rapid between two rings");
+        let (a, b) = (hops[0].from, hops[0].to);
+        assert_eq!((a.z, b.z), (expected_z, expected_z), "retract Z{retract}");
+        chords.push((a.x, a.y, b.x, b.y));
+    }
+    assert_eq!(chords[0], chords[1], "only the height of the link changes");
+}
+
+#[test]
+fn waterline_keeps_a_low_hop_that_clears_the_model() {
+    let mut facets = waterline_bosses();
+    let p = waterline_params(13.0);
+    let baseline = waterline(&facets, &p).expect("two waterline rings");
+    // This facet raises the model top above the retract plane without
+    // reaching the ring level or the link between the bosses.
+    facets.push(Triangle::new(p3(80.0, 80.0, 20.0), p3(90.0, 80.0, 20.0), p3(80.0, 90.0, 20.0)));
+    let path = waterline(&facets, &p).expect("two waterline rings below the distant facet");
+    assert_eq!(path.moves, baseline.moves);
 }

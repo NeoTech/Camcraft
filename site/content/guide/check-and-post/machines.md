@@ -31,9 +31,9 @@ milling coolant. The matching **Waterjet nozzle** tool kind turns no spindle
 material and thickness: cut feed, kerf, pierce time, abrasive delay,
 re-pierce time and pierce method. The machine check judges X/Y travel and
 feed limits, including arc extremes, and says which Z and spindle checks do
-not apply. No waterjet operation kind and no post for it ship yet, so a
-waterjet machine can be declared, mounted and checked but nothing can be
-posted for it.
+not apply. The [Waterjet Profile](@/guide/operations/operations-waterjet.md)
+operation cuts on it, and the generic ISO abrasive waterjet post
+(`waterjet-iso.cps`) posts it.
 
 The picker lists posts for the setup's machine kind. A loaded post also
 refuses by name any operation or move that it cannot express.

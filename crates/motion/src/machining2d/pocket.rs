@@ -13,7 +13,7 @@ use super::corner_relief::{CornerRelief, ResolvedRelief, plan_corner_reliefs};
 use super::face::GenError;
 use super::arcs::ARC_FIT_TOL;
 use super::fillet_tally::corner_arc_radius;
-use super::level_rings::ring_plan_ramped;
+use super::level_rings::ring_plan;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket_emit::{PocketWalks, emit_pocket_passes};
 use super::pocket_hsm_start::adaptive_passes_from;
@@ -304,17 +304,21 @@ pub(super) fn pocket_over_with_relief(
     };
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     notes.into_iter().for_each(|n| b.note(n));
+    // #3744: Auto round a part picks Inside or Outside of the one ring
+    // set here, so the rings, the links and the entry read one side.
+    let asked = side.start;
+    let side = &super::ring_side::resolve(center, strategy, p.tool_diameter * 0.5, side)?;
     // The HSM plan may choose where its entry stands (`pocket_hsm`).
-    let (mut passes, strategy, room, joins, ramp_starts) = match strategy {
+    let (mut passes, strategy, room, joins) = match strategy {
         PocketStrategy::Adaptive => {
             let (passes, notes, s, room, joins) = adaptive_passes_from(region, center, p, "this pocket", side)?;
             notes.into_iter().for_each(|n| b.note(n));
-            (passes, s, room, joins, Vec::new())
+            (passes, s, room, joins)
         }
         s => {
-            let (passes, notes, ramps) = ring_plan_ramped(region, center, p, s, side, true)?;
+            let (passes, notes) = ring_plan(region, center, p, s, side)?;
             notes.into_iter().for_each(|n| b.note(n));
-            (passes, s, None, Vec::new(), ramps)
+            (passes, s, None, Vec::new())
         }
     };
     // #3021: rows alone leave a cusp between row ends on every wall and
@@ -330,6 +334,18 @@ pub(super) fn pocket_over_with_relief(
         }
     }
     let hold_crossings = hold_crossings || zigzag;
+    // #3746: a start-side ring plan round a part enters from the air
+    // outside the stock box.
+    let air = super::air_entry::AirRoom::for_side(side, strategy, center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
+    // #3748: the user's Inside or Outside with a lead-in other than Arc,
+    // where the Arc entry from the air applies: used as selected, named.
+    // Not for an Adaptive op on its ring fallback: its page has no advice.
+    if air.is_some()
+        && p.strategy != PocketStrategy::Adaptive
+        && let Some(n) = super::pass_start::entry_advice_note(asked, p.entry)
+    {
+        b.note_once(&n);
+    }
     emit_pocket_passes(
         b,
         p,
@@ -344,7 +360,11 @@ pub(super) fn pocket_over_with_relief(
             holes,
             corner_reliefs,
             cleared_links: side.start != PassStart::Auto,
-            ramp_starts,
+            ring_links: match side.start {
+                PassStart::Auto => None,
+                _ => super::ring_links::for_side(side, strategy, p.tool_diameter * 0.5, None)?,
+            },
+            air,
         },
     )
 }

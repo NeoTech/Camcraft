@@ -37,7 +37,7 @@ impl PlayWorker {
     /// `spawn`, but the worker first calculates the whole removal with
     /// keyframes held to `budget` bytes (the sim crate's law).
     pub fn spawn_precalc(seed: PlaySeed, budget: usize) -> Result<Self, String> {
-        Self::start(seed, Some(budget))
+        Self::start(seed, Some(budget), None)
     }
 }
 

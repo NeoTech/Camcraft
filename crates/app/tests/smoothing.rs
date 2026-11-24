@@ -172,7 +172,7 @@ fn finish_ops_ask_their_tolerance_and_rough_ops_ask_from_their_stock() {
     // A contour that finishes asks its own tolerance; leaving stock, it roughs.
     let base = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),

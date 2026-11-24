@@ -11,6 +11,8 @@ use super::panes::{self, ribbon_plan, Cmd};
 use crate::state::{CommandKind, State};
 use camcraft_app::machine::Kind;
 use camcraft_app::operation::{OpType, Section};
+use egui::Vec2;
+use egui_kittest::{Harness, kittest::Queryable};
 
 fn sections(kind: Kind) -> Vec<Section> {
     ribbon_plan(kind, &[]).into_iter().filter_map(|g| g.section).collect()
@@ -46,4 +48,43 @@ fn the_waterjet_profile_has_its_own_glyph_and_a_leads_tab() {
     let mine = op_icon(OpType::WaterjetProfile);
     assert_ne!(mine, op_icon(OpType::PlasmaProfile), "not the plasma's glyph");
     assert!(has_section(OpType::WaterjetProfile, SEC_LEADS), "the leads live on Lead in / Lead out");
+}
+
+fn waterjet_fields(tab: usize) -> Harness<'static, State> {
+    let mut state = State::new();
+    state.op_ui.params = crate::operations::quick_params(OpType::WaterjetProfile.ordinal());
+    let camcraft_app::operation::OpParams::WaterjetProfile(params) = &mut state.op_ui.params else {
+        panic!("the waterjet draft must have waterjet parameters");
+    };
+    params.control_comp = true;
+    params.lead_in = 0.0;
+    params.tabs = Some(camcraft_app::operation::JetTabsOp { count: 2, width: 1.0, at: vec![[0.0, 0.0], [10.0, 0.0]] });
+    Harness::builder().with_size(Vec2::new(900.0, 900.0))
+        .build_ui_state(move |ui, state: &mut State| super::params_page::params_fields(ui, state, tab), state)
+}
+
+#[test]
+fn waterjet_compensation_uses_a_plain_control_label() {
+    let mut h = waterjet_fields(super::op_tabs::SEC_GEO);
+    h.run();
+    let values: Vec<_> = h.query_all_by_role(egui::accesskit::Role::ComboBox).filter_map(|node| node.value()).collect();
+    assert!(values.iter().any(|value| value == "In control"), "the selected compensation uses plain words: {values:?}");
+    assert!(values.iter().all(|value| !value.contains("G41/G42")), "{values:?}");
+}
+
+#[test]
+fn waterjet_tab_position_rows_have_unique_names() {
+    let mut h = waterjet_fields(super::op_tabs::SEC_PASSES);
+    h.run();
+    assert!(h.query_by_label("Tab 1 position").is_some());
+    assert!(h.query_by_label("Tab 2 position").is_some());
+    assert!(h.query_by_label("Tab position").is_none());
+}
+
+#[test]
+fn waterjet_zero_lead_in_names_the_part_edge_pierce() {
+    let mut h = waterjet_fields(SEC_LEADS);
+    h.run();
+    assert!(h.query_by_label_contains("zero lead-in").is_some());
+    assert!(h.query_by_label_contains("part edge").is_some());
 }

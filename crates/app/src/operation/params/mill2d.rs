@@ -85,7 +85,7 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 entry,
-                helix_radius,
+                helix_radius, blend_turns, blend_radius,
                 tilt,
                 extend_start,
                 extend_end,
@@ -119,6 +119,15 @@ impl OpParams {
                 if *extend_start != 0.0 || *extend_end != 0.0 {
                     w(h, *extend_start);
                     w(h, *extend_end);
+                }
+                // #1759: written only when ON, so every earlier slot
+                // keeps its digest.
+                if *blend_turns {
+                    h.write_u8(0xB1);
+                    if let Some(r) = blend_radius {
+                        h.write_u8(0xB4);
+                        w(h, *r);
+                    }
                 }
             }
             OpParams::TrochoidalSlot {

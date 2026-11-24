@@ -60,7 +60,7 @@ fn faced_world() -> (World, History) {
     h.execute(&world, AddTool::new(&world, TOOL, t).expect("tool"));
     let face = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 4.0,
         clearance_z: Height::fixed(20.0),
@@ -142,7 +142,7 @@ fn contour_inside(entry: Entry3D, top: f64) -> OpParams {
         tab_height: 0.0,
         entry,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     }

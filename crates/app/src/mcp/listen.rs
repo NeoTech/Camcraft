@@ -3,6 +3,9 @@
 //! handing each line to the owning (UI) thread over a channel and
 //! writing that thread's answer back to the client.
 //!
+//! The same loop serves the UI link (#3751, [`Inbox::link`]): a local
+//! socket whose first line must carry the token of its discovery file.
+//!
 //! Provenance: our own std::net + std::sync::mpsc code; the framing is
 //! the MCP stdio transport's (modelcontextprotocol.io, revision
 //! 2025-06-18: one JSON-RPC message per line), carried over a socket.
@@ -32,13 +35,17 @@
 //! newline is dropped on the same schedule as a silent one.
 
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use crate::clock::Instant;
 use std::time::Duration;
+
+use super::link::{self, Registration};
+use super::wire::{Listener, Stream};
 
 /// How often a blocked wait looks at the stop flag: the bound on how
 /// long dropping an [`Inbox`] can take.
@@ -66,6 +73,8 @@ enum End {
     Closed,
     /// It sent no complete line for the idle window.
     Idle(Duration),
+    /// Its first line was not the UI link's hello with the token (#3751).
+    Refused,
 }
 
 /// Whether a wire line may be handed to the app: JSON-RPC is always an
@@ -119,6 +128,8 @@ pub struct Inbox {
     addr: Option<SocketAddr>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
+    /// The UI link's discovery file (#3751); removed after the thread ends.
+    link: Option<Registration>,
 }
 
 impl Inbox {
@@ -148,9 +159,42 @@ impl Inbox {
         let flag = Arc::clone(&stop);
         let thread = std::thread::Builder::new()
             .name("camcraft-mcp".into())
-            .spawn(move || accept_loop(&listener, &tx, &flag, &wake, idle))?;
+            .spawn(move || accept_loop(&Listener::Tcp(listener), &tx, &flag, &wake, idle, None))?;
         tracing::info!("mcp: listening on {addr} (an idle client is dropped after {}s)", idle.as_secs());
-        Ok(Self { rx, addr: Some(addr), stop, thread: Some(thread) })
+        Ok(Self { rx, addr: Some(addr), stop, thread: Some(thread), link: None })
+    }
+
+    /// Open the UI link (#3751) in the link folder `dir`: a local socket
+    /// for `camcraft-cli --ui`, found through a discovery file and gated
+    /// by its token. The file goes when the inbox drops.
+    ///
+    /// # Errors
+    /// The folder, the bind, the file or the thread spawn failed.
+    pub fn link(dir: &Path, wake: Wake) -> std::io::Result<Self> {
+        let (listener, registration, token) = link::open(dir)?;
+        listener.set_nonblocking(true)?;
+        let (tx, rx) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&stop);
+        let thread = std::thread::Builder::new()
+            .name("camcraft-ui-link".into())
+            .spawn(move || accept_loop(&listener, &tx, &flag, &wake, IDLE_TIMEOUT, Some(&token)))?;
+        tracing::info!("ui link: {} {} (camcraft-cli --ui)", registration.entry().transport, registration.entry().address);
+        Ok(Self { rx, addr: None, stop, thread: Some(thread), link: Some(registration) })
+    }
+
+    /// The UI link's discovery entry, when this inbox is one.
+    #[must_use]
+    pub fn link_entry(&self) -> Option<&link::Entry> {
+        self.link.as_ref().map(Registration::entry)
+    }
+
+    /// Keep the discovery file's project current (`--window <project>`);
+    /// a no-op unless this inbox is a UI link and the project changed.
+    pub fn note_project(&mut self, project: Option<&Path>) {
+        if let Some(registration) = self.link.as_mut() {
+            registration.note_project(project);
+        }
     }
 
     /// An inbox with no socket: requests arrive through the returned
@@ -158,7 +202,7 @@ impl Inbox {
     #[must_use]
     pub fn channel() -> (Sender<Request>, Self) {
         let (tx, rx) = mpsc::channel();
-        (tx, Self { rx, addr: None, stop: Arc::new(AtomicBool::new(false)), thread: None })
+        (tx, Self { rx, addr: None, stop: Arc::new(AtomicBool::new(false)), thread: None, link: None })
     }
 
     /// The next waiting request, never blocking.
@@ -186,44 +230,18 @@ impl Drop for Inbox {
     }
 }
 
-/// `--mcp-port <n>` / `--mcp-port=<n>` over `CAMCRAFT_MCP_PORT`: `None`
-/// when neither asks for the server (it is off by default).
-///
-/// # Errors
-/// The flag without a value, or a value that is not a port number.
-pub fn port_from(args: &[String], env: Option<&str>) -> Result<Option<u16>, String> {
-    let flag = args.iter().enumerate().find_map(|(i, a)| {
-        if a == "--mcp-port" {
-            Some(args.get(i + 1).cloned())
-        } else {
-            a.strip_prefix("--mcp-port=").map(|v| Some(v.to_owned()))
-        }
-    });
-    let text = match flag {
-        Some(None) => return Err("--mcp-port needs a port number".into()),
-        Some(Some(v)) => v,
-        None => match env.map(str::trim).filter(|v| !v.is_empty()) {
-            Some(v) => v.to_owned(),
-            None => return Ok(None),
-        },
-    };
-    text.trim()
-        .parse::<u16>()
-        .map(Some)
-        .map_err(|_| format!("MCP port must be a number from 0 to 65535, got '{text}'"))
-}
-
-fn accept_loop(listener: &TcpListener, tx: &Sender<Request>, stop: &AtomicBool, wake: &Wake, idle: Duration) {
+fn accept_loop(listener: &Listener, tx: &Sender<Request>, stop: &AtomicBool, wake: &Wake, idle: Duration, token: Option<&str>) {
     while !stop.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((stream, peer)) => {
                 tracing::info!("mcp: client {peer} connected");
-                match serve_client(stream, tx, stop, wake, idle) {
+                match serve_client(stream, tx, stop, wake, idle, token) {
                     Ok(End::Closed) => tracing::info!("mcp: client {peer} left"),
                     Ok(End::Idle(after)) => tracing::warn!(
                         "mcp: client {peer} dropped: idle - no complete line for {:.1}s; serving the next client",
                         after.as_secs_f64()
                     ),
+                    Ok(End::Refused) => tracing::warn!("mcp: client {peer} refused: no valid UI link token"),
                     Err(e) => tracing::warn!("mcp: client {peer} dropped: {e}"),
                 }
             }
@@ -244,7 +262,11 @@ fn accept_loop(listener: &TcpListener, tx: &Sender<Request>, stop: &AtomicBool, 
 /// whichever is shorter, and takes at most [`CHUNK`] bytes, and the
 /// deadline is checked after every chunk - so a client trickling bytes
 /// with no newline cannot keep a read alive past its window.
-fn serve_client(mut stream: TcpStream, tx: &Sender<Request>, stop: &AtomicBool, wake: &Wake, idle: Duration) -> std::io::Result<End> {
+/// With a `token` (the UI link, #3751), the first complete line must be
+/// the link's hello with that token; anything else is refused and the
+/// connection closed before a line reaches the app.
+fn serve_client(mut stream: Stream, tx: &Sender<Request>, stop: &AtomicBool, wake: &Wake, idle: Duration, token: Option<&str>) -> std::io::Result<End> {
+    let mut gate = token;
     // An accepted socket may inherit the listener's non-blocking mode
     // (BSD does); reads wait, but only a POLL at a time.
     stream.set_nonblocking(false)?;
@@ -294,7 +316,7 @@ fn serve_client(mut stream: TcpStream, tx: &Sender<Request>, stop: &AtomicBool, 
         if got == 0 {
             // End of input: a last unterminated line still counts, as
             // it does on stdio.
-            if !buf.is_empty() {
+            if !buf.is_empty() && gate.is_none() {
                 let line = std::mem::take(&mut buf);
                 forward(&line, tx, &mut writer, stop, wake)?;
             }
@@ -305,6 +327,16 @@ fn serve_client(mut stream: TcpStream, tx: &Sender<Request>, stop: &AtomicBool, 
         while let Some(nl) = buf.iter().position(|b| *b == b'\n') {
             let rest = buf.split_off(nl.saturating_add(1));
             let line = std::mem::replace(&mut buf, rest);
+            if let Some(want) = gate.take() {
+                if !link::hello_matches(&line, want) {
+                    let _ = writeln!(writer, "{}", link::HELLO_REFUSED).and_then(|()| writer.flush());
+                    return Ok(End::Refused);
+                }
+                writeln!(writer, "{}", link::HELLO_OK)?;
+                writer.flush()?;
+                active = Instant::now();
+                continue;
+            }
             if !forward(&line, tx, &mut writer, stop, wake)? {
                 return Ok(End::Closed);
             }
@@ -322,7 +354,7 @@ fn serve_client(mut stream: TcpStream, tx: &Sender<Request>, stop: &AtomicBool, 
 /// Hand one line to the owning thread and write its answer. `Ok(false)`
 /// when the session cannot go on (the app is stopping or gone, or the
 /// client is not speaking JSON-RPC).
-fn forward(bytes: &[u8], tx: &Sender<Request>, writer: &mut TcpStream, stop: &AtomicBool, wake: &Wake) -> std::io::Result<bool> {
+fn forward(bytes: &[u8], tx: &Sender<Request>, writer: &mut Stream, stop: &AtomicBool, wake: &Wake) -> std::io::Result<bool> {
     if !is_json_rpc_line(bytes) {
         tracing::warn!("mcp: a client sent a line that is not JSON-RPC (an HTTP request?) - connection closed");
         let refusal = r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"not a JSON-RPC message - the connection is closed"}}"#;

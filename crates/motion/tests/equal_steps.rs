@@ -249,6 +249,7 @@ fn a_contour_cuts_the_levels_of_its_mode() {
             entry: Entry3D::Plunge,
             helix_radius: 1.0,
             blend_turns: false,
+            blend_radius: None,
             links: links(Links::PLANAR, equal),
         };
         contour(&square(0.0, 0.0, 30.0), &p).expect("contour")
@@ -259,6 +260,8 @@ fn a_contour_cuts_the_levels_of_its_mode() {
 fn a_slot_cuts_the_levels_of_its_mode() {
     two_modes("slot", |equal| {
         let p = SlotParams {
+            blend_turns: false,
+            blend_radius: None,
             links: links(Links::PLANAR, equal),
             tool_diameter: 10.0,
             width: 10.0,

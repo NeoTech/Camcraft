@@ -2,9 +2,10 @@
 // each work item (one chord against one 8^3 brick), one invocation for
 // each (x, y) column of the brick, the eight z cells in a loop. A claim
 // folds into the lattice with atomicMax on the order-preserving key, so
-// the result does not depend on the order of the items. Three entry
-// points: cs_fill writes the -4 cap floor key, cs_cut claims, cs_decode
-// turns each key into the bits of its f32 (the pack_cut layout).
+// the result does not depend on the order of the items. Four entry
+// points: cs_fill writes the -4 cap floor key, cs_encode turns an
+// earlier layer into keys (#2629), cs_cut claims, cs_decode turns each
+// key into the bits of its f32 (the pack_cut layout).
 // The math is the CPU law of cut.rs, operation for operation.
 // Provenance: the swept-solid distance laws of camcraft-sim's f32 twin
 // (#2626): capsule closed form, upright flat cylinder in the (rho, z)
@@ -57,6 +58,23 @@ fn cs_fill(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index
     if (i < params.n_tex) {
         atomicStore(&keys[i], params.floor_key);
     }
+}
+
+// #2629 (S3a): the incremental start. The buffer holds a layer (f32
+// bits, the cs_decode output); turn each into its ordered key, so the
+// cut folds onto the earlier layer instead of the floor.
+@compute @workgroup_size(64)
+fn cs_encode(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+    let i = texel(wg, li);
+    if (i >= params.n_tex) {
+        return;
+    }
+    let b = atomicLoad(&keys[i]);
+    var key = b | SIGN;
+    if ((b & SIGN) != 0u) {
+        key = ~b;
+    }
+    atomicStore(&keys[i], key);
 }
 
 @compute @workgroup_size(64)

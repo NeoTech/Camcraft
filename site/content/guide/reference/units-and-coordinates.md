@@ -60,6 +60,25 @@ program before you run it.
 - **STL** and **OBJ** carry no unit. The readers apply no scale, so their
   numbers are taken as they stand, that is as millimetres. A model
   exported in inches therefore arrives 25.4 times too small.
+- **DXF and SVG profiles** are 2D drawings that lie on the top face of a
+  setup's stock (`import_dxf` and `import_svg` over MCP, `cam.importDxf`
+  and `cam.importSvg` in scripts). A DXF states its unit in `$INSUNITS`.
+  An SVG states its size in the `width` and `height` of the `<svg>`
+  element: mm, cm, in, pt, pc or px (96 px to the inch), with the
+  `viewBox` for the drawing units. A drawing that states neither is
+  refused by name until you give the unit of one drawing unit (mm or in);
+  it is never guessed. SVG's Y axis points down, so CamCraft flips it:
+  the drawing looks as it does in Inkscape or Illustrator. Circular arcs
+  stay arcs; Beziers and other ellipses become short lines within
+  0.005 mm. Text, images, clip paths, masks and markers are skipped and
+  counted in the reply: convert text to paths in the editor before you
+  export. Fill and stroke are not read: a shape with a stroke imports as
+  its centre line, not as the outline of the stroke. To cut the outline,
+  convert the stroke to a path in the editor. A style sheet can hold
+  paint and text rules only. A file with a rule that hides, moves or
+  resizes a shape, with an animation element, or with a reference to a
+  DOCTYPE entity is refused by name: the import never cuts a shape that
+  the editor shows at a different size or does not show.
 - **Check the size after every import.** The Stock page reports the
   models' size and extents. Compare one dimension you know, for example
   a 2 in plate that should read 50.8 mm (or 2.0000 in with the document

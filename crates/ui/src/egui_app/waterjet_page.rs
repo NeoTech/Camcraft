@@ -2,7 +2,7 @@
 //! kerf, compensation, direction, open-run side and arc linearization
 //! on Geometry, the sheet's heights on Heights, the tabs on Passes, the
 //! leads on Lead in / Lead out, the cut feed and the pierce and abrasive
-//! dwell on Feeds. No torch height or THC field: a jet has none. Every
+//! dwell on Feeds. Standoff output is unavailable; posting refuses waterjet. Every
 //! value edits the page draft; Apply rides the command history
 //! (EditOperationParams, undoable).
 //!
@@ -12,7 +12,7 @@
 use super::fields::*;
 use camcraft_app::operation::{JetLead, JetSide, JetTabsOp, WaterjetOp};
 
-const COMPS: [&str; 2] = ["In computer (offset path)", "In control (G41/G42)"];
+const COMPS: [&str; 2] = ["In computer (offset path)", "In control"];
 const DIRS: [&str; 2] = ["Outer CW, holes CCW", "Reversed: outer CCW, holes CW"];
 const SIDES: [&str; 3] = ["On the centre line", "Left of travel", "Right of travel"];
 const LEADS: [&str; 2] = ["Arc", "Straight"];
@@ -82,7 +82,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         *lead = if li == 1 { JetLead::Straight } else { JetLead::Arc };
         prop_row(ui, "Lead-in length", |ui| num(ui, u, lead_in));
         prop_row(ui, "Lead-out length", |ui| num(ui, u, lead_out));
-        hint(ui, "the pierce is made in the scrap; a lead with no room is shortened, and a tight hole is pierced at its centre");
+        if *lead_in == 0.0 {
+            consequence(ui, "zero lead-in can place a pierce at the part edge on the kerf ring");
+        } else {
+            hint(ui, "the pierce is made in the scrap; a lead with no room is shortened, and a tight hole is pierced at its centre");
+        }
     }
     if tab == SEC_FEEDS {
         prop_row(ui, "Cut feed", |ui| num_feed(ui, u, feed));
@@ -107,7 +111,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<JetTabsOp>) {
     for (i, xy) in t.at.iter_mut().enumerate() {
         prop_row(ui, &format!("Tab {} X", i + 1), |ui| num(ui, u, &mut xy[0]));
         prop_row(ui, &format!("Tab {} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
-        prop_row(ui, "Tab position", |ui| {
+        prop_row(ui, &format!("Tab {} position", i + 1), |ui| {
             if ui.button(format!("Remove tab position {}", i + 1)).clicked() {
                 remove = Some(i);
             }

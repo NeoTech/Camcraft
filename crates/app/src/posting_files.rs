@@ -142,6 +142,9 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     ("Sienci AltMill 2x4", AssetFile("sienci-altmill-2x4.mch")),
     ("Sienci AltMill 4x4", AssetFile("sienci-altmill-4x4.mch")),
     ("Sienci AltMill 4x8", AssetFile("sienci-altmill-4x8.mch")),
+    // #3038: the 1000x1500 frame, the smaller of the owner's and Ooznest's travel; Estlcam control, so no post is
+    // named until #3735 (sources in docs/decisions/3038-workbee-estlcam.md).
+    ("Ooznest WorkBee 1000x1500 (Estlcam)", AssetFile("ooznest-workbee-1000x1500.mch")),
     // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF). #1433: the plain 3-axis
     // machine, and the catalog's optional A table as its own entry (no
     // published nose_to_axis, so that one refuses until a setup states it).
@@ -390,6 +393,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "tinyg-3axis.mch") => Some(include_str!("../../../assets/machines/tinyg-3axis.mch")),
         ("machines", "linuxcnc-3axis.mch") => Some(include_str!("../../../assets/machines/linuxcnc-3axis.mch")),
         ("machines", "grbl-3axis.mch") => Some(include_str!("../../../assets/machines/grbl-3axis.mch")),
+        ("machines", "ooznest-workbee-1000x1500.mch") => Some(include_str!("../../../assets/machines/ooznest-workbee-1000x1500.mch")),
         ("machines", "tormach-24r.mch") => Some(include_str!("../../../assets/machines/tormach-24r.mch")),
         ("machines", "tormach-xstech-pro.mch") => Some(include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
         ("machines", "tormach-xstech.mch") => Some(include_str!("../../../assets/machines/tormach-xstech.mch")),

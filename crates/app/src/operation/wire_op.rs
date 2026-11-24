@@ -36,6 +36,8 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         start: None,
         tabs: None,
         capture: false,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,

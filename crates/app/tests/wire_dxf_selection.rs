@@ -41,6 +41,8 @@ fn wire_op() -> WireContourOp {
         start: Some([-4.0, 5.0]),
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,
@@ -201,7 +203,21 @@ fn curved_pick_survives_but_generic_generation_refuses_and_undo_restores_the_pic
         SetOperationGeometry::new(&world, "Cut", vec![pick(&world, "other")])
             .expect("select circle"),
     );
+    // #2022: a punch reads a selected circle as a round profile. This lead
+    // from (-4, 5) to the R1 circle crosses the unselected outline.
+    let why = refusal(&world);
+    assert!(why.contains("cannot clear unselected DXF primitive"), "{why}");
+    // Other curved chains keep the straight-segment refusal of the generic path.
+    let die = WireContourOp {
+        side: WireSide::Die,
+        ..wire_op()
+    };
+    h.execute(
+        &world,
+        EditOperationParams::new(&world, "Cut", OpParams::WireContour(die)).expect("die"),
+    );
     assert!(refusal(&world).contains("contains an arc or circle"));
+    assert!(h.undo(&world));
     assert!(h.undo(&world));
     h.execute(
         &world,
@@ -224,6 +240,8 @@ fn selected_chain_requires_clear_stock_a_stated_start_and_slug_capture() {
         (
             WireContourOp {
                 capture: false,
+                both_pieces_restrained: false,
+                stock_centered_in_xy_travel: false,
                 ..wire_op()
             },
             "slug capture",

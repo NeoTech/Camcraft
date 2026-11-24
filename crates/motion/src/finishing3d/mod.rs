@@ -116,9 +116,11 @@ mod scan;
 mod shadow;
 mod support;
 mod swarf;
+mod validate;
 
 pub use params::{
     scallop_stepdown, scallop_stepover, Finish3DParams, FinishPattern, GapLink,
+    WATERLINES_OFF_NOTE,
 };
 pub use center_cut::guard as center_cut_guard;
 pub use center_cut::guard_as as center_cut_guard_as;

@@ -253,6 +253,7 @@ fn an_attached_agent_save_meets_the_window_stamp_and_hands_back_the_new_one() {
         let options = LiveOptions {
             gate: LiveGate::allow_once("save_project", args),
             selection: None,
+            read_only: false,
             doc_stamp: stamp,
         };
         let answer = answer_live_with(&world, history, Some(&path), &line, &options);

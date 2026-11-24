@@ -43,6 +43,7 @@ fn contour_op(equal: bool) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
+        blend_radius: None,
         blend_turns: false,
         tilt: None,
         chain_overrides: Vec::new(),

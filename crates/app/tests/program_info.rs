@@ -238,7 +238,7 @@ fn face_world() -> (flecs_ecs::prelude::World, History) {
     history.execute(&world, AddTool::new(&world, "EM-0600-4FL", tool).expect("catalog tool"));
     let params = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),

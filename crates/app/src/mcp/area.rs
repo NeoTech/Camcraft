@@ -149,7 +149,10 @@ pub(super) fn set_operation_area(env: &mut Env, a: &Map<String, Value>) -> Resul
     area.do_not_touch = op.area.do_not_touch;
     let cmd = EditOperationParams::with_area(&env.world, &key, op.params, area).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);
-    super::pick::geometry_view(env, &key)
+    let mut out = super::pick::geometry_view(env, &key)?;
+    // #3631: the containment moves the pocket's region: its fit is said again.
+    super::edit::clearance_warning(env, &key, &mut out);
+    Ok(out)
 }
 
 pub(super) fn s_set_area() -> Value {

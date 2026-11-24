@@ -32,6 +32,7 @@ fn p(blend: bool, staged: bool) -> FaceParams {
         plunge_feed: 100.0,
         climb: true,
         blend_turns: blend,
+        blend_radius: None,
         holes: FaceHoles::default(),
         stock_top: None,
     }
@@ -94,4 +95,21 @@ fn a_keepout_over_every_row_refuses_by_name() {
     let err = face_over_kept(&region, &p(false, true), 0.0, None, Some(&keep)).unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("plate face #1") && msg.contains("Do not touch"), "{msg}");
+}
+
+/// #3526: a keep-out that grows at the lower levels (an item wider under
+/// the face) blocks the level at Cut Z. The face would stop one level
+/// above Cut Z: refused by name, with the depth that it reaches.
+#[test]
+fn a_keepout_that_blocks_the_lower_levels_refuses_with_the_depth_reached() {
+    let region = sq((0.0, 0.0), 30.0, 20.0);
+    let wider_below = |z: f64| -> Result<Region, GenError> {
+        Ok(if z < -1.5 { sq((0.0, 0.0), 100.0, 100.0) } else { sq((0.0, 0.0), 6.0, 6.0) })
+    };
+    let keep = FaceKeep { names: "flange face #7".into(), at: &wider_below };
+    let err = face_over_kept(&region, &p(false, true), 0.0, None, Some(&keep)).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("flange face #7") && msg.contains("Do not touch"), "names the item: {msg}");
+    assert!(msg.contains("Cut Z -2.000"), "names Cut Z: {msg}");
+    assert!(msg.contains("Z -1.000"), "names the depth reached: {msg}");
 }

@@ -371,7 +371,9 @@ pub const ROWS: &[Row] = &[
             10,
             0.005,
         ),
-        import: "solidcore refuses: #117 at read: pcurves failed on",
+        // #3767: solidcore fa67b3f5 builds the pcurves; its vertex check
+        // refuses the solid (was "#117 at read: pcurves failed on").
+        import: "solidcore refuses: #117 at check: a vertex sits",
         mesh: "no exact solid to judge against",
     },
 ];

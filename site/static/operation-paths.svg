@@ -277,4 +277,16 @@
 <rect width="600" height="240" fill="white"/>
 <text x="20" y="28">V-Carve - top view</text><rect class="stock" x="80" y="65" width="330" height="115" rx="8"/><path class="center" d="M130 80 H360 L300 165 H190 Z"/><path class="cut" d="M130 80 L210 115 H280 L360 80 M190 165 L210 115 M300 165 L280 115"/>
 <text x="20" y="225">Tip on the centre line, deeper where wider</text></g>
+<view id="WaterjetProfile" viewBox="0 11040 600 240"/>
+<g id="WaterjetProfile-diagram" transform="translate(0 11040)" role="img" aria-labelledby="WaterjetProfile-title WaterjetProfile-desc">
+<title id="WaterjetProfile-title">Waterjet Profile - top view</title><desc id="WaterjetProfile-desc">The jet pierces in the scrap, comes in on an arc lead and cuts through the sheet around the part outline with the kerf on the waste side.</desc>
+<rect width="600" height="240" fill="white"/>
+<text x="20" y="28">Waterjet Profile - top view</text><rect class="stock" x="80" y="65" width="330" height="115" rx="8"/><path class="cut" d="M60 100 A25 25 0 0 1 75 125 M75 125 V60 H415 V185 H75 V125"/><ellipse class="cut" cx="60" cy="100" rx="4" ry="4"/>
+<text x="20" y="225">Pierce, arc lead-in, then through-cut outside the kerf</text></g>
+<view id="MultiAxisDeburr" viewBox="0 11280 600 240"/>
+<g id="MultiAxisDeburr-diagram" transform="translate(0 11280)" role="img" aria-labelledby="MultiAxisDeburr-title MultiAxisDeburr-desc">
+<title id="MultiAxisDeburr-title">Multi-Axis Deburr - section</title><desc id="MultiAxisDeburr-desc">The cone tool tilts onto the edge so that one flank lies on the chamfer plane while it follows the exposed edge.</desc>
+<rect width="600" height="240" fill="white"/>
+<text x="20" y="28">Multi-Axis Deburr - section</text><path class="stock" d="M120 190 V95 H300 L330 125 V190 Z"/><path class="axis" d="M380 45 L330 95"/><path class="cut" d="M285 85 L345 145"/><path class="center" d="M300 95 L330 125"/>
+<text x="20" y="225">Tool axis tilted onto the edge break</text></g>
 </svg>

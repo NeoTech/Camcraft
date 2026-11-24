@@ -27,7 +27,11 @@ impl OpParams {
     /// The corner-arc option's door (#1733), for the kinds that carry it.
     fn arc_turn_refusal(&self) -> Option<&'static str> {
         let (on, radius, trochoidal) = match self {
+            // #1759: Face, 2D Contour and Slot carry the option too.
             OpParams::Pocket { blend_turns, blend_radius, .. }
+            | OpParams::Face { blend_turns, blend_radius, .. }
+            | OpParams::Contour { blend_turns, blend_radius, .. }
+            | OpParams::Slot { blend_turns, blend_radius, .. }
             | OpParams::Offset2D { blend_turns, blend_radius, .. } => (*blend_turns, *blend_radius, false),
             OpParams::Adaptive2D { blend_turns, blend_radius, method, .. } => {
                 (*blend_turns, *blend_radius, *method == crate::machining2d::AdaptiveMethod::Trochoidal)
@@ -73,6 +77,10 @@ impl OpParams {
         // than ignored (`operation::pick_kinds`).
         if let Some(why) = self.pick_refusal() {
             return Some(why);
+        }
+        // #3745: the approach distance outside the stock, by name.
+        if let Some(why) = self.links().and_then(|l| l.approach.approach_distance_refusal()) {
+            return Some(why.into());
         }
         match self {
             OpParams::Finish3D { direction_angle, .. } => {

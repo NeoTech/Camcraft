@@ -40,7 +40,7 @@ fn fixture() -> World {
     history.execute(&world, cmd.expect("box stock"));
     let tool = catalog().into_iter().find(|(n, _)| *n == "EM-0400-2FL").map(|(_, t)| t).expect("catalog entry");
     history.execute(&world, AddTool::new(&world, "EM-0400-2FL", tool).expect("catalog tool"));
-    let params = OpParams::Face { holes: Default::default(), blend_turns: false,
+    let params = OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -340,7 +340,7 @@ fn cam_post_with_per_op_writes_standalone_files() {
     history.execute(&world, stock.expect("Setup2 stock"));
     let params = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),

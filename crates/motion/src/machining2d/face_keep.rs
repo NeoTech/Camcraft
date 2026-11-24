@@ -56,9 +56,19 @@ pub(super) struct Tally {
     pub levels: usize,
     blocked: usize,
     clipped: bool,
+    /// The lowest level that is cut (#3526): the depth the face reaches.
+    reached: Option<f64>,
+    /// The lowest level asked for: Cut Z.
+    floor: Option<f64>,
 }
 
 impl Tally {
+    /// Count level `z` as cut.
+    fn cut(&mut self, z: f64) {
+        self.levels += 1;
+        self.reached = Some(self.reached.map_or(z, |r| r.min(z)));
+    }
+
     /// The notes of the keep-out, or the refusal when no level is cut.
     pub fn finish(&self, keep: Option<&FaceKeep<'_>>) -> Result<Vec<String>, GenError> {
         let Some(k) = keep else {
@@ -70,17 +80,23 @@ impl Tally {
                 k.names
             )));
         }
+        // #3526: a blocked level leaves the whole face above Cut Z. No
+        // path state says "incomplete", so the cut is refused by name,
+        // with the depth that the face would reach.
+        if self.blocked > 0 {
+            // Both are set once a level is cut (`levels > 0` above).
+            let z = |v: Option<f64>| v.map_or_else(|| "?".to_owned(), |v| format!("{v:.3}"));
+            let (reached, floor) = (z(self.reached), z(self.floor));
+            return Err(GenError::Invalid(format!(
+                "cannot face down to Cut Z {floor} clear of protected 'Do not touch' {}: {} lower facing level(s) have no safe room, so the face would stop at Z {reached} - set Cut Z to {reached}, use a smaller clearance, or remove the item",
+                k.names, self.blocked
+            )));
+        }
         let mut notes = Vec::new();
         if self.clipped {
             notes.push(format!(
                 "Do not touch ({}) cut the facing rows short beside the protected items; the material there stays unfaced",
                 k.names
-            ));
-        }
-        if self.blocked > 0 {
-            notes.push(format!(
-                "Do not touch ({}) blocked {} facing level(s); the remaining levels stayed clear",
-                k.names, self.blocked
             ));
         }
         Ok(notes)
@@ -103,8 +119,9 @@ pub(super) fn level<'p>(
         Some(k) => (k.at)(z)?,
         None => Region::empty(),
     };
+    tally.floor = Some(tally.floor.map_or(z, |f| f.min(z)));
     if keepout.is_empty() {
-        tally.levels += 1;
+        tally.cut(z);
         return Ok(Some(Level { pieces: Cow::Borrowed(pieces), start: entry, keepout }));
     }
     let cut: Vec<Vec<(f64, f64)>> = rows
@@ -122,6 +139,6 @@ pub(super) fn level<'p>(
     if cut.as_slice() != pieces {
         tally.clipped = true;
     }
-    tally.levels += 1;
+    tally.cut(z);
     Ok(Some(Level { pieces: Cow::Owned(cut), start, keepout }))
 }

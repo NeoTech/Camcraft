@@ -35,6 +35,11 @@ pub struct ApproachDto {
     pub arc_sweep: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plunge_height: Option<f64>,
+    /// The approach distance outside the stock (#3745), mm: written only
+    /// when it differs from the default; absent is the default, every
+    /// earlier file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approach_distance: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ramp_feed: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -122,6 +127,7 @@ pub fn approach_to_dto(a: &Approach) -> Option<ApproachDto> {
         arc_radius: num(a.arc_radius, d.arc_radius),
         arc_sweep: num(a.arc_sweep, d.arc_sweep),
         plunge_height: num(a.plunge_height, d.plunge_height),
+        approach_distance: num(a.approach_distance, d.approach_distance),
         ramp_feed: num(a.ramp_feed, d.ramp_feed),
         plunge_feed: num(a.plunge_feed, d.plunge_feed),
         lead_feed_pct: num(a.lead_feed_pct, d.lead_feed_pct),
@@ -163,6 +169,7 @@ pub fn approach_from_dto(d: Option<&ApproachDto>) -> Approach {
         arc_radius: d.arc_radius.unwrap_or(a.arc_radius),
         arc_sweep: d.arc_sweep.unwrap_or(a.arc_sweep),
         plunge_height: d.plunge_height.unwrap_or(a.plunge_height),
+        approach_distance: d.approach_distance.unwrap_or(a.approach_distance),
         ramp_feed: d.ramp_feed.unwrap_or(a.ramp_feed),
         plunge_feed: d.plunge_feed.unwrap_or(a.plunge_feed),
         lead_feed_pct: d.lead_feed_pct.unwrap_or(a.lead_feed_pct),

@@ -88,7 +88,7 @@ fn doc(len: f64) -> (World, History) {
         plunge_feed: 4.0 * IN,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt: Some(Tilt { basis_version: 1, a_deg: 90.0, b_deg: 0.0, origin: [0.0; 3] }),
         extend_start: 0.0,

@@ -4,7 +4,9 @@
 //! machining practice (cut from the open side so each pass engages one
 //! stepover); no vendor material consulted.
 
+use crate::entry::Entry3D;
 use crate::geo2d::Region;
+use crate::verify::AdvisedEntry;
 
 use super::pocket_hsm::RINGS_FALLBACK;
 
@@ -37,6 +39,43 @@ pub const PASS_START_ZIGZAG_NOTE: &str =
 /// machining walks its own rest areas, not the pocket's rings.
 pub const PASS_START_REST_NOTE: &str =
     "Pass starts at: rest machining keeps its own order of the rest areas; the choice is not used";
+
+/// #3748: the advice note of a start-side pass whose user selected a
+/// lead-in other than Arc - the selected type, the recommended Arc and the
+/// reason, in one sentence ([`crate::verify::entry_advice`]).
+/// `None` for Arc and for Auto. The ladder writes it only where the Arc
+/// entry from the air applies (`air_entry::AirRoom`); the operation turns
+/// it into one `Warning::EntryNotRecommended`, and the Lead in page shows
+/// the same text next to the selector.
+#[must_use]
+pub fn entry_advice(start: PassStart, entry: Entry3D) -> Option<&'static str> {
+    let (kind, inside) = advised(start, entry)?;
+    Some(crate::verify::entry_advice(kind, inside))
+}
+
+/// The ladder's note of [`entry_advice`]: an `entry:` note, so that the op
+/// page does not show it as a "Pass start" warning line next to the one
+/// `Warning::EntryNotRecommended` that it posts.
+#[must_use]
+pub fn entry_advice_note(start: PassStart, entry: Entry3D) -> Option<String> {
+    entry_advice(start, entry).map(|a| format!("entry: {a}"))
+}
+
+/// The selected type and the side that [`entry_advice`] names.
+#[must_use]
+pub fn advised(start: PassStart, entry: Entry3D) -> Option<(AdvisedEntry, bool)> {
+    let kind = match entry {
+        Entry3D::Plunge => AdvisedEntry::Plunge,
+        Entry3D::Ramp => AdvisedEntry::Ramp,
+        Entry3D::Helix => AdvisedEntry::Helix,
+        Entry3D::Arc => return None,
+    };
+    match start {
+        PassStart::Inside => Some((kind, true)),
+        PassStart::Outside => Some((kind, false)),
+        PassStart::Auto => None,
+    }
+}
 
 impl PassStart {
     /// Every value, in the order the page lists them.
@@ -121,26 +160,14 @@ impl StartSide {
         )
     }
 
-    /// The warning when a pass after the first ring starts at a dead end
-    /// at `(x, y)` (no lead-in from cut stock) and is too short for the
-    /// ramp along it (#3567): the area is cut in the Auto order instead,
-    /// never entered by a plunge into that stock. It carries
-    /// [`RINGS_FALLBACK`], as [`StartSide::fallback_note`] does.
-    #[must_use]
-    pub fn ramp_fallback_note(&self, x: f64, y: f64) -> String {
-        format!(
-            "{PASS_START_NOTE} {}: a pass at X {x:.3}, Y {y:.3} starts in uncut stock and is too short for a ramp entry along it{RINGS_FALLBACK}this area in the Auto order instead",
-            self.start.label()
-        )
-    }
-
     /// The warning for cuts after the first ring that still take the
-    /// full tool width (#3316): `n` of them, the first at `(x, y)`.
+    /// full tool width (#3316), by the flanks law (#3788): `n` of them,
+    /// the first at `(x, y)`.
     #[must_use]
     pub fn narrow_note(&self, n: usize, x: f64, y: f64) -> String {
         format!(
             "{PASS_START_NOTE} {}: {n} cut(s) take the full tool width where the area is narrower than the \
-             tool plus one stepover, or where a wall hides the start side; the first is at X {x:.3}, Y {y:.3}",
+             tool plus one stepover, where a wall hides the start side, or where two rings meet at a corner; the first is at X {x:.3}, Y {y:.3}",
             self.start.label()
         )
     }

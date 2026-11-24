@@ -118,6 +118,7 @@ fn the_recorded_q02_mould_generates_a_3d_flat_finish() {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        waterlines: true,
     };
     history.execute(
         &world,

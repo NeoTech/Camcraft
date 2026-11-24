@@ -68,7 +68,7 @@ time. The current, authoritative tool list is whatever the client's
 |---|---|
 | Document and history | `open_project`, `save_project`, `get_job`, `get_selection`, `set_units`, `undo`, `redo` |
 | Models | `import_model`, `move_model`, `repair_model`, `set_part_axes`, `lay_part_on_points`, `lay_part_on_face`, `align_part_cylinder`, `delete_model`, `set_model_link`, `vouch_model_fidelity` |
-| DXF profiles | `import_dxf`, `move_dxf_profile` |
+| DXF and SVG profiles | `import_dxf`, `import_svg`, `move_dxf_profile` |
 | Engraving text | `insert_text` |
 | Outline-font text (closed shapes) | `insert_outline_text` |
 | Setups and work offsets | `add_setup`, `activate_setup`, `set_wcs`, `set_wcs_from_features`, `set_wcs_circle_centre`, `place_setup_origin`, `set_work_offset`, `load_machine`, `set_workholding_max_rpm`, `set_sheet_job`, `set_stock`, `fit_stock`, `set_raw_stock_only`, `set_operation_setup`, `delete_setup`, `set_program`, `set_setup_post`, `set_wcs_flip`, `edit_machine`, `get_rotary_stack`, `set_setup_nose_to_axis` |
@@ -79,6 +79,7 @@ time. The current, authoritative tool list is whatever the client's
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
 | Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
+| Agie nominal inspection | `create_agie_inspection`, `export_agie_inspection` |
 
 `list_operation_types` returns each operation kind's parameters, their
 types and defaults; `list_tool_catalog` and `list_holder_library` return the
@@ -123,6 +124,16 @@ option fields. The options include `skip_stops`, `per_op`, `threading`
 `detect_holes` reports holes it does not create in its `skipped` field.
 Read that field before assuming that every detected hole became an
 operation. A refused Bore is not silently replaced by Drill.
+
+### Agie nominal inspection
+
+Mount the Classic 2S template on the active setup. Place a DXF on the top of a 10 mm reference box and set the work Z origin at its top. Use `list_features` to identify the closed chain. Pass its ID, drawing name, operation name, 0.25 mm wire tool and the centre of the 3 mm hole to `create_agie_inspection`. The start coordinates are world XY in millimetres. The operation has no machining condition and can be saved and reopened.
+
+Call `export_agie_inspection` with the saved operation name and a new directory. The last part of the directory name supplies the uppercase DOS file stem. The CLI equivalent is `camcraft-cli export-agie-inspection <project.camproj> <operation> <new-directory>`. The desktop creation form is under **Setup → Post → Agie nominal inspection**. Select the saved operation to use **Export Agie inspection setup**.
+
+Import the ISO geometry and keep its SBR beside the SBL during script import. Create a new piece and confirm zero working steps. The native piece has zero length and width because physical stock XY is unknown. The contour uses the project work datum. Physical stock Z and travel without stated machine limits remain unverified. The work selects the controller’s perpendicular lead default. Holding, actual entry and exit paths, and effective erosion settings remain unverified.
+
+On the offline Classic 2S, the formal check of the work reports undefined technology (`Technologie: te definiëren`). Checking the whole piece also reports that its dimensions are too small (`Dimensions X, Y, Z: Waarde te laag`), because the inspection piece records zero for its unknown length and width.
 
 ### Tool libraries and machine tool tables
 

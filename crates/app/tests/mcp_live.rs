@@ -2,7 +2,11 @@
 //! History the caller owns (the GUI's), so undo there reverts an agent's
 //! step; the loopback listener that carries it; and the CLI's flag.
 //!
-//! Gate map (M4.4): covers app::mcp (live, listen, bridge).
+//! Gate map (M4.4): covers app::mcp (live, listen, bridge, link,
+//! link_client) and app::cli_ui (the `--ui` lane, #3751).
+
+#[path = "mcp_live/ui_link.rs"]
+mod ui_link;
 
 use camcraft_app::commands::History;
 use camcraft_app::mcp::provider::{FallbackMode, parse_prompt};
@@ -554,6 +558,7 @@ fn get_selection_reads_live_ui_selection_context_and_prompt_json_treats_it_read_
             }],
             active_operation: Some("Face1".to_owned()),
         }),
+        read_only: false,
         doc_stamp: None,
     };
     let answer = answer_live_with(
@@ -606,6 +611,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
             auto_approve_non_critical: true,
         },
         selection: None,
+        read_only: false,
         doc_stamp: None,
     };
     for (idx, (tool, args)) in [
@@ -640,6 +646,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
     let mismatched = LiveOptions {
         gate: LiveGate::allow_once("post", json!({ "output": nc_path.display().to_string() })),
         selection: None,
+        read_only: false,
         doc_stamp: None,
     };
     let ans = answer_live_with(
@@ -670,6 +677,7 @@ fn live_gate_allows_explicitly_approved_calls_and_never_auto_approves_post_or_ma
         let opts = LiveOptions {
             gate: LiveGate::allow_once(tool, args.clone()),
             selection: None,
+            read_only: false,
             doc_stamp: None,
         };
         let ans = answer_live_with(

@@ -1,3 +1,174 @@
+# CamCraft 0.26.0 (clean-room implementation)
+
+Released 2026-11-23.
+
+## Breaking
+This release has breaking changes. **The project file format goes from
+version 75 to 78.** 0.26.0 opens the files of 0.25.0 and older: a file of
+an older version steps up and keeps its content. 0.25.0 and older builds
+refuse a file that 0.26.0 saves.
+- **v76: 3D Deburr width is the chamfer chord** (#1890, PR #3220). Deburr
+  has contact chord width and depth sizing and multiple passes. An older
+  project width is converted on load.
+- **v77: setups keep their creation order** (#3447, PR #3485). A setup
+  that is added later is listed and posted after the earlier setups,
+  whatever its name.
+- **v78: stored tool reservations** (#2604, PR #3284). Cutting tools skip
+  reserved probe pockets and cannot use reserved tool names.
+- **Part-off puts the whole kerf on the bar side** (#3452, PR #3472).
+  Before, the kerf was centred on the parting plane and cut half a blade
+  width into the part. A part-off saved before this change must be
+  generated again before it posts.
+
+A minor release headlined by **new operations** (V-Carve, Waterjet Profile,
+Multi-Axis Deburr), **rest machining from the previous operations** on 2D
+Pocket and 2D Adaptive, **"Pass starts at" (Auto / Inside / Outside)** on
+the clearing kinds, **"Do not touch" on Face, Trace, Engrave, 2D Adaptive
+and 3D Finish**, **new posts** (Mach3, RichAuto DSP A11, Siemens Sinumerik
+810M, G-EDM wire, generic ISO waterjet, native Agie Classic Cut 2S job),
+**saved cut recipes**, **typed text as outline shapes**, and **a headless
+GPU compute crate**. 184 pull requests merged since 0.25.0 (36 features,
+97 fixes, 3 performance changes, 1 refactor, docs, tests and process).
+
+## Upgrade notes
+- Save a project in 0.26.0 only when each person who opens it also has
+  0.26.0. Older builds refuse format 78 (see "Breaking").
+- Generate each part-off operation again before you post it (#3452).
+- A STEP file that states no length unit is no longer read as millimetres.
+  The desktop app asks for mm or inches. MCP and scripts take `units`
+  (PR #3166).
+- The native wire EDM post has the new name "Native wire EDM job files".
+  The old name still selects the post (#3537, PR #3598).
+- Saving a project no longer writes over changes that another program saved
+  to the same file, and a failed write keeps the old file (#3608, #3509).
+
+## Changes to posted G-code
+These change the program that an existing project posts, or stop a post that
+went through before.
+- **New posts:** Mach3 Mill (#2482), RichAuto DSP A11 routers (`.mmg`),
+  Siemens Sinumerik 810M with the EMCO VMC-200 machine (#2888), G-EDM 2-axis
+  wire EDM, a generic ISO abrasive-waterjet post, and a native Agie Classic
+  Cut 2S job (#2945).
+- **Tap feeds:** the Haas post writes each feed with its decimals and a
+  decimal point, so a G84 tap feed gives the exact pitch (#3681). Mach4
+  keeps the G84 tap feed precision and refuses a pitch error above 0.01
+  percent (#3701).
+- **Fanuc options** (off by default): rigid tap M29 before G84 (#2603), AI
+  contour control G05.1 (#2603), and a Manual Guide i blank block (#2769).
+- **Rotaries after a tilted operation:** the Fanuc and Doosan DNM posts
+  return the rotaries to zero before the next operation. A post script that
+  does not declare `uprightReturn = true` is refused by name in that case.
+  A leaning five-axis path posts A0 B0 on its opening move (#3300).
+- **Arcs:** a post never writes an arc whose written end is its start, or
+  whose start and end have the same angle about the centre. It writes a
+  straight move (#3474).
+- The grblHAL, Grbl 1.1 and TinyG posts write no tool change between
+  operations that keep the same tool (#3445).
+- The Tormach PathPilot mill post reads the operation's coolant.
+- Toolpath changes: entry ramps on later 2D Offset passes, Circular ring
+  links over clearance (#2898), Slot round ends cut to size (#2906), Rotary
+  Parallel cuts the full turn of a bar, 2D Contour tab levels, and 3D
+  Finish hops that stay at the pass height.
+
+## Highlights
+- V-Carve operation along the medial axis (#1443).
+- Waterjet Profile operation on a shared 2D sheet kernel, with sheet cut
+  order and material release checks (#2159).
+- Multi-Axis Deburr with holder tilt-away.
+- 2D Pocket and 2D Adaptive rest machining from the previous operations.
+- "Pass starts at" on 2D Offset, 2D Pocket, 2D Adaptive, Circular, Bore,
+  3D Pocket and 3D Finish.
+- "Do not touch" on Face, Trace, Engrave, 2D Adaptive and 3D Finish.
+- Saved cut recipes (MCP `save_cut_recipe`, `list_cut_recipes`,
+  `apply_cut_recipe`).
+- Typed text in a TrueType outline font as closed shapes
+  (`insert_outline_text`), and the `cam.insertText` script verb.
+- CL toolpath transforms: translate, XY turn, A/B turn, vertical mirror.
+- The simulation steps to the next or previous operation (Page Up /
+  Page Down).
+- Cutting data for wood, MDF, plywood, acrylic and HDPE; a router machine
+  kind; the Ooznest WorkBee 1000x1500 (Estlcam) machine.
+- The browser build loads machine and post files from the user's disk.
+- macOS packages can be signed and notarized.
+- The new `camcraft-gpu` crate and a GPU stock removal kernel (not yet
+  used by the viewport, see #2629).
+
+## Not exercised on a real control
+The pull requests record no run on a real control for these changes. The
+test goldens are regression records. Check the first program on the machine
+before you cut.
+- The Mach3, RichAuto DSP A11, Sinumerik 810M, G-EDM and waterjet posts.
+- The native Agie Classic Cut 2S job.
+- The Fanuc rigid tap, AI contour control and Manual Guide i blank options.
+- The Haas and Mach4 tap feed decimals (#3681, #3701).
+
+## Known issues
+The cut line is 2026-11-23 19:22 UTC. These `P1` and `P2` issues are open
+and are not in this cut. Their fixes ship in the next minor.
+- #3699 (P1): Mill posts fanuc, doosan-dnm, mazak, sinumerik, tormach,
+  linuxcnc: the G84 tap feed is rounded to a whole mm/min.
+- #3339 (P2): Start and exit points: move the picks to one operation-level
+  project key.
+- #3336 (P2): Performance: the stock simulation is very slow - it runs on
+  the CPU, the GPU shader path is not built.
+- #3334 (P2): Start and exit points: Plasma Profile and the future waterjet
+  kinds (pierce point and cancel point).
+- #3333 (P2): Start and exit points: Sinker Burn and Sinker Side Burn
+  (start and end of the orbit and the side move).
+- #3332 (P2): Start and exit points: Wire Contour (threading point into the
+  shared pick, exit on open runs).
+- #3331 (P2): Start and exit points: turning kinds (start in the Z-X plane).
+- #3330 (P2): Start and exit points: multi-axis kinds (5-axis, swarf,
+  rotary, flow, multi-axis rough and contour).
+- #3329 (P2): Start and exit points: 3D kinds (3D Pocket, 3D Finish,
+  Deburr).
+- #3328 (P2): Start and exit points: drilling order (Drill, Bore, Thread
+  mill - first hole and last hole).
+- #3327 (P2): Start and exit points: 2D Adaptive (entry of the first pass,
+  end of the last pass).
+- #3326 (P2): Start and exit points: Face raster (first row corner, last
+  row end).
+- #3325 (P2): Start and exit points: 2D ring and chain kinds (Pocket,
+  Offset, Circular, Slot, Trochoidal slot, Trace, Engrave, Chamfer).
+- #2629 (P2): GPU stock sim S3: viewport playback cuts on the GPU, with CPU
+  fallback.
+- #1473 (P2): Start and exit points: exit points, viewport pick, and the
+  cases the first contour slice refuses.
+- #1448 (P2): Operations: user-set start and exit points, path regenerated
+  to them.
+
+## Process changes
+`PROCESS_VERSION` went from 122 to 145 (pinned issue #681):
+- 123, 124: MCP skill rows for router materials and the Waterjet Profile
+  workflow.
+- 125, 128: `release.yml` inputs `site_only` and `app_run_id`.
+- 126: catalog cases can expect a refusal.
+- 127: the gate names how a test executable stopped.
+- 129: `cut.yml` runs on the `camcraft-cut` runner label.
+- 130: `merge-ready` and `needs-rework` are never on the same PR.
+- 131: `gate heavy --covers` and the wave form of heavy lanes.
+- 132: the gate stall watchdog and the rule "Runner stops".
+- 133: the gate knows the new crate `camcraft-gpu`.
+- 134: the post-merge batch step stops at 75 minutes.
+- 135: targeted tests at review; the full heavy lanes at the cut.
+- 136, 138, 139, 140: MCP skill rows for Wire Contour, the native wire EDM
+  post name, `insert_text`, `pass_start` and 2D Adaptive rest.
+- 137: the quick gate selects the example catalog suites.
+- 141, 142: directory suites in the gate; a failed build stops the quick
+  plan; submodule test selection.
+- 143: new tests join a directory suite.
+- 144: a review finding does not make a ready PR a draft again.
+- 145: the quick gate runs the whole suite for a trait impl or scoped `pub`
+  item.
+- PROCESS_VERSION bump for #3737 follows after the tag.
+
+## Pixel snapshots
+The pixel-snapshot lanes were not run for this cut, by the maintainer's
+standing decision. The Windows arms of the per-OS pinned readings were not
+run either. The structural UI tests assert what the goldens guard.
+
+---
+
 # CamCraft 0.25.0 (clean-room implementation)
 
 Released 2026-11-22.

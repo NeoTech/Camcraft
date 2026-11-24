@@ -341,7 +341,7 @@ fn a_retract_into_an_overhang_of_the_part_is_convicted_on_the_lift_and_never_pos
             assert_eq!(gouges(&warns), 0, "{kind:?} rotated {rotated}: the mark itself is legal: {warns:?}");
             for at in lifts {
                 assert!(
-                    warns.contains(&Warning::RapidInStock { at }),
+                    warns.contains(&Warning::RapidInPart { at }),
                     "{kind:?} rotated {rotated}: the retract (move {at}) into the overhang is not convicted: {warns:?}"
                 );
             }

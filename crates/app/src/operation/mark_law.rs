@@ -138,6 +138,10 @@ pub fn budget_of(world: &flecs_ecs::prelude::World, op: &Operation, cutter_r: f6
 #[must_use]
 pub fn target_facets(world: &flecs_ecs::prelude::World, op: &Operation) -> Option<Vec<Triangle>> {
     let setup = op.setup.as_deref();
+    if !crate::sketch_model::source_profiles(world, &op.src).is_empty() {
+        // Like a stock-source mark, a placed sketch can mark the setup's parts.
+        return None;
+    }
     let stock_name = crate::setup::stock_entity_name(world, setup);
     let names: Vec<&str> = match &op.src {
         super::SrcRef::Stock => return None,
@@ -215,6 +219,22 @@ pub(super) fn mark_into(
     excess: f64,
     file_tolerance: bool,
 ) -> Marked {
+    mark_surface_into(warns, path, facets, cutter, budget, excess, file_tolerance, true)
+}
+
+/// Run the same physical checks on the marked part or stock. The stack warning
+/// identifies the solid it struck, including when both solids are present.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn mark_surface_into(
+    warns: &mut Vec<Warning>,
+    path: &Toolpath,
+    facets: &[Triangle],
+    cutter: &verify::Cutter,
+    budget: f64,
+    excess: f64,
+    file_tolerance: bool,
+    part: bool,
+) -> Marked {
     let law = verify::SolidLaw {
         step: STEP,
         // #864: less a coarse model's excess, while that is honest.
@@ -234,7 +254,10 @@ pub(super) fn mark_into(
     // Shank, holder and rapids against the part as it stands.
     let stack = verify::stack_hits(path, facets, cutter, &law);
     let found = Marked { deep: deep.len(), through: through.len(), stack: stack.len() };
-    for w in deep.into_iter().chain(through).chain(stack) {
+    for mut w in deep.into_iter().chain(through).chain(stack) {
+        if let Warning::ShankHit { part: struck_part, .. } = &mut w {
+            *struck_part = part;
+        }
         if !warns.contains(&w) {
             warns.push(w);
         }
@@ -253,6 +276,24 @@ pub(super) fn notes(kind: &str, found: Marked, budget: f64, unit: Unit) -> Vec<S
     }
     if found.through > 0 {
         out.push(through_note(kind, unit));
+    }
+    out
+}
+
+/// A mark on the stock measures depth and the remaining floor against the stock itself.
+pub(super) fn stock_notes(kind: &str, found: Marked, budget: f64, unit: Unit) -> Vec<String> {
+    let mut out = Vec::new();
+    if found.deep > 0 {
+        out.push(format!(
+            "{kind} cuts deeper than a mark on the stock. The cutter exceeds the mark budget of {} {} below the stock surface. Raise the bottom of the mark.",
+            units::len(budget, unit, 3), unit.suffix()
+        ));
+    }
+    if found.through > 0 {
+        out.push(format!(
+            "{kind} cuts through the stock or leaves less than {} {} on its underside. Raise the bottom of the mark.",
+            units::len(MARK_FLOOR, unit, 3), unit.suffix()
+        ));
     }
     out
 }

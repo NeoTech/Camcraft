@@ -105,6 +105,7 @@ fn face_posted(rig: Rig, a_deg: f64, b_deg: f64, over: f64, post: Option<PostRef
         holes: Default::default(),
         tilt: Some(Tilt { basis_version: 1, a_deg, b_deg, origin: [0.0, 0.0, ORIGIN_Z] }),
         blend_turns: false,
+        blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(ORIGIN_Z + over),
         cut_z: Height::fixed(19.5),

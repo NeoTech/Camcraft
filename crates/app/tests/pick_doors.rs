@@ -103,7 +103,7 @@ fn facing() -> OpParams {
         feed: 800.0,
         plunge_feed: 200.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
     }
 }
 

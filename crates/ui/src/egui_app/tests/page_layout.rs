@@ -13,6 +13,8 @@
 //!   `structural::tool_cutter_params_structure`
 //! - machine editor window: `structural::wire_machine_editor_structure`
 //! - G-code window: `gcode_viewer`
+//! - tool library window (#3892, was `layout_page_tool_library`):
+//!   `page_layout_tool_library::layout_window_tool_library`
 //! - dock panes: `layout`
 //!
 //! Provenance: our own page law over the egui_kittest AccessKit tree; no
@@ -185,13 +187,6 @@ fn layout_page_model() {
     let _g = snapshot_guard();
     let h = page(UiTarget::Model("Block".into()));
     assert_page_layout(&h, "Model", &["Model: Block", "STEP facet budget (next import)", "Turn X+", "Turn Y-", "Apply"]);
-}
-
-#[test]
-fn layout_page_tool_library() {
-    let _g = snapshot_guard();
-    let h = page(UiTarget::Tool(String::new()));
-    assert_page_layout(&h, "Tool library", &["New tool…", "Import library…", "Import tool holders"]);
 }
 
 #[test]

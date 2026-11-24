@@ -209,6 +209,26 @@ fn wire_four_axis_states_the_stand_off_choice_and_the_verify_tolerance() {
     assert_eq!(draft(&h).four_axis.as_ref().expect("the block").widening, WireWidening::Uniform);
 }
 
+#[test]
+fn the_open_cutoff_declarations_apply_and_undo_together() {
+    let mut h = wire_page();
+    let hold = "Both pieces clamped through all passes";
+    let travel = "Stock centered in installed XY travel";
+    assert!(h.query_by_label(hold).is_none());
+    let OpParams::WireContour(op) = &mut h.state_mut().op_ui.params else { panic!("wire draft") };
+    op.side = camcraft_app::operation::WireSide::Left;
+    h.run_steps(3);
+    press(&mut h, hold);
+    press(&mut h, travel);
+    assert!(!live(&h).both_pieces_restrained && !live(&h).stock_centered_in_xy_travel);
+    press(&mut h, "Apply");
+    h.state_mut().drain_actions();
+    assert!(live(&h).both_pieces_restrained && live(&h).stock_centered_in_xy_travel);
+    let st = h.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert!(!live(&h).both_pieces_restrained && !live(&h).stock_centered_in_xy_travel);
+}
+
 /// #3207: the sharp-inside-corner option is off by default, its row is
 /// on the geometry tab, and Apply stores it as one undoable edit.
 #[test]

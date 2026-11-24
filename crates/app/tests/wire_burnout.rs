@@ -59,6 +59,8 @@ fn burnout(clearance: Option<f64>) -> WireContourOp {
         start: Some([0.0, 0.0]),
         tabs: None,
         capture: false,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         burnout: clearance,
         taper_deg: 0.0,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,

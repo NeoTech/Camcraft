@@ -728,7 +728,7 @@ fn seed_face(c: &Carried) -> OpParams {
         climb: c.climb,
         // Turning-point blends are opt-in (M11.1 A): a fresh face is
         // the sharp serpentine every golden and every saved file knows.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // M13.11: a fresh face lifts over its holes - a bore or a boss
         // is bridged in the air; cutting across is the user's choice.
         holes: Default::default(),
@@ -759,7 +759,7 @@ fn seed_contour(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         // Turning-point blends are opt-in (M11.1 B), as on Face.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // Retract and re-enter: the transition every earlier contour
         // posted; staying down is the user's pick on Lead in / Lead out.
         links: crate::links::Links::PLANAR,
@@ -933,7 +933,7 @@ fn seed_slot(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: c.tilt,
         extend_start: 0.0,
         extend_end: 0.0,
@@ -1162,6 +1162,8 @@ fn seed_finish3d(c: &Carried) -> OpParams {
         // Fresh finishes hop to clearance like every older file;
         // straight links are the machinist's opt-in (the linking menu).
         gap_link: crate::finishing3d::GapLink::Jump,
+        // Steep flanks ride the waterline ring pass by default (#2811).
+        waterlines: true,
         // #3362: the outside-in order every earlier finish cut.
         pass_start: crate::machining2d::PassStart::Auto,
     }

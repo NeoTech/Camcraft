@@ -47,7 +47,7 @@ fn contour_op(lead: Lead, links: Links) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Arc,
         helix_radius: 1.0,
-        blend_turns: true,
+        blend_turns: true, blend_radius: None,
         tilt: None,
         links,
         chain_overrides: Vec::new(),
@@ -328,6 +328,8 @@ fn the_stamp_tells_the_approach_apart_and_a_default_op_keeps_its_digest() {
         Approach { lead_out: Some(Lead::None), ..Approach::DEFAULT },
         Approach { axis_start: true, ..Approach::DEFAULT },
         Approach { arc_xy: true, ..Approach::DEFAULT },
+        // #3745: the approach distance outside the stock.
+        Approach { approach_distance: 5.0, ..Approach::DEFAULT },
     ] {
         assert_ne!(stamp(with(a)), base, "{a:?}");
         assert_ne!(stamp(Links { approach: a, ..kd }), stamp(kd), "{a:?}");

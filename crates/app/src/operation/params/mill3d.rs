@@ -111,6 +111,7 @@ impl OpParams {
                 pencil_reference,
                 fill_openings,
                 gap_link,
+                waterlines,
                 pass_start,
             } => {
                 // v16: the pattern chooses a different kinematic (and
@@ -199,6 +200,12 @@ impl OpParams {
                         crate::finishing3d::GapLink::Straight => 2,
                         crate::finishing3d::GapLink::Jump => 1,
                     });
+                }
+                // #2811: skipping the waterline ring pass changes the cut
+                // path on steep flanks. Only `false` digests (one tag
+                // byte), so every op with waterlines on keeps its stamp.
+                if !*waterlines {
+                    h.write_u8(0x4E);
                 }
                 // Keep the old stamp for the default direction and for
                 // patterns whose paths do not depend on this angle.

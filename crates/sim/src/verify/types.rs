@@ -198,6 +198,14 @@ pub struct VerifyContext<'a> {
     /// Declared corner relief zones (#2400) for inside-corner pockets and
     /// slots, bounded strictly to cutter radius, pocket floor Z, and stock.
     pub corner_reliefs: &'a [super::CornerReliefZone],
+    /// The stepdown the plunge depth law (d3, #3679) judges a feed
+    /// descent against: the deepest engagement below the floor that the
+    /// cuts before the plunge left under the full tool disc. `None` -
+    /// every kind that cuts no levels (drills, bores, threads, turning,
+    /// wire, plasma) and every context that states no limit - keeps the
+    /// law silent and every stored verdict byte-identical, the same
+    /// discipline as `finish_tol` and `model`.
+    pub plunge_stepdown: Option<f64>,
 }
 
 /// The inert tool of [`VerifyContext::default`].
@@ -239,6 +247,7 @@ impl Default for VerifyContext<'_> {
             rim_top_z: None,
             lathe_axis: None,
             corner_reliefs: &[],
+            plunge_stepdown: None,
         }
     }
 }
@@ -307,6 +316,8 @@ pub enum Warning {
     /// Rapid `move` travels through stock: under the clearance plane,
     /// or (#2121) at it under the stock top.
     RapidInStock { at: usize },
+    /// The tool assembly meets the finished part on rapid move `at` (#3520).
+    RapidInPart { at: usize },
     /// #2901: the path starts at `height_mm`, under the `top_mm` of the
     /// start stock or of a fixture (`fixture`). The first traverse comes
     /// from an X/Y the machine does not know, so it can cross that top
@@ -356,13 +367,11 @@ pub enum Warning {
         gouge_mm: f64,
         rest_mm: f64,
     },
-    /// A 3-D finish's envelope verdict could not judge the material
-    /// hidden under overhangs (M13.1): the hidden-rest scan stopped at
-    /// its budget (`cells` the lattice, `claims` the plane claims
-    /// binned when it stopped), so whatever rest the verdict reports
-    /// speaks for the ridge law alone. "Not judged", never a zero -
-    /// reported at the first cutting move, and like every cached
-    /// warning it holds the post.
+    /// The envelope could not judge rest. For ball scans the hidden-rest
+    /// scan stopped at its budget (`cells` in the lattice, `claims` plane
+    /// claims binned), so the reported rest covers only the ridge law.
+    /// Zero cells and claims mark the bull-nose sweep, which measures no
+    /// rest. Reported at the first cutting move; holds the post.
     RestUnjudged { at: usize, cells: usize, claims: usize },
     /// A 3-D finish's spacing left a scallop past tolerance (M13.9,
     /// the ridge flank law): `mm` standing outside every ball at a
@@ -432,11 +441,29 @@ pub enum Warning {
     /// decision): it names the cause of the shank and holder findings that
     /// follow it, and those findings hold the post.
     FluteShort { at: usize, flute_mm: f64, depth_mm: f64 },
+    /// #3679: the feed plunge at move `at` reaches `mm` below the floor
+    /// that the cuts before it left under the full tool disc, deeper
+    /// than the stated stepdown `limit_mm` - the rim stands on stock
+    /// that no level above cut, and the cutter takes that much material
+    /// in one bite. Always advisory (the #3525 pattern): nothing gouges
+    /// and nothing collides, the risk is the tool load, so the finding
+    /// is shown and named everywhere a warning is and the post is not
+    /// held.
+    PlungeTooDeep { at: usize, mm: f64, limit_mm: f64 },
+    /// #3748: a start-side pass ("Pass starts at" Inside, or Outside when
+    /// `inside` is false) round a part that the user set to the `entry`
+    /// lead-in, where Arc from the air is the recommended one. The entry
+    /// is used as selected, from the first cut at `at`. Advisory: the
+    /// path is verified like any other, so the post is not held.
+    EntryNotRecommended { at: usize, entry: super::AdvisedEntry, inside: bool },
 }
 
 impl Warning {
-    /// Whether this warning holds the post: every kind but the scallop
-    /// reading (M13.9), which is a quality note - shown, never binding.
+    /// Whether this warning holds the post: every kind but the advisory
+    /// readings - the scallop (M13.9), the probe search, the sinker
+    /// order, the undersize drill, the strategy fallback, the flute
+    /// reach (#3525) and the plunge depth (#3679) - which name a risk
+    /// the collision laws alone decide.
     #[must_use]
     pub fn blocks_post(&self) -> bool {
         !matches!(self, Warning::Scallop { .. }
@@ -444,7 +471,9 @@ impl Warning {
                 | Warning::SinkerFinishOrder { .. }
                 | Warning::DrillUndersize { .. }
                 | Warning::StrategyFallback { .. }
-                | Warning::FluteShort { .. })
+                | Warning::FluteShort { .. }
+                | Warning::PlungeTooDeep { .. }
+                | Warning::EntryNotRecommended { .. })
     }
 
     /// The envelope report's unjudged hidden half, as the warning that
@@ -499,6 +528,9 @@ impl core::fmt::Display for Warning {
             Warning::RapidInStock { at } => {
                 write!(f, "rapid move {at} travels through stock (below the clearance plane, or at it below the stock top)")
             }
+            Warning::RapidInPart { at } => {
+                write!(f, "tool meets the part on rapid move {at}")
+            }
             Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, tilted: false } => write!(
                 f,
                 "the first rapid (move {at}) comes from an unknown X/Y at the clearance height Z{height_mm:.3}, under the {} \
@@ -544,6 +576,7 @@ impl core::fmt::Display for Warning {
                 f,
                 "finish envelope near move {at}: {gouge_mm:.4} mm gouge, {rest_mm:.4} mm rest"
             ),
+            Warning::RestUnjudged { at, cells: 0, claims: 0 } => write!(f, "bull-nose rest unmeasured from move {at}"),
             Warning::RestUnjudged { at, cells, claims } => write!(
                 f,
                 "finish envelope from move {at}: hidden rest NOT JUDGED - the scan's budget ran out ({cells} cells, {claims} plane claims); material under an overhang may stand unreported"
@@ -594,6 +627,17 @@ impl core::fmt::Display for Warning {
                 "the tool's flute length is {flute_mm:.3} mm, but the cut goes {depth_mm:.3} mm below the stock top from move {at}: \
                  above the flutes, the shank or the holder goes into the cut; the findings after this one name the moves where \
                  it meets material - use a tool with a longer flute, or cut less deep (this finding alone does not hold the post)"
+            ),
+            Warning::PlungeTooDeep { at, mm, limit_mm } => write!(
+                f,
+                "feed plunge at move {at} reaches {mm:.3} mm below the floor that no level above cut, deeper than one \
+                 stepdown ({limit_mm:.3} mm) - cut the levels above first, or plunge in pecks of one stepdown (the post is \
+                 not held: the risk is the tool load)"
+            ),
+            Warning::EntryNotRecommended { at, entry, inside } => write!(
+                f,
+                "{}, from move {at} (the post is not held: the cut is verified)",
+                super::entry_advice(*entry, *inside)
             ),
         }
     }

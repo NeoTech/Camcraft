@@ -71,7 +71,7 @@ fn two_pockets() -> (World, History) {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         links: Links::PLANAR,
         chain_overrides: Vec::new(),

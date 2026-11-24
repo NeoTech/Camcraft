@@ -147,6 +147,10 @@ pub enum ParamsDto {
         /// version step, the same pure default as `tilt`.
         #[serde(default, skip_serializing_if = "is_false")]
         blend_turns: bool,
+        /// #1759 arc radius: absent on every earlier file - no version
+        /// step.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend_radius: Option<f64>,
         /// M13.11 hole law: absent (and written only when not the
         /// default) is `lift` - a file that predates the word lifts
         /// over its holes, the safe reading; no version step.
@@ -194,6 +198,10 @@ pub enum ParamsDto {
         /// is the sharp walk every earlier file held - no version step.
         #[serde(default, skip_serializing_if = "is_false")]
         blend_turns: bool,
+        /// #1759 arc radius: absent on every earlier file - no version
+        /// step.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend_radius: Option<f64>,
         /// Level to level: absent is `retract_reenter`, the transition
         /// every earlier file posted - written only when the user picks
         /// the stay-down ramp, so no version step.
@@ -508,6 +516,13 @@ pub enum ParamsDto {
         /// 1.0 mm, the same default the pockets carry.
         #[serde(default = "default_helix_radius")]
         helix_radius: f64,
+        /// #1759 arc turns at the row ends and their radius: absent
+        /// (written only when set) on every earlier file - no version
+        /// step.
+        #[serde(default, skip_serializing_if = "is_false")]
+        blend_turns: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend_radius: Option<f64>,
         /// 3+2 index; see the Face arm.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tilt: Option<TiltDto>,
@@ -715,6 +730,10 @@ pub enum ParamsDto {
         /// grammar, so no version step-up.
         #[serde(default)]
         gap_link: GapLinkDto,
+        /// Absent means the waterline ring pass runs on steep flanks,
+        /// what every older file ran (#2811). Written always, like `ramp`.
+        #[serde(default = "default_true")]
+        waterlines: bool,
         /// #3362 where the nested offset loops start: absent is
         /// `auto`, the order every earlier file cut - no version step.
         #[serde(default, skip_serializing_if = "PassStartDto::is_auto")]
@@ -1482,6 +1501,11 @@ fn default_helix_radius() -> f64 {
 /// `false` is absent from the file, so legacy saves stay byte-identical.
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+/// Default `true` for additive on-by-default flags (#2811 `waterlines`).
+fn default_true() -> bool {
+    true
 }
 
 /// Serde's skip test for an additive length that is zero by default

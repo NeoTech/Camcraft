@@ -48,7 +48,7 @@ fn at(x: f64, y: f64, z: f64) -> Location {
 
 /// Face parameters for the 60x60x20 box stock with a 4 mm cutter.
 fn face_params() -> OpParams {
-    OpParams::Face { holes: Default::default(), blend_turns: false,
+    OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -81,7 +81,7 @@ fn contour_params() -> OpParams {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     }
@@ -107,7 +107,7 @@ fn slot_params() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
@@ -346,7 +346,7 @@ fn create_operation_validates_every_reference() {
             "O",
             "EM-0400-2FL",
             SrcRef::Stock,
-            OpParams::Face { holes: Default::default(), blend_turns: false,
+            OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
                 tilt: None,
                 stepover: f64::NAN,
                 clearance_z: Height::fixed(25.0),
@@ -417,7 +417,7 @@ fn edit_params_clears_the_stamp_not_the_cache() {
     let (world, mut history) = face_world();
     let first = cache(&world, "Face1").expect("generated").path;
 
-    let lower = OpParams::Face { holes: Default::default(), blend_turns: false,
+    let lower = OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -649,12 +649,13 @@ fn a_model_update_marks_entity_sourced_operations_stale() {
 }
 
 #[test]
-fn an_entry_edit_marks_the_contour_stale_and_the_wall_regen_moves_nothing() {
+fn an_entry_edit_marks_the_contour_stale_and_the_wall_regen_ramps() {
     // The M8.2 A digest law in one run: `entry` and the radius feed the
     // contour stamp, so the family edit reads Stale once and clears with
-    // a regen - and on the wall side the regen cuts the SAME path,
-    // because the Plunge default IS that law. Staleness is derived, so
-    // walking the edit back re-derives it without asking the generator.
+    // a regen - and on the wall side a stated helix stands down to the
+    // ramp along the ring (the Plunge default is the graze every earlier
+    // file cut). Staleness is derived, so walking the edit back
+    // re-derives it without asking the generator.
     let world = new_world();
     let mut history = History::default();
     add_tool(&world, &mut history, "EM-0600-4FL");
@@ -706,12 +707,11 @@ fn an_entry_edit_marks_the_contour_stale_and_the_wall_regen_moves_nothing() {
     );
     assert_eq!(status(&world, "Contour1"), OpStatus::Ok);
     let after = cache(&world, "Contour1").expect("cached").path;
-    assert_eq!(
+    assert_ne!(
         before.moves, after.moves,
-        "the wall-side graze is unchanged by the stated arm"
+        "the wall side ramps along the ring under the stated helix"
     );
-    // The only delta is what the refusal law obliges: the stated arm is
-    // said on the notes channel, once, and the dive stands in unchanged.
+    // The stand-down is said on the notes channel, once.
     assert!(
         before.notes.iter().all(|n| !n.starts_with("entry:")),
         "the dive names nothing: {:?}",
@@ -724,7 +724,7 @@ fn an_entry_edit_marks_the_contour_stale_and_the_wall_regen_moves_nothing() {
             .filter(|n| n.starts_with("entry:") && n.contains("needs bounded air"))
             .count(),
         1,
-        "the refused helix is said exactly once: {:?}",
+        "the helix standing down to the ramp is said exactly once: {:?}",
         after.notes
     );
 
@@ -863,7 +863,7 @@ fn a_reimport_with_unchanged_geometry_keeps_operations_ok() {
 
 /// Face parameters for the 10 x 10 x 5 solid the stock tests below cut.
 fn face_params_5() -> OpParams {
-    OpParams::Face { holes: Default::default(), blend_turns: false,
+    OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(10.0),
@@ -1134,7 +1134,7 @@ fn stale_reason_names_a_height_whose_source_is_gone() {
         )
         .expect("box stock"),
     );
-    let params = OpParams::Face { holes: Default::default(), blend_turns: false,
+    let params = OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::of(HeightReference::TopOfStock, 5.0),
@@ -1681,7 +1681,7 @@ fn region_of_is_the_preview_of_what_generate_would_cut() {
     let face = Operation {
         tool: String::new(),
         src: SrcRef::Stock,
-        params: OpParams::Face { holes: Default::default(), blend_turns: false,
+        params: OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
             tilt: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
@@ -1796,7 +1796,7 @@ fn sel(entity: &str, feature: FeatureSel) -> SrcRef {
 }
 
 fn face_sel_params() -> OpParams {
-    OpParams::Face { holes: Default::default(), blend_turns: false,
+    OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -2516,7 +2516,7 @@ fn a_closed_chain_routes_the_boundary_path_not_a_centerline() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     };
@@ -3337,7 +3337,7 @@ fn selection_notes_report_stitching_and_extension() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     };
@@ -3385,7 +3385,7 @@ fn contour_at(side: Side, z: f64) -> OpParams {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
     }
@@ -4092,6 +4092,7 @@ fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        waterlines: true,
     }
 }
 
@@ -7954,4 +7955,173 @@ fn finish3d_fill_openings_refuses_pencil_and_corner_by_name() {
         assert!(msg.contains(word) && msg.contains("cannot fill them") && msg.contains("Fill openings"), "{msg}");
         assert_eq!(status(&world, name), OpStatus::Never, "a refusal cuts nothing");
     }
+}
+
+#[test]
+fn finish3d_waterlines_off_stamps_digest_skips_rings_notes_steep_flanks_and_leaves_rest() {
+    let world = new_world();
+    let mut history = History::default();
+    box_stock(&world, &mut history, 40.0, 40.0, 12.0);
+    add_tool(&world, &mut history, "BN-0600");
+    let prism = cube(Point3::new(-10.0, -10.0, 0.0), Point3::new(10.0, 10.0, 10.0));
+    history.execute(&world, ImportModel::from_mesh("prism", prism));
+
+    let mut base = finish_params(10.0, 0.0, 0.1);
+    if let OpParams::Finish3D { pattern, .. } = &mut base {
+        *pattern = camcraft_app::finishing3d::FinishPattern::Parallel;
+    }
+    history.execute(
+        &world,
+        CreateOperation::new(&world, "F1", "BN-0600", SrcRef::Entity("prism".into()), base.clone()).expect("create F1"),
+    );
+    // Downstream operation so `rest::prior_state` evaluates carried stock after F1.
+    history.execute(
+        &world,
+        CreateOperation::new(&world, "F2", "BN-0600", SrcRef::Entity("prism".into()), base.clone()).expect("create F2"),
+    );
+    history.execute(&world, GenerateOperation::new(&world, "F1").expect("generate F1 on"));
+    assert_eq!(status(&world, "F1"), OpStatus::Ok);
+
+    let tp_on = cache(&world, "F1").expect("cached F1 on");
+    assert!(
+        tp_on.path.moves.iter().any(|m| m.kind == camcraft_app::cl::MoveKind::Feed && m.to.z < 5.0),
+        "waterlines on cuts ring levels down the steep walls"
+    );
+    assert!(
+        !tp_on.path.notes.iter().any(|n| n.starts_with(camcraft_app::finishing3d::WATERLINES_OFF_NOTE)),
+        "waterlines on emits no steep-flank warning: {:?}",
+        tp_on.path.notes
+    );
+
+    let flank_min_top = |w: &World| -> f64 {
+        let prior = camcraft_app::rest::prior_state(w, "F2", None, 3.0).expect("prior state");
+        let grid = prior.grid.expect("dexel grid after F1");
+        let cols = camcraft_app::stock_sim::Columns::of_grid(&grid);
+        let mut min_top = f64::INFINITY;
+        for iy in 0..cols.ny() {
+            for ix in 0..cols.nx() {
+                let c = cols.center(ix, iy);
+                if (11.5..=13.5).contains(&c.x) && (-2.0..=2.0).contains(&c.y) {
+                    min_top = min_top.min(cols.top_at(ix, iy));
+                }
+            }
+        }
+        min_top
+    };
+    let top_with_rings = flank_min_top(&world);
+    assert!(top_with_rings < 3.0, "waterlines on must cut steep wall flank down, got min top {top_with_rings}");
+
+    let mut off = base.clone();
+    if let OpParams::Finish3D { waterlines, .. } = &mut off {
+        *waterlines = false;
+    }
+    history.execute(&world, EditOperationParams::new(&world, "F1", off).expect("edit F1 off"));
+    assert_eq!(status(&world, "F1"), OpStatus::Stale, "waterlines flip must stamp the digest");
+
+    history.execute(&world, GenerateOperation::new(&world, "F1").expect("generate F1 off"));
+    assert_eq!(status(&world, "F1"), OpStatus::Ok);
+    let tp_off = cache(&world, "F1").expect("cached F1 off");
+    assert!(
+        tp_off.path.moves.iter().filter(|m| m.kind == camcraft_app::cl::MoveKind::Feed).all(|m| m.from.z >= 9.5 && m.to.z >= 9.5),
+        "waterlines off must cut only the top surface, no wall rings"
+    );
+    assert!(
+        tp_off.path.notes.iter().any(|n| n.starts_with(camcraft_app::finishing3d::WATERLINES_OFF_NOTE) && n.contains("8 steep flank")),
+        "waterlines off must report 8 steep flank facets on prism: {:?}",
+        tp_off.path.notes
+    );
+    let top_without_rings = flank_min_top(&world);
+    assert!(top_without_rings >= 10.0, "waterlines off must leave steep wall stock uncut for downstream rest, got {top_without_rings}");
+
+    history.undo(&world);
+    assert_eq!(status(&world, "F1"), OpStatus::Stale);
+    history.undo(&world);
+    assert_eq!(status(&world, "F1"), OpStatus::Ok);
+    assert_eq!(cache(&world, "F1").expect("restored").path.moves, tp_on.path.moves);
+}
+
+#[test]
+fn finish3d_waterlines_off_refuses_all_steep_and_ring_only_patterns_in_app() {
+    use camcraft_app::finishing3d::FinishPattern;
+    use camcraft_app::geometry::Triangle;
+
+    let world = new_world();
+    let mut history = History::default();
+    box_stock(&world, &mut history, 40.0, 40.0, 12.0);
+    add_tool(&world, &mut history, "BN-0600");
+    let wall = vec![
+        Triangle::new(Point3::new(-5.0, 0.0, 0.0), Point3::new(5.0, 0.0, 5.0), Point3::new(5.0, 0.0, 0.0)),
+        Triangle::new(Point3::new(-5.0, 0.0, 0.0), Point3::new(-5.0, 0.0, 5.0), Point3::new(5.0, 0.0, 5.0)),
+    ];
+    history.execute(&world, ImportModel::from_mesh("wall", Mesh::from_facets(wall)));
+    let prism = cube(Point3::new(-10.0, -10.0, 0.0), Point3::new(10.0, 10.0, 10.0));
+    history.execute(&world, ImportModel::from_mesh("prism", prism));
+
+    let make_off = |pat: FinishPattern, top: f64| {
+        let mut p = finish_params(top, 0.0, 0.1);
+        if let OpParams::Finish3D { pattern, waterlines, .. } = &mut p {
+            *pattern = pat;
+            *waterlines = false;
+        }
+        p
+    };
+    history.execute(
+        &world,
+        CreateOperation::new(&world, "SteepOnly", "BN-0600", SrcRef::Entity("wall".into()), make_off(FinishPattern::Parallel, 5.0))
+            .expect("create steep"),
+    );
+    let err = GenerateOperation::new(&world, "SteepOnly").err().expect("all-steep off must refuse");
+    assert!(matches!(err, CommandError::Machining(_)), "{err:?}");
+    assert_eq!(status(&world, "SteepOnly"), OpStatus::Never);
+
+    for (name, pat) in [
+        ("WOff", FinishPattern::Waterline),
+        ("BOff", FinishPattern::Blend),
+        ("MOff", FinishPattern::Morph),
+    ] {
+        history.execute(
+            &world,
+            CreateOperation::new(&world, name, "BN-0600", SrcRef::Entity("prism".into()), make_off(pat, 10.0))
+                .expect("create ring pattern"),
+        );
+        let err = GenerateOperation::new(&world, name).err().expect("ring pattern off must refuse");
+        assert!(matches!(err, CommandError::Machining(_)), "{name}: {err:?}");
+        assert_eq!(status(&world, name), OpStatus::Never);
+    }
+
+    history.execute(
+        &world,
+        CreateOperation::new(&world, "ROff", "BN-0600", SrcRef::Entity("prism".into()), make_off(FinishPattern::Ramp, 10.0))
+            .expect("create ramp off"),
+    );
+    history.execute(&world, GenerateOperation::new(&world, "ROff").expect("generate ramp off"));
+    assert_eq!(status(&world, "ROff"), OpStatus::Ok);
+    let tp = cache(&world, "ROff").expect("cached ramp off");
+    assert!(tp.path.moves.iter().filter(|m| m.kind == camcraft_app::cl::MoveKind::Feed).all(|m| m.from.z >= 9.5 && m.to.z >= 9.5));
+    assert!(tp.path.notes.iter().any(|n| n.starts_with(camcraft_app::finishing3d::WATERLINES_OFF_NOTE)));
+}
+
+#[test]
+fn finish3d_waterlines_flag_changes_op_stamp_directly() {
+    let world = new_world();
+    let mut history = History::default();
+    box_stock(&world, &mut history, 40.0, 40.0, 12.0);
+    add_tool(&world, &mut history, "BN-0600");
+
+    let p_on = finish_params(10.0, 0.0, 0.1);
+    let mut p_off = p_on.clone();
+    if let OpParams::Finish3D { waterlines, .. } = &mut p_off {
+        *waterlines = false;
+    }
+
+    history.execute(&world, CreateOperation::new(&world, "FOn", "BN-0600", SrcRef::Stock, p_on).expect("on"));
+    history.execute(&world, CreateOperation::new(&world, "FOff", "BN-0600", SrcRef::Stock, p_off).expect("off"));
+    let op_on = model::operation_of(&world, &model::find_by_name(&world, "FOn").expect("FOn")).expect("op on");
+    let op_off = model::operation_of(&world, &model::find_by_name(&world, "FOff").expect("FOff")).expect("op off");
+
+    assert_ne!(
+        operation::op_stamp(&world, &op_on, "F3"),
+        operation::op_stamp(&world, &op_off, "F3"),
+        "waterlines: false must alter op_stamp directly"
+    );
 }

@@ -255,7 +255,7 @@ mod tests {
     fn fit_target_never_asks_the_device_for_a_texture_past_its_limit() {
         // Without the clamp, wgpu's fatal validation error ends the process
         // ("Dimension X value ... exceeds the limit") - #3582.
-        let Some(gpu) = crate::headless_gpu::device_for_test("view_pass").expect("adapter") else { return };
+        let Some(gpu) = crate::headless_gpu::test_gpu("view_pass").expect("adapter") else { return }; // #3605
         let limit = gpu.device.limits().max_texture_dimension_2d;
         let mut view = crate::viewport::View3D::new(&gpu.device, super::VIEW3D_FORMAT, 64, 48);
         assert!(super::fit_target(&mut view, &gpu.device, (limit + 1, 16)));

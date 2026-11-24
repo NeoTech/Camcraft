@@ -157,7 +157,11 @@ pub(crate) fn marks(state: &State, aspect: f64) -> (Vec<Seg>, Vec<Seg>) {
     else {
         return (start_segs, exit_segs);
     };
-    let Some(z) = operation::resolve_height(&state.world, op.setup.as_deref(), Some(&op.src), *top_z) else {
+    // A display read (#3161): inside this scope a DXF sketch's Z span
+    // reads the frame memo, so a still frame does not resample the sketch.
+    let Some(z) = operation::display_heights(|| {
+        operation::resolve_height(&state.world, op.setup.as_deref(), Some(&op.src), *top_z)
+    }) else {
         return (start_segs, exit_segs);
     };
     let mvp = state.cam.mvp(aspect);

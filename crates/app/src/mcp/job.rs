@@ -245,6 +245,8 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("start", "array", Value::Null),
                         ("tabs", "object", Value::Null),
                         ("capture", "boolean", json!(false)),
+                        ("both_pieces_restrained", "boolean", json!(false)),
+                        ("stock_centered_in_xy_travel", "boolean", json!(false)),
                         ("taper_deg", "number", json!(0.0)),
                         ("burnout_clearance", "number", Value::Null),
                         ("clearance", "number", json!(crate::operation::DEFAULT_CLEARANCE)),
@@ -323,6 +325,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::HolderHit { at, .. } => ("holder_hit", *at),
         Warning::SweepHit { at, .. } => ("sweep_hit", *at),
         Warning::RapidInStock { at } => ("rapid_in_stock", *at),
+        Warning::RapidInPart { at } => ("rapid_in_part", *at),
         Warning::FirstTraverseLow { at, .. } => ("first_traverse_low", *at),
         Warning::FirstTraverseUnderTable { at, .. } => ("first_traverse_under_table", *at),
         Warning::FixtureHit { at, .. } => ("fixture_hit", *at),
@@ -337,6 +340,8 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::UndercutLift { at } => ("undercut_lift", *at),
         Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
         Warning::FluteShort { at, .. } => ("flute_short", *at),
+        Warning::PlungeTooDeep { at, .. } => ("plunge_too_deep", *at),
+        Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
     };
     json!({
         "op": op,
@@ -363,6 +368,13 @@ pub(super) fn verify(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
             findings.extend(t.warnings.iter().map(|w| finding(&label, w)));
         }
     }
+    // #3456: a program law's warning (a plasma tip-up, a kerf crossing)
+    // names its op but no move; the law decides it holds nothing.
+    if let Some(warnings) = report["gate"]["warnings"].as_array() {
+        for w in warnings {
+            findings.push(json!({ "op": w["op"], "move": null, "kind": w["kind"], "message": w["message"], "blocks_post": false }));
+        }
+    }
     // The program gate's problems speak of the whole program, not one
     // move: they ride as findings with no op and no move index.
     if let Some(problems) = report["gate"]["problems"].as_array() {
@@ -378,6 +390,20 @@ pub(super) fn verify(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
 mod tests {
     use super::{Warning, finding};
     use crate::verify::FallbackCause;
+
+    #[test]
+    fn part_and_stock_rapids_keep_their_kind_message_and_blocking_state() {
+        for (warning, kind, message) in [
+            (Warning::RapidInPart { at: 7 }, "rapid_in_part", "tool meets the part on rapid move 7"),
+            (Warning::RapidInStock { at: 7 }, "rapid_in_stock", "rapid move 7 travels through stock (below the clearance plane, or at it below the stock top)"),
+        ] {
+            let f = finding("op", &warning);
+            assert_eq!(f["kind"], kind, "{f}");
+            assert_eq!(f["message"], message, "{f}");
+            assert_eq!(f["move"], 7, "{f}");
+            assert_eq!(f["blocks_post"], true, "{f}");
+        }
+    }
 
     /// #3542: the pass-start cause keeps the MCP kind `strategy_fallback`
     /// and stays advisory; only its message names the other cause.

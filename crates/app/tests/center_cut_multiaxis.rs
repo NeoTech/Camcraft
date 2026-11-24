@@ -323,6 +323,7 @@ fn the_rotary_twins_under_the_forced_ramp_retry() {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     };
     let sloped = Finish3DParams { ramp: true, entry_ramp: true, ..base };
     let standing = turned_bar().facets.to_vec();
@@ -382,6 +383,7 @@ fn swarf_first_entry_ramps_under_the_forced_retry() {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     };
     let sloped = Finish3DParams { ramp: true, entry_ramp: true, ..base };
     let s = |p: Point3| Point3::new(p.z, p.x, p.y);

@@ -192,6 +192,130 @@ saying "even with sharp inside corners stated" means the leftover
 exceeds that wire radius + gap. Open the corner to at least 60 degrees,
 round it in the model, or choose a thinner-wire condition.
 
+## Native wire EDM job files
+
+Mount the **AGIECUT Classic 2S (template)** and configure it for the
+installed machine. In the machine's **EDM** settings, add the rough
+condition `AGIE_QN2` for cold die steel (material 0001) and Berco Cut
+0.25 mm wire. Set the preview gap to 0.005 mm. Use rectangular stock
+within the 350 × 250 mm XY span, with the first, unrotated work origin
+on the stock top. The preview gap places the wire in CamCraft. The
+control uses its own technology to offset the nominal contour.
+
+Generate a vertical **Wire Contour** and select **Native wire EDM job
+files** in **Post**. Choose **One program** and a new job directory.
+Set **Separation cut length (mm)** to 1.0 for closed cuts and 0 for an
+open cutoff. The job opens with zero erosion steps. Keep its ISO, SBR
+and SBL files together. Review the effective quality and assign the
+matching TECCUT technology on the control. Check the actual datum,
+travel and offsets in FORMALCHECK and GRAFICHECK before cutting.
+Check the separation and support for each released piece on closed cuts.
+
+### QN2 stock thickness and offsets
+
+For a modeled punch, QN2 accepts the measured stock thicknesses below.
+The die, straight cutoff, two-punch group and DXF arc punch each require
+20 mm stock. The dimensions in the table are in millimetres.
+
+| Stock thickness | Rough | Trim 1 | Trim 2 | Trim 3 |
+|---:|---:|---:|---:|---:|
+| 15 | 0.245 | 0.155 | 0.140 | 0.134 |
+| 20 | 0.245 | 0.155 | 0.140 | 0.134 |
+| 40 | 0.260 | 0.170 | 0.140 | 0.130 |
+| 80 | 0.266 | 0.176 | 0.143 | 0.133 |
+
+CamCraft uses the measured rough offset for the selected thickness to
+check the corners. The straight-face margin includes the wire radius
+and rounds up to 0.4 mm at these thicknesses. Sharp outside corners can
+require more room. The post refuses thicknesses outside the table.
+
+### Modeled punch with inside corners
+
+Use one closed, vertical solid with flat ends at the stock planes.
+Select the complete punch and set **Side** to **Punch**. Confirm
+**Freed piece captured**. Put the full 2 mm threading hole in the waste
+inside the stock. The perpendicular lead needs at least 3 mm from the
+hole and at least 3 mm of straight face on each side of the entry.
+
+An inward notch can pass if the rough offset reaches each nominal
+corner within 0.002 mm. CamCraft also checks that each segment can
+fit its corner joins and that the swept wire clears nonadjacent faces.
+It refuses a notch that is too tight or a punch without a clear lead
+from an exterior face.
+
+### Convex through-opening
+
+On **Geometry**, select the entire upper rim of one convex through-opening
+in a vertical 20 mm plate and set **Side** to **Die**. Confirm **Freed
+piece captured** when the setup holds the slug. CamCraft checks the
+selected rim against the full-height opening and refuses a blind floor,
+an incomplete rim or the outside edge of the plate.
+
+Place the entire 2 mm threading hole inside the opening. The lead must
+reach a straight wall from inside the opening and clear the other walls.
+CamCraft checks the retained plate and corner reach with the 0.245 mm
+rough offset. A square corner fails the reach check. The job states the
+die side, so the control offsets into the opening.
+
+### Straight open cutoff
+
+On **Geometry**, select one straight X- or Y-parallel edge of the
+full-height retained solid that reaches opposite faces of 20 mm stock.
+Choose **Left** or **Right** to put the kerf on the waste side and clear
+**Start hole stated**. Set **Run-out clearance** to at most 3.6 mm.
+
+In **Passes**, confirm **Both pieces clamped through all passes** and
+**Stock centered in installed XY travel**. The post extends the cut
+4 mm into air at each end and places separate entry and exit points
+3 mm toward the waste side. It checks stock corners and travel with
+the rough offset and wire radius. The setup records the chosen side
+and two air endpoints, with zero separation.
+
+### Two punches in one job
+
+Use two **Wire Contour** operations on the same 20 mm stock and setup.
+Select a different complete punch for each operation. Use the same wire
+and QN2 condition. State the threading hole and confirm capture for each
+punch. The cutting areas must have a clear gap along X or Y. Each area
+includes the punch, its hole and lead, the furthest rough corner and the
+wire radius. CamCraft refuses the whole job if the areas cannot be
+separated along either axis.
+
+Use a job name of up to seven uppercase letters or digits, starting
+with a letter. The job has two ISO objects, one SBR and one SBL. Assign
+technology and check the release sequence for each work on the control.
+
+### DXF circle or racetrack punch
+
+Import a DXF, place it on the stock top and select one closed chain in
+**Geometry** for a captured vertical **Punch**. Use 20 mm stock and QN2.
+A circle needs a radius of 6 to 15 mm and a horizontal or vertical radial
+lead. A racetrack needs two equal tangent semicircles and two straight
+sides parallel to X or Y, each at least 6 mm long. Place the hole at least
+3 mm from the profile and enter the racetrack through a straight side
+with at least 3 mm of straight wall on each side of the entry.
+
+The post requires centres, radii and endpoints on the five-decimal ISO
+grid. It checks that the rough cut clears the rest of the drawing and
+stays within the stock. The preview uses a polygon around the arcs. The
+native ISO object writes nominal counter-clockwise `G03` arcs with
+incremental `I` and `J` centres.
+
+### Request CCB035 for one punch
+
+For one closed polygon punch on 20 mm steel with Berco Cut 0.25 mm wire,
+add the rough condition `AGIE_BERCO_RA035` with the same 0.005 mm preview
+gap and select it in **Passes**. The job requests **CCB035** with Ra
+0.35 µm, Te 1.50 µm, Tkm 1.00 µm and the speed option enabled. It opens
+with zero erosion steps. Other thicknesses, die openings, open cutoffs,
+punch groups and DXF arc punches are refused with this condition.
+
+Before assigning the technology, check that TECCUT shows `TYPE:VS` and
+preselects `estbca25nsn060b035020`. Check the five offsets in order:
+0.234, 0.189, 0.154, 0.139 and 0.129 mm. CamCraft uses the first offset
+for its rough clearance checks. Stop if the technology or offsets differ.
+Ra 0.35 µm is a requested surface finish.
+
 ## Wire Contour refusals
 
 At **Apply** or creation, about the condition:

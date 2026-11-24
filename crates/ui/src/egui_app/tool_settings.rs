@@ -88,7 +88,7 @@ fn contents(ui: &mut Ui, state: &mut State) {
     // side preview, under the fields; it draws the profile tab's draft
     // through `preview_inputs`. #2397: the Body / Profile tabs and the
     // shape editor live in their own window ("Edit tool shape").
-    let (body, steel) = super::tool_profile_page::preview_inputs(state, exists);
+    let (body, steel) = super::tool_preview_inputs::preview_inputs(state, exists);
     super::tool_preview::draw(ui, &preview_tool, u, body.as_deref(), steel.as_deref(), false);
 }
 
@@ -263,7 +263,8 @@ pub(super) fn seed_kind(state: &mut State, before: usize) {
 /// from the tool's own (or for a new tool, when the user typed a number
 /// other than the `next_free` number `AddTool` will assign). Rides the
 /// same Apply / Add click as the geometry, as its own undoable command.
-fn push_number_if_changed(state: &mut State, name: &str) {
+/// #3893: the tool library window's Apply calls it too.
+pub(super) fn push_number_if_changed(state: &mut State, name: &str) {
     let want = (state.tool_ui.number > 0).then_some(state.tool_ui.number);
     let have = model::find_by_name(&state.world, name)
         .and_then(|e| model::tool_number_of(&state.world, &e));

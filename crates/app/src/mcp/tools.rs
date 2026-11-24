@@ -22,8 +22,8 @@ pub(super) struct Tool {
 }
 
 const TOOLS: &[Tool] = &[
-    Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
-    Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved. If that file on disk changed after this session opened or saved it, the save is refused by name; overwrite: true replaces the file.", schema: s_save, run: save_project },
+    Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history. With read_only: true, save_project does not write over this file; give it a different path to write a copy, which also ends read-only.", schema: s_open_project, run: open_project },
+    Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved. If that file on disk changed after this session opened or saved it, the save is refused by name; overwrite: true replaces the file. Refused for the file of a project open read-only: give a different path.", schema: s_save, run: save_project },
     Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail, or one whose file's edges lie off their surfaces, answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget, or export the file again with a tighter tolerance, to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward; for a STEP file it also states the length unit the model was read in. A STEP file that states no length unit is refused until units gives one.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups (each with model_reference: a solid part, or the virtual reference of its placed DXF profiles), stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), DXF profiles, tools, and operations with their parameters and status (one on a DXF profile says what it checks against). With summary, a short form for a small context window: no machine definition, and each operation lists only the fields changed from its defaults.", schema: super::compact::s_get_job, run: job::get_job },
     Tool { name: "get_selection", description: "Read currently selected entities, active setup, active operation, viewport pick mode (model, face, edge, vertex), and active geometry picks.", schema: s_empty, run: super::selection::get_selection },
@@ -48,7 +48,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "set_operation_geometry", description: "Set the features an operation machines (faces, edge chains, loops, or DXF sketch chains and layers with optional per-chain side and direction overrides) by list_features ids. One undo step; undo restores the previous source.", schema: pick::s_set_geometry, run: pick::set_operation_geometry },
     Tool { name: "set_operation_area", description: "Replace an operation's area controls (containment, offset, outer_offset, corner, extension, extra include/exclude boundaries, open boundary). One undo step.", schema: area::s_set_area, run: area::set_operation_area },
     Tool { name: "get_operation_do_not_touch", description: "Read an operation's 'Do not touch' protected faces/edges and standoff clearance (mm).", schema: pick::s_op, run: do_not_touch::get_operation_do_not_touch },
-    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face and 3D Finish paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
+    Tool { name: "set_operation_do_not_touch", description: "Set protected faces or edge chains (plus standoff clearance, mm) that 2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave paths must stay clear of across flutes, shank, and holder. Refuses unsupported operation kinds, vertex picks, and overlap with the machining selection. One undo step.", schema: do_not_touch::s_set_do_not_touch, run: do_not_touch::set_operation_do_not_touch },
     Tool { name: "undo", description: "Undo the last document change.", schema: s_empty, run: edit::undo },
     Tool { name: "redo", description: "Redo the last undone change.", schema: s_empty, run: edit::redo },
     Tool { name: "generate", description: "Generate toolpaths: one named operation (always regenerated) or, with no name, every operation that is not current when reached in program order, including operations made stale by earlier generations in this call. A refusal stops the call and names the operation.", schema: s_opt_name, run: generate },
@@ -92,8 +92,10 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::sinker_tools::TOOLS)
         .chain(super::machine_tools::TOOLS)
         .chain(super::tool_number_tools::TOOLS)
+        .chain(super::agie_inspection::TOOLS)
         .chain(super::post_options_tools::TOOLS)
         .chain(super::sketch_tools::TOOLS)
+        .chain(super::svg_tools::TOOLS)
         .chain(super::outline_text_tools::TOOLS)
         .chain(super::holder_dxf_tools::TOOLS)
         .chain(super::recipe_tools::TOOLS)
@@ -148,7 +150,14 @@ pub(super) fn opt_str<'a>(a: &'a Map<String, Value>, key: &str) -> Result<Option
 
 fn open_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let path = req_str(a, "path")?;
-    api::v_load(env, vec![json!(path)])
+    let read_only = super::compact::flag(a, "read_only")?;
+    let mut out = api::v_load(env, vec![json!(path)])?;
+    // #3609: `api::v_save` refuses a save over this file while read-only.
+    env.doc_read_only = read_only;
+    if read_only {
+        out["read_only"] = json!(true);
+    }
+    Ok(out)
 }
 
 fn save_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -267,8 +276,8 @@ fn s_empty() -> Value {
     obj(json!({}), &[])
 }
 
-fn s_path() -> Value {
-    obj(json!({ "path": { "type": "string", "description": "File path." } }), &["path"])
+fn s_open_project() -> Value {
+    obj(json!({ "path": { "type": "string", "description": "File path." }, "read_only": { "type": "boolean", "description": "Open read-only: save_project does not write over this file (default false)." } }), &["path"])
 }
 
 fn s_save() -> Value {

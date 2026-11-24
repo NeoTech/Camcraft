@@ -45,7 +45,7 @@ fn clamped(tilt: Option<Tilt>) -> (World, History, String) {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(40.0),
         cut_z: Height::fixed(29.5),

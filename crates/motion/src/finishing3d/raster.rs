@@ -6,7 +6,10 @@ use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
 
 use super::ladder::levels;
-use super::params::{Finish3DParams, FinishPattern, dirs, refinement_floor, scallop_stepdown, scallop_stepover, validate};
+use super::params::{
+    Finish3DParams, FinishPattern, SPLIT_MZ, WATERLINES_OFF_NOTE, dirs, refinement_floor,
+    scallop_stepdown, scallop_stepover, validate,
+};
 use super::grid::SupSet;
 use super::support::{build_sups, plunge_support};
 use super::march::{emit_runs, march_curve};
@@ -258,11 +261,53 @@ pub fn parallel_with_angle(
 /// rides a loop that touches nothing past the band.
 pub fn blend(facets: &[Triangle], p: &Finish3DParams) -> Result<Toolpath, GenError> {
     validate(p, facets)?;
+    if !p.waterlines {
+        return Err(GenError::Invalid(
+            "Blend 3D finish needs the waterline ring pass across the 30-45 deg band - enable waterlines or pick Parallel".into(),
+        ));
+    }
     let r = p.tool_diameter * 0.5;
     let sups = build_sups(facets, r);
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     let emitted = raster_pass(&mut b, p, r, &sups, 1.0, 0.0, false)?;
     rings_and_tail(b, p, r, facets, emitted)
+}
+
+/// Steep facets (`|m_z| < SPLIT_MZ`, >45 deg off horizontal) whose Z range
+/// enters `[bottom_z, top_z + 2r]`, left uncut when `waterlines` is off.
+pub(super) fn count_steep_flanks(facets: &[Triangle], bottom_z: f64, top_z: f64, r: f64) -> usize {
+    facets
+        .iter()
+        .filter(|f| {
+            let m = f.normal();
+            if !m.is_finite() {
+                return false;
+            }
+            let len2 = m.x * m.x + m.y * m.y + m.z * m.z;
+            if len2 <= 0.5 || m.z.abs() >= SPLIT_MZ {
+                return false;
+            }
+            let zmin = f.a.z.min(f.b.z).min(f.c.z);
+            let zmax = f.a.z.max(f.b.z).max(f.c.z);
+            zmax > bottom_z + 1e-6 && zmin <= top_z + 2.0 * r + 1e-6
+        })
+        .count()
+}
+
+/// Emit a visible path note when `waterlines` is off and steep flanks stand
+/// uncut inside the requested depth window (#2811).
+pub(super) fn note_waterlines_off(
+    b: &mut PathBuilder,
+    p: &Finish3DParams,
+    r: f64,
+    facets: &[Triangle],
+) {
+    let steep = count_steep_flanks(facets, p.bottom_z, p.top_z, r);
+    if steep > 0 {
+        b.note(format!(
+            "{WATERLINES_OFF_NOTE} {steep} steep flank facet(s) (>45 deg) left uncut - raster passes only, leaving steep material or large scallops for downstream rest or a waterline pass"
+        ));
+    }
 }
 
 /// The shared close of every raster-family strategy: the steep
@@ -288,17 +333,30 @@ pub(super) fn rings_and_tail_with_trim(
     emitted: bool,
     trim_columns: bool,
 ) -> Result<Toolpath, GenError> {
-    // #1015: the rings refuse with the shallow pass (and any rings) built.
-    let zs = levels(p, r, facets).map_err(|e| e.with_ghost_moves(b.moves()))?;
-    let ds = dirs(r, p.tolerance);
-    let mut last = Some(p.clearance_z);
     let mut emitted = emitted;
-    emitted |= emit_rings_with_trim(&mut b, p, facets, &zs, &ds, &mut last, trim_columns)
-        .map_err(|e| e.with_ghost_moves(b.moves()))?;
+    if p.waterlines {
+        // #1015: the rings refuse with the shallow pass (and any rings) built.
+        let zs = levels(p, r, facets).map_err(|e| e.with_ghost_moves(b.moves()))?;
+        let ds = dirs(r, p.tolerance);
+        let mut last = Some(p.clearance_z);
+        emitted |= emit_rings_with_trim(&mut b, p, facets, &zs, &ds, &mut last, trim_columns)
+            .map_err(|e| e.with_ghost_moves(b.moves()))?;
+    } else if p.top_z < p.bottom_z {
+        return Err(
+            GenError::Invalid("waterline bottom is above its top".into())
+                .with_ghost_moves(b.moves()),
+        );
+    }
     if !emitted {
-        return Err(GenError::Empty(
-            "no surface reaches within one ball radius of the requested depths".into(),
-        ));
+        let msg = if p.waterlines {
+            "no surface reaches within one ball radius of the requested depths"
+        } else {
+            "no shallow surface inside the requested depths, and the waterline ring pass is off - enable waterlines to cut steep flanks"
+        };
+        return Err(GenError::Empty(msg.into()));
+    }
+    if !p.waterlines {
+        note_waterlines_off(&mut b, p, r, facets);
     }
     let cur = b.at();
     b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);

@@ -271,6 +271,7 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             Warning::StockChamferGouge { .. } | Warning::StockDeburrGouge { .. } => (1, true),
             Warning::ShankHit { part, .. } => (2, *part),
             Warning::RapidInStock { .. } => (3, false),
+            Warning::RapidInPart { .. } => (3, true),
             // #2901: the first traverse under a top - its own fix (raise
             // the clearance height), clear of the avoid range (216..=220).
             Warning::FirstTraverseLow { .. } => (221, false),
@@ -309,6 +310,12 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             // #3525: a cut deeper than the flute length - the cause of
             // the shank findings after it, its own line (advisory).
             Warning::FluteShort { .. } => (226, false),
+            // #3679: a feed plunge deeper than one stepdown below the
+            // uncut floor - a tool-load note, its own line (advisory).
+            Warning::PlungeTooDeep { .. } => (227, false),
+            // #3748: a selected entry that is not the recommended Arc on
+            // a start-side pass - advisory, its own line.
+            Warning::EntryNotRecommended { .. } => (227, false),
             // A lathe holder's rub (#369) splits part from stock too.
             Warning::HolderHit { part, .. } => (212 + *part as u8, false),
         }
@@ -323,6 +330,7 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             | Warning::HolderHit { at, .. }
             | Warning::SweepHit { at, .. }
             | Warning::RapidInStock { at }
+            | Warning::RapidInPart { at }
             | Warning::UndercutLift { at }
             | Warning::FirstTraverseLow { at, .. }
             | Warning::FirstTraverseUnderTable { at, .. }
@@ -336,7 +344,9 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             | Warning::SinkerFinishOrder { at, .. }
             | Warning::DrillUndersize { at, .. }
             | Warning::StrategyFallback { at, .. }
-            | Warning::FluteShort { at, .. } => *at,
+            | Warning::FluteShort { at, .. }
+            | Warning::PlungeTooDeep { at, .. } => *at,
+            | Warning::EntryNotRecommended { at, .. } => *at,
         }
     }
     let mut lines: Vec<(String, Option<usize>)> = Vec::new();
@@ -422,7 +432,7 @@ mod height_row_tests {
     #[test]
     fn the_pane_note_appears_only_while_something_is_unresolved() {
         let world = new_world();
-        let ok = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+        let ok = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
             cut_z: Height::fixed(19.5),
@@ -433,7 +443,7 @@ mod height_row_tests {
             climb: true,
         };
         assert_eq!(unresolved_note(&world, None, None, &ok), None, "all fixed - no alarm");
-        let broken = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+        let broken = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
             cut_z: Height::of(HeightReference::BottomOfStock, 0.0),
@@ -527,7 +537,7 @@ mod height_row_tests {
             tab_height: 1.0,
             entry: camcraft_app::machining3d::Entry3D::Plunge,
             helix_radius: 1.0,
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             chain_overrides: Vec::new(),
         }
@@ -696,9 +706,11 @@ mod warning_fold_tests {
         let mut w = shank_run(10, 12, false);
         w.push(Warning::ShankHit { at: 500, part: true });
         w.push(Warning::RapidInStock { at: 3 });
+        w.push(Warning::RapidInPart { at: 4 });
         w.push(Warning::ShankHit { at: 540, part: true });
+        w.push(Warning::RapidInPart { at: 6 });
         let folded = fold_warnings(&w);
-        assert_eq!(folded.len(), 3);
+        assert_eq!(folded.len(), 4);
         assert!(
             folded[0].starts_with("warning: shank/holder at move 10 collides with the uncut stock"),
             "{folded:?}"
@@ -714,5 +726,9 @@ mod warning_fold_tests {
             folded[2],
             "warning: rapid move 3 travels through stock (below the clearance plane, or at it below the stock top)"
         );
+        assert_eq!(folded[3], "warning: tool meets the part on rapid move 4 - repeated on 1 more move (to 6)");
+        let at: Vec<_> = super::fold_warnings_located(&w).into_iter().map(|(_, at)| at).collect();
+        assert_eq!(at, [Some(10), Some(500), Some(3), Some(4)]);
+        assert!(w[5].blocks_post(), "a part rapid remains a blocking warning");
     }
 }

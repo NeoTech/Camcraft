@@ -92,7 +92,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         let sections = if super::wire_sketch::selected(&op.src, &op.params) {
             let name = model::name_of(world, e).ok_or("the selected wire operation has no name")?;
             let sketch = super::wire_sketch::resolve(world, &op, &name, &hs)?;
-            let part = crate::geo2d::Region::new(vec![sketch.straight_ring(w)?]).map_err(|e| e.to_string())?;
+            let part = crate::geo2d::Region::new(vec![sketch.nominal_ring(w)?]).map_err(|e| e.to_string())?;
             let stock = sketch.stock_region()?;
             sketch.check_path(&cache.path, cond.wire_diameter * 0.5 + cond.gap)?;
             let (lo, hi) = (sketch.stock.min.z, sketch.stock.max.z);

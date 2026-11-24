@@ -70,7 +70,7 @@ fn cp(side: Side, climb: bool, lead: Lead, comp: Compensation) -> ContourParams 
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
     }
 }

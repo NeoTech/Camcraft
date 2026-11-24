@@ -14,6 +14,7 @@ use super::contour_depth::Ladder;
 use super::contour_entry::{Engage, crosses, flatten, say, seam_leads, wall_arc, wall_arc_top};
 use super::contour_comp::{self, SpanCtx};
 use super::contour_link::{plan_links, push_stay, ring_link};
+use super::contour_peck::{dive, uncut_floor};
 use super::contour_step::{Said, Step, engage_level};
 use super::levels::{Cert, Motion};
 use super::ring::Ring;
@@ -297,7 +298,7 @@ pub(super) fn emit_band(
                 // #2004: the column of this descent is open down to prev_z
                 // when the descent one level up was the same arm.
                 let opened = rzi >= 2 || (rzi == 1 && arm == p.entry);
-                let step = Step { arm, e2, z, prev_z, first: first_entry, opened, inside, tabbed, lead_top };
+                let step = Step { arm, e2, z, prev_z, first: first_entry, opened, inside, tabbed, lead_top, uncut: uncut_floor(p, rz, rzi) };
                 if let Some(d) = engage_level(b, &eng, &step, &lead, &walk, said) {
                     if dives.0.to_bits() != z.to_bits() {
                         dives = (z, Vec::new());
@@ -305,12 +306,13 @@ pub(super) fn emit_band(
                     dives.1.push(vec![d, e2]);
                 }
             } else {
-                // Tab window to tab window: up over the tab, across, down.
+                // Tab window to tab window: up over the tab, across, down (pecked, #3678).
                 let cur = b.at();
                 b.push(MoveKind::Feed, Point3::new(cur.x, cur.y, hop_z), Some(p.feed));
                 b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, hop_z), None);
                 super::contour_link::guard(b, p, e2, lead_top, p.entry_top(), "the dive past a tab");
-                b.push(MoveKind::Plunge, Point3::new(e2.x, e2.y, lead_top), Some(p.plunge_feed));
+                let (pf, uncut) = (p.plunge_feed, uncut_floor(p, rz, rzi));
+                dive(b, p, e2, lead_top, uncut, hop_z, pf, |b, d| b.push(MoveKind::Plunge, Point3::new(e2.x, e2.y, d), Some(pf)));
             }
             first_entry = false;
             let at = b.at();

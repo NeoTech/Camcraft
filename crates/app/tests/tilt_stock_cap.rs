@@ -74,6 +74,8 @@ fn generate(world: &World, h: &mut History, src: SrcRef, params: OpParams) -> Ve
 fn slot(a_deg: f64) -> OpParams {
     let y = mid_y(a_deg);
     OpParams::Slot {
+        blend_turns: false,
+        blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         a: Point2::new(-10.0, y),
         b: Point2::new(10.0, y),

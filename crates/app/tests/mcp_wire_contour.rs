@@ -279,6 +279,8 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
             cutoff_condition: "C120".into(),
         }),
         capture: true,
+        both_pieces_restrained: true,
+        stock_centered_in_xy_travel: true,
         taper_deg: 2.0,
         burnout_clearance: Some(1.0),
         clearance: 2.5,

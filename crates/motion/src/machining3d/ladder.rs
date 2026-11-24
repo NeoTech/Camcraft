@@ -8,6 +8,7 @@ use super::descent::{self, Ask, descend};
 use super::hsm;
 use super::level_ctx::{LevelCtx, feed_leg, walk_pass};
 use super::params::{Entry3D, Pocket3DParams};
+use super::reentry;
 use super::rest::level_target;
 use super::shell::Field;
 use super::troch;
@@ -18,7 +19,6 @@ use crate::geo2d::{Point2, Region};
 use crate::geometry::{Point3, Triangle};
 use crate::links::{Link, LinkTally, NOT_PROVED, TOO_LONG};
 use crate::machining2d::{chord_clears, AdaptiveMethod, GenError};
-use crate::plunge_law;
 use crate::stock_sim::Columns;
 
 /// Half the width, in lattice cells, of the narrowest standing strip
@@ -360,10 +360,10 @@ pub(super) fn ladder(
                 None => feed_leg(&mut b, &lvl, next_entry, 0.0),
                 Some(hz) => {
                     b.push(MoveKind::Rapid, Point3::new(prev.x, prev.y, hz), None);
-                    // M11.3: a tool that is not centre-cutting enters a
-                    // pass start its neighbours have not cleared like a
-                    // level (helix, ramp along the pass) or the op is
-                    // refused by name (`plunge_law`).
+                    // M11.3, #3670: a pass start its neighbours have not
+                    // cleared is entered like a level - by the op's entry,
+                    // or (not centre-cutting) helix, ramp along the pass,
+                    // else refused by name (`plunge_law`).
                     let again = Ask {
                         arm: Entry3D::Plunge,
                         transition: false,
@@ -374,14 +374,11 @@ pub(super) fn ladder(
                         prev_cut: prev_state.as_ref().map(|(q, _)| *q),
                         air: false,
                     };
-                    let (tip, top) = (lvl.tip(next_entry, 0.0), descent::mat_top(&lvl, &again));
-                    if !p.links.approach.center_cutting && plunge_law::into_solid(&b, next_entry, tip, top, r) {
-                        lvl.tz = hz;
-                        let why = "a pass start inside the level";
-                        if let Some(d) = descent::fallback(&mut b, &lvl, &again, why, false) {
-                            restarts.push(vec![d, next_entry]);
-                        }
-                        lvl.tz = p.clearance_z;
+                    lvl.tz = hz;
+                    let re = reentry::reenter(&mut b, &lvl, &again, p.entry);
+                    lvl.tz = p.clearance_z;
+                    if let Some(dove) = re {
+                        restarts.extend(dove.map(|d| vec![d, next_entry]));
                         walk_pass(&mut b, pass, &lvl, pi, /*skip_first=*/ true);
                         continue;
                     }

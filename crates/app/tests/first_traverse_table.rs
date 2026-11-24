@@ -108,6 +108,7 @@ fn generate_on(rig: Rig, x_half: f64, b_deg: f64, clear: f64) -> (World, OpStatu
     let p = OpParams::Face {
         holes: Default::default(),
         tilt: Some(Tilt { basis_version: 1, a_deg: 0.0, b_deg, origin: [0.0, 0.0, ORIGIN_Z] }),
+        blend_radius: None,
         blend_turns: false,
         stepover: 3.0,
         clearance_z: Height::fixed(clear),

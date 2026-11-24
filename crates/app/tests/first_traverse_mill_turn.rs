@@ -51,6 +51,7 @@ fn face(clear: f64, tilt: Option<Tilt>, cut: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         tilt,
+        blend_radius: None,
         blend_turns: false,
         stepover: 3.0,
         clearance_z: Height::fixed(clear),

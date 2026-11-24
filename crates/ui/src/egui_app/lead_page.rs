@@ -15,12 +15,13 @@
 use egui::Ui;
 
 use camcraft_app::links::{Link, Links};
+use camcraft_app::machining2d::{PassStart, entry_advice};
 use camcraft_app::machining3d::Entry3D;
 use camcraft_app::units::Unit;
 
 use super::approach_page::{arm_fields, engagement_group, feeds_group, plunge_group};
 use super::fields::{combo, num, num_unit};
-use super::layout::{auto_value, check_row, group, hint, prop_row, prop_row_hint};
+use super::layout::{auto_value, check_row, consequence, group, hint, prop_row, prop_row_hint};
 
 const ENTRY_KINDS: [&str; 4] = ["Plunge", "Ramp", "Helix", "Arc"];
 const TRANSITIONS: [&str; 5] = ["Same as entry", "Plunge", "Ramp", "Helix", "Arc"];
@@ -63,11 +64,14 @@ fn link_of(i: usize) -> Link {
 /// radius, `None` for a kind whose first engagement is not a choice (the
 /// bore's centre dive).
 pub(super) fn leads_tab(ui: &mut Ui, u: Unit, tag: &str, first: Option<(&mut Entry3D, &mut f64)>, links: &mut Links) {
-    leads_tab_with_retract(ui, u, tag, first, links, true);
+    leads_tab_with_retract(ui, u, tag, first, links, true, PassStart::Auto);
 }
 
 /// Roughing links use clearance while Heights has no retract hop (#3318).
 /// Keep the stored Retract choice so enabling the hop restores its plane.
+/// `start`: the op's "Pass starts at" (#3748) - for Inside or Outside a
+/// Helix, Ramp or Plunge entry shows the advice under the Type selector;
+/// Auto for a kind without the choice.
 pub(super) fn leads_tab_with_retract(
     ui: &mut Ui,
     u: Unit,
@@ -75,10 +79,11 @@ pub(super) fn leads_tab_with_retract(
     first: Option<(&mut Entry3D, &mut f64)>,
     links: &mut Links,
     has_retract: bool,
+    start: PassStart,
 ) {
     let entry = first.as_ref().map(|(e, _)| **e);
     if let Some((entry, helix_radius)) = first {
-        group(ui, "Entry", None, |ui| entry_group(ui, u, tag, entry, helix_radius, links));
+        group(ui, "Entry", None, |ui| entry_group(ui, u, tag, entry, helix_radius, links, start));
     }
     group(ui, "Linking", None, |ui| linking_group(ui, u, tag, entry, links, has_retract));
     plunge_group(ui, u, &mut links.approach);
@@ -86,7 +91,7 @@ pub(super) fn leads_tab_with_retract(
     engagement_group(ui, &mut links.approach);
 }
 
-fn entry_group(ui: &mut Ui, u: Unit, tag: &str, entry: &mut Entry3D, helix_radius: &mut f64, links: &mut Links) {
+fn entry_group(ui: &mut Ui, u: Unit, tag: &str, entry: &mut Entry3D, helix_radius: &mut f64, links: &mut Links, start: PassStart) {
     let mut e_idx = entry_idx(*entry);
     let before = e_idx;
     prop_row_hint(ui, "Type", "how the tool first reaches the cut depth", |ui| {
@@ -94,6 +99,12 @@ fn entry_group(ui: &mut Ui, u: Unit, tag: &str, entry: &mut Entry3D, helix_radiu
     });
     if e_idx != before {
         *entry = entry_of(e_idx);
+    }
+    // #3748: every type stays selectable; a type that is not the
+    // recommended Arc on an Inside or Outside pass says why, next to the
+    // selector (the same text as the op's warning).
+    if let Some(advice) = entry_advice(start, *entry) {
+        consequence(ui, advice);
     }
     if *entry == Entry3D::Helix {
         prop_row(ui, "Helix radius", |ui| num(ui, u, helix_radius));

@@ -302,7 +302,7 @@ fn machining_document() -> (World, History) {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(top + 25.0),
         cut_z: Height::fixed(top - 0.5),

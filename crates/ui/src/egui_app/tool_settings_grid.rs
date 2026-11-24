@@ -60,8 +60,9 @@ pub(super) fn grid(ui: &mut Ui, state: &mut State) {
     group_open(ui, "Catalog", None, true, |ui| catalog(ui, state));
 }
 
-/// Type, the cutting shape and the tool body's lengths.
-fn geometry(ui: &mut Ui, state: &mut State) {
+/// Type, the cutting shape and the tool body's lengths. #3893: the tool
+/// library window's Tool tab draws these same rows.
+pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
     let u = state.units();
     let exists = state.tool_ui.exists;
     let before = state.tool_ui.kind;
@@ -148,7 +149,7 @@ fn geometry(ui: &mut Ui, state: &mut State) {
 
 /// The rows each tool kind reads, shown only where they feed a generator
 /// or the collision profile.
-fn kind_rows(ui: &mut Ui, state: &mut State) {
+pub(super) fn kind_rows(ui: &mut Ui, state: &mut State) {
     let u = state.units();
     let kind = state.tool_ui.kind;
     if kind == 3 {
@@ -257,7 +258,8 @@ fn cutting(ui: &mut Ui, state: &mut State) {
 }
 
 /// The catalog facts, the workpiece material and the tool-table number.
-fn catalog(ui: &mut Ui, state: &mut State) {
+/// #3893: the tool library window's Details tab draws these same rows.
+pub(super) fn catalog(ui: &mut Ui, state: &mut State) {
     text_row(ui, "Material group", &mut state.tool_ui.material_group, "tool_material_group", CTRL_W * 1.3);
     super::layout::hint(ui, "workpiece material these base speeds and feeds are set for");
     super::tool_catalog_rows::catalog_rows(ui, &mut state.tool_ui);

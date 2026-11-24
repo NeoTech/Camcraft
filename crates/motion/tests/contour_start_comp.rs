@@ -49,6 +49,7 @@ fn params(pick: Point2, comp: Compensation) -> ContourParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         blend_turns: false,
+        blend_radius: None,
         links: Links {
             approach: Approach { start_point: Some(pick), compensation: comp, ..Approach::DEFAULT },
             ..Links::PLANAR

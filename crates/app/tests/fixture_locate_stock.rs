@@ -116,7 +116,7 @@ fn face_op(world: &World, h: &mut History) {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::of(HeightReference::TopOfStock, 25.0),
         cut_z: Height::of(HeightReference::TopOfStock, -0.5),

@@ -271,11 +271,14 @@ impl Run {
                 let (code, stalled) = crate::direct::run(d, root, file, limit)?;
                 (code, None, stalled)
             }
-            None => crate::direct::cargo(&cargo(), cache, &args, &dir, file, records.is_some(), limit)?,
+            None => {
+                let json = records.is_some().then(|| crate::direct::json_path(&log));
+                crate::direct::cargo(&cargo(), cache, &args, &dir, file, json.as_deref(), limit)?
+            }
         };
         let mut recorded = None;
         if let (Some(name), Some(json), 0) = (records.filter(|_| !crate::direct::opted_out()), json, code) {
-            match crate::direct::record(root, &cargo(), &name, &json) {
+            match json.and_then(|j| crate::direct::record(root, &cargo(), &name, &j)) {
                 Ok(p) => {
                     println!("     {} test executable(s) of {name} recorded: their steps start no cargo", p.count());
                     recorded = Some((name, p));

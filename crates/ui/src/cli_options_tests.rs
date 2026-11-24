@@ -1,6 +1,6 @@
 //! Pins for #2082: the help text, the table and the parser agree.
 
-use crate::cli_options::{help_text, parse, Parsed, ENV_VARS, OPTIONS};
+use crate::cli_options::{files, help_text, parse, read_only, Parsed, ENV_VARS, OPTIONS};
 
 fn argv(a: &[&str]) -> Vec<String> {
     a.iter().map(|s| (*s).to_owned()).collect()
@@ -27,7 +27,7 @@ fn help_names_each_option_and_variable_of_the_table() {
 #[test]
 fn each_flag_the_readers_use_is_in_the_table() {
     // The flags that the owners of each value read, spelled as they spell them.
-    for flag in ["--gpu-backend", "--gpu", "--mcp-port", "--headless", "--ui"] {
+    for flag in ["--gpu-backend", "--gpu", "--mcp-port", "--headless", "--ui", "--read-only"] {
         assert!(OPTIONS.iter().any(|o| o.flag == flag), "{flag} is not in the table");
     }
     for env in ["CAMCRAFT_GPU_BACKEND", "CAMCRAFT_GPU", "CAMCRAFT_MCP_PORT"] {
@@ -63,6 +63,19 @@ fn unknown_option_gives_an_error_that_names_it() {
     assert!(err.contains("--bogus"), "{err}");
     assert!(parse(&argv(&["-x"])).is_err());
     assert!(parse(&argv(&["--headless=yes"])).unwrap_err().contains("takes no value"));
+}
+
+#[test]
+fn read_only_is_a_switch_that_keeps_the_file_after_it() {
+    // #3609: the switch takes no value, so the next argument stays a file.
+    let args = argv(&["--read-only", "job.camproj"]);
+    assert_eq!(parse(&args), Ok(Parsed::Run));
+    assert!(read_only(&args));
+    assert_eq!(files(&args), ["job.camproj"]);
+    assert!(read_only(&argv(&["job.camproj", "--read-only"])), "in any place");
+    assert!(!read_only(&argv(&["job.camproj"])), "off by default");
+    assert!(parse(&argv(&["--read-only=yes"])).unwrap_err().contains("takes no value"));
+    assert!(!read_only(&argv(&["--read-only", "--bogus"])), "refused arguments open nothing");
 }
 
 #[test]

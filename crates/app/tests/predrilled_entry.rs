@@ -212,7 +212,7 @@ fn a_drilled_hole_ahead_is_plunged_to_full_depth_and_posted() {
     // The straight feed down the hole to the floor at X0 Y0, straight
     // from the rapid over it - no helix arc between.
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
-    let at = lines.iter().position(|l| *l == "G01 X0. Y0. Z12. F200").unwrap_or_else(|| panic!("no plunge to Z12 at X0 Y0\n{text}"));
+    let at = lines.iter().position(|l| *l == "G01 X0. Y0. Z12. F200.").unwrap_or_else(|| panic!("no plunge to Z12 at X0 Y0\n{text}"));
     assert!(at > 0 && lines[at - 1].starts_with("G00 X0. Y0. Z"), "the rapid over the hole, then the plunge: {:?}", &lines[at.saturating_sub(2)..=at]);
 }
 

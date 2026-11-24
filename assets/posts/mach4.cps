@@ -102,6 +102,20 @@ function fu(mm) { return trimDec(inch ? mm / 25.4 : mm, inch ? 4 : 3, true); }
 function fa(deg) { return trimDec(deg, 3, true); }
 function ff(mmMin) { return "F" + trimDec(inch ? mmMin / 25.4 : mmMin, inch ? 2 : 1, false); }
 function fn(mm) { return trimDec(inch ? mm / 25.4 : mm, inch ? 4 : 3, false); }
+// #3701: compare the tap pitch with the F/S words the control reads.
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var writtenFeed = Number(fn(feed)) * (inch ? 25.4 : 1);
+  var want = feed / sRpm;
+  var got = speed > 0 ? writtenFeed / speed : 0;
+  var error = Math.abs(got - want) / want;
+  if (!(error <= 1e-4)) {
+    msg(who() + "canned cycle G84 (tap) feed " + feed + " mm/min at " + sRpm + " rpm posts as F" + fn(feed) + " S" + speed +
+      " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 function eps() { return inch ? "0.0005" : "0.005"; }
 function minusU(expr, mm) {
   var v = Number(fn(mm));
@@ -808,6 +822,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   var pose = preparePose(p, true);
   if (!pose) return;
   var cfg = trunnionCfg;
@@ -824,7 +839,7 @@ function onCycle() {
     var ws = [g, "X" + fu(qBot[0]), "Y" + fu(qBot[1]), "Z" + fu(qBot[2]), "R" + fu(qR[2])];
     if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && Number(p.Q) > 0) ws.push("Q" + fu(Number(p.Q)));
     if (secDwell > 0 && (g === "G82" || g === "G89")) ws.push("P" + trimDec(secDwell, 3, false));
-    ws.push(ff(Number(p.FeedRate)));
+    ws.push(g === "G84" ? "F" + fn(Number(p.FeedRate)) : ff(Number(p.FeedRate)));
     block(ws);
     cycleSig = sig;
   }

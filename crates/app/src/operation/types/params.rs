@@ -114,6 +114,10 @@ pub enum OpParams {
         /// (`machining2d::face`); `false` is the sharp serpentine every
         /// pre-M11.1 file holds.
         blend_turns: bool,
+        /// The row-end arc's radius (#1759), read only with
+        /// `blend_turns`; `None` is the half row spacing every earlier
+        /// file turns on.
+        blend_radius: Option<f64>,
         /// How the rows meet a hole in the region (M13.11): lifted over
         /// at the clearance plane (the default - safe for a bore and a
         /// boss alike), cut straight across where the hole is air with
@@ -160,6 +164,10 @@ pub enum OpParams {
         /// it (`machining2d::fillet_corners`); `false` is the sharp
         /// walk every pre-M11.1 file holds.
         blend_turns: bool,
+        /// The corner arc's radius (#1759), read only with
+        /// `blend_turns`; `None` is the tool radius every earlier file
+        /// blends at.
+        blend_radius: Option<f64>,
         /// Level transitions and links (M11.2 C/D, the Lead in / Lead
         /// out choice): the descent between levels, and clearance /
         /// retract / keep-down between levels and between rings. The
@@ -452,6 +460,13 @@ pub enum OpParams {
         /// Helix, certified per level against the stadium (a
         /// full-width channel has no room for an orbit and says so).
         helix_radius: f64,
+        /// Arc turns at the row ends (#1759): each corner of the
+        /// serpentine rides one tangent arc inside the cutter-center
+        /// stadium (`machining2d::slot`); `false` is every earlier file.
+        blend_turns: bool,
+        /// The corner arc's radius, read only with `blend_turns`;
+        /// `None` is the tool radius.
+        blend_radius: Option<f64>,
         links: Links,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
@@ -698,6 +713,11 @@ pub enum OpParams {
         /// own diagonal certifies the break.
         /// See [`crate::finishing3d::GapLink`].
         gap_link: finishing3d::GapLink,
+        /// Run the waterline ring pass on steep flanks after the
+        /// shallow pass (#2811). `true` (default) preserves every
+        /// older operation; `false` cuts the shallow pass only and
+        /// notes any steep flanks left uncut.
+        waterlines: bool,
         /// Where the nested offset loops start (#3362, the shared
         /// parameter of #3316): read by Contour and Flat only. `Auto`
         /// is every earlier file, byte for byte.

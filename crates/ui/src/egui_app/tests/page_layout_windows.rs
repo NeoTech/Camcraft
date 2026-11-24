@@ -23,7 +23,7 @@ fn assert_stack_in(h: &H, container: egui::Rect, who: &str, anchors: &[&str]) {
 }
 
 /// Floating `egui::Window`: inside the screen, anchors inside it top to bottom.
-fn assert_window_layout(h: &H, title: &str, anchors: &[&str]) {
+pub(super) fn assert_window_layout(h: &H, title: &str, anchors: &[&str]) {
     let screen = h.ctx.content_rect();
     let Some(win) = h
         .query_all_by_role(egui::accesskit::Role::Window)

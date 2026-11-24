@@ -81,7 +81,7 @@ fn doc(machine: Machine, len: f64, a: Option<f64>) -> World {
         plunge_feed: 4.0 * IN,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt,
         extend_start: 0.0,

@@ -18,6 +18,8 @@
 //! after a tilted section), post::dump, post::upright_after_tilt.
 
 mod ac_trunnion_support;
+#[path = "upright_after_tilt/program_end.rs"]
+mod program_end; // #3540: the program end returns the rotaries too
 
 use camcraft_post::cl::{CycleKind, Move, MoveKind, Toolpath};
 use camcraft_post::geometry::Point3;

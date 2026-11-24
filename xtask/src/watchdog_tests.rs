@@ -40,6 +40,18 @@ fn watchdog_helper() {
             let mut g = spawn("tick");
             g.wait().expect("wait");
         }
+        // As a build that starts the sccache server (#3675): a descendant that outlives the build holds
+        // its stdout, and the build exits at once.
+        "orphan" => {
+            #[expect(clippy::zombie_processes, reason = "the descendant must outlive this process; the test kills it by pid")]
+            let g = spawn("silent");
+            println!("{{\"reason\":\"build-finished\",\"success\":true}}");
+            println!("grandchild pid {}", g.id());
+        }
+        "fail" => {
+            println!("{{\"reason\":\"build-finished\",\"success\":false}}");
+            std::process::exit(3);
+        }
         _ => {}
     }
 }
@@ -102,6 +114,91 @@ fn output_of_the_child_or_a_descendant_keeps_the_step_alive() {
         assert!(matches!(end, End::Exited(st) if st.success()), "{mode}: the step writes output, so it must run to its end: {end:?}\n{text}");
         assert!(!text.contains(watchdog::LINE), "{mode}: no STALL line:\n{text}");
     }
+}
+
+/// #3675: a recording build ends when cargo exits, also when a descendant that outlives it (the
+/// sccache server) still holds its stdout. Before the fix the gate waited for that descendant, with no
+/// watchdog: the helper's descendant sleeps 120 s, so the old code took 120 s or more here.
+#[test]
+fn a_recording_build_ends_when_cargo_exits_not_when_its_descendants_do() {
+    let dir = json_dir("orphan");
+    let path = crate::direct::json_path(&dir.join("01-step.log"));
+    let t0 = Instant::now();
+    let (code, json, stalled) = recording(None, "orphan", &dir, Some(&path)).expect("run");
+    let took = t0.elapsed();
+    let json = json.and_then(Result::ok).unwrap_or_default();
+    let pid: Option<u32> = json.lines().find_map(|l| l.split_once("grandchild pid ").and_then(|(_, p)| p.trim().parse().ok()));
+    if let Some(pid) = pid.map(|p| p.to_string()) {
+        let (prog, kill) = if cfg!(windows) { ("taskkill", vec!["/F", "/PID", &pid]) } else { ("kill", vec!["-KILL", &pid]) };
+        let _ = Command::new(prog).args(kill).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    let removed = !path.exists();
+    let _ = fs::remove_dir_all(&dir);
+    assert!(took < Duration::from_secs(30), "the step must end when cargo exits: {took:?}");
+    assert!(!stalled && code == 0, "the build exits green: code {code}, stalled {stalled}");
+    assert!(json.contains("\"reason\":\"build-finished\""), "the JSON of the build comes back: {json}");
+    assert!(pid.is_some(), "the helper names its descendant: {json}");
+    assert!(removed, "the JSON file is removed after a green build: {}", path.display());
+}
+
+/// #3675 review: the JSON file goes away after a red build, and when cargo cannot start (an early return).
+#[test]
+fn the_json_file_is_removed_after_a_failed_build_and_a_failed_start() {
+    let dir = json_dir("removed");
+    let path = dir.join("02-step.json");
+    let (code, json, _) = recording(None, "fail", &dir, Some(&path)).expect("run");
+    let red_removed = !path.exists();
+    let start = recording(Some(&dir.join("no-such-cargo.exe")), "", &dir, Some(&path));
+    let start_removed = !path.exists();
+    let _ = fs::remove_dir_all(&dir);
+    assert!(code == 3, "the red build's code comes back: {code}");
+    assert!(json.is_some_and(|j| j.is_ok_and(|t| t.contains("\"success\":false"))), "the JSON of a red build still comes back");
+    assert!(red_removed, "the JSON file is removed after a red build");
+    assert!(start.is_err(), "a cargo that cannot start is an error, as before");
+    assert!(start_removed, "the JSON file is removed on the early return");
+}
+
+/// #3675 review: an I/O error of the JSON file is "nothing recorded", not a gate error.
+#[test]
+fn an_io_error_of_the_json_file_records_nothing_and_the_build_still_runs() {
+    let dir = json_dir("io");
+    let path = dir.join("missing-dir").join("03-step.json");
+    let (code, json, stalled) = recording(None, "", &dir, Some(&path)).expect("an I/O error is not a gate error");
+    let _ = fs::remove_dir_all(&dir);
+    assert!(code == 0 && !stalled, "the build runs to its end: code {code}");
+    let why = json.and_then(Result::err).unwrap_or_default();
+    assert!(why.starts_with("create ") && why.contains("03-step.json"), "the reason names the file: {why}");
+}
+
+/// #3675 review: an entry that is at the name already (a stale file, a planted link) is not followed,
+/// not written and not removed.
+#[test]
+fn an_entry_at_the_json_name_is_not_followed() {
+    let dir = json_dir("exists");
+    let path = dir.join("04-step.json");
+    fs::write(&path, "keep").expect("seed");
+    let (code, json, _) = recording(None, "", &dir, Some(&path)).expect("run");
+    let kept = fs::read_to_string(&path).unwrap_or_default();
+    let _ = fs::remove_dir_all(&dir);
+    assert_eq!(code, 0);
+    assert!(json.is_some_and(|j| j.is_err()), "nothing is recorded from a file that was there before");
+    assert_eq!(kept, "keep", "the entry at the name is not written and not removed");
+}
+
+fn json_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("xtask-json-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("dir");
+    dir
+}
+
+/// A recording build of the helper in `mode` (or of the program `prog`) with its JSON at `json`.
+fn recording(prog: Option<&std::path::Path>, mode: &str, dir: &std::path::Path, json: Option<&std::path::Path>) -> Result<crate::direct::Watched, String> {
+    let log = File::create(dir.join("step.log")).expect("log");
+    let me = std::env::current_exe().expect("exe");
+    let prog = prog.unwrap_or(&me).to_string_lossy().into_owned();
+    let args: Vec<String> = ["--exact", "watchdog_tests::watchdog_helper", "--nocapture", "--test-threads=1"].map(String::from).to_vec();
+    crate::direct::cargo(&prog, vec![(HELPER, mode.into())], &args, dir, log, json, Duration::from_secs(60))
 }
 
 #[test]

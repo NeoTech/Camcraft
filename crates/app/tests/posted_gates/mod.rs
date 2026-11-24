@@ -101,6 +101,9 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
             spindle: None,
             rims: &[],
             corner_reliefs: &[],
+            // #3679: this fixture states no stepdown, so the plunge
+            // law stays silent.
+            plunge_stepdown: None,
         },
     )
 }
@@ -122,7 +125,7 @@ fn slot_op(a: Point2, b: Point2, width: f64) -> OpParams {
         plunge_feed: 100.0,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
@@ -145,7 +148,7 @@ fn slot_params(d: f64, width: f64, bottom: f64, stepdown: f64, stepover: f64) ->
         plunge_feed: 100.0,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
     }
 }
 

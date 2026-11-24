@@ -333,8 +333,11 @@ pub(crate) fn target(state: &mut State, t: UiTarget) {
     // A retarget ends the blank new-tool form (#2397).
     state.new_tool_form = false;
     if let UiTarget::Tool(name) = &t {
+        // #3892: the empty name is the tool library. Every door (the
+        // ribbon's Tools cell, the View menu, the gate route) opens its
+        // window and keeps the Properties subject.
         if name.is_empty() {
-            state.layout_request = Some(LayoutRequest::ToolLibrary);
+            state.open_tool_library();
             return;
         }
         if state.tool_shape_editor.is_some() {

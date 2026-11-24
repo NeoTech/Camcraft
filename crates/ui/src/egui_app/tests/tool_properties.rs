@@ -38,7 +38,7 @@ fn setup_tool_list_edit_opens_tool_settings_in_properties() {
 }
 
 #[test]
-fn browser_library_door_and_tool_selection_focus_their_own_dock_tabs() {
+fn browser_library_door_opens_the_window_and_tool_selection_focuses_properties() {
     let mut h = shell_harness();
     h.get_by_label("View").click();
     h.run_steps(2);
@@ -47,7 +47,8 @@ fn browser_library_door_and_tool_selection_focus_their_own_dock_tabs() {
     assert!(h.query_by_label("Import library…").is_some(), "the browser door opens the catalog");
     select_tool(&mut h);
     assert!(here(&h, "Diameter"), "selecting a tool brings Properties in front of the catalog");
-    assert!(h.query_by_label("Import library…").is_none(), "the catalog stays behind Properties");
+    // #3892: the library is a window beside the dock, so it stays open.
+    assert!(h.query_by_label("Import library…").is_some(), "the library window stays open beside Properties");
     crate::actions::open_tool_shape_editor(&mut h.state_mut().state, TOOL);
     h.run_steps(2);
     assert!(h.state().state.tool_shape_editor.is_some());
@@ -108,21 +109,24 @@ fn properties_tool_apply_and_undo_use_the_command_history() {
 }
 
 #[test]
-fn tools_ribbon_opens_a_docked_catalog_without_retargeting_properties() {
+fn tools_ribbon_opens_the_tool_library_window_without_retargeting_properties() {
     let mut h = shell_harness();
     h.run_steps(2);
     let before = h.state().state.ui_target.clone();
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(3);
     assert_eq!(h.state().state.ui_target, before, "opening the catalog preserves the Properties subject");
-    assert!(painted(&h).iter().any(|(t, _)| t == "Tool library"), "the catalog has its own dock tab");
+    assert!(painted(&h).iter().any(|(t, _)| t == "Tool library"), "the window's title is painted");
     assert!(h.query_by_label("Catalog").is_some(), "the catalog is visible");
     assert_eq!(h.get_by_label("Import tool holders").accesskit_node().role(), egui::accesskit::Role::CheckBox);
     assert_eq!(h.get_by_label("New tool…").accesskit_node().role(), egui::accesskit::Role::Button);
-    assert!(!h.query_all_by_role(egui::accesskit::Role::Window).any(|n| n.accesskit_node().label().as_deref() == Some("Tool library")), "the library docks instead of opening a window");
+    // #3892: the library is its own window now, not a dock tab.
+    assert!(h.query_all_by_role(egui::accesskit::Role::Window).any(|n| n.accesskit_node().label().as_deref() == Some("Tool library")), "the library opens its own window");
+    assert!(!crate::egui_app::layout::is_open(&h.state().dock, &Tab::Tools), "the dock gets no Tool library tab");
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(3);
-    assert!(h.query_by_label("Catalog").is_some(), "opening the catalog twice keeps it open");
+    assert!(h.query_by_label("Catalog").is_some(), "opening the library twice keeps it open");
+    assert!(h.state().state.tool_library.is_some(), "the second click does not close the window");
     assert_eq!(h.state().state.ui_target, before);
 }
 

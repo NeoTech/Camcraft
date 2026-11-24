@@ -180,6 +180,9 @@ pub use links::*;
 pub use entity::*;
 mod wire;
 pub use wire::*;
+// #3609: a project open read-only refuses a save over its own file.
+mod read_only;
+pub use read_only::refuse_read_only_save;
 // #3608: the project file's size and modification time, for the overwrite guard of a save.
 mod disk_stamp;
 pub use disk_stamp::DiskStamp;

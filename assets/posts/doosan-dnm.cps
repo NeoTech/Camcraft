@@ -192,12 +192,31 @@ function minusU(expr, v) {
 }
 function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
   if (!(has(v) && v > 0)) return "0";
-  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+  // #3690: a whole inch F without a point can use 0.01 in/min units.
+  // FANUC B-64604EN-2/01, section 5.2.1, Unit of F command.
+  return pt(inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v)));
 }
 function eps() { return inch ? "0.0001" : "0.001"; } // one output step, the probe checks' band
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word (rpm)
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+// #3699: a tap feed is pitch x rpm, kept at 0.001 mm/min by the stream, and
+// the control cuts the pitch F / S. G84 writes the feed at three mm or four
+// inch decimals, with its point; a tap whose written F and S do not hold
+// the pitch to 0.01 percent is refused by name.
+function tapFeed(v) { return pt(fn(v)); }
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var written = Number(fn(feed)) * (inch ? 25.4 : 1);
+  var want = sRpm > 0 ? feed / sRpm : 0;
+  var got = speed > 0 ? written / speed : 0;
+  if (!(want > 0 && Math.abs(got - want) / want <= 1e-4)) {
+    msg("canned cycle G84 (tap)" + (coolantOp ? " in operation " + coolantOp : "") + " feed " + feed + " mm/min at " + sRpm +
+      " rpm posts as F" + tapFeed(feed) + " S" + speed + " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 function wa(letter, v) { return has(v) ? letter + fa(v) : ""; } // an angle word
 var seqNum = 0;
 var seqNextForce = false;
@@ -793,20 +812,48 @@ function onToolChange(number, name) {
 // the tool change and the first X/Y traverse, which states its height
 // again. A turning A is unclamped and clamped around it, as onRapid does.
 function uprightAfterTilt() {
-  var words = [], held = [], ls = ["A", "B", "C"];
-  for (var i = 0; i < ls.length; i++) {
-    var v = rotAt[ls[i]];
-    if (has(v) && Math.abs(v) > 1e-9 && statesRotary(ls[i])) { words.push(angleWord(ls[i], 0)); held.push(ls[i]); }
-  }
-  if (!words.length) return;
+  if (!heldRotaries().length) return;
   retractHome(false);
   if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
+  rotariesToZero();
+  xyUnknown = true;
+}
+// The rotaries the control holds away from zero (rotAt).
+function heldRotaries() {
+  var held = [], ls = ["A", "B", "C"];
+  for (var i = 0; i < ls.length; i++) {
+    var v = rotAt[ls[i]];
+    if (has(v) && Math.abs(v) > 1e-9 && statesRotary(ls[i])) held.push(ls[i]);
+  }
+  return held;
+}
+// One block that turns each held rotary to zero; no X/Y/Z word. A
+// turning A is unclamped before it and clamped after it.
+function rotariesToZero() {
+  var held = heldRotaries(), words = [];
+  for (var i = 0; i < held.length; i++) { words.push(angleWord(held[i], 0)); rotAt[held[i]] = 0; }
+  if (!words.length) return;
   var turnsA = held.indexOf("A") >= 0;
   if (turnsA) ensureRotaryUnclamped();
   block(["G00"].concat(words));
   if (turnsA) ensureRotaryClamped();
-  for (var j = 0; j < held.length; j++) rotAt[held[j]] = 0;
-  xyUnknown = true;
+}
+
+// #3540: the program ends upright too, so the operator unloads at zero
+// and the next program does not start under the old lean. Same order as
+// the return above: G49 (TCPM and the length offset off), Z to the
+// reference height, the angles to zero, then X/Y home - incremental
+// (G91 G28), so the via point is the current position, never work X0 Y0.
+// A trailing Go home already lifted Z (homedAt): only the angles follow.
+function uprightAtEnd() {
+  if (!heldRotaries().length) return false;
+  var homed = linesWritten() === homedAt;
+  var g28 = optStr("safeRetract", "G28") !== "G53";
+  if (!homed) { block(["G49"]); retractHome(false); }
+  if (g28 && !homed) block(["G90"]);  // a Go home wrote its own G90
+  rotariesToZero();
+  if (!homed && g28) block(["G91", "G28", "X0", "Y0"]);
+  return true;
 }
 
 // ----------------------------------------------------------- Preamble
@@ -1055,7 +1102,7 @@ function feedWord(p, arc) {
   if (!r.capped) return fw(p.FeedRate);
   var word = rotaryFeedWord(r.feed, inch);  // the post's own unit, as ff() writes F
   if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
-  return word;
+  return pt(word);  // #3690: capped feeds need the same explicit unit point
 }
 var rotRefused = {};  // #885: each rate refusal counted once per program, not per line
 function rotRefuse(s) { if (!rotRefused[s]) { rotRefused[s] = true; msg(s); } }
@@ -1291,6 +1338,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
@@ -1307,7 +1355,7 @@ function onCycle() {
       words.push(w("Q", p.Q));
     }
     if (ms > 0 && g !== "G73" && g !== "G84") words.push("P" + ms);
-    words.push(fw(p.FeedRate));
+    words.push(g === "G84" ? "F" + tapFeed(p.FeedRate) : fw(p.FeedRate));
     block(words);
     cycleSig = sig;
   }
@@ -1455,7 +1503,7 @@ function onClose() {
     }
     chipConveyorStarted = false;
   }
-  if (linesWritten() !== homedAt) {
+  if (!uprightAtEnd() && linesWritten() !== homedAt) {
     retractHome(true);
   }
   var u = endUnitsWord();

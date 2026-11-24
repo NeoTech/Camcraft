@@ -33,7 +33,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             plunge_feed,
             climb,
             entry,
-            helix_radius,
+            helix_radius, blend_turns, blend_radius,
             tilt,
             extend_start,
             extend_end,
@@ -80,6 +80,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
                 prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
                 no_pass_order_row(ui, "slot", SLOT_NO_PASS_ORDER);
+                // #1759: the row-end corners on one arc each, inside
+                // the slot; the status line states the corner rest.
+                super::kind_editors::arc_turn_rows(ui, u, "Arc turns at row ends", blend_turns, blend_radius);
             }
             if tab == SEC_FEEDS {
                 prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));

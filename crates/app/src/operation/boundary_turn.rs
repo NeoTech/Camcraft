@@ -236,7 +236,7 @@ mod law {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             holes: machining2d::FaceHoles::Lift,
             stock_top: None,
         }

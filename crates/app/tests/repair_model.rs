@@ -103,7 +103,7 @@ fn tools_and_operations_are_refused_as_not_models_not_setup_parts() {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(15.0),
         cut_z: Height::fixed(5.0),

@@ -21,6 +21,8 @@ use crate::approach::CENTER_CUT_REFUSAL;
 use super::contour_bore::{BoreStep, bore_entry};
 use super::contour_entry::Engage;
 use super::contour_params::Lead;
+use super::contour_peck;
+use super::contour_wall_ramp::wall_ramp;
 use super::descent::feed_down;
 
 /// What one level's engagement reads beyond the shared [`Engage`].
@@ -44,12 +46,19 @@ pub(super) struct Step {
     /// or the vertical lead-in's height over it (M11.3 C) - the lead then
     /// descends along itself.
     pub lead_top: f64,
+    /// #3678: the floor with no cut under the disc on a level below the
+    /// ring's first (`contour_peck::uncut_floor`); the dive pecks where it
+    /// would go more than one stepdown below the floor under the disc.
+    pub uncut: Option<f64>,
 }
 
 /// Structural refusals, each said once per path.
 #[derive(Default)]
 pub(super) struct Said {
     refused: bool,
+    /// The helix stood down to the wall-side ramp (said once, apart from
+    /// the graze refusal: a later tabbed level can still graze).
+    helixed: bool,
     tabbed: bool,
 }
 
@@ -99,7 +108,7 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top, s.arm);
+        graze(b, eng, e2, s.lead_top, s.arm, s.uncut);
         None
     } else if s.inside {
         // The bore side: the eroded region states the bounded air
@@ -112,22 +121,34 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         bore_entry(b, eng, &bs, lead, walk)
     } else {
         // The wall side (explicit Outside, and every direct Auto): the
-        // graze this generator has always posted, and the only one that
-        // can be certified - the grown region holds the part's own
-        // interior, so a dive_room or a chord on it would certify
-        // descents THROUGH the body (M8.1's rule). The other arms are
-        // refused by name - once, because the reason is structural.
-        if !matches!(s.arm, Entry3D::Plunge | Entry3D::Arc) && !said.refused {
-            b.note(format!(
-                "entry: the {} needs bounded air only a bore (Side::Inside) \
-                 has - grazing dive at the lead-in, unchanged",
-                word(s.arm)
-            ));
-            said.refused = true;
+        // grown region holds the part's own interior, so a dive_room or a
+        // chord on it would certify descents THROUGH the body (M8.1's
+        // rule). A ramp needs neither: it zig-zags along the lead-in and
+        // the ring, the path the level cuts at full depth anyway
+        // (contour_wall_ramp). A helix has no bounded air here and stands
+        // down to that ramp, named once. Where the ramp cannot stand (a
+        // tabbed level, a path too short for the angle) the graze this
+        // generator has always posted does, named once.
+        if matches!(s.arm, Entry3D::Ramp | Entry3D::Helix) {
+            if !s.tabbed && wall_ramp(b, eng, s, tz, lead, walk) {
+                if s.arm == Entry3D::Helix && !said.helixed {
+                    b.note("entry: the helix needs bounded air only a bore (Side::Inside) has - ramp along the lead-in and the ring instead");
+                    said.helixed = true;
+                }
+                return None;
+            }
+            if !said.refused {
+                b.note(format!(
+                    "entry: the {} cannot stand on the wall side here ({}) - grazing dive at the lead-in",
+                    word(s.arm),
+                    if s.tabbed { "a standing tab is material the path cannot see" } else { "the lead-in and ring are too short for the ramp angle" }
+                ));
+                said.refused = true;
+            }
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top, s.arm);
+        graze(b, eng, e2, s.lead_top, s.arm, s.uncut);
         None
     }
 }
@@ -137,8 +158,9 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
 /// generator's contract, nothing is engaged above it (M11.3) - then feed.
 /// A tool that is not centre-cutting may not plunge here (the stock
 /// beside the wall is not proved cleared): the operation is refused by
-/// name.
-fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D) {
+/// name. Below a ring's first level the dive pecks where it would go more
+/// than one stepdown below the floor under the disc (#3678).
+fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D, uncut: Option<f64>) {
     let p = eng.p;
     let a = &p.links.approach;
     if !a.center_cutting {
@@ -149,7 +171,8 @@ fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D) {
             graze_hint(arm, p.lead == Lead::None)
         ));
     }
-    feed_down(b, e2, z, p.entry_top(), eng.m, a.plunge(p.plunge_feed));
+    let feed = a.plunge(p.plunge_feed);
+    contour_peck::dive(b, p, e2, z, uncut, eng.m.hop_z, feed, |b, d| feed_down(b, e2, d, p.entry_top(), eng.m, feed));
 }
 
 /// What the user can change to lift the refusal. The Arc entry is already

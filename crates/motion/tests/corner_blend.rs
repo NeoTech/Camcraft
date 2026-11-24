@@ -66,7 +66,7 @@ fn cp(side: Side, climb: bool, blend: bool) -> ContourParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: blend,
+        blend_turns: blend, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
     }
 }

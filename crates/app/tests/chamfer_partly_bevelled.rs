@@ -99,6 +99,7 @@ fn chamfer(width: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        blend_radius: None,
         blend_turns: false,
     };
     let mut p = operation::retype_params(&base, OpType::Chamfer2D.ordinal());

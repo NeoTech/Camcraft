@@ -21,17 +21,23 @@ use crate::geo2d::{Loop, Point2, Region, RingClip};
 
 use super::face::GenError;
 use super::level_order::{Piece, WALL, order};
-use super::level_ramp_entry::too_short_at;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::PocketParams;
 use super::pocket_plan::plan_passes;
 use super::pocket_strategy::PocketStrategy;
+use super::ring_fill::{Band, RING, closed_walk, fills};
+use super::ring_side::{mirror, share_ends};
 use super::ring::dist;
 
 /// How far (mm) the area's own boundary may stand from the start side
-/// and still be read as on it: a micron, well above Clipper's nanometre
-/// lattice and below its 5 um arc flats.
-const SIDE_EPS: f64 = 1e-3;
+/// and still be read as on it: 10 um, twice Clipper's 5 um arc flats
+/// (`ARC_TOL_UNITS`). #3824: the area and the start side flatten the
+/// same round joins apart, up to 5 um each; at the old micron a stretch
+/// of the part wall where the two flats part by more than that read as
+/// the other side - on fig8, two 0.117 mm slivers of the wall that the
+/// wall ring left as gaps and Outside cut first, each reached by a lift
+/// over the part and a plunge into material.
+pub(super) const SIDE_EPS: f64 = 1e-2;
 
 /// Pieces shorter than this (mm) are dropped: a stub where a wall meets
 /// the start side, which the neighbouring pieces' discs already cover.
@@ -49,29 +55,8 @@ pub(super) fn ring_plan(
     strategy: PocketStrategy,
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    ring_plan_ramped(region, center, p, strategy, side, false).map(|(passes, notes, _)| (passes, notes))
-}
-
-/// The passes, the notes, and the dead-end starts the ladder enters by a
-/// ramp along the pass (#3567).
-pub(super) type RampedRings = (Vec<Vec<Point2>>, Vec<String>, Vec<Point2>);
-
-/// [`ring_plan`] with the dead-end starts of an Outside plan, for a
-/// caller whose ladder enters them by the ramp along the pass (`ramps`):
-/// a dead end too short for that ramp sends the area to the Auto order,
-/// named, as the completeness guard does. Without `ramps` no start is
-/// returned and nothing falls back for it.
-pub(super) fn ring_plan_ramped(
-    region: &Region,
-    center: &Region,
-    p: &PocketParams,
-    strategy: PocketStrategy,
-    side: &StartSide,
-    ramps: bool,
-) -> Result<RampedRings, GenError> {
     let off = p.tool_diameter * 0.5 + p.stock_to_leave;
-    let ramp_entry = if ramps { Some(p) } else { None };
-    side_plan(region, center, (off, p.tool_diameter * 0.5), (p.tiling_step(), p.climb), strategy, side, ramp_entry)
+    side_plan(region, center, (off, p.tool_diameter * 0.5), (p.tiling_step(), p.climb), strategy, side)
 }
 
 /// The 3-D rough's level (#3361): [`ring_plan`] over a cutter-centre
@@ -86,7 +71,7 @@ pub fn level_ring_plan(
     strategy: PocketStrategy,
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side, None).map(|(passes, notes, _)| (passes, notes))
+    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side)
 }
 
 fn side_plan(
@@ -96,28 +81,21 @@ fn side_plan(
     (step, climb): (f64, bool),
     strategy: PocketStrategy,
     side: &StartSide,
-    ramp_entry: Option<&PocketParams>,
-) -> Result<RampedRings, GenError> {
+) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
     let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings | PocketStrategy::Adaptive);
     if side.start != PassStart::Auto
         && rings
-        && let Some(pieces) = level_pieces(region, center, off, step, climb, side.start)?
+        && let Some(pieces) = level_pieces(region, center, off, step, climb, side, tool_r)?
     {
         let plan = order(pieces, center, tool_r, side)?;
         let left = unswept(center, &plan.passes, tool_r)?;
-        let short = ramp_entry.and_then(|p| too_short_at(&plan.passes, &plan.ramp_starts, p));
-        if left <= LEFT_TOL && short.is_none() {
-            let starts = if ramp_entry.is_some() { plan.ramp_starts } else { Vec::new() };
-            return Ok((plan.passes, plan.notes, starts));
+        if left <= LEFT_TOL {
+            return Ok((plan.passes, plan.notes));
         }
         let auto = plan_passes(center, step, climb, strategy)?;
-        let note = match short.filter(|_| left <= LEFT_TOL) {
-            Some(at) => side.ramp_fallback_note(at.x, at.y),
-            None => side.fallback_note(left),
-        };
-        return Ok((auto, vec![note], Vec::new()));
+        return Ok((auto, vec![side.fallback_note(left)]));
     }
-    Ok((plan_passes(center, step, climb, strategy)?, Vec::new(), Vec::new()))
+    Ok((plan_passes(center, step, climb, strategy)?, Vec::new()))
 }
 
 /// The most area (mm2) of the cutter-centre area that the passes may leave
@@ -139,14 +117,22 @@ pub(super) fn unswept(center: &Region, passes: &[Vec<Point2>], r: f64) -> Result
 /// the material (an outer loop with its own holes; material inside a
 /// hole is a part of its own) starts from its own edges. `None` when no
 /// part has the start side (Inside on an area with no hole).
+///
+/// `around` (#3744): the area surrounds the part, so every start side
+/// cuts ONE ring set, the distance from the part (its holes): Outside
+/// walks the Inside pieces mirrored (`ring_side::mirror`). A part with
+/// no hole keeps its own rings (core first for Inside, from its edge for
+/// Outside: offsets of the same edge).
 pub(super) fn level_pieces(
     region: &Region,
     center: &Region,
     off: f64,
     step: f64,
     climb: bool,
-    start: PassStart,
+    side: &StartSide,
+    tool_r: f64,
 ) -> Result<Option<Vec<Piece>>, GenError> {
+    let (start, around) = (side.start, side.around_part);
     let Some((lo, hi)) = center.bounds() else {
         return Err(GenError::Empty("empty pocket region".into()));
     };
@@ -166,23 +152,36 @@ pub(super) fn level_pieces(
         }
         let filled = Region::new(part.loops().iter().filter(|l| l.is_ccw()).cloned().collect())?;
         let holes = filled.difference(&part)?;
-        let ok = if start == PassStart::Inside && holes.area().abs() <= 1e-9 {
+        let has_holes = holes.area().abs() > 1e-9;
+        let from_holes = start == PassStart::Inside || (around && has_holes);
+        let first = out.len();
+        let ok = if from_holes && !has_holes {
             core_first(&c, step, climb, cap, &mut out)?
-        } else if start == PassStart::Inside {
+        } else if from_holes {
             started = true;
             // The distance from the holes: the holes' centre keep-out grown.
             // `off` 0: the area is its own outline (the 3-D level).
             let hc = if off == 0.0 { holes } else { holes.offset(off)? };
             sides(&c, &hc.offset(SIDE_EPS)?, true, climb, &mut out)?;
             let mut done = false;
+            let mut last = 0;
             for j in 1..=cap {
                 let g = hc.offset(f64::from(j) * step)?;
                 // `g` lies on the left of its loops and is the cut side.
-                curves(&c, &g, j, !climb, &mut out)?;
+                // Ring `j` is level `RING * j`: its fills (#3788) lie between.
+                curves(&c, &g, RING.saturating_mul(j), !climb, &mut out)?;
+                last = j;
                 if c.difference(&g)?.is_empty() {
                     done = true;
                     break;
                 }
+            }
+            if side.around_part {
+                let fill = Band { c: &c, hc: &hc, j: 0, step, tool_r, climb };
+                add_fills(&mut out, first, &fill, last)?;
+            }
+            if start == PassStart::Outside {
+                mirror(out.get_mut(first..).unwrap_or_default());
             }
             done
         } else {
@@ -211,6 +210,20 @@ pub(super) fn level_pieces(
     }
     share_ends(&mut out);
     Ok(Some(out))
+}
+
+/// The fills (#3788) of each band of one part's rings, `out[first..]`.
+fn add_fills(out: &mut Vec<Piece>, first: usize, band: &Band<'_>, last: u32) -> Result<(), GenError> {
+    let walks = |out: &[Piece], lev: u32| -> Vec<Vec<Point2>> {
+        out.iter().skip(first).filter(|p| !p.core && p.level == lev).map(closed_walk).collect()
+    };
+    let mut add = Vec::new();
+    for j in 1..=last {
+        let (inner, outer) = (walks(out, RING.saturating_mul(j - 1)), walks(out, RING.saturating_mul(j)));
+        add.extend(fills(&Band { j, ..*band }, &inner, &outer)?);
+    }
+    out.extend(add);
+    Ok(())
 }
 
 /// The parts of the material: each outer (counter-clockwise) loop with
@@ -270,7 +283,7 @@ fn core_first(c: &Region, step: f64, climb: bool, cap: u32, out: &mut Vec<Piece>
 /// outside it for Outside): ring 0 on the start side, the walls (level
 /// [`WALL`]) elsewhere. The area lies on the left of its loops, and it
 /// is the uncut side of ring 0 and the cut side of a wall.
-fn sides(center: &Region, start_side: &Region, start_inside: bool, climb: bool, out: &mut Vec<Piece>) -> Result<(), GenError> {
+pub(super) fn sides(center: &Region, start_side: &Region, start_inside: bool, climb: bool, out: &mut Vec<Piece>) -> Result<(), GenError> {
     for l in center.loops() {
         let ring = walk(l.points(), climb);
         push(out, 0, &ring, start_side.clip_ring(&ring, start_inside)?);
@@ -284,38 +297,6 @@ fn sides(center: &Region, start_side: &Region, start_inside: bool, climb: bool, 
         push(out, WALL, &back, wall);
     }
     Ok(())
-}
-
-/// Each end of a ring piece that stands on the area's boundary becomes
-/// a vertex of the boundary walk it stands on (ring 0 or a wall): the
-/// two then share the point exactly, so the verifier's crossing law
-/// reads a touch there, never a crossing.
-fn share_ends(out: &mut [Piece]) {
-    let ends: Vec<Point2> = out
-        .iter()
-        .filter(|p| !p.closed && p.level != 0 && p.level != WALL)
-        .flat_map(|p| p.pts.first().into_iter().chain(p.pts.last()).copied().collect::<Vec<_>>())
-        .collect();
-    for p in out.iter_mut().filter(|p| p.level == 0 || p.level == WALL) {
-        for &e in &ends {
-            let at = p.pts.windows(2).position(|w| w[0] != e && w[1] != e && on_segment(e, w[0], w[1]));
-            if let Some(i) = at {
-                p.pts.insert(i + 1, e);
-            }
-        }
-    }
-}
-
-/// Is `e` on the segment `a -> b`, strictly between its ends, within a
-/// nanometre?
-fn on_segment(e: Point2, a: Point2, b: Point2) -> bool {
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let dd = dx * dx + dy * dy;
-    if !(dd > 0.0 && dd.is_finite()) {
-        return false;
-    }
-    let t = ((e.x - a.x) * dx + (e.y - a.y) * dy) / dd;
-    t > 0.0 && t < 1.0 && dist(e, Point2::new(a.x + t * dx, a.y + t * dy)) <= 1e-6
 }
 
 /// Ring `level`: the loops of `g` clipped to `center`, reversed when

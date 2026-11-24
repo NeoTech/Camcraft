@@ -113,7 +113,7 @@ fn ramp_zig(lvl: &LevelCtx, a: &Ask) -> Option<Result<Zig, &'static str>> {
 
 /// The fallback zig (M11.3): along the first pass at the entry's angle,
 /// the transition's when the entry sets none.
-fn zig_fallback(lvl: &LevelCtx, a: &Ask) -> Result<Zig, &'static str> {
+pub(super) fn zig_fallback(lvl: &LevelCtx, a: &Ask) -> Result<Zig, &'static str> {
     let ap = &lvl.p.links.approach;
     let angle = if ap.ramp_zigs() { ap.ramp_angle } else { lvl.p.links.ramp_angle };
     let zf = from(lvl, a, true);
@@ -222,7 +222,7 @@ fn push_helix(b: &mut PathBuilder, lvl: &LevelCtx, a: &Ask, h: &Hel) -> Option<P
     Some(chosen.start)
 }
 
-fn push_zig3(b: &mut PathBuilder, lvl: &LevelCtx, a: &Ask, pre: &[Point2], n: usize, zf: f64) {
+pub(super) fn push_zig3(b: &mut PathBuilder, lvl: &LevelCtx, a: &Ask, pre: &[Point2], n: usize, zf: f64) {
     traverse(b, lvl, a.entry);
     b.push(MoveKind::Rapid, Point3::new(a.entry.x, a.entry.y, zf), None);
     push_zig(b, pre, n, zf, lvl.z, lvl.p.links.approach.descent_feed(lvl.p.feed));

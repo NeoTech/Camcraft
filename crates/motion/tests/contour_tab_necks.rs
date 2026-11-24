@@ -44,7 +44,7 @@ fn params(count: u32) -> ContourParams {
         tab_height: TAB_H,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: Links::PLANAR,
     }
 }

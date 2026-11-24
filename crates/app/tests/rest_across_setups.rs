@@ -218,7 +218,7 @@ fn a_carry_the_lattice_refuses_refuses_the_rest_reading_by_name() {
         let p = OpParams::Face {
             holes: Default::default(),
             tilt: None,
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             stepover: 3.0,
             clearance_z: Height::fixed(30.0),
             cut_z: Height::fixed(16.0),
@@ -264,7 +264,7 @@ fn faced_then_turned(deg: f64) -> (World, History) {
         let p = OpParams::Face {
             holes: Default::default(),
             tilt: None,
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             stepover: 3.0,
             clearance_z: Height::fixed(30.0),
             cut_z: Height::fixed(16.0),

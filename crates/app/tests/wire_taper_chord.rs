@@ -98,6 +98,8 @@ fn punch(taper_deg: f64) -> World {
         start: Some([-10.0, 0.0]),
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,

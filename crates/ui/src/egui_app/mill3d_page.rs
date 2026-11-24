@@ -158,6 +158,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             pencil_reference,
             fill_openings,
             gap_link,
+            waterlines,
             pass_start,
         } => {
             if tab == SEC_HEIGHTS {
@@ -227,6 +228,14 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                         17 => camcraft_app::finishing3d::FinishPattern::Flow,
                         _ => camcraft_app::finishing3d::FinishPattern::Waterline,
                     };
+                    if matches!(
+                        *pattern,
+                        camcraft_app::finishing3d::FinishPattern::Waterline
+                            | camcraft_app::finishing3d::FinishPattern::Blend
+                            | camcraft_app::finishing3d::FinishPattern::Morph
+                    ) {
+                        *waterlines = true;
+                    }
                 }
                 hint(ui, "Waterline: tangent rings only. The others march the flat ground first - Parallel at the direction angle (Multi along both axes, Scallop along the diagonals), Radial as chords through the centre, Spiral as one in-winding curve, Contour as concentric loops of the model's shadow, Project as its lifted silhouette, and every closed edge the part itself carries - a trim's rim, a hole's edge - XY kept and Z grounded, cut exactly where the model's facets end rather than where their shadow falls (a closed solid has no open edge, so its path is what it always was). Then the rings take the flanks. Steep and shallow draws that split as a border: the rings keep their hands off shallow ground, and the flanks answer to their own spacing. Flat rides the floors only, one pass per shrink. Pencil and Corner read the bends instead of the slope: each rides the line of centres tangent to both faces of every concave corner, Corner with the op's own ball and Pencil with a fatter reference ball, cleaning only what that pen leaves standing. Ramp is Parallel with the sloped entries always on. The morphed spiral keeps one in-winding curve but spaces its turns by the ground's own cosine under them. Geodesic rings start at the model's open edge and march outward by distance ALONG the surface, so one loop can run floor, wall and rim together; a closed shell with no open edge is refused by name. Blend rides the slope from both directions: the parallel lines keep the flat ground, and the rings keep every run touching ground past thirty degrees, so the transition band is cut twice and the border's staircase is shaved away. Morph joins the ladder's levels: the rings ride as Waterline places them, and between each two successive rings that pair as one feature a middle guide is laid halfway between the loops and grounded on the surface - half the spacing along the wall, a quarter of the cusp. Flow traces the surface's own grain: each line starts where the ground is widest and runs along the direction that curves least under it, the field the Flow5D operation reads - so on a blade the passes lie WITH it; on ground that claims no direction the lines degrade to the straight raster and still cover, and the rings take the flanks as always.");
                 if matches!(pattern, camcraft_app::finishing3d::FinishPattern::Parallel) {
@@ -276,8 +285,10 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                             prop_row(ui, "Ramp angle", |ui| num_plain(ui, ramp_angle));
                             hint(ui, "the steepest descent a chain may carry; past it a link is a plunge in a diagonal coat, and the hop holds the line");
                         }
-                        check_row(ui, "Ramp ring entries", entry_ramp);
-                        hint(ui, "on flanks steeper than the split, a ring's first contact slides in along its contact normal instead of dropping; where the normal cannot certify the way in, the plunge stands and the path says why");
+                        if *waterlines {
+                            check_row(ui, "Ramp ring entries", entry_ramp);
+                            hint(ui, "on flanks steeper than the split, a ring's first contact slides in along its contact normal instead of dropping; where the normal cannot certify the way in, the plunge stands and the path says why");
+                        }
                         let mut link_idx = match gap_link {
                             camcraft_app::finishing3d::GapLink::Jump => 0,
                             camcraft_app::finishing3d::GapLink::Straight => 1,
@@ -304,7 +315,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                     if matches!(
                         pattern,
                         camcraft_app::finishing3d::FinishPattern::SteepShallow
-                    ) {
+                    ) && *waterlines {
                         // The scallop law's own figure on the reference
                         // R3 ball - 2 x sqrt(r tol) - as a starting
                         // value. The envelope verdict, not the number,
@@ -321,6 +332,32 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                         // - a pen a band can hide under is no reference.
                         auto_opt(ui, "Reference ball", "None", pencil_reference, "every corner", 24.0, |ui, d| num(ui, u, d));
                         hint(ui, "None: every concave corner whose locus rests on the solid is cleaned. Stated: the pen whose leftovers this op cleans - it must be fatter than the op's ball, and the path names it if it is not");
+                    }
+                }
+                let has_waterlines = matches!(
+                    pattern,
+                    camcraft_app::finishing3d::FinishPattern::Parallel
+                        | camcraft_app::finishing3d::FinishPattern::ParallelMulti
+                        | camcraft_app::finishing3d::FinishPattern::Scallop
+                        | camcraft_app::finishing3d::FinishPattern::Radial
+                        | camcraft_app::finishing3d::FinishPattern::Spiral
+                        | camcraft_app::finishing3d::FinishPattern::Contour
+                        | camcraft_app::finishing3d::FinishPattern::Project
+                        | camcraft_app::finishing3d::FinishPattern::SteepShallow
+                        | camcraft_app::finishing3d::FinishPattern::Ramp
+                        | camcraft_app::finishing3d::FinishPattern::MorphSpiral
+                        | camcraft_app::finishing3d::FinishPattern::Flow
+                );
+                if has_waterlines || !*waterlines {
+                    prop_row(ui, "Steep flanks", |ui| {
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                            super::layout::radio_value(ui, waterlines, true, "Waterlines");
+                            super::layout::radio_value(ui, waterlines, false, "Leave uncut");
+                        });
+                    });
+                    hint(ui, "Waterlines: Z-level rings cut flanks steeper than 45 degrees after the shallow pass. Leave uncut: shallow pass only; steep flanks stay for another operation");
+                    if !*waterlines {
+                        consequence(ui, "Steep flanks (>45 deg) stay uncut - only the shallow pass cuts. Check rest material downstream.");
                     }
                 }
                 // The land model (#1196): Off is the model itself.

@@ -127,7 +127,7 @@ fn face_edge_chains(world: &World, entity: &str, want_n: [f64; 3], want_off: f64
 fn face_params(cut: Height, clearance: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(clearance),
@@ -210,7 +210,7 @@ fn contour_params(top: Height, bottom: Height, side: Side) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
