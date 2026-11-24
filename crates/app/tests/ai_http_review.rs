@@ -5,10 +5,10 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use camcraft_app::ai::http::{Client, Timeouts, send_chat};
+use camcraft_app::ai::http::{send_chat, Client, Timeouts};
 use camcraft_app::ai::wire::ChatRequest;
 use camcraft_app::ai::{ApiKey, Endpoint};
 use camcraft_app::mcp::provider::Provider;
@@ -78,7 +78,10 @@ fn provider_errors_keep_type_code_and_request_endpoint() {
     .to_string();
     let (err, base) = error_for(body);
     assert!(err.contains("bad key [type: tttt"), "{err}");
-    assert!(err.contains("[redacted]"), "redaction must precede truncation: {err}");
+    assert!(
+        err.contains("[redacted]"),
+        "redaction must precede truncation: {err}"
+    );
     assert!(!err.contains("placeholder"), "partial key leaked: {err}");
     assert!(
         err.ends_with(&format!("(endpoint: POST {base}/chat/completions)")),
@@ -110,6 +113,11 @@ fn assert_error_redacted(body: String) {
 
 /// The error of one chat request that a loopback server answers with HTTP 401 and `body`.
 fn error_for(body: String) -> (String, String) {
+    error_for_provider(Provider::OpenAiChat, body)
+}
+
+/// As `error_for`, for the chat request of `provider`.
+fn error_for_provider(provider: Provider, body: String) -> (String, String) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("loopback");
     let base = format!("http://{}/v1", listener.local_addr().expect("addr"));
     let ep = Endpoint::parse(&base).expect("endpoint");
@@ -124,16 +132,40 @@ fn error_for(body: String) -> (String, String) {
         .expect("reply");
     });
     let key = ApiKey::new(KEY).expect("placeholder");
+    let req = ChatRequest {
+        provider,
+        ..request()
+    };
     let err = send_chat(
         &Client::new(true),
         &ep,
-        &request(),
+        &req,
         Some(&key),
         &AtomicBool::new(false),
     )
     .expect_err("401");
     server.join().expect("server");
     (err, base)
+}
+
+/// Each cloud provider's transport surfaces the authentication status of a
+/// rejected key: the HTTP answer status is present, and the key is not.
+#[test]
+fn authentication_failure_surfaces_the_http_status_for_each_cloud_provider() {
+    for provider in [
+        Provider::Anthropic,
+        Provider::OpenAiChat,
+        Provider::OpenAiResponses,
+        Provider::Gemini,
+    ] {
+        let (err, _) = error_for_provider(provider, "denied".into());
+        assert!(err.contains("answered HTTP 401"), "{provider:?}: {err}");
+        assert!(!err.contains(KEY), "{provider:?}: key leaked: {err}");
+        assert!(
+            !err.contains("placeholder"),
+            "{provider:?}: partial key leaked: {err}"
+        );
+    }
 }
 
 #[test]

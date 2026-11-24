@@ -24,6 +24,30 @@ fn http_status(error: &str) -> Option<u16> {
     rest.get(..3)?.parse().ok()
 }
 
+/// Authentication failure of a cloud provider behind Test. HTTP 401 and 403
+/// are the documented authentication answers of every cloud provider here
+/// (Anthropic `authentication_error` is 401, OpenAI `invalid_api_key` is 401,
+/// Gemini answers 403 or a 400 with a key-error status for a rejected key).
+/// The markers are the provider-documented classified error fields
+/// (`error.type`, `error.code`, `error.status`); they are short fixed strings,
+/// never the provider response text, and the key is removed from the error
+/// before this runs. Anything that matches no marker keeps its own status: a
+/// credit, model or network failure is never reported as a key rejection.
+fn is_auth_failure(lower: &str, status: Option<u16>) -> bool {
+    match status {
+        Some(401 | 403) => true,
+        _ => [
+            "authentication_error",
+            "invalid_api_key",
+            "api key not valid",
+            "api_key_invalid",
+            "unauthenticated",
+        ]
+        .iter()
+        .any(|marker| lower.contains(marker)),
+    }
+}
+
 /// One cause and one "what to try" hint for a failed cloud Test.
 /// `error` is the transport error; `http.rs` removed the key from it before and
 /// kept the provider's message, type, code and request endpoint in it.
@@ -33,11 +57,13 @@ pub(crate) fn test_failure(error: &str, model: &str, endpoint: &str) -> String {
     let lower = error.to_ascii_lowercase();
     let billing = lower.contains("credit") || lower.contains("billing");
     let status = http_status(error);
-    let (cause, hint) = match status {
-        Some(401 | 403) => (
-            "the provider rejected the key",
+    let (cause, hint) = if is_auth_failure(&lower, status) {
+        (
+            "the key was rejected",
             "Click Set API key... and paste a new key for this provider.",
-        ),
+        )
+    } else {
+        match status {
         Some(402) => (
             "billing or credits",
             "Check the credits and the spending limits on the provider's billing page.",
@@ -78,6 +104,7 @@ pub(crate) fn test_failure(error: &str, model: &str, endpoint: &str) -> String {
             "the provider gave no usable answer",
             "Check the network connection, then click Test again.",
         ),
+        }
     };
     let code = status.map_or_else(String::new, |code| format!(" (HTTP {code})"));
     let text = format!(

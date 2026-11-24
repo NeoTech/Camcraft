@@ -131,7 +131,7 @@ fn failed_test_names_the_cause_the_model_and_what_to_try() {
     for (error, cause, hint) in [
         (
             "api.anthropic.com answered HTTP 401: invalid x-api-key",
-            "rejected the key",
+            "the key was rejected",
             "Set API key",
         ),
         (
