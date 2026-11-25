@@ -40,6 +40,7 @@ fn die_of(mesh: Mesh) -> World {
     );
     h.execute(&world, ImportModel::from_mesh("opening", mesh));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
