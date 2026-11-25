@@ -251,18 +251,21 @@ pub(crate) fn walk(
     until: Option<&str>,
 ) -> Result<Walked, String> {
     let min_r = planned.iter().map(|p| p.radius).fold(f64::INFINITY, f64::min);
-    // The block the program starts on is the FIRST setup's stock - the
-    // implicit-setup law makes that the legacy `Stock` entity exactly,
-    // so a single-setup document walks this identical to before.
-    let first = planned.first().and_then(|p| p.setup.as_deref());
-    let first_eff = crate::setup::effective(world, first);
+    let steps = step_setups(world, planned)?;
+    // The block the program starts on is the FIRST step's setup stock -
+    // the implicit-setup law makes that the legacy `Stock` entity
+    // exactly, so a single-setup document walks this identical to before.
+    let first_eff = steps.first().cloned().unwrap_or_else(|| crate::setup::effective(world, None));
+    let first = planned.first().map_or(first_eff.as_deref(), |p| p.setup.as_deref());
     let mut held = first_held(world, first, min_r)?;
     let mut frame = first_eff.clone();
     let mut origin = first_eff;
     let mut left: Option<Deviation> = None;
     let mut spanned = false;
-    for (index, p) in planned.iter().enumerate() {
-        let eff = crate::setup::effective(world, p.setup.as_deref());
+    for (index, eff) in steps.into_iter().enumerate() {
+        // The ops already cut when this step is reached (none, for a
+        // program that cuts nothing).
+        let cut = &planned[..index.min(planned.len())];
         if eff != frame {
             spanned = true;
             match entry(world, frame.as_deref(), eff.as_deref())? {
@@ -280,12 +283,12 @@ pub(crate) fn walk(
                 Entry::Carry(turn) => {
                     // #874: the side-on read can hide a gouge cut so far.
                     if turn.side_on() {
-                        keep_gouges(&mut left, judge(world, &held, &frame, &planned[..index])?);
+                        keep_gouges(&mut left, judge(world, &held, &frame, cut)?);
                     }
                     held = Held::Carried(held.into_carried(world, origin.as_deref())?.carry_through(&turn)?);
                 }
                 Entry::NewBlock => {
-                    keep_gouges(&mut left, judge(world, &held, &frame, &planned[..index])?);
+                    keep_gouges(&mut left, judge(world, &held, &frame, cut)?);
                     held = first_held(world, eff.as_deref(), min_r)?;
                     origin = eff.clone();
                 }
@@ -295,6 +298,7 @@ pub(crate) fn walk(
         if until.is_some() && frame.as_deref() == until {
             return Ok(Walked { held, frame, spanned, origin, left });
         }
+        let Some(p) = planned.get(index) else { continue };
         // #541: a sinker electrode burns its box atom; #1152: a body
         // electrode its outline atom.
         if let Some(e) = &p.electrode {
@@ -317,6 +321,37 @@ pub(crate) fn walk(
         return Err(format!("the program never enters setup '{u}'"));
     }
     Ok(Walked { held, frame, spanned, origin, left })
+}
+
+/// The setup of each step the walk takes, in program order: each cutting
+/// op's, or - for a program that cuts nothing (probes or torches only,
+/// which the plan skips) - each program op's, so that program is judged
+/// on the stock of the setup it runs in, never on the first setup's.
+fn step_setups(world: &flecs_ecs::prelude::World, planned: &[Planned]) -> Result<Vec<Option<String>>, String> {
+    if planned.is_empty() {
+        let ops = crate::posting::program_ops(world)?;
+        return Ok(ops.iter().map(|(_, e)| crate::program_entry::effective_setup(world, e)).collect());
+    }
+    Ok(planned.iter().map(|p| crate::setup::effective(world, p.setup.as_deref())).collect())
+}
+
+/// A program that cuts nothing (probes or torches only, no wire job) and runs
+/// in more than one setup. The walk is the only judge of the stock under
+/// such a program - its ops' generator verdicts judge their paths, not the
+/// stock - so when the walk cannot cross those setups, the post refuses
+/// instead of going ahead on a not-judged line (`posting_sim`).
+#[must_use]
+pub(crate) fn cuts_nothing_across_setups(world: &flecs_ecs::prelude::World) -> bool {
+    if !crate::stock_sim::plan_program(world).is_ok_and(|planned| planned.is_empty()) {
+        return false;
+    }
+    let Ok(ops) = crate::posting::program_ops(world) else { return false };
+    if ops.iter().any(|(_, e)| crate::model::operation_of(world, e).is_some_and(|op| super::wire::skips(&op))) {
+        return false;
+    }
+    let setups: std::collections::BTreeSet<_> =
+        ops.iter().map(|(_, e)| crate::program_entry::effective_setup(world, e)).collect();
+    setups.len() > 1
 }
 
 /// The verdict before leaving `frame`, credited only by operations already

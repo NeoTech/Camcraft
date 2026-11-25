@@ -29,7 +29,10 @@
 //! program level", not "unsafe": it posts, loudly labelled. An op that
 //! cannot show that verdict (no stamp, not fresh, or the op list itself
 //! unreadable) has no judge at all, and then the not-judged line is a
-//! blocking problem - two missing verdicts never add up to a pass.
+//! blocking problem - two missing verdicts never add up to a pass. So is
+//! it for a program that cuts nothing (probes or torches only) across
+//! setups: its ops' verdicts judge their paths, never the stock under
+//! them, so the sim was the only judge of that stock.
 //!
 //! One input of that verdict is not in the stamp: the parts beside an
 //! op's source its part laws keep (#1607, #1621). A part moved, added or
@@ -126,6 +129,13 @@ fn judge_clause(world: &World) -> SimClause {
             let line = format!("{NOT_JUDGED}: {reason}");
             let problem = uncovered(world)
                 .map(|why| format!("{line} - and {why}, so nothing judged it; refusing"))
+                // Probes or torches only, across setups: no generator
+                // verdict judges the stock under it, so nothing did.
+                .or_else(|| {
+                    crate::stock_sim::carry::cuts_nothing_across_setups(world).then(|| {
+                        format!("{line} - and the operation checks do not verify the stock under probes or torches across this setup change; refusing")
+                    })
+                })
                 // #1628: the parts beside an op's source, judged again live.
                 .or_else(|| kept_moved(world).map(|why| format!("{line} - and {why}")));
             SimClause {

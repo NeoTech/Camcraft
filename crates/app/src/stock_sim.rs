@@ -120,7 +120,7 @@ fn simulate_program(
         carry::fold_left(&mut dev, left);
     }
     let inherited = if for_post && !walked.spanned && carry_engine() == Backend::Column {
-        incoming::report(world, &planned, &display, &mut dev)
+        incoming::report(world, walked.frame.as_deref(), &planned, &display, &mut dev)
     } else {
         None
     };
