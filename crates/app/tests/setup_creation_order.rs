@@ -37,6 +37,7 @@ fn face() -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         blend_turns: false,
+        blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -46,6 +47,7 @@ fn face() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -158,7 +160,7 @@ fn a_v76_file_keeps_name_order_and_a_newer_file_is_refused() {
     assert_eq!(resaved, expected, "a v76 file steps up with no other change");
 
     let mut newer = saved;
-    let future = camcraft_app::project::PROJECT_VERSION + 1;
+    let future = camcraft_app::project::NEWEST_PROJECT_VERSION + 1;
     newer["version"] = json!(future);
     match camcraft_app::project::open(&new_world(), &newer.to_string()) {
         Err(camcraft_app::project::ProjectError::UnsupportedVersion(v)) if v == future => {}

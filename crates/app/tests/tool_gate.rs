@@ -60,7 +60,7 @@ fn world_with(machine: Option<&str>, tools: &[&str]) -> (World, History) {
 
 fn face() -> OpParams {
     OpParams::Face { holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -70,6 +70,7 @@ fn face() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -81,6 +82,7 @@ fn groove() -> OpParams {
         bottom_z: Height::fixed(-6.8),
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 

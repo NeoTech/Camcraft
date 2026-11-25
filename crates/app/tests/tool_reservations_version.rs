@@ -36,7 +36,7 @@ fn saved_machine_reservations_need_the_v78_reader() {
     assert_eq!(machine::of(&reopened), loaded);
 
     let mut future = saved;
-    let next = project::PROJECT_VERSION + 1;
+    let next = project::NEWEST_PROJECT_VERSION + 1;
     future["version"] = json!(next);
     let error = project::open_noted(&reopened, &future.to_string()).expect_err("too new");
     assert!(

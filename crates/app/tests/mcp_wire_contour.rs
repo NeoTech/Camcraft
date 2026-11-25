@@ -116,7 +116,7 @@ fn wire_job_on(tag: &str, template: &str) -> Client {
 
 fn wire_args(condition: &str) -> Value {
     json!({ "kind": "Wire Contour", "name": "W", "tool": "EDM-W025", "source": "slug",
-        "params": { "condition": condition, "side": "die", "start": [0.0, 0.0] } })
+        "params": { "condition": condition, "side": "die", "picks": { "start": [[0.0, 0.0]] } } })
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn wire_contour_is_added_with_a_wire_tool_edited_generated_undone_and_redone() {
 
     let edited = c.ok("edit_operation", json!({ "name": "W", "params": { "side": "punch" } }));
     assert_eq!(edited["params"]["wire_contour"]["side"], json!("punch"));
-    c.ok("edit_operation", json!({ "name": "W", "params": { "start": [30.0, 0.0] } }));
+    c.ok("edit_operation", json!({ "name": "W", "params": { "picks": { "start": [[30.0, 0.0]] } } }));
     // The condition is patched too; an unknown one is refused by name.
     c.ok("edit_operation", json!({ "name": "W", "params": { "condition": "C110" } }));
     let bad = c.refused("edit_operation", json!({ "name": "W", "params": { "condition": "NOPE" } }));
@@ -183,6 +183,51 @@ fn wire_contour_refusals_arrive_as_tool_errors_in_the_commands_words() {
     let mill = c.refused("add_operation", json!({ "kind": "Face" }));
     assert!(mill.contains("tool"), "{mill}");
     assert_eq!(c.ok("get_job", json!({}))["operations"].as_array().map_or(0, Vec::len), 0);
+}
+
+/// #3332: `edit_operation` sets the wire's exit pick beside its start,
+/// `list_operation_types` says that the kind takes both, the pick the
+/// wire cannot hold is refused by name, and undo takes the pick away.
+#[test]
+fn edit_operation_sets_the_wire_exit_pick_and_refuses_one_it_cannot_hold() {
+    let mut c = wire_job("exit");
+    c.ok("add_operation", wire_args("C110"));
+    let types = c.ok("list_operation_types", json!({}));
+    let kinds = types["kinds"].as_array().cloned().unwrap_or_default();
+    let wire = kinds.iter().find(|k| k["label"] == json!("Wire Contour")).expect("kind listed");
+    assert_eq!(wire["start_exit"]["start"], json!(true), "{wire}");
+    assert_eq!(wire["start_exit"]["exit"], json!(true), "{wire}");
+
+    let picks = |c: &mut Client| c.ok("get_job", json!({}))["operations"][0]["params"]["wire_contour"]["picks"].clone();
+    let before = picks(&mut c);
+    assert!(before.get("exit").is_none_or(|e| e == &json!([])), "a new wire cut has no exit pick: {before}");
+    let patch = json!({ "name": "W", "params": { "picks": { "start": [[0.0, 0.0]], "exit": [[5.0, 1.0]] } } });
+    c.ok("edit_operation", patch);
+    assert_eq!(picks(&mut c)["exit"], json!([[5.0, 1.0]]));
+    assert_eq!(picks(&mut c)["start"], json!([[0.0, 0.0]]));
+    let g = c.ok("generate", json!({ "name": "W" }));
+    assert!(g["generated"].is_array(), "{g}");
+
+    // An exit beside a taper is refused at the door, and nothing changes.
+    let why = c.refused("edit_operation", json!({ "name": "W", "params": { "taper_deg": 2.0 } }));
+    assert!(why.contains("Wire Contour") && why.contains("exit point") && why.contains("taper"), "{why}");
+    assert_eq!(picks(&mut c)["exit"], json!([[5.0, 1.0]]));
+    // An exit outside a die's profile is refused by name at generation.
+    c.ok("edit_operation", json!({ "name": "W", "params": { "picks": { "start": [[0.0, 0.0]], "exit": [[50.0, 0.0]] } } }));
+    let (err, body) = c.call("generate", json!({ "name": "W" }));
+    let text = body.to_string();
+    assert!(text.contains("exit point at X50.000 Y0.000") && text.contains("outside the profile"), "{err}: {text}");
+
+    // Undo: the bad pick, then the good pick.
+    c.ok("undo", json!({}));
+    assert_eq!(picks(&mut c)["exit"], json!([[5.0, 1.0]]));
+    let mut undone = 0;
+    while picks(&mut c).get("exit").is_some_and(|e| e != &json!([])) {
+        c.ok("undo", json!({}));
+        undone += 1;
+        assert!(undone < 6, "undo never took the exit pick away");
+    }
+    assert_eq!(picks(&mut c)["start"], json!([[0.0, 0.0]]));
 }
 
 #[test]
@@ -271,7 +316,13 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
         bottom_z: serde_json::from_value(json!({ "reference": "fixed", "offset": 0.0 })).expect("bottom_z"),
         condition: "C110".into(),
         side: WireSideDto::Die,
-        start: Some([0.0, 0.0]),
+        start: None,
+        picks: camcraft_app::project::PathPicksDto {
+            start: vec![camcraft_app::project::PathPickDto(camcraft_app::path_picks::PathPick::xy(
+                camcraft_app::geo2d::Point2::new(0.0, 0.0),
+            ))],
+            exit: Vec::new(),
+        },
         tabs: Some(WireTabsDto {
             count: Some(1),
             width: Some(1.0),
@@ -279,6 +330,8 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
             cutoff_condition: "C120".into(),
         }),
         capture: true,
+        both_pieces_restrained: true,
+        stock_centered_in_xy_travel: true,
         taper_deg: 2.0,
         burnout_clearance: Some(1.0),
         clearance: 2.5,

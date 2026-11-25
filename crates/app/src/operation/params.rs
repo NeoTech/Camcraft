@@ -1,10 +1,9 @@
 //! The digest of an operation's parameters (`OpParams::stamp_with`).
 //! The pocket family's arms live here; the other families' arms and the
 //! shared writers live in the child modules (#1849 split).
-//! Provenance: our own digest law over this repo's operation registry.
 
 use super::*;
-use digest::{w, write_corner_relief, write_rest, wt};
+use digest::{w, write_blend, write_corner_relief, write_rest, wt};
 
 impl OpParams {
     /// The digest-relevant scalars, written to a hasher in a fixed
@@ -43,9 +42,9 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                blend_turns,
+                blend_turns, blend_radius,
                 holes,
-                tilt,
+                tilt, picks: _
             } => {
                 w(h, *stepover);
                 wh(h, *clearance_z);
@@ -68,9 +67,7 @@ impl OpParams {
                 // M11.1 A: the blends change the moves, so they change
                 // the digest - written only when ON, so every legacy
                 // (sharp) face keeps the digest it was cached under.
-                if *blend_turns {
-                    h.write_u8(0xB1);
-                }
+                write_blend(h, *blend_turns, *blend_radius);
                 // M13.11: the hole law changes the moves only away from
                 // its default, and is written only then - every legacy
                 // (lift) face keeps the digest it was cached under.
@@ -98,10 +95,10 @@ impl OpParams {
                 climb,
                 entry,
                 helix_radius,
-                blend_turns,
+                blend_turns, blend_radius,
                 links: _,
                 tilt,
-                chain_overrides,
+                chain_overrides, picks: _
             } => {
                 w(h, *stock_to_leave);
                 wh(h, *clearance_z);
@@ -158,9 +155,7 @@ impl OpParams {
                 wt(h, *tilt);
                 // M11.1 B: written only when ON (A's word), so every
                 // legacy sharp contour keeps its cached digest.
-                if *blend_turns {
-                    h.write_u8(0xB1);
-                }
+                write_blend(h, *blend_turns, *blend_radius);
                 if !chain_overrides.is_empty() {
                     h.write(b"chain-overrides");
                     let mut sorted: Vec<_> = chain_overrides.iter().collect();
@@ -201,7 +196,7 @@ impl OpParams {
                 optimal_load,
                 blend_turns,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -277,7 +272,7 @@ impl OpParams {
                 troch,
                 rest,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -352,7 +347,8 @@ impl OpParams {
             | OpParams::MultiAxisContour { .. }
             | OpParams::RotaryOffset { .. }
             | OpParams::MultiAxisRough { .. }
-            | OpParams::AdvancedSwarf { .. } => self.stamp_multiaxis(world, setup, src, h),
+            | OpParams::AdvancedSwarf { .. }
+            | OpParams::RotaryFlow { .. } => self.stamp_multiaxis(world, setup, src, h),
             OpParams::Facing { .. }
             | OpParams::ProfileRough { .. }
             | OpParams::ProfileFinish { .. }
@@ -376,6 +372,7 @@ impl OpParams {
             | OpParams::PlasmaProfile { .. } | OpParams::WaterjetProfile { .. } => self.stamp_cutting(world, setup, src, h),
         }
         self.stamp_links(h);
+        self.stamp_picks(h);
     }
 }
 

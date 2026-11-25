@@ -24,9 +24,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             feed,
             plunge_feed,
             climb,
-            blend_turns,
+            blend_turns, blend_radius,
             holes,
-            tilt,
+            tilt, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 orientation_editor(ui, u, tilt);
@@ -72,7 +72,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // the status line names every turn left sharp.
                 // #3356: Face rows run edge to edge - no ring order.
                 super::pass_start_row::no_pass_order_row(ui, "face", super::pass_start_row::FACE_NO_PASS_ORDER);
-                check_row(ui, "Arc turns at row ends", blend_turns);
+                super::kind_editors::arc_turn_rows_auto(ui, u, ("Arc turns at row ends", "Arc radius = half the row spacing"), blend_turns, blend_radius);
                 // M13.11: how a row meets a hole in the faced region.
                 // Lift is safe for a bore and a boss alike; cutting
                 // across air is the user's call, islands stay lifted.
@@ -118,10 +118,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             tab_height,
             entry,
             helix_radius,
-            blend_turns,
+            blend_turns, blend_radius,
             links,
             tilt,
             chain_overrides,
+            picks,
         } => {
             if tab == SEC_GEO {
                 let mut s_idx = match side {
@@ -176,7 +177,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // M11.1 B: air-side corners round on one arc where it
                 // is legal; the status line names every corner left
                 // sharp and the corner rest the rounding leaves.
-                check_row(ui, "Arc turns at corners", blend_turns);
+                super::kind_editors::arc_turn_rows(ui, u, "Arc turns at corners", blend_turns, blend_radius);
             }
             if tab == SEC_LEADS {
                 let mut l_idx = match lead {
@@ -212,7 +213,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 }
                 lead_page::leads_tab(ui, u, "c", Some((entry, helix_radius)), links);
                 hint(ui, "keep down between levels cuts each ring all the way down, descending on the ring itself");
-                super::approach_page::contour_leads_editor(ui, u, &mut links.approach);
+                super::approach_page::contour_leads_editor(ui, u, &mut links.approach, picks);
                 let mut tabs = f64::from(*tab_count);
                 prop_row(ui, "Tab count", |ui| num_plain(ui, &mut tabs));
                 *tab_count = tabs.clamp(0.0, 99.0).round().max(0.0) as u32;
@@ -245,11 +246,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             rest,
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "p", Some((&mut *entry, helix_radius)), links);
                 super::approach_page::pocket_arc_group(ui, u, *entry, &mut links.approach);
+                super::approach_page::approach_distance_group(ui, u, *pass_start, &mut links.approach);
                 super::predrilled_page::predrilled_group(ui, &mut links.approach, rest.is_some());
             }
             if tab == SEC_HEIGHTS {
@@ -344,7 +346,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             rest: _, // #1446: no rows on this page yet; the draft keeps the value
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => roughing2d_pane(
             ui,
             world,
@@ -386,7 +388,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             helix_radius, blend_turns, blend_radius,
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => roughing2d_pane(
             ui,
             world,

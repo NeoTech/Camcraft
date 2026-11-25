@@ -38,6 +38,7 @@ mod launch_file_tests;
 
 pub mod actions;
 pub mod play_precalc;
+pub mod play_layer;
 pub mod align_pick_viz;
 pub mod avoid_viz;
 pub(crate) mod machine_modes;
@@ -84,6 +85,7 @@ mod operator_side;
 pub mod view_frame;
 pub mod mcp_host;
 pub mod operations;
+pub mod update_check;
 pub mod path_lines;
 pub(crate) mod path_overlay;
 pub mod pick_line_memo;
@@ -131,6 +133,8 @@ mod helix_view_tests;
 mod field_view_tests;
 #[cfg(test)]
 mod play_precalc_tests;
+#[cfg(test)]
+mod play_layer_tests;
 #[cfg(test)]
 mod machined_tests;
 #[cfg(test)]

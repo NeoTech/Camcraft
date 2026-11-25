@@ -6,6 +6,8 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+pub mod cli_skill;
+pub mod cli_ui;
 pub mod clock;
 pub mod commands;
 // #3073: saved cut recipes - an operation's settings under a name.
@@ -98,10 +100,16 @@ pub mod recognize;
 pub mod raster;
 // #877: the theme and colour-vision mode, kept per user (not per project).
 pub mod prefs;
+mod prefs_setups;
+// #2428: startup update check against GitHub Releases (native only for HTTP).
+pub mod update_check;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
 pub mod rotary_stack;
+// #2772 parts 1-2: the stated rotation-axis resolver (the op's own
+// direction, else the machine's stated rotary line, through the WCS).
+pub mod rotary_stated;
 pub mod schema;
 pub mod script;
 // #1862: DXF profiles placed on a setup's stock, and the virtual model reference.

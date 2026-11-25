@@ -32,6 +32,7 @@ pub fn seed_multiaxis_deburr(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 30.0,
         shank_avoid: true,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 

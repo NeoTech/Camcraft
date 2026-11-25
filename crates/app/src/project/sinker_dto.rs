@@ -126,6 +126,8 @@ pub struct SinkerDto {
     pub wear_lost: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wear_over: Option<f64>,
+    #[serde(default, skip_serializing_if = "PathPicksDto::is_empty")]
+    pub picks: PathPicksDto,
 }
 
 impl SinkerDto {
@@ -160,6 +162,7 @@ impl SinkerDto {
             wear_lost: p.wear_lost,
             wear_over: p.wear_over,
             orbit: p.orbit.as_ref().map(SinkerOrbitDto::from_orbit),
+            picks: PathPicksDto::from_picks(&p.picks),
         }
     }
 
@@ -194,6 +197,7 @@ impl SinkerDto {
             wear_lost: self.wear_lost,
             wear_over: self.wear_over,
             orbit: self.orbit.map(SinkerOrbitDto::to_orbit),
+            picks: self.picks.to_picks(),
         }
     }
 }

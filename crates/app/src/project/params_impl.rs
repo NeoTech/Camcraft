@@ -64,6 +64,11 @@ fn cr_from_dto(dto: &CornerReliefDto) -> crate::machining2d::CornerRelief {
     }
 }
 
+fn legacy_picks(picks: &PathPicksDto, links: Option<&LinksDto>) -> crate::path_picks::PathPicks {
+    let approach = links.and_then(|l| l.approach.as_ref());
+    picks.with_legacy(approach.and_then(|a| a.start_point), approach.and_then(|a| a.exit_point))
+}
+
 impl ParamsDto {
     pub(super) fn from_params(p: &OpParams) -> Self {
         match p {
@@ -94,6 +99,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => {
                 let (break_mode, break_depth, break_profile, passes) = break_dto(sizing);
                 ParamsDto::MultiAxisDeburr(MultiAxisDeburrDto {
@@ -118,6 +124,7 @@ impl ParamsDto {
                     lag_deg: *lag_deg,
                     max_tilt_deg: *max_tilt_deg,
                     shank_avoid: *shank_avoid,
+                    picks: PathPicksDto::from_picks(picks),
                 })
             }
             OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
@@ -130,9 +137,10 @@ impl ParamsDto {
                 feed,
                 plunge_feed,
                 climb,
-                blend_turns,
+                blend_turns, blend_radius,
                 holes,
                 tilt,
+                picks,
             } => ParamsDto::Face {
                 stepover: *stepover,
                 clearance_z: (*clearance_z).into(),
@@ -142,9 +150,10 @@ impl ParamsDto {
                 climb: *climb,
                 top_z: (*top_z).map(Into::into),
                 stepdown: *stepdown,
-                blend_turns: *blend_turns,
+                blend_turns: *blend_turns, blend_radius: *blend_radius,
                 holes: (*holes).into(),
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Contour {
                 stock_to_leave,
@@ -164,10 +173,11 @@ impl ParamsDto {
                 side,
                 entry,
                 helix_radius,
-                blend_turns,
+                blend_turns, blend_radius,
                 links,
                 tilt,
                 chain_overrides,
+                picks,
             } => ParamsDto::Contour {
                 stock_to_leave: *stock_to_leave,
                 clearance_z: (*clearance_z).into(),
@@ -201,7 +211,7 @@ impl ParamsDto {
                     Entry3D::Arc => EntryDto::Arc,
                 },
                 helix_radius: *helix_radius,
-                blend_turns: *blend_turns,
+                blend_turns: *blend_turns, blend_radius: *blend_radius,
                 // The old keys where they say it all, else `links`.
                 level_link: contour_links_dto(links).0,
                 ramp_angle: contour_links_dto(links).1,
@@ -216,6 +226,7 @@ impl ParamsDto {
                         reverse: o.reverse,
                     })
                     .collect(),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Pocket {
                 links,
@@ -239,6 +250,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => ParamsDto::Pocket {
                 links: links_to_dto(links, &p.default_links()),
                 stepover: *stepover,
@@ -275,6 +287,7 @@ impl ParamsDto {
                 corner_relief: cr_to_dto(corner_relief),
                 tilt: (*tilt).map(Into::into),
                 pass_start: (*pass_start).into(),
+                picks: PathPicksDto::from_picks(picks),
             },
             // The twins drop the strategy tag - the variant itself
             // says which ladder runs (M2.4 A).
@@ -301,6 +314,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => {
                 let (troch_return, lift) = match troch.ret {
                     None => (AdaptiveTrochReturnDto::Auto, None),
@@ -344,6 +358,7 @@ impl ParamsDto {
                     corner_relief: cr_to_dto(corner_relief),
                     tilt: (*tilt).map(Into::into),
                     pass_start: (*pass_start).into(),
+                    picks: PathPicksDto::from_picks(picks),
                 }
             }
             OpParams::Offset2D {
@@ -365,6 +380,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => ParamsDto::Offset2D {
                 links: links_to_dto(links, &p.default_links()),
                 stepover: *stepover,
@@ -389,6 +405,7 @@ impl ParamsDto {
                 corner_relief: cr_to_dto(corner_relief),
                 tilt: (*tilt).map(Into::into),
                 pass_start: (*pass_start).into(),
+                picks: PathPicksDto::from_picks(picks),
             },
             // The M2.4 B trio: the engrave twin rides the trace arm
             // verbatim, the chamfer states its two authored face
@@ -404,6 +421,7 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 tilt,
+                picks,
             } => ParamsDto::Engrave {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -414,6 +432,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
             },
             // #1443: the V-carve arm.
             OpParams::VCarve {
@@ -427,6 +446,7 @@ impl ParamsDto {
                 flat_clear,
                 flat_stepover,
                 tilt,
+                picks,
             } => ParamsDto::VCarve {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -438,10 +458,38 @@ impl ParamsDto {
                 flat_clear: *flat_clear,
                 flat_stepover: *flat_stepover,
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
+            },
+            // #2826: the flow band arm (v82).
+            OpParams::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => ParamsDto::RotaryFlow {
+                tolerance: *tolerance,
+                stepover: *stepover,
+                clearance_z: (*clearance_z).into(),
+                retract_z: (*retract_z).map(Into::into),
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+                lead_deg: *lead_deg,
+                lag_deg: *lag_deg,
+                max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
             },
             OpParams::Chamfer2D {
                 width,
                 angle_deg,
+                minimum_cone_radius,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -451,9 +499,11 @@ impl ParamsDto {
                 side,
                 tolerance,
                 tilt,
+                picks,
             } => ParamsDto::Chamfer2D {
                 width: *width,
                 angle_deg: *angle_deg,
+                minimum_cone_radius: *minimum_cone_radius,
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
                 top_z: (*top_z).into(),
@@ -467,6 +517,7 @@ impl ParamsDto {
                 },
                 tolerance: *tolerance,
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Circular {
                 links,
@@ -487,6 +538,7 @@ impl ParamsDto {
                 entry,
                 helix_radius,
                 tilt,
+                picks,
             } => ParamsDto::Circular {
                 links: links_to_dto(links, &p.default_links()),
                 center: [center.x, center.y],
@@ -511,6 +563,7 @@ impl ParamsDto {
                 },
                 helix_radius: *helix_radius,
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Pocket3D {
                 links,
@@ -533,6 +586,7 @@ impl ParamsDto {
                 shell,
                 method,
                 pass_start,
+                picks,
             } => ParamsDto::Pocket3D {
                 links: links_to_dto(links, &p.default_links()),
                 stepover: *stepover,
@@ -569,6 +623,7 @@ impl ParamsDto {
                 feed_opt: *feed_opt,
                 shell: *shell,
                 pass_start: (*pass_start).into(),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Finish3D {
                 pattern,
@@ -590,7 +645,9 @@ impl ParamsDto {
                 pencil_reference,
                 fill_openings,
                 gap_link,
+                waterlines,
                 pass_start,
+                picks,
             } => ParamsDto::Finish3D {
                 pattern: (*pattern).into(),
                 direction_angle: *direction_angle,
@@ -611,7 +668,9 @@ impl ParamsDto {
                 pencil_reference: *pencil_reference,
                 fill_openings: *fill_openings,
                 gap_link: (*gap_link).into(),
+                waterlines: *waterlines,
                 pass_start: (*pass_start).into(),
+                picks: PathPicksDto::from_picks(picks),
             },
             // The deburr ride (M2.5 E B): the six keys are the kind's
             // whole content - no pattern, no retract, nothing derived
@@ -631,6 +690,7 @@ impl ParamsDto {
                 hole_max_diameter,
                 unreachable,
                 sizing,
+                picks,
             } => {
                 let (break_mode, break_depth, break_profile, passes) = break_dto(sizing);
                 ParamsDto::Deburr {
@@ -650,6 +710,7 @@ impl ParamsDto {
                 break_depth,
                 break_profile,
                 passes,
+                    picks: PathPicksDto::from_picks(picks),
                 }
             }
             // The 5-axis twins (M5.1 stage C): one shape, mirrored.
@@ -668,6 +729,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             }
             | OpParams::Parallel5D {
                 tolerance,
@@ -682,6 +744,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
                 ..
             } => {
                 let stepover = match p {
@@ -709,6 +772,7 @@ impl ParamsDto {
                         lag_deg: *lag_deg,
                         max_tilt_deg: *max_tilt_deg,
                         shank_avoid: *shank_avoid,
+                        picks: PathPicksDto::from_picks(picks),
                     },
                     None => ParamsDto::Contour5D {
                         tolerance: *tolerance,
@@ -723,6 +787,7 @@ impl ParamsDto {
                         lag_deg: *lag_deg,
                         max_tilt_deg: *max_tilt_deg,
                         shank_avoid: *shank_avoid,
+                        picks: PathPicksDto::from_picks(picks),
                     },
                 }
             }
@@ -743,6 +808,7 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                picks,
                 ..
             } => ParamsDto::Swarf {
                 tolerance: *tolerance,
@@ -757,6 +823,7 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::AdvancedSwarf {
                 tolerance,
@@ -772,6 +839,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 passes,
+                picks,
                 ..
             } => ParamsDto::AdvancedSwarf {
                 tolerance: *tolerance,
@@ -787,6 +855,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 passes: *passes,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The rotary twins (M5.1 stage E): the swarf family's
             // shape for shape - each variant maps to its own DTO, and
@@ -803,6 +872,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => ParamsDto::RotaryContour {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -815,6 +886,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::RotaryParallel {
                 tolerance,
@@ -829,6 +902,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => ParamsDto::RotaryParallel {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -842,6 +917,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The wrap ladder (M5.1 stage E2): the pocket's bridge,
             // minus the retract key the kernel could never honor.
@@ -864,6 +941,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => ParamsDto::RotaryOffset {
                 links: links_to_dto(links, &p.default_links()),
                 tolerance: *tolerance,
@@ -895,6 +974,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The stamped ladder (M5.1 stage E3): the pocket's bridge
             // with the hop plane back in (the kernel reads it - it is
@@ -921,6 +1002,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => ParamsDto::MultiAxisRough {
                 links: links_to_dto(links, &p.default_links()),
                 tolerance: *tolerance,
@@ -954,6 +1036,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: PathPicksDto::from_picks(picks),
             },
             // Flow (M5.1 I): the parallel's shape, mapped directly -
             // it has its own stepover field, so no twin-disambiguation
@@ -973,6 +1056,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => ParamsDto::Flow5D {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -987,6 +1071,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The drive-curve contour (M5.1 J): flow's shape minus
             // the stepover - the path comes from `op.src`'s picks,
@@ -1004,6 +1089,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => ParamsDto::MultiAxisContour {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1017,6 +1103,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The facing ladder (M5.2 A): three heights, an infeed
             // and two feeds - no hop, no lean, no climb to state.
@@ -1030,6 +1117,7 @@ impl ParamsDto {
                 stepdown,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::Facing {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1038,6 +1126,7 @@ impl ParamsDto {
                 stepdown: *stepdown,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The profile kinds (M5.2 B): the same three-height shape;
             // the rough one adds the rung spacing and the leave, the
@@ -1051,6 +1140,7 @@ impl ParamsDto {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::ProfileRough {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1060,6 +1150,7 @@ impl ParamsDto {
                 stock_to_leave: *stock_to_leave,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::ProfileFinish {
                 tolerance,
@@ -1068,6 +1159,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::ProfileFinish {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1075,6 +1167,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             // The blade kinds (M5.2 stage C): the profile shape
             // restated on a band - and the width deliberately NOT
@@ -1088,6 +1181,7 @@ impl ParamsDto {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::GrooveRough {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1097,6 +1191,7 @@ impl ParamsDto {
                 stock_to_leave: *stock_to_leave,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::GrooveFinish {
                 tolerance,
@@ -1105,6 +1200,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::GrooveFinish {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1112,6 +1208,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Part {
                 tolerance,
@@ -1127,6 +1224,7 @@ impl ParamsDto {
                 bar_transfer,
                 inspect_tol,
                 kerf,
+                picks,
             } => {
                 let (kept, back_stock) = super::part_kerf_dto::kerf_dto(*kerf);
                 ParamsDto::Part {
@@ -1144,6 +1242,7 @@ impl ParamsDto {
                     inspect_tol: *inspect_tol,
                     kept,
                     back_stock,
+                    picks: PathPicksDto::from_picks(picks),
                 }
             }
             // The threading kind (M5.2 stage D): the wave's own three
@@ -1162,6 +1261,7 @@ impl ParamsDto {
                 plunge_feed,
                 infeed_plan,
                 hand,
+                picks,
             } => ParamsDto::Threading {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1174,6 +1274,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
+                picks: PathPicksDto::from_picks(picks),
             },
             // The contour kinds (M5.2 stage E): the promise-number
             // or two rides beside the trio - and the nose
@@ -1187,6 +1288,7 @@ impl ParamsDto {
                 angle_deg,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::Chamfering {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1195,6 +1297,7 @@ impl ParamsDto {
                 angle_deg: *angle_deg,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::TaperTurning {
                 tolerance,
@@ -1205,6 +1308,7 @@ impl ParamsDto {
                 top_dia,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::TaperTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1214,6 +1318,7 @@ impl ParamsDto {
                 top_dia: *top_dia,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::MultiPassTurning {
                 tolerance,
@@ -1225,6 +1330,7 @@ impl ParamsDto {
                 passes,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::MultiPassTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1235,6 +1341,7 @@ impl ParamsDto {
                 passes: *passes,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::BoringTurning {
                 tolerance,
@@ -1243,6 +1350,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::BoringTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1250,6 +1358,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::FormTurning {
                 tolerance,
@@ -1258,6 +1367,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => ParamsDto::FormTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -1265,6 +1375,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Slot {
                 links,
@@ -1282,10 +1393,11 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 entry,
-                helix_radius,
+                helix_radius, blend_turns, blend_radius,
                 tilt,
                 extend_start,
                 extend_end,
+                picks,
             } => ParamsDto::Slot {
                 links: links_to_dto(links, &p.default_links()),
                 a: [a.x, a.y],
@@ -1307,10 +1419,11 @@ impl ParamsDto {
                     Entry3D::Helix => EntryDto::Helix,
                     Entry3D::Arc => EntryDto::Arc,
                 },
-                helix_radius: *helix_radius,
+                helix_radius: *helix_radius, blend_turns: *blend_turns, blend_radius: *blend_radius,
                 tilt: (*tilt).map(Into::into),
                 extend_start: *extend_start,
                 extend_end: *extend_end,
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Trace {
                 clearance_z,
@@ -1322,6 +1435,7 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 tilt,
+                picks,
             } => ParamsDto::Trace {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -1332,6 +1446,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tilt: (*tilt).map(Into::into),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Drill {
                 clearance_z,
@@ -1347,6 +1462,7 @@ impl ParamsDto {
                 cross,
                 break_through,
                 break_through_from,
+                picks,
             } => ParamsDto::Drill {
                 break_through: *break_through,
                 break_through_from: Some(match break_through_from {
@@ -1378,6 +1494,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 holes: holes.iter().map(HoleDto::from_hole).collect(),
                 cross: cross.iter().map(CrossHoleDto::from_hole).collect(),
+                picks: PathPicksDto::from_picks(picks),
             },
             // The hole-list rides write the drill's shape (M2.4 C):
             // optional heights absent-means-law, the holes as
@@ -1397,6 +1514,7 @@ impl ParamsDto {
                 holes,
                 break_through,
                 pass_start,
+                picks,
             } => ParamsDto::Bore {
                 break_through: *break_through,
                 pass_start: (*pass_start).into(),
@@ -1412,6 +1530,7 @@ impl ParamsDto {
                 climb: *climb,
                 tolerance: *tolerance,
                 holes: holes.iter().map(HoleDto::from_hole).collect(),
+                picks: PathPicksDto::from_picks(picks),
             },
             OpParams::Thread {
                 clearance_z,
@@ -1428,6 +1547,7 @@ impl ParamsDto {
                 external,
                 passes,
                 break_through,
+                picks,
             } => ParamsDto::Thread {
                 break_through: *break_through,
                 external: *external,
@@ -1443,6 +1563,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 holes: holes.iter().map(HoleDto::from_hole).collect(),
+                picks: PathPicksDto::from_picks(picks),
             },
         }
     }
@@ -1470,9 +1591,10 @@ impl ParamsDto {
                 feed,
                 plunge_feed,
                 climb,
-                blend_turns,
+                blend_turns, blend_radius,
                 holes,
                 tilt,
+                picks,
             } => OpParams::Face {
                 stepover: *stepover,
                 clearance_z: (*clearance_z).into(),
@@ -1482,9 +1604,10 @@ impl ParamsDto {
                 feed: *feed,
                 plunge_feed: *plunge_feed,
                 climb: *climb,
-                blend_turns: *blend_turns,
+                blend_turns: *blend_turns, blend_radius: *blend_radius,
                 holes: (*holes).into(),
                 tilt: (*tilt).map(Into::into),
+                picks: picks.to_picks(),
             },
             ParamsDto::Contour {
                 stock_to_leave,
@@ -1504,12 +1627,13 @@ impl ParamsDto {
                 side,
                 entry,
                 helix_radius,
-                blend_turns,
+                blend_turns, blend_radius,
                 level_link,
                 ramp_angle,
                 links,
                 tilt,
                 chain_overrides,
+                picks,
             } => OpParams::Contour {
                 stock_to_leave: *stock_to_leave,
                 clearance_z: (*clearance_z).into(),
@@ -1545,7 +1669,7 @@ impl ParamsDto {
                     EntryDto::Arc => Entry3D::Arc,
                 },
                 helix_radius: *helix_radius,
-                blend_turns: *blend_turns,
+                blend_turns: *blend_turns, blend_radius: *blend_radius,
                 // The pre-M11.2 keys migrate in memory (a stay-down ramp
                 // is level Keep down + a Ramp transition); `links` lays
                 // over them.
@@ -1560,6 +1684,7 @@ impl ParamsDto {
                         reverse: o.reverse,
                     })
                     .collect(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Pocket {
                 links,
@@ -1584,6 +1709,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => OpParams::Pocket {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 stepover: *stepover,
@@ -1619,6 +1745,7 @@ impl ParamsDto {
                 corner_relief: cr_from_dto(corner_relief),
                 tilt: (*tilt).map(Into::into),
                 pass_start: (*pass_start).into(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Adaptive2D {
                 links,
@@ -1647,6 +1774,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => OpParams::Adaptive2D {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 stepover: *stepover,
@@ -1693,6 +1821,7 @@ impl ParamsDto {
                 corner_relief: cr_from_dto(corner_relief),
                 tilt: (*tilt).map(Into::into),
                 pass_start: (*pass_start).into(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Offset2D {
                 links,
@@ -1713,6 +1842,7 @@ impl ParamsDto {
                 corner_relief,
                 tilt,
                 pass_start,
+                picks,
             } => OpParams::Offset2D {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 stepover: *stepover,
@@ -1737,6 +1867,7 @@ impl ParamsDto {
                 corner_relief: cr_from_dto(corner_relief),
                 tilt: (*tilt).map(Into::into),
                 pass_start: (*pass_start).into(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             // The M2.4 B trio back out of the wire, same shapes.
             ParamsDto::Engrave {
@@ -1749,6 +1880,7 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 tilt,
+                picks,
             } => OpParams::Engrave {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -1759,6 +1891,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tilt: (*tilt).map(Into::into),
+                picks: picks.to_picks(),
             },
             // #1443: the V-carve arm.
             ParamsDto::VCarve {
@@ -1772,6 +1905,7 @@ impl ParamsDto {
                 flat_clear,
                 flat_stepover,
                 tilt,
+                picks,
             } => OpParams::VCarve {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -1783,10 +1917,39 @@ impl ParamsDto {
                 flat_clear: *flat_clear,
                 flat_stepover: *flat_stepover,
                 tilt: (*tilt).map(Into::into),
+                picks: picks.to_picks(),
+            },
+            // #2826: the flow band arm (v82). An older reader refuses
+            // the file by its version before this arm is reached.
+            ParamsDto::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => OpParams::RotaryFlow {
+                tolerance: *tolerance,
+                stepover: *stepover,
+                clearance_z: (*clearance_z).into(),
+                retract_z: (*retract_z).map(Into::into),
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+                lead_deg: *lead_deg,
+                lag_deg: *lag_deg,
+                max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
             },
             ParamsDto::Chamfer2D {
                 width,
                 angle_deg,
+                minimum_cone_radius,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -1796,9 +1959,11 @@ impl ParamsDto {
                 side,
                 tolerance,
                 tilt,
+                picks,
             } => OpParams::Chamfer2D {
                 width: *width,
                 angle_deg: *angle_deg,
+                minimum_cone_radius: *minimum_cone_radius,
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
                 top_z: (*top_z).into(),
@@ -1812,6 +1977,7 @@ impl ParamsDto {
                 },
                 tolerance: *tolerance,
                 tilt: (*tilt).map(Into::into),
+                picks: picks.to_picks(),
             },
             ParamsDto::Circular {
                 links,
@@ -1832,6 +1998,7 @@ impl ParamsDto {
                 entry,
                 helix_radius,
                 tilt,
+                picks,
             } => OpParams::Circular {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 center: Point2::new(center[0], center[1]),
@@ -1856,6 +2023,7 @@ impl ParamsDto {
                 },
                 helix_radius: *helix_radius,
                 tilt: (*tilt).map(Into::into),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Pocket3D {
                 links,
@@ -1879,6 +2047,7 @@ impl ParamsDto {
                 feed_opt,
                 shell,
                 pass_start,
+                picks,
             } => OpParams::Pocket3D {
                 links: links_from_dto(links.as_ref(), crate::links::Links::ROUGH3D),
                 stepover: *stepover,
@@ -1914,6 +2083,7 @@ impl ParamsDto {
                 feed_opt: *feed_opt,
                 shell: *shell,
                 pass_start: (*pass_start).into(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Finish3D {
                 pattern,
@@ -1935,7 +2105,9 @@ impl ParamsDto {
                 pencil_reference,
                 fill_openings,
                 gap_link,
+                waterlines,
                 pass_start,
+                picks,
             } => OpParams::Finish3D {
                 pattern: (*pattern).into(),
                 direction_angle: *direction_angle,
@@ -1956,7 +2128,9 @@ impl ParamsDto {
                 pencil_reference: *pencil_reference,
                 fill_openings: *fill_openings,
                 gap_link: (*gap_link).into(),
+                waterlines: *waterlines,
                 pass_start: (*pass_start).into(),
+                picks: picks.to_picks(),
             },
             // Read back whole, the blade kinds' way - sane or
             // nothing, `validate_kind`'s door first (M2.5 E B):
@@ -1978,6 +2152,7 @@ impl ParamsDto {
                 break_depth,
                 break_profile,
                 passes,
+                picks,
             } => OpParams::Deburr {
                 width: *width,
                 clearance_z: (*clearance_z).into(),
@@ -1992,6 +2167,7 @@ impl ParamsDto {
                 hole_max_diameter: *hole_max_diameter,
                 unreachable: (*unreachable).into(),
                 sizing: break_of(*break_mode, *break_depth, *break_profile, *passes),
+                picks: picks.to_picks(),
             },
             // The 5-axis twins (M5.1 stage C): the same shape read
             // back - the contour has no stepover key to lose, and the
@@ -2009,6 +2185,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => OpParams::Contour5D {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2022,6 +2199,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: picks.to_picks(),
             },
             ParamsDto::Parallel5D {
                 tolerance,
@@ -2037,6 +2215,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => OpParams::Parallel5D {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -2051,6 +2230,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: picks.to_picks(),
             },
             // The swarf family (M5.1 stage D), straight mirrors; the
             // ladder's count is validated by the params door, not
@@ -2069,6 +2249,7 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                picks,
             } => OpParams::Swarf {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -2082,6 +2263,7 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                picks: picks.to_picks(),
             },
             ParamsDto::AdvancedSwarf {
                 tolerance,
@@ -2097,6 +2279,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 passes,
+                picks,
             } => OpParams::AdvancedSwarf {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -2111,6 +2294,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 passes: *passes,
+                picks: picks.to_picks(),
             },
             // The rotary twins (M5.1 stage E), straight mirrors read
             // back; the parallel's absent stepover means the cos-law,
@@ -2127,6 +2311,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => OpParams::RotaryContour {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2139,6 +2325,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: picks.to_picks(),
             },
             ParamsDto::RotaryParallel {
                 tolerance,
@@ -2153,6 +2341,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => OpParams::RotaryParallel {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -2166,6 +2356,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: picks.to_picks(),
             },
             // The wrap ladder reads back whole; `validate_kind` has
             // already refused anything the door would fail (M5.1 E2).
@@ -2189,6 +2381,8 @@ impl ParamsDto {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
+                picks,
             } => OpParams::RotaryOffset {
                 links: links_from_dto(links.as_ref(), crate::links::Links::ROUGH3D),
                 tolerance: *tolerance,
@@ -2219,6 +2413,8 @@ impl ParamsDto {
                 lead_deg: *lead_deg,
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
+                stated_axis: *stated_axis,
+                picks: legacy_picks(picks, links.as_ref()),
             },
             // The stamped ladder reads back whole; `validate_kind` has
             // already refused anything the door would fail (M5.1 E3).
@@ -2244,6 +2440,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => OpParams::MultiAxisRough {
                 links: links_from_dto(links.as_ref(), crate::links::Links::ROUGH3D),
                 tolerance: *tolerance,
@@ -2276,6 +2473,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: legacy_picks(picks, links.as_ref()),
             },
             // Flow reads back whole; `validate_kind` has already
             // refused anything the door would fail (M5.1 I).
@@ -2293,6 +2491,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => OpParams::Flow5D {
                 tolerance: *tolerance,
                 stepover: *stepover,
@@ -2307,6 +2506,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: picks.to_picks(),
             },
             // Read back whole, the same law; `validate_kind` has
             // already refused anything the door would fail (M5.1 J).
@@ -2323,6 +2523,7 @@ impl ParamsDto {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid,
+                picks,
             } => OpParams::MultiAxisContour {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2336,6 +2537,7 @@ impl ParamsDto {
                 lag_deg: *lag_deg,
                 max_tilt_deg: *max_tilt_deg,
                 shank_avoid: *shank_avoid,
+                picks: picks.to_picks(),
             },
             // Read back whole, the same law; `validate_kind` has
             // already refused anything the door would fail (M5.2 A).
@@ -2347,6 +2549,7 @@ impl ParamsDto {
                 stepdown,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::Facing {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2355,6 +2558,7 @@ impl ParamsDto {
                 stepdown: *stepdown,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             // Read back whole, the same law; `validate_kind` has
             // already refused anything the door would fail (M5.2 B).
@@ -2367,6 +2571,7 @@ impl ParamsDto {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::ProfileRough {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2376,6 +2581,7 @@ impl ParamsDto {
                 stock_to_leave: *stock_to_leave,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             ParamsDto::ProfileFinish {
                 tolerance,
@@ -2384,6 +2590,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::ProfileFinish {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2391,6 +2598,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             // Read back whole, the blade kinds' way too - sane or
             // nothing, `validate_kind`'s door again first (M5.2 C).
@@ -2403,6 +2611,7 @@ impl ParamsDto {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::GrooveRough {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2412,6 +2621,7 @@ impl ParamsDto {
                 stock_to_leave: *stock_to_leave,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             ParamsDto::GrooveFinish {
                 tolerance,
@@ -2420,6 +2630,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::GrooveFinish {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2427,6 +2638,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             // The feeder signals read back with the rest; an old
             // file's absence was already stepped up to silent-off
@@ -2447,6 +2659,7 @@ impl ParamsDto {
                 inspect_tol,
                 kept,
                 back_stock,
+                picks,
             } => OpParams::Part {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2461,6 +2674,7 @@ impl ParamsDto {
                 bar_transfer: *bar_transfer,
                 inspect_tol: *inspect_tol,
                 kerf: super::part_kerf_dto::kerf_of(*kept, *back_stock),
+                picks: picks.to_picks(),
             },
             // Read back whole, the threading kind's way too - sane or
             // nothing, `validate_kind`'s door again first (M5.2 D).
@@ -2476,6 +2690,7 @@ impl ParamsDto {
                 plunge_feed,
                 infeed_plan,
                 hand,
+                picks,
             } => OpParams::Threading {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2488,6 +2703,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
+                picks: picks.to_picks(),
             },
             // Read back whole, the contour kinds' way too - sane or
             // nothing, `validate_kind`'s door again first (M5.2 E).
@@ -2499,6 +2715,7 @@ impl ParamsDto {
                 angle_deg,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::Chamfering {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2507,6 +2724,7 @@ impl ParamsDto {
                 angle_deg: *angle_deg,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             ParamsDto::TaperTurning {
                 tolerance,
@@ -2517,6 +2735,7 @@ impl ParamsDto {
                 top_dia,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::TaperTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2526,6 +2745,7 @@ impl ParamsDto {
                 top_dia: *top_dia,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             ParamsDto::MultiPassTurning {
                 tolerance,
@@ -2537,6 +2757,7 @@ impl ParamsDto {
                 passes,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::MultiPassTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2547,6 +2768,7 @@ impl ParamsDto {
                 passes: *passes,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             // Read back whole, the bar's way too - the window, the
             // tolerance and the feeds, the nose living on the TOOL
@@ -2559,6 +2781,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::BoringTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2566,6 +2789,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             // Read back whole, the gauge's way too - sane or
             // nothing, `validate_kind`'s door again first, and the
@@ -2578,6 +2802,7 @@ impl ParamsDto {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks,
             } => OpParams::FormTurning {
                 tolerance: *tolerance,
                 clearance_z: (*clearance_z).into(),
@@ -2585,6 +2810,7 @@ impl ParamsDto {
                 bottom_z: (*bottom_z).into(),
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                picks: picks.to_picks(),
             },
             ParamsDto::Slot {
                 links,
@@ -2602,10 +2828,11 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 entry,
-                helix_radius,
+                helix_radius, blend_turns, blend_radius,
                 tilt,
                 extend_start,
                 extend_end,
+                picks,
             } => OpParams::Slot {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 a: Point2::new(a[0], a[1]),
@@ -2627,10 +2854,11 @@ impl ParamsDto {
                     EntryDto::Helix => Entry3D::Helix,
                     EntryDto::Arc => Entry3D::Arc,
                 },
-                helix_radius: *helix_radius,
+                helix_radius: *helix_radius, blend_turns: *blend_turns, blend_radius: *blend_radius,
                 tilt: (*tilt).map(Into::into),
                 extend_start: *extend_start,
                 extend_end: *extend_end,
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Trace {
                 clearance_z,
@@ -2642,6 +2870,7 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 tilt,
+                picks,
             } => OpParams::Trace {
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
@@ -2652,6 +2881,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tilt: (*tilt).map(Into::into),
+                picks: picks.to_picks(),
             },
             ParamsDto::Drill {
                 clearance_z,
@@ -2667,6 +2897,7 @@ impl ParamsDto {
                 cross,
                 break_through,
                 break_through_from,
+                picks,
             } => OpParams::Drill {
                 break_through: *break_through,
                 break_through_from: match break_through_from.unwrap_or_default() {
@@ -2703,6 +2934,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 holes: holes.iter().copied().map(HoleDto::to_hole).collect(),
                 cross: cross.iter().copied().map(CrossHoleDto::to_hole).collect(),
+                picks: picks.to_picks(),
             },
             // Read back whole - the same law as the drill's arm:
             // absent optionals decode to the hole-shaped defaults
@@ -2722,6 +2954,7 @@ impl ParamsDto {
                 holes,
                 break_through,
                 pass_start,
+                picks,
             } => OpParams::Bore {
                 break_through: *break_through,
                 pass_start: (*pass_start).into(),
@@ -2737,6 +2970,7 @@ impl ParamsDto {
                 climb: *climb,
                 tolerance: *tolerance,
                 holes: holes.iter().copied().map(HoleDto::to_hole).collect(),
+                picks: legacy_picks(picks, links.as_ref()),
             },
             ParamsDto::Thread {
                 clearance_z,
@@ -2753,6 +2987,7 @@ impl ParamsDto {
                 external,
                 passes,
                 break_through,
+                picks,
             } => OpParams::Thread {
                 break_through: *break_through,
                 external: *external,
@@ -2768,6 +3003,7 @@ impl ParamsDto {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 holes: holes.iter().copied().map(HoleDto::to_hole).collect(),
+                picks: picks.to_picks(),
             },
         }
     }
@@ -2797,7 +3033,7 @@ mod face_holes_law {
     fn face(holes: FaceHoles) -> OpParams {
         OpParams::Face {
             holes,
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             tilt: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
@@ -2807,6 +3043,7 @@ mod face_holes_law {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         }
     }
 

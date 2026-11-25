@@ -138,7 +138,10 @@ fn feed_of(p: &OpParams) -> f64 {
         // every 2D ride (M2.4 C).
         | OpParams::Bore { feed, .. }
         | OpParams::Thread { feed, .. }
-        | OpParams::FormTurning { feed, .. } => *feed,
+        | OpParams::FormTurning { feed, .. }
+        // The flow passes feed along their lines like every ride
+        // (#2826).
+        | OpParams::RotaryFlow { feed, .. } => *feed,
         // The seek feed is the probe's travel pace (#108).
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
@@ -216,7 +219,9 @@ fn plunge_of(p: &OpParams) -> f64 {
         // stand on this number (M2.4 C).
         | OpParams::Bore { plunge_feed, .. }
         | OpParams::Thread { plunge_feed, .. }
-        | OpParams::FormTurning { plunge_feed, .. } => *plunge_feed,
+        | OpParams::FormTurning { plunge_feed, .. }
+        // The flow line's entry off the clearance cylinder (#2826).
+        | OpParams::RotaryFlow { plunge_feed, .. } => *plunge_feed,
         // The measuring re-probe is the slow number (#108).
         OpParams::Probe { slow_feed, .. } => *slow_feed,
         // The torch never plunges into solid: it pierces at the
@@ -305,6 +310,9 @@ fn climb_of(p: &OpParams) -> bool {
         OpParams::SlotUndercut(p) => p.climb,
         // #1443: the cone cuts the two walls at once; no side leads.
         OpParams::VCarve { .. } => true,
+        // The flow band walks as picked or reversed (#2826) - the
+        // drive-curve walk's own climb law.
+        OpParams::RotaryFlow { climb, .. } => *climb,
     }
 }
 
@@ -352,6 +360,9 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // has NO spacing at all - the picked chain is the path, one
         // pass over it (M5.1 J).
         | OpParams::Flow5D { .. }
+        // The flow band's spacing is derived the same way (#2826):
+        // the scallop law authors it until a number is typed.
+        | OpParams::RotaryFlow { .. }
         // The drive-curve contour has NO spacing at all, and facing
         // none either: one radial pass per station runs the profile's
         // whole width - the stepdown IS the spacing (M5.2 A). The
@@ -456,6 +467,9 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         | OpParams::FormTurning { .. }
         | OpParams::BoringTurning { .. }
         | OpParams::MultiAxisContour { .. }
+        // One ride per flow line is the whole band (#2826): the
+        // picks author the depth's extent, no infeed ladder exists.
+        | OpParams::RotaryFlow { .. }
         // The 2-D chamfer is one ride: between the shoulder and the
         // derived depth there is no infeed to step (M2.4 B). The
         // thread's descent is its PITCH - infeed is its own field,
@@ -484,8 +498,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Offset2D { top_z, .. }
         | OpParams::VCarve { top_z, .. }
         // The engrave and circular tops are the pocket family's; the
-        // chamfer's top plane is where the cone's apex stands - the
-        // ride's only height (M2.4 B).
+        // chamfer's top plane is the authored edge plane - the ride's
+        // only height (M2.4 B).
         | OpParams::Engrave { top_z, .. }
         | OpParams::Chamfer2D { top_z, .. }
         | OpParams::Circular { top_z, .. }
@@ -536,6 +550,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Deburr { top_z, .. } | OpParams::MultiAxisDeburr { top_z, .. } => Some(*top_z),
         OpParams::Face { .. } => None,
         OpParams::Probe { .. } => None,
+        // The picks bound the flow band (#2826): no top plane exists.
+        OpParams::RotaryFlow { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
         OpParams::WaterjetProfile(p) => Some(p.top_z),
@@ -614,11 +630,14 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Drill { bottom_z, .. }
         | OpParams::Bore { bottom_z, .. }
         | OpParams::Thread { bottom_z, .. } => *bottom_z,
-        // The chamfer's floor is derived - width · tan(angle) below
-        // the top plane the cone's apex stands at (M2.4 B).
+        // The chamfer's break floor and virtual tip are derived from
+        // width, angle and its selected cone band (M2.4 B).
         OpParams::Chamfer2D { .. } => None,
         OpParams::Face { .. } => None,
         OpParams::Probe { .. } => None,
+        // The picks bound the flow band (#2826): no bottom plane
+        // exists either.
+        OpParams::RotaryFlow { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
         OpParams::WaterjetProfile(p) => Some(p.bottom_z),
@@ -665,7 +684,10 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         | OpParams::Flow5D { retract_z, .. }
         // The drive-curve contour hops between chains like the
         // raster hops between lines (M5.1 J).
-        | OpParams::MultiAxisContour { retract_z, .. } => *retract_z,
+        | OpParams::MultiAxisContour { retract_z, .. }
+        // The flow lines hop between passes on the retract cylinder,
+        // the radial reading's own hop (#2826).
+        | OpParams::RotaryFlow { retract_z, .. } => *retract_z,
         // No hop plane to carry: the kernel names its own rapids
         // plane (one infeed and a tool radius off the skin - the
         // facing ladder states it one infeed clear of the profile,
@@ -728,11 +750,12 @@ fn seed_face(c: &Carried) -> OpParams {
         climb: c.climb,
         // Turning-point blends are opt-in (M11.1 A): a fresh face is
         // the sharp serpentine every golden and every saved file knows.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // M13.11: a fresh face lifts over its holes - a bore or a boss
         // is bridged in the air; cutting across is the user's choice.
         holes: Default::default(),
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -759,12 +782,13 @@ fn seed_contour(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         // Turning-point blends are opt-in (M11.1 B), as on Face.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // Retract and re-enter: the transition every earlier contour
         // posted; staying down is the user's pick on Lead in / Lead out.
         links: crate::links::Links::PLANAR,
         tilt: c.tilt,
         chain_overrides: Vec::new(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -798,6 +822,7 @@ fn seed_pocket(c: &Carried) -> OpParams {
         corner_relief: crate::machining2d::CornerRelief::default(),
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -828,6 +853,7 @@ fn seed_adaptive2d(c: &Carried) -> OpParams {
         rest: None,
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -853,6 +879,7 @@ fn seed_offset2d(c: &Carried) -> OpParams {
         helix_radius: 1.0,
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -869,6 +896,7 @@ fn seed_engrave(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -879,6 +907,7 @@ fn seed_chamfer2d(c: &Carried) -> OpParams {
     OpParams::Chamfer2D {
         width: 0.8,
         angle_deg: 45.0,
+        minimum_cone_radius: 0.0,
         clearance_z: c.clearance,
         retract_z: None,
         top_z: c.top,
@@ -888,6 +917,7 @@ fn seed_chamfer2d(c: &Carried) -> OpParams {
         side: Side::Auto,
         tolerance: 0.01,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -913,6 +943,7 @@ fn seed_circular(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -933,10 +964,11 @@ fn seed_slot(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: c.tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -963,6 +995,7 @@ fn seed_trochoidal_slot(c: &Carried) -> OpParams {
         return_feed: c.feed * 2.0,
         plunge_feed: c.plunge,
         climb: c.climb,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -977,6 +1010,7 @@ fn seed_trace(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1002,6 +1036,7 @@ fn seed_drill(c: &Carried) -> OpParams {
         // the full cutting diameter so a twist drill's point exits clean.
         break_through: None,
         break_through_from: crate::drilling::BreakThroughFrom::FullDiameter,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1027,6 +1062,7 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
         holes: Vec::new(),
         break_through: None,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1053,6 +1089,7 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         // #988: the #894 ride - equal passes, M3, right-hand-cut mill.
         passes: crate::machining2d::ThreadPasses::default(),
         break_through: None,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1117,6 +1154,7 @@ fn seed_pocket3d(c: &Carried) -> OpParams {
         shell: false,
         // #3361: the core-first order every earlier 3D pocket cut.
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1161,8 +1199,11 @@ fn seed_finish3d(c: &Carried) -> OpParams {
         // Fresh finishes hop to clearance like every older file;
         // straight links are the machinist's opt-in (the linking menu).
         gap_link: crate::finishing3d::GapLink::Jump,
+        // Steep flanks ride the waterline ring pass by default (#2811).
+        waterlines: true,
         // #3362: the outside-in order every earlier finish cut.
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1193,6 +1234,7 @@ fn seed_deburr(c: &Carried) -> OpParams {
         unreachable: crate::finishing3d::UnreachableEdges::SkipWithNote,
         // #1890: one Constant Width chamfer pass.
         sizing: crate::finishing3d::DeburrBreak::default(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1216,6 +1258,7 @@ fn seed_contour5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1236,6 +1279,7 @@ fn seed_parallel5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1262,6 +1306,7 @@ fn seed_flow5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1285,6 +1330,7 @@ fn seed_multi_axis_contour(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1316,6 +1362,7 @@ fn seed_facing(c: &Carried) -> OpParams {
         stepdown: 0.5,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1335,6 +1382,7 @@ fn seed_profile_rough(c: &Carried) -> OpParams {
         stock_to_leave: 0.25,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1349,6 +1397,7 @@ fn seed_profile_finish(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1368,6 +1417,7 @@ fn seed_groove_rough(c: &Carried) -> OpParams {
         stock_to_leave: 0.25,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1382,6 +1432,7 @@ fn seed_groove_finish(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1408,6 +1459,7 @@ fn seed_part(c: &Carried) -> OpParams {
         inspect_tol: 0.0,
         // #3469: the #3452 kerf - the cut-off piece is the part.
         kerf: crate::turning::PartKerf::default(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1429,6 +1481,7 @@ fn seed_threading(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         infeed_plan: crate::turning::ThreadInfeed::default(),
         hand: crate::cl::ThreadHand::Right,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1447,6 +1500,7 @@ fn seed_chamfer(c: &Carried) -> OpParams {
         angle_deg: 45.0,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1465,6 +1519,7 @@ fn seed_taper(c: &Carried) -> OpParams {
         top_dia: 16.0,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1484,6 +1539,7 @@ fn seed_multi_pass(c: &Carried) -> OpParams {
         passes: 3,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1499,6 +1555,7 @@ fn seed_form(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1514,6 +1571,7 @@ fn seed_bore(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1536,6 +1594,7 @@ fn seed_swarf(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1558,6 +1617,7 @@ fn seed_advanced_swarf(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         passes: 2,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1580,6 +1640,8 @@ fn seed_rotary_contour(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        stated_axis: None,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1597,6 +1659,31 @@ fn seed_rotary_parallel(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        stated_axis: None,
+        picks: crate::path_picks::PathPicks::default(),
+    }
+}
+
+/// The flow seed (#2826): the parallel's pose at rest and the twins'
+/// carried pace, with NO station window to carry - the picked guide
+/// chains bound the band, so the top/bottom folds stay home. The
+/// heights seed as the lying bar's own radial reading: the stock top
+/// plus the fold's hop, a radius above the stock's max radius on a
+/// centreline-anchored offset (#2774), and the kernel's own guard
+/// refuses the number that does not clear the work.
+fn seed_rotary_flow(c: &Carried) -> OpParams {
+    OpParams::RotaryFlow {
+        tolerance: 0.05,
+        stepover: None,
+        clearance_z: c.clearance,
+        retract_z: None,
+        feed: c.feed,
+        plunge_feed: c.plunge,
+        climb: c.climb,
+        lead_deg: 0.0,
+        lag_deg: 0.0,
+        max_tilt_deg: 90.0,
+        stated_axis: None,
     }
 }
 
@@ -1628,6 +1715,7 @@ fn seed_multiaxis_rough(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1657,6 +1745,8 @@ fn seed_rotary_offset(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        stated_axis: None,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -2550,6 +2640,22 @@ impl KindInfo {
             seed: super::multiaxis_deburr_op::seed_multiaxis_deburr,
             tool_kinds: tk::CONE,
         },
+        KindInfo {
+            ty: OpType::RotaryFlow,
+            label: "Rotary Flow",
+            caption: "Rotary Flow",
+            tag: 48,
+            // #2826: the picked chains ARE the pattern and the axis
+            // is a statement, so the sphere-envelope scan judges the
+            // ball's path wherever the band winds. Rotary (M13): the
+            // passes ride the retract cylinders about the stated axis -
+            // the radial field judges them, the vertical column never
+            // could.
+            mode: Mode::Rotary,
+            section: Section::MultiAxis,
+            seed: seed_rotary_flow,
+            tool_kinds: tk::BALL,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2631,6 +2737,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[45].label,
     KindInfo::ALL[46].label,
     KindInfo::ALL[47].label,
+    KindInfo::ALL[48].label,
 ];
 
 impl OpType {
@@ -2711,6 +2818,9 @@ impl OpType {
             // move); the menu lists it in the multi-axis section by
             // its row.
             OpType::MultiAxisDeburr => 47,
+            // #2826: the Rotary Flow appends (stored ids never move);
+            // the menu lists it in the Multi-axis section by its row.
+            OpType::RotaryFlow => 48,
         }
     }
 

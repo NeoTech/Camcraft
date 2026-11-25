@@ -62,6 +62,7 @@ fn adaptive(method: AdaptiveMethod) -> OpParams {
         tilt: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

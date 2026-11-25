@@ -75,8 +75,10 @@ fn build_air_cut_world(spindle_rpm: f64) -> World {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
         blend_turns: false,
+        blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Perimeter Skim", "6MM EM", SrcRef::Stock, contour).expect("contour"));
     h.execute(&world, GenerateOperation::new(&world, "Perimeter Skim").expect("gen contour"));
@@ -99,6 +101,7 @@ fn build_air_cut_world(spindle_rpm: f64) -> World {
         plunge_feed: 180.0,
         holes,
         cross: Vec::new(),
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Peck Pair", "5MM DRILL", SrcRef::Stock, drill).expect("drill"));
     h.execute(&world, GenerateOperation::new(&world, "Peck Pair").expect("gen drill"));

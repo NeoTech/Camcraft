@@ -28,6 +28,7 @@ use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_play::{FieldPlay, PlaySeed};
 use camcraft_app::stock_sim::preview::{pack_cut, pack_cut_patch};
+use camcraft_app::stock_sim::{cpu_layer_cutter, merge_max};
 use camcraft_app::stock_view::{PackedBase, DEFAULT_TEXELS};
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
@@ -90,6 +91,7 @@ fn fig8_offset() -> (World, String) {
         rest: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     let params = operation::retype_params(&adaptive, OpType::Offset2D as usize);
     assert!(matches!(params, OpParams::Offset2D { .. }), "the retype gives a 2D Offset");
@@ -126,6 +128,7 @@ fn pocket3d() -> (World, String) {
         feed_opt: false,
         shell: false,
         method: AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Op1", "EM-1000-4FL", SrcRef::Entity(part), params.clone()).expect("create"));
     let inside = AreaControls { containment: Some(Containment::Inside), ..Default::default() };
@@ -298,6 +301,63 @@ fn playback_cost_against_the_cell_count() {
     for (world, what) in [fig8_offset(), pocket3d()] {
         for div in [4.0, 2.0] {
             bench(&world, &format!("{what}, budget 1/{div}"), DEFAULT_TEXELS / div);
+        }
+    }
+}
+
+/// The layer mode's walk (#2629 S3b, for #3336): the ops with an f32
+/// twin leave the f64 field and are cut onto the dense layer by the CPU
+/// twin law (a GPU cutter is the UI's; no device here). One publication
+/// each `step` moves, as a playing transport asks: the field's `seek`,
+/// the layer cut (`layer_frame`), then the whole-layer pack and merge.
+fn bench_layered(world: &World, what: &str, budget: f64, step: usize) {
+    let mode = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let seed = PlaySeed::gather(world, false, budget).expect("seed");
+    let mut play = FieldPlay::from_seed(seed).expect("play");
+    let base = PackedBase::of(&play.view().stock, None).map(|(b, _)| b).expect("the stock packs");
+    let kept = play.set_layer(base.meta.clone(), cpu_layer_cutter()).expect("the layer mode");
+    let moves = play.total();
+    let (mut seeks, mut layers, mut packs) = (Vec::new(), Vec::new(), Vec::new());
+    let walk = Instant::now();
+    while play.at() < moves && walk.elapsed() < WALK_BUDGET {
+        let t = Instant::now();
+        play.seek(play.at().saturating_add(step).min(moves)).expect("seek");
+        seeks.push(t.elapsed());
+        let t = Instant::now();
+        let layer = play.layer_frame().expect("a layer frame");
+        layers.push(t.elapsed());
+        let t = Instant::now();
+        let view = play.view();
+        let mut whole = pack_cut(view.stock.field().expect("a field stock"), &base.meta);
+        if let Some(layer) = &layer {
+            merge_max(&mut whole, layer).expect("the layer fits the picture");
+        }
+        packs.push(t.elapsed());
+        std::hint::black_box(whole);
+    }
+    let walked = play.at();
+    let (sm, _, sx) = spread(&seeks);
+    let (lm, lmed, lx) = spread(&layers);
+    let (pm, _, px) = spread(&packs);
+    let cut: Duration = seeks.iter().chain(&layers).sum();
+    let per_move = ms(cut) / walked.max(1) as f64;
+    println!("== {what}, layer mode, {step} moves a publication [{mode}]; ops kept on the field: {kept:?}; layer on at the end: {}", play.layer_on());
+    println!("walked {walked}/{moves} moves in {} publications", seeks.len());
+    println!("field seek: mean {sm:.2} ms, max {sx:.2} ms; layer cut: mean {lm:.2} ms, median {lmed:.2} ms, max {lx:.2} ms; pack + merge: mean {pm:.2} ms, max {px:.2} ms");
+    println!(
+        "SUMMARY|{mode}|{what}, layer mode|step {step}|moves {moves}|walked {walked}|ms/move {per_move:.3}|publication ms {:.2}|layer ms {lm:.2}|pack+merge ms {pm:.2}",
+        sm + lm + pm
+    );
+}
+
+/// The layer mode (the CPU twin law as the cutter) on both fixtures, at
+/// the display budget: 1, 8 and 64 moves in each publication.
+#[test]
+#[ignore = "heavy lane (playback perf bench): both fixtures in the layer mode, release only - run with --release -- --ignored --nocapture"]
+fn playback_cost_in_the_layer_mode() {
+    for (world, what) in [fig8_offset(), pocket3d()] {
+        for step in [1, 8, 64] {
+            bench_layered(&world, &what, DEFAULT_TEXELS, step);
         }
     }
 }

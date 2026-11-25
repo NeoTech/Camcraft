@@ -90,6 +90,8 @@ mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
 pub(crate) use stamp_stock::write_setup_stock;
 mod material;
+// #3544: Detect holes on a stock source names the stock and the models.
+mod detect_source;
 // #2496: a drill makes its own size; a wider hole is named.
 mod drill_size;
 // #3525: a cut deeper than the flute length is named first.
@@ -128,9 +130,14 @@ mod thread_r_plane;
 mod thread_boss;
 pub mod wire_op;
 mod agie_profile;
-pub(crate) use agie_profile::agie_job;
+mod agie_die;
+pub(crate) use agie_profile::{agie_job, agie_quality, agie_sketch_job};
 mod wire_ruled;
 pub(crate) mod wire_sketch;
+mod wire_sketch_arcs;
+mod agie_inspection;
+pub(crate) use agie_inspection::prepare_inspection;
+pub use agie_inspection::{AgieInspectionReceipt, export_agie_inspection, has_agie_inspection_source};
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
@@ -193,6 +200,7 @@ fn boundary_chain_error(error: boundary_chains::BoundaryError) -> GenError {
 }
 mod contour_open;
 mod contour_sketch_pick;
+mod sketch_mark;
 mod sketch_memo;
 pub use contour_sketch_pick::{SketchChainInfo, sketch_chain_infos_fresh, sketch_z_range_fresh};
 pub use sketch_memo::{
@@ -278,6 +286,9 @@ mod stock_top_law;
 // #266: a tap judged at its thread's core.
 mod tap_core;
 pub use clearance_stock::{CLEARANCE_STOCK_WARNING, creation_advice as clearance_in_stock_advice};
+// #3631: a 2D Pocket's tool that no position in its region fits, said at edit time.
+mod pocket_fit;
+pub use pocket_fit::pocket_fit_advice;
 pub use top_stock::{CARRIED_STOCK_NOTE, TOP_STOCK_WARNING};
 mod turning_credit;
 mod g76_start;

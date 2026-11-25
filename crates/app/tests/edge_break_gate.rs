@@ -36,7 +36,8 @@ fn seeded(ty: OpType) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     };
     operation::retype_params(&base, ty.ordinal())
 }
@@ -125,6 +126,7 @@ fn a_default_deburr_on_a_finished_brick_posts() {
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     });
     assert_posts(&world, "deburr-w2");
 }

@@ -70,7 +70,8 @@ fn both_on(
     let mut new = Vec::new();
     let s_new = band_reach_counted(&path, &cx, &Rest::new(&path, &cx, cx.gouge_tol, &[]), cx.gouge_tol, &mut new);
     let mut old = Vec::new();
-    let s_old = band_reach_reference(&path, &cx, &Rest::new(&path, &cx, cx.gouge_tol, &[]), cx.gouge_tol, &mut old);
+    // #3831: the reference reads every plane on its own, as the old scan did.
+    let s_old = band_reach_reference(&path, &cx, &Rest::new(&path, &cx, cx.gouge_tol, &[]).plane_exact(), cx.gouge_tol, &mut old);
     ((new, s_new), (old, s_old))
 }
 

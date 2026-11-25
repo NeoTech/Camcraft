@@ -104,6 +104,40 @@ fn lattice_box(meta: &LatticeMeta) -> Result<[(i32, i32); 3], StockError> {
     Ok(out)
 }
 
+/// Whether move `m` cuts on the twin (`false`: a rapid, which touches
+/// nothing), or its refusal by name.
+fn twin_move(m: &Move) -> Result<bool, StockError> {
+    if !m.is_finite() {
+        return Err(invalid("the move has a non-finite endpoint".into()));
+    }
+    if m.kind == MoveKind::Rapid {
+        return Ok(false);
+    }
+    if m.arc.is_some() {
+        return Err(invalid("an arc move has no twin; only linear moves cut here".into()));
+    }
+    if let Some(a) = m.axis
+        && !(a[0] == 0.0 && a[1] == 0.0 && a[2].is_finite() && a[2] > 0.0)
+    {
+        return Err(invalid(format!("the tool axis {a:?} is not upright; only +Z cuts here")));
+    }
+    if m.from == m.to {
+        return Err(invalid("a zero-length move has no swept solid".into()));
+    }
+    Ok(true)
+}
+
+/// The cheap precheck of a whole op (#2629, S3b): `Ok` when the tool and
+/// every move have a twin, else the first refusal by name. It builds no
+/// window; `twin_work` can still refuse a window over the cell ceiling.
+pub fn twin_refusal(moves: &[Move], tool: &SdfTool) -> Result<(), StockError> {
+    twin_tool(tool)?;
+    for m in moves {
+        twin_move(m)?;
+    }
+    Ok(())
+}
+
 /// The chords of `moves` and the brick work list that their windows
 /// touch inside `meta`'s lattice. Validates the whole batch first.
 pub fn twin_work(moves: &[Move], tool: &SdfTool, meta: &LatticeMeta) -> Result<TwinWork, StockError> {
@@ -114,22 +148,8 @@ pub fn twin_work(moves: &[Move], tool: &SdfTool, meta: &LatticeMeta) -> Result<T
     let mut chords = Vec::new();
     let mut items = Vec::new();
     for m in moves {
-        if !m.is_finite() {
-            return Err(invalid("the move has a non-finite endpoint".into()));
-        }
-        if m.kind == MoveKind::Rapid {
+        if !twin_move(m)? {
             continue;
-        }
-        if m.arc.is_some() {
-            return Err(invalid("an arc move has no twin; only linear moves cut here".into()));
-        }
-        if let Some(a) = m.axis
-            && !(a[0] == 0.0 && a[1] == 0.0 && a[2].is_finite() && a[2] > 0.0)
-        {
-            return Err(invalid(format!("the tool axis {a:?} is not upright; only +Z cuts here")));
-        }
-        if m.from == m.to {
-            return Err(invalid("a zero-length move has no swept solid".into()));
         }
         let sw = chord_sweep(&kind, up, m.from, m.to)?;
         let (a, b) = match tt {
@@ -218,9 +238,36 @@ pub fn run_twin(work: &TwinWork, meta: &LatticeMeta) -> Result<Vec<f32>, StockEr
     let items = twin_items(work, meta)?;
     let dims = [meta.dims[0] as usize, meta.dims[1] as usize, meta.dims[2] as usize];
     let floor = ordered_bits((-4.0 * meta.cap) as f32);
-    let mut keys = vec![floor; dims[0] * dims[1] * dims[2]];
+    fold_items(&items, meta, vec![floor; dims[0] * dims[1] * dims[2]])
+}
+
+/// The incremental CPU law (#2629, S3b): the kernel items cut onto an
+/// earlier layer `base` of the same lattice (a playback keyframe). The
+/// max law makes it exact: the keyframe of A, then B onto it, is the
+/// one-batch cut of A and B, bit for bit. A base of the wrong size or
+/// with a non-finite value is refused by name.
+pub fn run_twin_items_onto(items: &[TwinItem], meta: &LatticeMeta, base: &[f32]) -> Result<Vec<f32>, StockError> {
+    let n = (meta.dims[0] as usize)
+        .checked_mul(meta.dims[1] as usize)
+        .and_then(|n| n.checked_mul(meta.dims[2] as usize))
+        .ok_or_else(|| invalid(format!("the lattice dims {:?} overflow", meta.dims)))?;
+    if base.len() != n {
+        return Err(invalid(format!("the base layer has {} texels, the lattice {n}", base.len())));
+    }
+    if let Some(at) = base.iter().position(|v| !v.is_finite()) {
+        return Err(invalid(format!("the base layer texel {at} is not finite")));
+    }
+    let mut keys = Vec::new();
+    keys.try_reserve_exact(n).map_err(|e| invalid(format!("no memory for {n} texels: {e}")))?;
+    keys.extend(base.iter().map(|v| ordered_bits(*v)));
+    fold_items(items, meta, keys)
+}
+
+/// Fold the claims of `items` into `keys` with the max law and decode.
+fn fold_items(items: &[TwinItem], meta: &LatticeMeta, mut keys: Vec<u32>) -> Result<Vec<f32>, StockError> {
+    let dims = [meta.dims[0] as usize, meta.dims[1] as usize, meta.dims[2] as usize];
     let (cell32, cap32) = (meta.cell as f32, meta.cap as f32);
-    for it in &items {
+    for it in items {
         for k in it.lo[2]..=it.hi[2] {
             for j in it.lo[1]..=it.hi[1] {
                 for i in it.lo[0]..=it.hi[0] {
@@ -229,10 +276,10 @@ pub fn run_twin(work: &TwinWork, meta: &LatticeMeta) -> Result<Vec<f32>, StockEr
                     let Some(v) = cell_cut(&it.tile, q, cap32) else {
                         continue;
                     };
-                    // twin_items keeps base + local inside 0..dims
-                    let at: [usize; 3] = std::array::from_fn(|a| (i64::from(it.base[a]) + i64::from(local[a])) as usize);
-                    let slot = (at[2] * dims[1] + at[1]) * dims[0] + at[0];
-                    let Some(dst) = keys.get_mut(slot) else {
+                    let at: [i64; 3] = std::array::from_fn(|a| i64::from(it.base[a]) + i64::from(local[a]));
+                    let inside = (0..3).all(|a| at[a] >= 0 && at[a] < dims[a] as i64);
+                    let slot = inside.then(|| (at[2] as usize * dims[1] + at[1] as usize) * dims[0] + at[0] as usize);
+                    let Some(dst) = slot.and_then(|s| keys.get_mut(s)) else {
                         return Err(invalid(format!("work item cell {local:?} lies outside the lattice")));
                     };
                     *dst = (*dst).max(ordered_bits(v));

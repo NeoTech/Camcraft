@@ -45,6 +45,7 @@ fn deburr(unreachable: UnreachableEdges) -> OpParams {
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     }
 }
 

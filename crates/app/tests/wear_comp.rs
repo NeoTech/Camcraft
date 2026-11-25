@@ -49,16 +49,17 @@ fn contour_params(comp: Compensation) -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         side: Side::Auto,
-        lead: Lead::Linear { length: 6.0 },
+        lead: Lead::Perpendicular { length: 6.0 },
         tolerance: 0.01,
         tab_count: 0,
         tab_width: 0.0,
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

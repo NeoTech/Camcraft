@@ -1375,6 +1375,11 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // the clearance plane by the kernel's own word - no hop
         // height exists to author or draw (M2.5 E B).
         | operation::OpParams::Deburr { .. } | operation::OpParams::MultiAxisDeburr { .. }
+        // The flow band's links ride the RETRACT RADIUS about the
+        // stated axis (#2826) - a radius is no world-Z plane to draw,
+        // and the links are the kernel's own radial law. "Hop at
+        // clearance, say nothing extra" is the honest answer.
+        | operation::OpParams::RotaryFlow { .. }
         // The probe travels at its clearance plane only (#108), and
         // so does the torch between contours (#670).
         | operation::OpParams::Probe { .. }
@@ -1574,12 +1579,13 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
             }
         }
         // The chamfer ride draws its one authored plane: the top edge's
-        // own Z, where the cone's apex stands. The face's floor is
-        // DERIVED (width·tan(angle), variant docs) - a rectangle at a
+        // own Z. The virtual cone tip stands below it by the selected
+        // cone-band reach. The face's floor is DERIVED
+        // (width·tan(angle), variant docs) - a rectangle at a
         // z no height author could disagree with is honest, and Part's
         // law above says an advertised window the path cannot be
-        // measured against is not. The corner Z rides the pane's read
-        // of the same two numbers.
+        // measured against is not. The cone-tip note reads the same
+        // two face numbers plus the minimum radius.
         operation::OpParams::Chamfer2D { top_z, .. } => {
             if let Some(z) = resolve(*top_z) {
                 out.push(HeightPlane {
@@ -1624,6 +1630,11 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 });
             }
         }
+        // The flow band's heights are BALL-CENTER RADII about the stated
+        // axis (#2826) - never world Z planes: a radius drawn at a Z
+        // would advertise a window the band does not have. The picked
+        // chains bound it; nothing to paint here.
+        operation::OpParams::RotaryFlow { .. } => {}
     }
     out.retain(|p| p.z.is_finite());
     out

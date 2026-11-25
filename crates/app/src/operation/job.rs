@@ -61,6 +61,7 @@ pub struct GenJob {
     /// `contour_sel` / `picked_region` when `src` selects sketch entities).
     pub(super) sketch_contour:
         Option<Result<super::contour_sketch::SketchContourPlan, GenError>>,
+    pub(super) sketch_mark: Option<crate::machining2d::TraceStrokes>,
     pub(super) drive_chains: Option<Result<Vec<Vec<Point3>>, GenError>>,
     /// #1504: a picked Slot's room, read here; the Slot arm confines to it.
     pub(super) slot_bound: Option<Result<crate::machining2d::SlotBound, GenError>>,
@@ -267,7 +268,16 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // arm's own statement in `run_job`.
     let section_z = section_z_of(world, setup, Some(&op.src), &op.params, frame.as_ref());
     let sketch_slot = super::slot_sketch::is_sketch_slot(world, &op.src, &op.params);
-    let picked_region = if super::contour_sketch::is_sketch_contour(world, &op.src, &op.params) {
+    let sketch_mark = super::sketch_mark::resolve(world, &op.src, &op.params).transpose()?;
+    if sketch_mark.is_some() {
+        if stock_facets.as_ref().is_none_or(Vec::is_empty) {
+            return Err(GenError::Invalid("the sketch mark needs stock geometry for depth verification".into()));
+        }
+        if op.area.has_boundary_edits() {
+            return Err(GenError::Invalid("area boundaries cannot clip sketch mark strokes - pick the chains or layers to mark".into()));
+        }
+    }
+    let picked_region = if sketch_mark.is_some() || super::contour_sketch::is_sketch_contour(world, &op.src, &op.params) {
         None
     } else if sketch_slot {
         // #1868: sketch picks bound the slot (`slot_bound`); the region
@@ -281,7 +291,14 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
             // answer.
             (params, SrcRef::Selection(items))
                 if selection_drives_region(params)
-                    && !matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_)) =>
+                    && !matches!(
+                        params,
+                        OpParams::Contour { .. }
+                            | OpParams::PlasmaProfile(_)
+                            | OpParams::WaterjetProfile(_)
+                            | OpParams::WireContour(_)
+                            | OpParams::Chamfer2D { .. }
+                    ) =>
             {
                 Some(selection_region(world, setup, items, params, &op.area))
             }
@@ -302,9 +319,17 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let sketch_contour = super::contour_sketch::is_sketch_contour(world, &op.src, &op.params)
         .then(|| super::contour_sketch::resolve_plan(world, &op.src, &op.params));
     let contour_sel = match (&op.params, &op.src) {
-        // The plasma cut reads its picks the contour's way (#670):
-        // closed rings AND open runs, each cut as picked.
-        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
+        // The plasma cut and 2D Chamfer read their picks the contour's
+        // way (#670, #2988): closed rings AND open runs, each cut as
+        // picked.
+        (
+            OpParams::Contour { .. }
+                | OpParams::PlasmaProfile(_)
+                | OpParams::WaterjetProfile(_)
+                | OpParams::WireContour(_)
+                | OpParams::Chamfer2D { .. },
+            SrcRef::Selection(items),
+        )
             if wire_ruled.is_none() && sketch_contour.is_none() && wire_sketch.is_none() =>
         {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
@@ -318,6 +343,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     };
     let drive_chains = match &op.params {
         OpParams::MultiAxisContour { .. } => Some(drive_chains_of(world, op)),
+        // #2826: the flow band's guide chains ride the same slot -
+        // the WCS yaw turns them with the facets they lie on.
+        OpParams::RotaryFlow { .. } => Some(drive_chains_of(world, op)),
         // #1888: the deburr's picked chains ride the same slot - the
         // WCS yaw turns them with the facets they lie on.
         OpParams::Deburr { exclude_edges, .. } | OpParams::MultiAxisDeburr { exclude_edges, .. } => Some(super::deburr_picks::chains_of(world, op, exclude_edges)),
@@ -492,6 +520,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         picked_region,
         contour_sel,
         sketch_contour,
+        sketch_mark,
         drive_chains,
         slot_bound,
         rotary_picks: super::rotary_picks::picks_of(world, op),

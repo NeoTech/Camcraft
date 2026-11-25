@@ -163,6 +163,7 @@ fn axial_params(holes: Vec<Hole>, bottom_z: Option<Height>) -> OpParams {
         plunge_feed: 80.0,
         holes,
         cross: vec![],
+        picks: Default::default(),
     }
 }
 

@@ -88,7 +88,7 @@ pub(super) fn cover(given: &[Point2], path_ring: &[Point2], p: &WireParams) -> R
 /// kerf offset itself - the wire's own corner radius. A sharp corner of
 /// 60 degrees or more leaves no more than that; a narrower one, or a
 /// slot deeper than the offset that the kerf cannot enter, still does.
-fn sharp_reach(p: &WireParams) -> f64 {
+pub(super) fn sharp_reach(p: &WireParams) -> f64 {
     if p.sharp_corners {
         p.kerf_offset()
     } else {
@@ -168,38 +168,46 @@ fn cover_run_with(
         }
     }
     if let Some((d, q)) = worst_over {
-        let rest = d - k;
-        let msg = if sharp {
-            format!(
-                "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side, even with sharp inside corners stated - the kerf would leave {rest:.4} mm standing there, past the wire's own corner radius {k:.4} mm (wire radius {:.4} + spark gap {:.4}); open the corner to 60 degrees or more, round it, or cut with a thinner wire",
-                q.x,
-                q.y,
-                p.side.word(),
-                p.wire_diameter * 0.5,
-                p.gap,
-            )
-        } else if heal_tolerance == 0.0 {
-            format!(
-                "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side - the minimum inside radius is {k:.4} mm (wire radius {:.4} + spark gap {:.4}), and the kerf would leave {rest:.4} mm standing there; round it to at least that radius, or cut with a thinner wire",
-                q.x,
-                q.y,
-                p.side.word(),
-                p.wire_diameter * 0.5,
-                p.gap,
-            )
-        } else {
-            format!(
-                "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side - the minimum inside radius is {k:.4} mm (wire radius {:.4} + spark gap {:.4}), and the kerf would leave {rest:.4} mm standing there, past the 4-axis heal tolerance {heal_tolerance:.4} mm; round it, cut with a thinner wire, or raise heal_tolerance",
-                q.x,
-                q.y,
-                p.side.word(),
-                p.wire_diameter * 0.5,
-                p.gap,
-            )
-        };
-        return Err(GenError::invalid_at(msg, Point3::new(q.x, q.y, p.plane_z)));
+        return Err(uncovered(q, d, p, heal_tolerance, sharp));
     }
     Ok(worst_healed.map(|(d, q)| UncutRest { depth: d - k, at: Point3::new(q.x, q.y, p.plane_z) }))
+}
+
+/// The cover law's refusal: profile point `q` stands `d` from the wire
+/// path, past the reach `heal_tolerance` (or the stated sharp corners)
+/// allows.
+pub(super) fn uncovered(q: Point2, d: f64, p: &WireParams, heal_tolerance: f64, sharp: bool) -> GenError {
+    let k = p.kerf_offset();
+    let rest = d - k;
+    let msg = if sharp {
+        format!(
+            "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side, even with sharp inside corners stated - the kerf would leave {rest:.4} mm standing there, past the wire's own corner radius {k:.4} mm (wire radius {:.4} + spark gap {:.4}); open the corner to 60 degrees or more, round it, or cut with a thinner wire",
+            q.x,
+            q.y,
+            p.side.word(),
+            p.wire_diameter * 0.5,
+            p.gap,
+        )
+    } else if heal_tolerance == 0.0 {
+        format!(
+            "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side - the minimum inside radius is {k:.4} mm (wire radius {:.4} + spark gap {:.4}), and the kerf would leave {rest:.4} mm standing there; round it to at least that radius, or cut with a thinner wire",
+            q.x,
+            q.y,
+            p.side.word(),
+            p.wire_diameter * 0.5,
+            p.gap,
+        )
+    } else {
+        format!(
+            "wire contour: an inside corner or slot of the profile near X{:.3} Y{:.3} is tighter than the wire can cut on the {} side - the minimum inside radius is {k:.4} mm (wire radius {:.4} + spark gap {:.4}), and the kerf would leave {rest:.4} mm standing there, past the 4-axis heal tolerance {heal_tolerance:.4} mm; round it, cut with a thinner wire, or raise heal_tolerance",
+            q.x,
+            q.y,
+            p.side.word(),
+            p.wire_diameter * 0.5,
+            p.gap,
+        )
+    };
+    GenError::invalid_at(msg, Point3::new(q.x, q.y, p.plane_z))
 }
 
 /// The certificate: no move of `path` brings the wire's centre nearer

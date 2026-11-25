@@ -206,6 +206,9 @@ When issue #356 was originally filed, several core features were GUI-only. The f
 - **WCS on a circle's centre (#739):** Shipped via `set_wcs_circle_centre` (one edge chain id; the same command as the WCS page's "Circle centre" anchor).
 - **Locating the part in a fixture (#561):** Shipped via `locate_part` (one to three face or vertex mates between part and fixture).
 - **Live GUI session (#183, #567):** Shipped: start the app with `--mcp-port <n>` and connect with `camcraft-cli mcp --connect 127.0.0.1:<n>`; the agent's steps land on the open window's History.
+  `camcraft-cli --ui call <tool> <json>` sends one tool call to a running window, through the same History and live gate as `--mcp-port`.
+  No running window: exit 3, with no headless fallback. Multiple windows without a selection: exit 2; nothing runs.
+  Select a window with `camcraft-cli --ui --window <pid|project> call <tool> <json>`.
 
 ---
 

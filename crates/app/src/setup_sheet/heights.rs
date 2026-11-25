@@ -233,6 +233,21 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
             ("TOP", "Top of Part Z", Some(*top_z)),
             ("BOT", "Bottom of Part Z", Some(*bottom_z)),
         ],
+        // The flow band states two rows, read as RADII about the
+        // stated axis (#2826, #2774's alignment): the picks bound the
+        // band, so no TOP/BOT row exists - and each radius names the
+        // cylinder its moves ride, a ball-center distance from the
+        // axis the sheet says plainly.
+        OpParams::RotaryFlow {
+            clearance_z,
+            retract_z,
+            ..
+        } => [
+            ("CLR", "Clearance radius", Some(*clearance_z)),
+            ("RET", "Retract radius", *retract_z),
+            ("TOP", "Top of Part Z", None),
+            ("BOT", "Bottom of Part Z", None),
+        ],
         // The chamfer ride states three rows: the BOT column is empty
         // because the face's depth is DERIVED - width and angle author
         // the floor, and no height stands there to print (M2.4 B,

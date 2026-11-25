@@ -6,12 +6,20 @@
 //!
 //! Gate map (#3324): covers app::operation (kinds pick capability,
 //! path_picks accessor, sane), app::mcp (tools schema, job kind list).
+//! #3330: app::operation (generate, the 5-Axis Contour arm) and
+//! motion::finishing3d (ring_seam) through the application.
+//! Gate map (#3331): covers app::operation (generate: the Facing, Profile
+//! Rough and Profile Finish picks), app::commands (EditOperationParams).
 
 use camcraft_app::mcp::Server;
 use camcraft_app::geo2d::Point2;
 use camcraft_app::operation::{Carried, Height, HeightReference, KindInfo, OpParams, OpType, PickCapability};
 use camcraft_app::path_picks::PickRole;
 use serde_json::{json, Value};
+
+// #3331: the turning kinds' picks, in the lathe (Z, X) plane.
+#[path = "start_exit_shared/turning.rs"]
+mod turning;
 
 fn call(s: &mut Server, name: &str, args: Value) -> (bool, Value) {
     let msg = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } });
@@ -35,8 +43,8 @@ fn a_pick_on_a_kind_that_does_not_take_it_names_the_kind_and_the_reason() {
     for (kind, label) in [("2D Offset", "2D Offset"), ("2D Pocket", "2D Pocket"), ("3D Pocket", "3D Pocket")] {
         let (err, r) = call(&mut s, "add_operation", json!({ "kind": kind, "tool": "EM-1000-4FL", "name": "Op" }));
         assert!(!err, "{kind}: {r}");
-        for (key, what) in [("start_point", "start point"), ("exit_point", "exit point")] {
-            let patch = json!({ "name": "Op", "params": { "links": { "approach": { key: [35.0, 0.0] } } } });
+        for (role, what) in [("start", "start point"), ("exit", "exit point")] {
+            let patch = json!({ "name": "Op", "params": { "picks": { role: [[35.0, 0.0]] } } });
             let (err, r) = call(&mut s, "edit_operation", patch);
             let text = r.to_string();
             assert!(err, "{kind}: a {what} is refused: {text}");
@@ -54,15 +62,25 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
         let cap = k.pick();
         match k.ty {
             OpType::Contour => assert_eq!(cap, PickCapability::Ring, "the contour takes a ring pick"),
+            // #3330: the 5-axis contour seats its waterline rings at the pick.
+            OpType::Contour5D => assert_eq!(cap, PickCapability::Ring, "the 5-axis contour takes a ring pick"),
             OpType::WireContour => assert_eq!(cap, PickCapability::Threading, "the wire takes its threading point"),
+            // #3331 slice 1: a point in the lathe (Z, X) plane.
+            OpType::Facing | OpType::ProfileRough | OpType::ProfileFinish => {
+                assert_eq!(cap, PickCapability::Meridian, "{} takes a lathe-plane pick", k.label)
+            }
+            // #3325: the Slot's slice of #1448 shipped.
+            OpType::Slot => assert_eq!(cap, PickCapability::Ends, "the slot takes a pick at one of its ends"),
             _ => {
-                let PickCapability::NotTaken(why) = cap else { panic!("{}: only the contour and the wire take a pick", k.label) };
+                let PickCapability::NotTaken(why) = cap else { panic!("{}: this kind takes no pick", k.label) };
                 assert!(!why.is_empty(), "{}: the reason is named", k.label);
             }
         }
     }
     assert!(PickCapability::Ring.takes(PickRole::Start) && PickCapability::Ring.takes(PickRole::Exit));
-    assert!(PickCapability::Threading.takes(PickRole::Start) && !PickCapability::Threading.takes(PickRole::Exit));
+    // #3332: the wire takes its exit too.
+    assert!(PickCapability::Threading.takes(PickRole::Start) && PickCapability::Threading.takes(PickRole::Exit));
+    assert!(PickCapability::Meridian.takes(PickRole::Start) && PickCapability::Meridian.takes(PickRole::Exit));
     let probe = KindInfo::ALL.iter().find(|k| k.ty == OpType::Probe).map(KindInfo::pick);
     assert!(matches!(probe, Some(PickCapability::NotTaken(w)) if w.contains("cuts no path")), "{probe:?}");
 }
@@ -71,9 +89,9 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
 fn path_picks_reads_the_contour_pick_and_the_wire_start() {
     let mut contour = seeded(OpType::Contour);
     assert!(contour.path_picks().is_empty(), "a new contour has no pick");
-    if let Some(l) = contour.links_mut() {
-        l.approach.start_point = Some(Point2::new(35.0, 0.0));
-        l.approach.exit_point = Some(Point2::new(0.0, 25.0));
+    if let Some(p) = contour.path_picks_mut() {
+        p.start = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(35.0, 0.0))];
+        p.exit = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(0.0, 25.0))];
     }
     let picks = contour.path_picks();
     let start = picks.first(PickRole::Start).expect("the start");
@@ -84,7 +102,7 @@ fn path_picks_reads_the_contour_pick_and_the_wire_start() {
 
     let mut wire = seeded(OpType::WireContour);
     if let OpParams::WireContour(w) = &mut wire {
-        w.start = Some([4.0, -3.0]);
+        w.picks.start = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(4.0, -3.0))];
     }
     let picks = wire.path_picks();
     let start = picks.first(PickRole::Start).expect("the wire start");
@@ -126,7 +144,7 @@ fn the_mcp_doors_name_the_pick_fields_and_the_kinds_that_take_them() {
         .expect("edit_operation")
         .clone();
     let doc = edit["inputSchema"]["properties"]["params"]["description"].as_str().unwrap_or_default().to_owned();
-    for want in ["links.approach.start_point", "links.approach.exit_point", "2D Contour", "list_operation_types"] {
+    for want in ["picks", "2D Contour", "list_operation_types"] {
         assert!(doc.contains(want), "the schema names {want}: {doc}");
     }
     let (err, kinds) = call(&mut s, "list_operation_types", json!({}));
@@ -134,3 +152,7 @@ fn the_mcp_doors_name_the_pick_fields_and_the_kinds_that_take_them() {
     let text = kinds.to_string();
     assert!(text.contains("start_exit"), "each kind says if it takes a pick: {text:.400}");
 }
+
+// #3330: the 5-Axis Contour takes a start and an exit pick.
+#[path = "start_exit_shared/contour5d.rs"]
+mod contour5d;

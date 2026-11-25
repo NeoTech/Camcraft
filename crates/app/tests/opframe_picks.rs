@@ -127,7 +127,7 @@ fn face_edge_chains(world: &World, entity: &str, want_n: [f64; 3], want_off: f64
 fn face_params(cut: Height, clearance: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(clearance),
@@ -137,6 +137,7 @@ fn face_params(cut: Height, clearance: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -161,6 +162,7 @@ fn pocket_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -188,6 +190,7 @@ fn adaptive_params(top: Height, bottom: Height, stepdown: f64) -> OpParams {
         troch: Default::default(),
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -210,10 +213,11 @@ fn contour_params(top: Height, bottom: Height, side: Side) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

@@ -123,6 +123,7 @@ fn rough(strategy: PocketStrategy) -> OpParams {
         feed_opt: false,
         shell: true,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -148,6 +149,8 @@ fn finish() -> OpParams {
         pencil_reference: None,
         fill_openings: None,
         gap_link: camcraft_app::finishing3d::GapLink::Jump,
+        waterlines: true,
+        picks: Default::default(),
     }
 }
 

@@ -86,6 +86,8 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
+            picks: Default::default(),
         },
         // The crown and upper flanks: a laid bar's passes stay on the
         // half the head can reach from above (B never past +-90).
@@ -102,6 +104,8 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
+            picks: Default::default(),
         },
         Kind::Offset => OpParams::RotaryOffset {
             links: camcraft_app::links::Links::ROUGH3D,
@@ -122,6 +126,8 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
+            picks: Default::default(),
         },
     }
 }
@@ -271,7 +277,7 @@ fn a_full_turn_rotary_parallel_refuses_on_a_head_that_cannot_reach_under() {
     else {
         unreachable!("the parallel params")
     };
-    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg };
+    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis: None, picks: Default::default() };
     let world = world_with(Kind::Parallel, 12.4, op);
     let report = posting::verification_report(&world);
     let text = format!("{:?}", report.problems);
@@ -342,10 +348,13 @@ fn a_rough_over_an_oversized_bar_peels_from_the_stock_radius() {
     // matching bar; after: 7,082 - the seven air levels each sweep
     // half what they did. The matching bar has no air level, so its
     // program is the unsplit ladder's, move for move.
+    // #3168 (PR #3496) closes each Auto/Zigzag wrap level with a seam
+    // ring: the matching bar went 2,064 -> 2,110 moves (the rings), the
+    // d20 bar 7,648 -> 7,578. The air-lap law above is unchanged (#3774).
     let snug = cache(&world_for(Kind::Offset, 12.4, 25.0)).path.moves.len();
     let big = c.path.moves.len();
     eprintln!("ROTARY OFFSET | d20 bar {big} moves | d12.4 bar {snug} moves");
-    assert_eq!(snug, 2064, "the matching bar has no air level - its ladder must not move");
+    assert_eq!(snug, 2110, "the matching bar has no air level - its ladder must not move");
     assert!(big < 9000, "air levels still clear both laps: {big} moves (11,967 when they did)");
 }
 

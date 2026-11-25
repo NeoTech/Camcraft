@@ -101,6 +101,8 @@ mod grid_tests;
 mod geodesic;
 #[cfg(test)]
 mod hop_tests;
+#[cfg(test)]
+mod ring_seam_tests;
 mod ladder;
 mod morph;
 mod pencil;
@@ -112,13 +114,16 @@ mod raster;
 mod raster_bridge;
 mod rim;
 mod rings;
+mod ring_seam;
 mod scan;
 mod shadow;
 mod support;
 mod swarf;
+mod validate;
 
 pub use params::{
     scallop_stepdown, scallop_stepover, Finish3DParams, FinishPattern, GapLink,
+    WATERLINES_OFF_NOTE,
 };
 pub use center_cut::guard as center_cut_guard;
 pub use center_cut::guard_as as center_cut_guard_as;
@@ -137,6 +142,6 @@ pub(crate) use support::closest_pt_tri;
 pub use polar::{morphed_spiral, radial, spiral};
 pub use raster::{blend, parallel, parallel_angle_refusal, parallel_with_angle};
 pub use swarf::{swarf, swarf_multi};
-pub use rings::waterline;
+pub use ring_seam::{waterline, waterline_seamed, RingSeam};
 pub use morph::morph;
 pub use shadow::{contour, contour_from, project, reads_pass_start};

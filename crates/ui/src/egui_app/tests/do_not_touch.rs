@@ -174,11 +174,13 @@ fn unsupported_op_shows_do_not_touch_note_without_pick_button() {
     h.run_steps(2);
     {
         let st = &mut h.state_mut().state;
-        seed_part_and_offset(st, OpType::Pocket);
+        seed_part_and_offset(st, OpType::Contour);
     }
     h.run_steps(3);
     expand_boundary(&mut h);
-    assert!(h.query_by_label_contains("2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave").is_some());
+    assert!(h
+        .query_by_label_contains("2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave")
+        .is_some());
     assert!(h.query_by_label("Pick protected").is_none());
 }
 
@@ -404,4 +406,49 @@ fn avoid_marks_cache_reuses_still_frames_and_follows_input_changes() {
     h.state_mut().state.settle();
     h.run_steps(2);
     assert_eq!(crate::avoid_viz::avoid_marks(&h.state().state, aspect), before_hide);
+}
+
+#[test]
+fn pocket2d_boundaries_shows_pick_protected_and_takes_viewport_click() {
+    let _g = snapshot_guard();
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1400.0, 1100.0))
+        .build_ui_state(frame, ShellUi::seeded());
+    h.run_steps(2);
+    let (_face_top, face_other, edge) = {
+        let st = &mut h.state_mut().state;
+        seed_part_and_offset(st, OpType::Pocket)
+    };
+    h.run_steps(3);
+    expand_boundary(&mut h);
+
+    assert!(h.query_by_label("Do not touch").is_some());
+    assert!(h.query_by_label("Pick protected").is_some(), "2D Pocket Boundary group must show Pick protected");
+    h.get_by_label("Pick protected").click();
+    h.run_steps(2);
+    assert_eq!(h.state().state.boundary_pick, Some(crate::state::BoundaryPick::DoNotTouch));
+    assert!(h.query_by_label("Picking…").is_some());
+
+    {
+        let st = &mut h.state_mut().state;
+        crate::boundary_draft::take_pick(
+            st,
+            crate::state::BoundaryPick::DoNotTouch,
+            face_other,
+            crate::boundary_draft::PickMods::default(),
+        );
+        crate::boundary_draft::take_pick(
+            st,
+            crate::state::BoundaryPick::DoNotTouch,
+            edge,
+            crate::boundary_draft::PickMods::default(),
+        );
+        assert_eq!(st.op_ui.area.do_not_touch.picks.len(), 2);
+        let marks = crate::avoid_viz::avoid_marks(st, 1.4);
+        assert!(!marks.faces.is_empty(), "protected face must render for 2D Pocket");
+        assert!(!marks.edges.is_empty(), "protected edge must render for 2D Pocket");
+    }
+    h.run_steps(2);
+    assert!(h.query_by_label_contains("block face #").is_some());
+    assert!(h.query_by_label_contains("block edge chain #").is_some());
 }

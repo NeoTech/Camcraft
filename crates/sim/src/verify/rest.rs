@@ -2,11 +2,12 @@
 
 use super::cut_index::CutIndex;
 use super::laws::dist2_seg;
+use super::slab::Slabs;
 use super::slice_index::IndexedSlice;
 use super::types::VerifyContext;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
@@ -54,6 +55,24 @@ pub(super) struct Rest<'c, 'a> {
     /// repeats its planes across all three readers. `None` means the slice
     /// failed; every use of a failed slice fails closed (no proof, no pass).
     island_cache: RefCell<HashMap<u64, Option<Rc<IndexedSlice>>>>,
+    /// The model's prismatic Z slabs (#3831, [`Slabs`]), found on the
+    /// first section asked. `None` inside reads every plane on its own -
+    /// the plane-exact reading the tests compare against.
+    slabs: OnceCell<Option<Slabs>>,
+    /// One section per prismatic slab (#3831): every plane of such a
+    /// slab is the same point set, so a ramp that ends each move at a Z
+    /// of its own sections the slab once, not once per move. Only a
+    /// section that sliced is kept: a failed one is asked again at each
+    /// plane, as before. A flat plane's own section is never kept here.
+    slab_cache: RefCell<HashMap<usize, Rc<IndexedSlice>>>,
+    /// The planes the path cuts flat at (a cutting move with one Z), by
+    /// their bits (#3831). Each keeps its own section, so a level ladder
+    /// reads exactly what it always read; only the planes between them -
+    /// the ends of a ramp's or a helix's moves - share the slab's section.
+    flat: HashSet<u64>,
+    /// The model sections sliced so far (#3831), counted always - one
+    /// integer add - and read only by the tests.
+    sliced: Cell<usize>,
     /// Cutting (non-rapid) XY segments with the level they cut at: a
     /// segment's whole disc sweep clears its column down to `to.z`
     /// (plunges are degenerate segments at their XY, arcs contribute
@@ -100,10 +119,20 @@ impl<'c, 'a> Rest<'c, 'a> {
             .collect();
         cut.sort_by(|a, b| a.2.total_cmp(&b.2));
         let index = CutIndex::new(&cut, cx.tool.radius + 1e-9);
+        let flat = path
+            .moves
+            .iter()
+            .filter(|m| m.kind != MoveKind::Rapid && m.from.z == m.to.z)
+            .map(|m| m.to.z.to_bits())
+            .collect();
         Self {
             cx,
             bodies,
             island_cache: RefCell::new(HashMap::new()),
+            slabs: OnceCell::new(),
+            slab_cache: RefCell::new(HashMap::new()),
+            flat,
+            sliced: Cell::new(0),
             cut,
             index,
             hidden_cache: RefCell::new(HashMap::new()),
@@ -145,20 +174,71 @@ impl<'c, 'a> Rest<'c, 'a> {
 
     /// The cached indexed slice at plane `z` (one region, one exact point
     /// index). `None` is a failed slice, memoized so it fails closed on every
-    /// later read too.
-    fn island_slice(&self, facets: &[Triangle], z: f64) -> Option<Rc<IndexedSlice>> {
+    /// later read too. A plane in a prismatic slab of the context's model
+    /// (#3831) that the path does not cut flat at reads the slab's one
+    /// section: the first such plane that sliced stands for them all.
+    pub(super) fn island_slice(&self, facets: &[Triangle], z: f64) -> Option<Rc<IndexedSlice>> {
         let key = z.to_bits();
         if let Some(hit) = self.island_cache.borrow().get(&key) {
             return hit.clone();
         }
-        let fresh = crate::geometry::slice::material_above_of(facets, self.bodies, z)
-            .ok()
-            .map(|r| Rc::new(IndexedSlice::new(r)));
+        let slab = self.slab_of(facets, z).filter(|_| !self.flat.contains(&key));
+        let shared = slab.and_then(|k| self.slab_cache.borrow().get(&k).cloned());
+        let fresh = shared.or_else(|| {
+            self.sliced.set(self.sliced.get().saturating_add(1));
+            let s = crate::geometry::slice::material_above_of(facets, self.bodies, z)
+                .ok()
+                .map(|r| Rc::new(IndexedSlice::new(r)))?;
+            if let Some(k) = slab {
+                self.slab_cache.borrow_mut().entry(k).or_insert_with(|| s.clone());
+            }
+            Some(s)
+        });
         self.island_cache
             .borrow_mut()
             .entry(key)
             .or_insert_with(|| fresh.clone());
         fresh
+    }
+
+    /// The prismatic slab of the context's model that holds plane `z`
+    /// (#3831). Only `cx.model` itself is placed: any other facet slice
+    /// is sectioned plane by plane.
+    fn slab_of(&self, facets: &[Triangle], z: f64) -> Option<usize> {
+        let model = self.cx.model?;
+        if !std::ptr::eq(model, facets) {
+            return None;
+        }
+        self.slabs.get_or_init(|| Some(Slabs::new(model))).as_ref()?.of(z)
+    }
+
+    /// The section whose vertices law (c) samples at plane `z`.
+    /// A shared slab preserves geometric membership, but not the vertices
+    /// or their mean that `boundary_samples` nudges toward. No replacement
+    /// sample set proves coverage of those points, so section each such
+    /// plane exactly. Other planes reuse their exact cached section.
+    pub(super) fn reach_slice(&self, facets: &[Triangle], z: f64) -> Option<Rc<IndexedSlice>> {
+        let s = self.island_slice(facets, z)?;
+        if !self.slab_cache.borrow().values().any(|v| Rc::ptr_eq(v, &s)) {
+            return Some(s);
+        }
+        self.sliced.set(self.sliced.get().saturating_add(1));
+        crate::geometry::slice::material_above_of(facets, self.bodies, z)
+            .ok()
+            .map(|r| Rc::new(IndexedSlice::new(r)))
+    }
+
+    /// How many model sections were sliced (#3831); the tests read it.
+    #[cfg(test)]
+    pub(super) fn sliced(&self) -> usize {
+        self.sliced.get()
+    }
+
+    /// This rest with every plane sectioned on its own, as before #3831:
+    /// the reference the tests compare the slab reading against.
+    #[cfg(test)]
+    pub(super) fn plane_exact(self) -> Self {
+        Self { slabs: OnceCell::from(None), ..self }
     }
 
     /// The model's section strictly above plane `z` (cached).

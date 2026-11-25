@@ -89,6 +89,7 @@ fn carve(top: f64, depth: f64, flat_clear: bool) -> OpParams {
         flat_clear,
         flat_stepover: 0.25,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

@@ -790,6 +790,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "camcraft-gcode"
+version = "0.26.0"
+dependencies = [
+ "camcraft-cl",
+ "camcraft-geometry",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "camcraft-geometry"
 version = "0.26.0"
 dependencies = [
@@ -4709,7 +4718,7 @@ dependencies = [
 [[package]]
 name = "solidcore"
 version = "1.0.1"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -4718,7 +4727,7 @@ dependencies = [
 [[package]]
 name = "solidcore-convert"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "solidcore",
  "solidcore-record",
@@ -4727,8 +4736,9 @@ dependencies = [
 [[package]]
 name = "solidcore-ops"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
+ "serde",
  "solidcore",
  "solidcore-convert",
  "solidcore-record",
@@ -4737,7 +4747,7 @@ dependencies = [
 [[package]]
 name = "solidcore-record"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "serde",
  "serde_json",
@@ -4747,7 +4757,7 @@ dependencies = [
 [[package]]
 name = "solidcore-step"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "solidcore",
  "solidcore-convert",
@@ -4758,7 +4768,7 @@ dependencies = [
 [[package]]
 name = "solidcore-tess"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=2016386442dfee3b2a0c3a1bfdd4017c5254dac8#2016386442dfee3b2a0c3a1bfdd4017c5254dac8"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "rayon",
  "serde",

@@ -39,7 +39,7 @@ impl OpParams {
                 feed_opt,
                 shell,
                 method,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -111,7 +111,8 @@ impl OpParams {
                 pencil_reference,
                 fill_openings,
                 gap_link,
-                pass_start,
+                waterlines,
+                pass_start, picks: _
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -200,6 +201,12 @@ impl OpParams {
                         crate::finishing3d::GapLink::Jump => 1,
                     });
                 }
+                // #2811: skipping the waterline ring pass changes the cut
+                // path on steep flanks. Only `false` digests (one tag
+                // byte), so every op with waterlines on keeps its stamp.
+                if !*waterlines {
+                    h.write_u8(0x4E);
+                }
                 // Keep the old stamp for the default direction and for
                 // patterns whose paths do not depend on this angle.
                 if *pattern == crate::finishing3d::FinishPattern::Parallel && *direction_angle != 0.0 {
@@ -231,7 +238,7 @@ impl OpParams {
                 hole_min_diameter,
                 hole_max_diameter,
                 unreachable,
-                sizing,
+                sizing, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -290,7 +297,7 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
-                shank_avoid,
+                shank_avoid, picks: _
             } => {
                 h.write_u8(0x5A);
                 wh(h, *clearance_z);

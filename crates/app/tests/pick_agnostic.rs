@@ -55,6 +55,7 @@ fn pocket(strategy: PocketStrategy, top: f64, bottom: f64) -> OpParams {
         blend_turns: false,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -81,6 +82,7 @@ fn adaptive2d(top: f64, bottom: f64) -> OpParams {
         tilt: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

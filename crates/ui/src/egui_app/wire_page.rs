@@ -191,14 +191,15 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start, burnout, clearance, taper_deg, four_axis, sharp_corners, .. } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, picks, burnout, clearance, taper_deg, four_axis, sharp_corners, .. } = p;
 
     if tab == SEC_GEO {
         let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
         *side = SIDE_OF.get(si).copied().unwrap_or(WireSide::Die);
         prop_row(ui, "Run-out clearance", |ui| num(ui, u, clearance));
-        super::start_exit_rows::wire_start_group(ui, u, start);
+        super::start_exit_rows::wire_start_group(ui, u, picks);
+        super::start_exit_rows::wire_exit_group(ui, u, picks);
         hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
         hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, threaded outside the stock the run-out clearance off its edge");
         // #3207: sharp inside corners keep the wire's own radius.
@@ -232,6 +233,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         skim_fields(ui, &mut p.skims, &ids);
         check_row(ui, "Freed piece captured", &mut p.capture);
         hint(ui, "state that the freed piece is caught by a slug catcher, magnet or the machine's slug retention before allowing it to drop");
+        // Agie-only: only the native Agie post reads these two statements.
+        if matches!(side, WireSide::Left | WireSide::Right) && super::agie_inspection::agie_job(world, op_ctx.as_deref()) {
+            check_row(ui, "Both pieces clamped through all passes", &mut p.both_pieces_restrained);
+            check_row(ui, "Stock centered in installed XY travel", &mut p.stock_centered_in_xy_travel);
+            hint(ui, "Agie open cuts require both clamps to hold independently until all trims finish. Center the stock on both installed travel midpoints and clear the wire corridors at both ends.");
+        }
         tab_fields(ui, u, &mut p.tabs, &ids);
         // #540: no-core burnout - the pocket's interior burnt out by
         // offset rings, the wire at least the clearance from the walls.

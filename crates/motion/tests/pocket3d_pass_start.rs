@@ -10,7 +10,7 @@
 //!
 //! Gate map: covers camcraft_motion::machining3d (hsm, ladder, params)
 //! and camcraft_motion::machining2d (level_rings, level_order,
-//! pass_start).
+//! pass_start), camcraft_motion::plunge_law (#3670 re-entries).
 //! Provenance: our own regression for #3361; no vendor material
 //! consulted.
 
@@ -152,6 +152,44 @@ fn zigzag_keeps_its_rows_and_names_the_unused_choice() {
             assert_eq!(t.moves, auto.moves, "{strategy:?} {start:?}: the rows do not move");
             let said = t.notes.iter().filter(|n| *n == PASS_START_ZIGZAG_NOTE).count();
             assert_eq!(said, 1, "{strategy:?} {start:?}: said once: {:?}", t.notes);
+        }
+    }
+}
+
+/// #3670: the zigzag rows split at the island, so each row restarts on
+/// its far side after a hop. With a Helix entry and a centre-cutting
+/// tool, no restart feeds straight down into uncut stock: it takes the
+/// helix (or the ramp along the pass), never the plain plunge.
+#[test]
+fn zigzag_helix_re_entries_never_plunge_into_uncut_stock() {
+    use camcraft_motion::plunge_law::{Solid, first_solid_plunge};
+    for strategy in [PocketStrategy::Zigzag, PocketStrategy::Auto] {
+        let p = Pocket3DParams { entry: Entry3D::Helix, ..params(strategy, PassStart::Auto) };
+        assert!(p.links.approach.center_cutting, "the fixture tool cuts at its centre");
+        let t = pocket3d(&model(), &square(0.0, 0.0, 40.0), &p).expect("3D pocket");
+        let hops = t.moves.iter().filter(|m| m.kind == MoveKind::Rapid && m.to.z > m.from.z).count();
+        assert!(hops > 2, "{strategy:?}: the rows restart after hops ({hops})");
+        let solid = Solid { top: p.top_z, footprint: None };
+        assert_eq!(first_solid_plunge(&t, R, &solid), None, "{strategy:?}: a restart plunges into stock: {:?}", t.notes);
+    }
+}
+
+/// #3852: with the Plunge entry, each zigzag row that restarts after a
+/// hop goes down by a rapid to the plunge height over the material, then
+/// feeds the rest. No plunge feeds from the hop plane: none is longer
+/// than the plunge height plus the stepdown.
+#[test]
+fn zigzag_plunge_restarts_feed_only_from_the_plunge_height() {
+    for strategy in [PocketStrategy::Zigzag, PocketStrategy::Auto] {
+        let p = Pocket3DParams { stepdown: 6.5, ..params(strategy, PassStart::Auto) };
+        let h = p.links.approach.plunge_height;
+        assert!(h > 0.0 && h < p.clearance_z - p.top_z, "the fixture tells the plunge height from the hop plane");
+        let t = pocket3d(&model(), &square(0.0, 0.0, 40.0), &p).expect("3D pocket");
+        let plunges: Vec<_> = t.moves.iter().filter(|m| m.kind == MoveKind::Plunge).collect();
+        assert!(plunges.len() > 2, "{strategy:?}: the rows restart by plunges ({})", plunges.len());
+        for m in plunges {
+            let len = m.from.z - m.to.z;
+            assert!(len <= h + p.stepdown + 1e-6, "{strategy:?}: a plunge of {len} mm feeds from the hop plane: {m:?}");
         }
     }
 }

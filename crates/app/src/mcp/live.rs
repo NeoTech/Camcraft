@@ -57,7 +57,7 @@ impl GateKind {
 #[must_use]
 pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
     match tool {
-        "post" => Some(GateKind::Posting),
+        "post" | "export_agie_inspection" => Some(GateKind::Posting),
         "load_machine" | "edit_machine" => Some(GateKind::MachineEdit),
         "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
             Some(GateKind::LimitEdit)
@@ -163,11 +163,15 @@ fn refusal_message(tool: &str, kind: GateKind) -> String {
     }
 }
 
-/// Caller-supplied live gate and UI selection context for [`answer_live_with`].
+/// Caller-supplied live gate, UI selection context and read-only state for
+/// [`answer_live_with`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LiveOptions {
     pub gate: LiveGate,
     pub selection: Option<SelectionContext>,
+    /// The window's project is open read-only (`camcraft-ui --read-only`,
+    /// #3609): `save_project` refuses to save over `doc_path`.
+    pub read_only: bool,
     /// #3608: the window's disk stamp of `doc_path`, so that an agent's save
     /// over a file whose copy on disk changed is refused as in a headless
     /// session.
@@ -236,11 +240,15 @@ pub fn answer_live_with(
             logs: Vec::new(),
             errors: Vec::new(),
             doc_path: doc_path.map(Path::to_path_buf),
+            doc_read_only: options.read_only,
             doc_stamp: options.doc_stamp.clone(),
             posted: None,
             last_value: Value::Null,
             selection: options.selection.clone(),
         },
+        // The live bridge answers one line at a time: no background lane.
+        bg: None,
+        gate: None,
     };
     let reply = server.handle_line(line);
     *history = std::mem::take(&mut server.env.history);

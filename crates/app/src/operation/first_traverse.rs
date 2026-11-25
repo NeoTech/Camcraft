@@ -274,6 +274,7 @@ mod tests {
         OpParams::Face {
             holes: Default::default(),
             tilt: None,
+            blend_radius: None,
             blend_turns: false,
             stepover: 3.0,
             clearance_z: Height::fixed(30.0),
@@ -283,6 +284,7 @@ mod tests {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         }
     }
 
@@ -299,6 +301,8 @@ mod tests {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
+            picks: Default::default(),
         }
     }
 

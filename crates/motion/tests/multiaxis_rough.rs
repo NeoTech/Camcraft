@@ -102,6 +102,26 @@ fn tilt_between(a: Point3, b: Point3) -> f64 {
     d.clamp(-1.0, 1.0).acos().to_degrees()
 }
 
+/// #3414: the path's moves without the rotary indices - the standstill
+/// swings the stamp inserts: zero-travel RAPIDS whose axis CHANGES off
+/// the pose held. A zero-travel rapid that states no new pose stays,
+/// and so does an opening upright statement from no held pose (#3300):
+/// the home the path inherits, commanded as zero angles.
+fn sans_swings(path: &camcraft_motion::cl::Toolpath) -> Vec<&camcraft_motion::cl::Move> {
+    let mut held: Option<[f64; 3]> = None;
+    path.moves
+        .iter()
+        .filter(|m| {
+            let swing = m.kind == MoveKind::Rapid && m.from == m.to && m.axis != held
+                && !(held.is_none() && m.axis.is_some_and(|a| camcraft_motion::cl::is_vertical(&a)));
+            if !swing {
+                held = m.axis.or(held);
+            }
+            !swing
+        })
+        .collect()
+}
+
 #[test]
 fn positions_are_the_prismatic_ladders_bit_for_bit() {
     // The whole claim of law (f) in one assert: leaning the spindle
@@ -110,13 +130,16 @@ fn positions_are_the_prismatic_ladders_bit_for_bit() {
     let region = silhouette(&f);
     let base = pocket3d(&f, &region, &params()).unwrap();
     let rough = multiaxis_rough(&f, &region, &params(), &control(0.0, 0.0, Some(60.0)), None).unwrap();
-    assert_eq!(base.moves.len(), rough.moves.len());
+    // #3414: the posed ladder carries standstill rotary indices, so
+    // the count and the pairing read the swing-free stream.
+    let cuts = |t: &camcraft_motion::cl::Toolpath| t.moves.iter().filter(|m| m.kind != MoveKind::Rapid).count();
+    assert_eq!(cuts(&base), cuts(&rough));
     // The pivot law: the BALL is the ladder's - the posted tip lifted
     // r along the pose the machine holds (modal) is the upright tip
     // lifted r up Z. The tip itself moves with the lean.
     let r = params().tool_diameter * 0.5;
     let mut held = [0.0, 0.0, 1.0];
-    for (b, m) in base.moves.iter().zip(&rough.moves) {
+    for (b, m) in base.moves.iter().zip(sans_swings(&rough)) {
         if let Some(a) = m.axis {
             held = a;
         }
@@ -159,10 +182,12 @@ fn rapids_hold_inherited_pose_and_flanks_lean() {
     // its flanks, so it inherits the upright home and states it on
     // every move before the first lean (floors included - the post
     // commands it as zero angles); after the lean a floor states the
-    // upright Z column as before. The flank count below proves the lean.
+    // upright Z column as before. The flank count below proves the
+    // lean. The exception is the zero-travel rotary index (#3414) -
+    // the standstill swing in air, which the sweep below skips.
     assert_eq!(rough.moves[0].axis, Some([0.0, 0.0, 1.0]), "the opening states the upright pose");
     let mut held: Option<[f64; 3]> = Some([0.0, 0.0, 1.0]);
-    for m in &rough.moves {
+    for m in sans_swings(&rough) {
         if m.kind == MoveKind::Rapid {
             assert_eq!(m.axis, held, "a rapid changed the pose it inherited");
         }

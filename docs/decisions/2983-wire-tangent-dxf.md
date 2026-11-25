@@ -1,0 +1,19 @@
+## #2983 - Wire punch from a convex DXF loop of tangent lines and arcs
+
+Read one selected closed DXF chain as a convex loop of tangent lines and counter-clockwise arcs when it is not a circle or a racetrack. Use the oriented source curves of the chain. A tangent joint at each segment end and positive arc sweeps that total one turn prove convexity. Check the analytic support of every arc and line against every edge of the circumscribed preview. Keep 0.000002 mm of the 0.000025 mm radial bound for the joint and grid arithmetic. Limit the chain to 128 segments and the preview to 2,048 vertices before the arrays are allocated.
+
+The native ISO uses the source joints and arc centres. The post checks the emitted radii, the closure and the tangent directions in integer grid units. A straight side parallel to X or Y gives a perpendicular entry from the waste side with 3 mm of straight on each side of the seam. The circle and racetrack paths of #2022 stay as they are for their checked jobs. A curve inferred from a tessellated mesh would lose the source radius. A concave drawing or an open path needs a separate proof of the kept side and the lead clearance.
+
+### Port onto the selected-chain wire path (#3180) and the zero-step setup writer (#2984)
+
+**Decided: one enum for the selected chain.** `wire_round_profile::WireProfile` holds a `RoundProfile` (#2022) or a `TangentProfile` (#2983). `WireProfile::from_chain` tries the circle and racetrack first, so `CIRCLE20` and `RACE20` stay byte-identical. A single circle keeps its own radius refusal. Every other chain must pass the tangent proof. `SelectedWireChain::wire_profile` places the profile in world XY, and its preview is the ring of the generic wire path. The PR's whole-drawing source (`WireProfile::from_sketch`, "use every source segment") is dropped: #3180 selects one chain, and `check_envelope` checks the rest of the drawing.
+
+**Decided: the native arcs of #2978.** `tangent_profile::prepare` gives the same `ArcBlock` list and `PunchSetup20` as `round_profile::prepare`, and `round_profile::iso` writes it: `G03` with incremental `I`/`J`, five decimals, no rounding (each value on the grid within 1e-9 mm), the exact squared radius at both arc ends, and the radius from 0.5 to 20 mm. The quality is CCB030 through `contour::punch_setup`, as for the other DXF punches. There is no own quality object (#2984: one quality per piece, the job arms no technology). `agie::export_round_with_review` now takes a `&WireProfile`. The SBL and SBR are those of the control-checked `CCSEP20` punch with only the stem and `stp1` changed.
+
+**Arc envelope bound.** The control offsets a convex arc to a concentric arc and a straight to a parallel straight. So the post checks the exact bounds of the loop (`TangentProfile::bounds`, from the support of each segment), rounded outward to the grid, plus the 0.4 mm rough and wire margin of the 20 mm QN2 row, against the stock. The app checks the rest of the drawing against the same bounds and the complete hole (`WireProfile::bounds` in `agie_sketch_job`).
+
+**Values.** Only values of the PR's own control runs (20 Nov 2026) and of the checked setups: CCB030 on 20 mm, the QN2 offsets 245, 155, 140 and 134 µm, the 1 mm separation, the 3 mm lead rule of the racetrack, the 0.5 to 20 mm arc radius of #2022. The PR's examples and their shapes are unchanged.
+
+**Dropped.** `crates/post/src/agie/tangent_profile.rs` of the PR (it targeted the deleted writer and its `Work`), the `prism` mesh, the new top-level test binary `agie_dxf.rs` (its tests are now the `agie_native::tangent` module and the post lib module `tangent_profile_tests`).
+
+**Cost to change.** An entry on an oblique straight or on an arc needs a grid proof of the seam and a control run. A die opening with tangent arcs needs a control run with `c_die`.

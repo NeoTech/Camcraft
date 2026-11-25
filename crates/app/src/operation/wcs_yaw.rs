@@ -217,6 +217,7 @@ impl WcsYaw {
         picked_region: &mut Option<Result<Region, GenError>>,
         contour_sel: &mut Option<Result<SelectionGeometry, GenError>>,
         sketch_contour: &mut Option<Result<super::contour_sketch::SketchContourPlan, GenError>>,
+        sketch_mark: &mut Option<machining2d::TraceStrokes>,
         drive_chains: &mut Option<Result<Vec<Vec<Point3>>, GenError>>,
         slot_bound: &mut Option<Result<SlotBound, GenError>>,
         prior: &mut Option<Result<Arc<crate::rest::PriorState>, GenError>>,
@@ -257,6 +258,9 @@ impl WcsYaw {
         }
         if let Some(Ok(plan)) = sketch_contour {
             plan.rotate_xy(&r)?;
+        }
+        if let Some(strokes) = sketch_mark {
+            strokes.transform(|p| r.p2(p));
         }
         if let Some(Ok(chains)) = drive_chains {
             for ch in chains {
@@ -345,7 +349,15 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
                 ov.at = r.p2(ov.at);
             }
         }
-        OpParams::Slot { a, b, .. } | OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::Slot { a, b, picks, .. } => {
+            *a = r.p2(*a);
+            *b = r.p2(*b);
+            // Compare temporary generation-frame points; stored picks stay in model coordinates.
+            for pick in picks.start.iter_mut().chain(picks.exit.iter_mut()) {
+                pick.xy = r.p2(pick.xy);
+            }
+        }
+        OpParams::TrochoidalSlot { a, b, .. } => {
             *a = r.p2(*a);
             *b = r.p2(*b);
         }

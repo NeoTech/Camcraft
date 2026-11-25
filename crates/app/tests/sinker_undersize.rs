@@ -109,6 +109,7 @@ fn burn(pass: SinkerPass, condition: &str) -> OpParams {
         wear_lost: None,
         wear_over: None,
         orbit: None,
+        picks: Default::default(),
     })
 }
 

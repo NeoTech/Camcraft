@@ -61,6 +61,12 @@ pub struct SlotParams {
     /// stadium wall (the contour law), not by a static cap: a full-
     /// width slot (h = 0) has no room for any orbit, and says so.
     pub helix_radius: f64,
+    /// Arc turns at the row ends (#1759, `slot_turns`); `false` is
+    /// every earlier slot, unchanged to the byte.
+    pub blend_turns: bool,
+    /// The corner arc's radius, read only with `blend_turns`; `None` is
+    /// the tool radius, a radius is held to `corner_arc_radius`'s door.
+    pub blend_radius: Option<f64>,
     /// Level transitions and links (M11.2 C/D), proved against the
     /// closed-form stadium; [`Links::PLANAR`] is every earlier slot.
     pub links: Links,
@@ -123,7 +129,7 @@ impl SlotParams {
         if self.retract_z.is_some_and(|rz| rz < self.top_z) {
             return Err(GenError::Invalid("retract plane sits inside the material".into()));
         }
-        Ok(())
+        super::slot_turns::door(self)
     }
 }
 
@@ -159,14 +165,15 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
     }
     // #2906: the last row (d = h, q = 0) ends on a tangent point of the
     // +n side; the lap rides the whole wall from there, caps included.
-    let runs = match (h > 0.0, pass.split_first()) {
-        (true, Some((_, rest))) => {
+    // #1759: the rows alone, before the lap joins the pass - the row-end
+    // corners round on these, and the lap follows the rounded walk.
+    let rows = pass.clone();
+    let lap = match (h > 0.0, pass.is_empty()) {
+        (true, false) => {
             let at_b = p.climb == (ds.len().saturating_sub(1) % 2 == 0);
             let (lap, pts) = super::slot_lap::wall_lap(a, b, u, n, h, &ds, at_b, p.climb);
-            let mut walk = vec![super::arcs::Seg::Line(rest.to_vec())];
-            walk.extend(lap);
             pass.extend(pts);
-            Some(vec![walk])
+            Some(lap)
         }
         _ => None,
     };
@@ -212,6 +219,11 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
         (Some(t), _) | (None, Some(t)) => Some(Cert::Stadium { a, b, h, tess: t }),
         (None, None) => None,
     };
+    // #1759: the row-end corners on arcs, where asked and proved; the
+    // #2906 wall lap then follows the (rounded or sharp) rows.
+    let area = if p.blend_turns { stadium_center(a, b, h) } else { None };
+    let turns = super::slot_turns::round(&rows, p, area.as_ref(), &mut bld);
+    let runs = super::slot_turns::with_lap(&rows, turns, lap);
     run_level_walks(&mut bld, &[pass], &zs, &motion, runs.as_deref(), center.as_ref(), link_cert.as_ref());
     let cur = bld.at();
     bld.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);

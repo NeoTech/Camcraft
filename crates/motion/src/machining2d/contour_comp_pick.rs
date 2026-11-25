@@ -124,10 +124,12 @@ mod tests {
             entry: crate::entry::Entry3D::Plunge,
             helix_radius: 1.0,
             blend_turns: false,
+            blend_radius: None,
             links: Links {
                 approach: Approach { compensation: Compensation::Control, ..Approach::DEFAULT },
                 ..Links::PLANAR
             },
+            picks: crate::path_picks::PathPicks::default(),
         }
     }
 

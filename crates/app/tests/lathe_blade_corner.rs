@@ -100,6 +100,7 @@ fn groove() -> OpParams {
         bottom_z: Height::fixed(-11.5),
         feed: 120.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -117,6 +118,7 @@ fn part() -> OpParams {
         bar_unload: false,
         bar_transfer: false,
         inspect_tol: 0.0, kerf: Default::default(),
+        picks: Default::default(),
     }
 }
 

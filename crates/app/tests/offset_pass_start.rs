@@ -13,14 +13,21 @@
 //!
 //! Gate map: covers app::operation (generate, params digest), app::mcp
 //! (edit_operation, undo), app::project (params, params_impl),
-//! motion::machining2d (pass_start, level_rings, level_order), sim::verify.
+//! motion::machining2d (pass_start, level_rings, level_order, air_entry),
+//! sim::verify (entry_advice).
 //! Provenance: our own regression of the maintainer's report; no vendor
 //! material consulted.
 
 mod area_support;
 mod common;
+#[path = "offset_pass_start/entry_advice.rs"]
+mod entry_advice;
 #[path = "offset_pass_start/flanks.rs"]
 mod flanks;
+#[path = "offset_pass_start/lifts.rs"]
+mod lifts;
+#[path = "offset_pass_start/start_side_entry.rs"]
+mod start_side_entry;
 
 use area_support::*;
 use camcraft_app::machining2d::{PASS_START_NOTE, PassStart};
@@ -80,6 +87,11 @@ fn fig8_world() -> (World, History, String, (Point3, Point3)) {
 /// The maintainer's 2D Offset1: Outside containment over the floor face,
 /// generated with `start`.
 fn offset_op(world: &World, h: &mut History, name: &str, zmin: f64, start: PassStart) -> (Toolpath, Vec<String>) {
+    offset_op_entered(world, h, name, zmin, start, Entry3D::Helix)
+}
+
+/// [`offset_op`] with the entry `kind` (#3746).
+fn offset_op_entered(world: &World, h: &mut History, name: &str, zmin: f64, start: PassStart, kind: Entry3D) -> (Toolpath, Vec<String>) {
     let src = sel(name, horizontal_face(world, name, zmin));
     let mut p = operation::retype_params(&pocket(zmin + 20.0, zmin), OpType::Offset2D.ordinal());
     if let OpParams::Offset2D { clearance_z, retract_z, top_z, bottom_z, stepdown, entry, helix_radius, pass_start, .. } =
@@ -90,7 +102,7 @@ fn offset_op(world: &World, h: &mut History, name: &str, zmin: f64, start: PassS
         *top_z = Height { reference: HeightReference::TopOfStock, offset: 0.0 };
         *bottom_z = Height { reference: HeightReference::BottomOfSelection, offset: 1.5 };
         *stepdown = 10.0;
-        *entry = Entry3D::Helix;
+        *entry = kind;
         *helix_radius = 1.6;
         *pass_start = start;
     }
@@ -179,6 +191,61 @@ fn fig8_outside_offset_starts_each_level_at_the_stock_edge() {
     assert!(!warnings.iter().any(|w| w.starts_with("RapidInStock")), "#3319: a rapid through stock: {warnings:?}");
 }
 
+/// #3746 pins on fig8 with the Arc entry. Outside: the first descent of
+/// each level is a plunge in air, off the stock box by at least the tool
+/// radius plus the approach distance, and the first cut after it is a G17
+/// arc at the level's Z (after a straight lead in air, where there is
+/// one). Inside: no level is entered by a plunge into material, and no
+/// level entry falls back to the axial dive.
+#[test]
+#[ignore = "heavy lane (#3746 fig8 Inside and Outside): two generations run past the 60 s debug budget - run with --release -- --ignored"]
+fn fig8_start_sides_enter_from_the_air() {
+    // The approach distance is the default, 2 mm (#3745).
+    let need = R8 + 2.0;
+    for start in [PassStart::Outside, PassStart::Inside] {
+        let (world, mut h, name, stock) = fig8_world();
+        let (path, _) = offset_op_entered(&world, &mut h, &name, stock.0.z, start, Entry3D::Arc);
+        let levels = level_ends(&path);
+        assert!(!levels.is_empty(), "{start:?}: no level");
+        let dived: Vec<&String> = path.notes.iter().filter(|n| n.contains("axial dive")).collect();
+        assert!(dived.is_empty(), "{start:?}: {} axial dive(s): {dived:?}", dived.len());
+        for (z, _, _) in &levels {
+            let Some(i) = path.moves.iter().position(|m| (m.to.z - z).abs() < 1e-6 && m.from.z > z + 1e-6) else { continue };
+            let d = &path.moves[i];
+            let into_stock = d.kind == MoveKind::Plunge && outside_box(d.to, stock) < R8 - 1e-6;
+            assert!(!into_stock, "{start:?} Z {z:.3}: the level is entered by a plunge into the stock: {d:?}");
+            if start != PassStart::Outside {
+                continue;
+            }
+            assert!(d.kind == MoveKind::Plunge && outside_box(d.to, stock) >= need - 1e-6, "Outside Z {z:.3}: the entry is not a plunge {need} mm off the box: {d:?}");
+            let mut next = path.moves.get(i + 1).filter(|m| m.arc.is_none());
+            if let Some(lead) = next {
+                assert!(outside_box(lead.to, stock) >= R8 - 1e-6, "Outside Z {z:.3}: the straight lead ends in the stock: {lead:?}");
+                next = path.moves.get(i + 2);
+            } else {
+                next = path.moves.get(i + 1);
+            }
+            let arc = next.unwrap_or_else(|| panic!("Outside Z {z:.3}: nothing after the entry"));
+            assert!(arc.arc.is_some() && (arc.to.z - z).abs() < 1e-6, "Outside Z {z:.3}: the first cut is not an arc in the plane: {arc:?}");
+        }
+    }
+}
+
+/// #3746 / #3825: on fig8 Outside with the Arc entry, no pass start is
+/// entered by a plunge into material. The level entries come from the air
+/// (pinned above). After #3747, four pass links still lifted across the
+/// part to a start inside ring 0, and the re-entries plunged, named.
+/// #3825: those starts were two 0.117 mm stretches of the part wall that
+/// the side split read as ring 0 (#3824); they are now part of the wall.
+#[test]
+#[ignore = "heavy lane (#3825 fig8 Outside, Arc entry): one generation runs past the 60 s debug budget - run with --release -- --ignored"]
+fn fig8_outside_offset_has_no_plunge_into_material() {
+    let (world, mut h, name, stock) = fig8_world();
+    let (path, _) = offset_op_entered(&world, &mut h, &name, stock.0.z, PassStart::Outside, Entry3D::Arc);
+    let plunged: Vec<&String> = path.notes.iter().filter(|n| n.contains("plunged into material")).collect();
+    assert!(plunged.is_empty(), "Outside: a plunge into material ({} named): {plunged:?}", plunged.len());
+}
+
 /// The part's outline and the material of the band: the stock box less
 /// the part, in XY.
 fn band_material(world: &World, name: &str, (lo, hi): (Point3, Point3)) -> camcraft_app::geo2d::Region {
@@ -194,15 +261,96 @@ fn band_material(world: &World, name: &str, (lo, hi): (Point3, Point3)) -> camcr
 /// #3316 second read: along each WHOLE level (not only its ends), no
 /// Outside cut has uncut stock on both flanks - no cut takes the full
 /// tool width, where the band at the lobe tips splits the ring.
+/// #3744: Outside walks the one ring set (offsets of the part). At the
+/// waist the rings of the two lobes merge, and a ring corner there moves
+/// by more than one stepover: 495 full-width points before #3788. The
+/// fill rings of #3788 (a) clear the stock between two rings there: 21
+/// points stay, single samples at 7 ring corners (3 levels), and the
+/// narrow note names them (#3788 (c)). #3788 keeps the corners open; the
+/// pin goes back to 0 points and no note with them.
 #[test]
 #[ignore = "heavy lane (#3316 fig8 Outside): one generation and its verify run past the 60 s debug budget (about 170 s) - run with --release -- --ignored"]
 fn fig8_outside_offset_cuts_no_move_at_full_width() {
     let (world, mut h, name, stock) = fig8_world();
     let (path, _) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Outside);
     let full = flanks::full_width_points(&path, &band_material(&world, &name, stock), R8);
-    assert!(full.is_empty(), "{} full-width cut point(s), the first at {:?}", full.len(), full.first());
+    assert_names_each_full_width_cut(&world, &name, &path, &full, false);
+    assert!(full.len() <= 21, "{} full-width cut point(s) (#3788: 21 at 7 ring corners), the first at {:?}", full.len(), full.first());
     let named: Vec<&String> = path.notes.iter().filter(|n| n.starts_with(PASS_START_NOTE)).collect();
-    assert!(named.is_empty(), "the band starts in air, so no pass start warning: {named:?}");
+    assert!(!named.iter().any(|n| n.contains("is a wall in the stock")), "the band starts in air: {named:?}");
+}
+
+/// #3788 (c): no full-width cut is silent. When the meter finds a cut of
+/// the full tool width off the part wall, the path names it with the
+/// narrow note; without `wall`, the note's first place is the meter's
+/// first place. With `wall`, the cuts along the part wall are named by
+/// the wall note.
+fn assert_names_each_full_width_cut(world: &World, name: &str, path: &Toolpath, full: &[camcraft_app::geo2d::Point2], wall: bool) {
+    let notes: Vec<&String> = path.notes.iter().filter(|n| n.starts_with(PASS_START_NOTE)).collect();
+    let e = model::find_by_name(world, name).expect("part");
+    let part = camcraft_app::geometry::slice::project(&model::world_facets(world, &e).expect("facets"), 64).expect("part outline");
+    let to_wall = |q: &camcraft_app::geo2d::Point2| {
+        let mut best = f64::INFINITY;
+        for l in part.loops() {
+            let pts = l.points();
+            for i in 0..pts.len() {
+                let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                let (dx, dy) = (b.x - a.x, b.y - a.y);
+                let dd = dx * dx + dy * dy;
+                let t = if dd > 0.0 { (((q.x - a.x) * dx + (q.y - a.y) * dy) / dd).clamp(0.0, 1.0) } else { 0.0 };
+                best = best.min((q.x - a.x - dx * t).hypot(q.y - a.y - dy * t));
+            }
+        }
+        best
+    };
+    let on_wall = |q: &camcraft_app::geo2d::Point2| (to_wall(q) - R8).abs() < 0.5;
+    let (walled, open): (Vec<&camcraft_app::geo2d::Point2>, Vec<&camcraft_app::geo2d::Point2>) = full.iter().partition(|q| wall && on_wall(q));
+    if !walled.is_empty() {
+        assert!(notes.iter().any(|n| n.contains("the part wall")), "{} cut(s) along the part wall are not named: {notes:?}", walled.len());
+    }
+    let Some(first) = open.first() else { return };
+    let narrow = notes.iter().find(|n| n.contains("take the full tool width"));
+    let Some(narrow) = narrow else { panic!("{} full-width cut(s) are not named, the first at {first:?}: {notes:?}", open.len()) };
+    let at = format!("X {:.3}, Y {:.3}", first.x, first.y);
+    let near = |n: &str| {
+        let tail = n.rsplit("the first is at X ").next().unwrap_or_default();
+        let mut it = tail.split(", Y ");
+        let x: f64 = it.next().and_then(|v| v.trim().parse().ok()).unwrap_or(f64::NAN);
+        let y: f64 = it.next().and_then(|v| v.trim().parse().ok()).unwrap_or(f64::NAN);
+        (x - first.x).hypot(y - first.y) < 1.0
+    };
+    // Inside walks the wall first, and the meter reads the posted walk
+    // (arcs, links) in another order there: the note is required, its
+    // first place only where no wall cut comes first.
+    assert!(wall || near(narrow), "the note names another place than the meter's first ({at}): {narrow}");
+}
+
+/// #3788 (c) pin: Inside on fig8 cuts its first ring along the part wall at
+/// the full tool width (named by the wall note) and more cuts at the
+/// waist; each one is named.
+#[test]
+#[ignore = "heavy lane (#3788 fig8 Inside): one generation and the meter run past the 60 s debug budget - run with --release -- --ignored"]
+fn fig8_inside_offset_names_each_full_width_cut() {
+    let (world, mut h, name, stock) = fig8_world();
+    let (path, _) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Inside);
+    let full = flanks::full_width_points(&path, &band_material(&world, &name, stock), R8);
+    eprintln!("fig8 Inside: {} full-width point(s)", full.len());
+    assert!(!full.is_empty(), "Inside starts on the part wall, so the meter reads full-width cuts");
+    assert_names_each_full_width_cut(&world, &name, &path, &full, true);
+}
+
+/// #3744 pin: the one ring set gives no crossing feeds on fig8, from
+/// either side. The maintainer's Inside run on a private model gave 414
+/// `Warning::Crossing` (#3741); a crossing blocks the post.
+#[test]
+#[ignore = "heavy lane (#3744 fig8 Inside and Outside): two generations and their verify run past the 60 s debug budget - run with --release -- --ignored"]
+fn fig8_start_sides_have_no_crossing() {
+    for start in [PassStart::Inside, PassStart::Outside] {
+        let (world, mut h, name, stock) = fig8_world();
+        let (_, warnings) = offset_op(&world, &mut h, &name, stock.0.z, start);
+        let crossed: Vec<&String> = warnings.iter().filter(|w| w.starts_with("Crossing")).collect();
+        assert!(crossed.is_empty(), "{start:?}: {} crossing(s), the first {:?}", crossed.len(), crossed.first());
+    }
 }
 
 /// #3316: Inside on the Outside band starts each level on the part wall,
@@ -274,9 +422,10 @@ fn a_strategy_fallback_saved_without_a_cause_reads_as_adaptive() {
     assert_eq!(back, new);
 }
 
-/// #3319 guard on Auto, the maintainer's own setting: the order is the
-/// one every earlier file cut, and no lateral rapid runs below the
-/// clearance plane with "Hop below clearance" off.
+/// #3319 guard on Auto, the maintainer's own setting: no lateral rapid
+/// runs below the clearance plane with "Hop below clearance" off.
+/// #3744: Auto round a part cuts the one ring set from one side; the
+/// stock box leaves the band's outer edge in air, so Auto is Outside.
 #[test]
 fn fig8_auto_offset_keeps_every_lateral_rapid_at_the_clearance_plane() {
     let (world, mut h, name, stock) = fig8_world();
@@ -284,9 +433,12 @@ fn fig8_auto_offset_keeps_every_lateral_rapid_at_the_clearance_plane() {
     let clear_z = stock.1.z + CLEARANCE;
     assert_eq!(lateral_rapids_below(&path, clear_z), vec![], "#3319: a lateral rapid below Z {clear_z}");
     assert!(!warnings.iter().any(|w| w.starts_with("RapidInStock")), "#3319: a rapid through stock: {warnings:?}");
-    // Auto is the core-first order: the first ring is not at the stock edge.
+    // #3744: Auto picks the Outside start of the one ring set: each level
+    // starts outside the stock box (was: the core-first order of
+    // `waterline_passes`, a first ring inside the box).
     let levels = level_ends(&path);
-    assert!(levels.iter().all(|(_, first, _)| outside_box(*first, stock) < R8 - 0.05), "Auto moved: {levels:?}");
+    assert!(!levels.is_empty(), "the levels: {levels:?}");
+    assert!(levels.iter().all(|(_, first, _)| outside_box(*first, stock) >= R8 - 0.05), "Auto is not the Outside start: {levels:?}");
 }
 
 fn call(s: &mut Server, id: i64, name: &str, args: Value) -> Value {

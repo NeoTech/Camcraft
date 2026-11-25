@@ -5,14 +5,19 @@
 //! subtract_batch`, `preview::pack_cut`) as the reference; nothing
 //! from vendor binaries.
 //!
-//! Gate map: covers camcraft_sim::stock_sim::cut_twin and
-//! camcraft_sim::stock_sim::cut_twin_work.
+//! The layer playback (#2629, S3b) at the end: seeks, keyframes and the
+//! move in flight against the one-batch twin.
+//!
+//! Gate map: covers camcraft_sim::stock_sim::cut_twin,
+//! camcraft_sim::stock_sim::cut_twin_work and
+//! camcraft_sim::stock_sim::layer_play.
 
 use camcraft_sim::cl::{Move, MoveKind};
 use camcraft_sim::geometry::{cube, Point3};
 use camcraft_sim::stock_sim::preview::{pack_cut, pack_field, LatticeMeta};
 use camcraft_sim::stock_sim::{
-    from_ordered_bits, ordered_bits, run_twin, twin_cut, twin_items, twin_work, SdfField, SdfTool, StockError,
+    cpu_layer_cutter, from_ordered_bits, layer_tool, merge_max, ordered_bits, partial_move, run_twin, run_twin_items_onto,
+    twin_cut, twin_items, twin_work, LayerPlay, LayerSpan, SdfField, SdfTool, SimOp, Stock, StockError,
 };
 
 fn p(x: f64, y: f64, z: f64) -> Point3 {
@@ -278,4 +283,92 @@ fn every_other_tool_refuses_by_name() {
     refusal(&ok, &SdfTool::Taper { r: 2.0, cot: 1.0 }, "taper");
     refusal(&ok, &SdfTool::Drill { r: 2.0, cot: 0.6, flank: 10.0 }, "drill");
     refusal(&ok, &SdfTool::BullNose { r: 3.0, corner: 1.0, flank: 10.0 }, "bull nose");
+}
+
+/// The one-batch twin of the moves before `k` of each span, merged: the
+/// layer that the playback must show at `k`.
+fn one_batch(spans: &[LayerSpan<'_>], k: usize, meta: &LatticeMeta) -> Vec<f32> {
+    let n = meta.dims.iter().map(|d| *d as usize).product();
+    let mut out = vec![(-4.0 * meta.cap) as f32; n];
+    for s in spans {
+        let upto = k.saturating_sub(s.start).min(s.moves.len());
+        if upto > 0 {
+            merge_max(&mut out, &twin_cut(&s.moves[..upto], s.tool, meta).expect("the twin")).expect("same lattice");
+        }
+    }
+    out
+}
+
+fn bits(v: &[f32]) -> Vec<u32> {
+    v.iter().map(|x| x.to_bits()).collect()
+}
+
+#[test]
+fn the_layer_playback_is_the_one_batch_twin_at_every_seek() {
+    let (_, meta) = block();
+    let moves = program();
+    let spans = [
+        LayerSpan { start: 0, moves: &moves, tool: &BALL },
+        LayerSpan { start: moves.len(), moves: &moves, tool: &FLAT },
+    ];
+    let total = 2 * moves.len();
+    let mut play = LayerPlay::new(meta.clone(), cpu_layer_cutter(), 2).expect("the layer");
+    // forward, a jump, backward past keyframes, the end, and back to 0
+    for k in [1, 2, 3, 7, total, 4, 9, 0, total, 5] {
+        play.seek(k, &spans).expect("the seek");
+        assert_eq!(play.at(), k);
+        let got = play.frame(k, 0.0, &spans).expect("the frame");
+        assert_eq!(bits(&got), bits(&one_batch(&spans, k, &meta)), "the layer at {k}");
+    }
+    assert!(play.keyframes() > 2, "the seeks keep keyframes: {}", play.keyframes());
+}
+
+#[test]
+fn the_layer_frame_shows_the_travelled_part_of_the_move_in_flight() {
+    let (_, meta) = block();
+    let moves = program();
+    let spans = [LayerSpan { start: 0, moves: &moves, tool: &FLAT }];
+    let mut play = LayerPlay::new(meta.clone(), cpu_layer_cutter(), 3).expect("the layer");
+    let k = 3; // the second ramp, a golden-section move
+    let half = play.frame(k, 0.5, &spans).expect("the half frame");
+    let sub = partial_move(&moves[k], 0.5).expect("a travelled part");
+    let mut with = moves[..k].to_vec();
+    with.push(sub);
+    let want = twin_cut(&with, &FLAT, &meta).expect("the twin");
+    assert_eq!(bits(&half), bits(&want), "the move in flight");
+    let whole = play.frame(k, 0.0, &spans).expect("the whole frame");
+    assert_eq!(bits(&whole), bits(&one_batch(&spans, k, &meta)), "the partial cut is on a copy");
+    assert_ne!(bits(&half), bits(&whole), "the fixture's half move cuts something");
+}
+
+#[test]
+fn an_op_without_a_twin_stays_on_the_field_by_name() {
+    let (f, _) = block();
+    let stock = Stock::Field(f);
+    let moves = program();
+    let ball = SimOp { moves: &moves, radius: 2.5, ball: true, cone: None, corner: None };
+    assert!(matches!(layer_tool(&ball, &stock), Ok(SdfTool::Ball { .. })));
+    let flat = SimOp { ball: false, ..ball };
+    assert!(matches!(layer_tool(&flat, &stock), Ok(SdfTool::Flat { .. })));
+    let bull = SimOp { corner: Some(0.5), ..flat };
+    let err = layer_tool(&bull, &stock).expect_err("a bull nose").to_string();
+    assert!(err.contains("bull nose"), "{err}");
+    let mut arc = moves.clone();
+    arc[0].arc = Some(camcraft_sim::cl::ArcMove { center: camcraft_sim::geo2d::Point2::new(8.0, 8.0), ccw: false, plane: Default::default() });
+    let err = layer_tool(&SimOp { moves: &arc, ..ball }, &stock).expect_err("an arc").to_string();
+    assert!(err.contains("arc"), "{err}");
+}
+
+#[test]
+fn a_bad_base_layer_is_refused_by_name() {
+    let (_, meta) = block();
+    let work = twin_work(&program(), &BALL, &meta).expect("the work");
+    let items = twin_items(&work, &meta).expect("the items");
+    let n: usize = meta.dims.iter().map(|d| *d as usize).product();
+    let err = run_twin_items_onto(&items, &meta, &vec![0.0; n - 1]).expect_err("a short base").to_string();
+    assert!(err.contains("base layer has"), "{err}");
+    let mut nan = vec![-1.0; n];
+    nan[3] = f32::NAN;
+    let err = run_twin_items_onto(&items, &meta, &nan).expect_err("a NaN").to_string();
+    assert!(err.contains("not finite"), "{err}");
 }

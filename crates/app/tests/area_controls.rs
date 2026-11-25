@@ -312,6 +312,8 @@ fn finish_parallel() -> OpParams {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        waterlines: true,
+        picks: Default::default(),
     }
 }
 
@@ -405,6 +407,7 @@ fn trace_params() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

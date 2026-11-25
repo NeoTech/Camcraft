@@ -60,7 +60,7 @@ fn faced_world() -> (World, History) {
     h.execute(&world, AddTool::new(&world, TOOL, t).expect("tool"));
     let face = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 4.0,
         clearance_z: Height::fixed(20.0),
@@ -70,6 +70,7 @@ fn faced_world() -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Face", TOOL, SrcRef::Stock, face).expect("face"));
     h.execute(&world, GenerateOperation::new(&world, "Face").expect("face generation"));
@@ -119,6 +120,7 @@ fn adaptive_with(method: AdaptiveMethod, top: f64, troch: AdaptiveTrochParams) -
         troch,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -142,9 +144,10 @@ fn contour_inside(entry: Entry3D, top: f64) -> OpParams {
         tab_height: 0.0,
         entry,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

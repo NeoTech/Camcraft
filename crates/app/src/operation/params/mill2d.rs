@@ -39,7 +39,7 @@ impl OpParams {
                 entry,
                 helix_radius,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -85,10 +85,10 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 entry,
-                helix_radius,
+                helix_radius, blend_turns, blend_radius,
                 tilt,
                 extend_start,
-                extend_end,
+                extend_end, picks: _
             } => {
                 wp2(h, *a);
                 wp2(h, *b);
@@ -120,6 +120,15 @@ impl OpParams {
                     w(h, *extend_start);
                     w(h, *extend_end);
                 }
+                // #1759: written only when ON, so every earlier slot
+                // keeps its digest.
+                if *blend_turns {
+                    h.write_u8(0xB1);
+                    if let Some(r) = blend_radius {
+                        h.write_u8(0xB4);
+                        w(h, *r);
+                    }
+                }
             }
             OpParams::TrochoidalSlot {
                 a,
@@ -139,7 +148,7 @@ impl OpParams {
                 feed,
                 return_feed,
                 plunge_feed,
-                climb,
+                climb, picks: _
             } => {
                 wp2(h, *a);
                 wp2(h, *b);
@@ -171,7 +180,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -194,7 +203,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -208,11 +217,13 @@ impl OpParams {
             }
             // The chamfer ride digests its whole promise: the land,
             // the angle, the side the cone rides, the chord budget,
-            // and the ONE height it stands on - the depth is derived
-            // from width and angle, so nothing else to write (M2.4 B).
+            // and the ONE height it stands on. The opt-in cone-band
+            // radius writes a new marker only when positive, so every
+            // zero-radius cache keeps its old bytes (M2.4 B / #3153).
             OpParams::Chamfer2D {
                 width,
                 angle_deg,
+                minimum_cone_radius,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -221,7 +232,7 @@ impl OpParams {
                 climb,
                 side,
                 tolerance,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -236,6 +247,10 @@ impl OpParams {
                 });
                 wh_opt(h, *retract_z);
                 wt(h, *tilt);
+                if *minimum_cone_radius != 0.0 {
+                    h.write_u8(0xC1);
+                    w(h, *minimum_cone_radius);
+                }
             }
             // The circular ladder digests the pocket family's bytes
             // plus the authored disk: center, radius, and the dome
@@ -258,7 +273,7 @@ impl OpParams {
                 climb,
                 entry,
                 helix_radius,
-                tilt,
+                tilt, picks: _
             } => {
                 wp2(h, *center);
                 w(h, *radius);
@@ -294,7 +309,7 @@ impl OpParams {
                 plunge_feed,
                 flat_clear,
                 flat_stepover,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);

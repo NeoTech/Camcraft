@@ -90,6 +90,7 @@ fn rough(bottom: f64) -> OpParams {
         corner_relief: Default::default(),
         pass_start: Default::default(),
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -127,6 +128,7 @@ fn adaptive_with(
         corner_relief,
         pass_start: Default::default(),
         tilt,
+        picks: Default::default(),
     }
 }
 

@@ -33,6 +33,7 @@ mod bore;
 mod bore_core;
 mod chamfer;
 mod chamfer_ride;
+mod chamfer_side;
 mod circular;
 mod circular_helix;
 mod thread_mill;
@@ -55,17 +56,21 @@ mod contour_depth;
 mod contour_entry;
 mod contour_link;
 mod contour_params;
+mod contour_peck;
 mod contour_run_side;
 mod contour_run_stock;
 mod contour_start;
 mod contour_step;
+mod contour_wall_ramp;
 mod contour_whole;
 mod contour_whole_fence;
 mod contour_whole_reach;
 mod contour_whole_slice;
+mod air_entry;
 mod descent;
 mod descent_dive;
 mod descent_xy;
+mod entry_warn;
 mod equal_steps;
 mod face;
 mod face_entry;
@@ -80,12 +85,15 @@ mod lead_ext;
 mod lead_fit;
 mod lead_seam;
 mod ladder_links;
+mod level_flanks;
 mod level_order;
-mod level_ramp_entry;
 mod level_rings;
 mod levels;
 mod microlift;
 mod pass_start;
+mod ring_fill;
+mod ring_links;
+mod ring_side;
 mod pocket;
 mod pocket_plan;
 mod pocket_emit;
@@ -113,12 +121,15 @@ mod ring;
 mod tab_bridge;
 mod tab_clear;
 mod tab_kerf;
+mod sketch_trace;
 mod slots;
 mod slot_band;
 mod trace_avoid;
 mod slot_ends;
 mod slot_lap;
+mod slot_picks;
 mod slot_room;
+mod slot_turns;
 mod undercut;
 mod unreached;
 mod vcarve;
@@ -126,6 +137,7 @@ mod vcarve_axis;
 mod vcarve_walk;
 mod waterscan;
 mod pocket_avoid;
+mod pocket_avoid_level;
 mod corner_relief;
 mod corner_relief_spur;
 
@@ -148,7 +160,7 @@ pub use arcs::{fit_arcs, fit_arcs_sided, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
 pub use bore::{bore, bore_started, BoreHole, BoreParams};
 pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};
-pub use chamfer::{chamfer, ChamferParams};
+pub use chamfer::{chamfer, chamfer_open_runs, ChamferParams};
 pub use chamfer_ride::{ride_loops as chamfer_ride_loops, wall_lean as chamfer_wall_lean};
 pub use circular::{circular, CircularParams};
 pub use contour::{contour, contour_on_bodies, contour_on_part, contour_on_picked, ContourParams, Lead, Side};
@@ -173,25 +185,36 @@ pub use corner_relief::{
 };
 pub use corner_relief_spur::pocket_relief_plan;
 pub use level_rings::level_ring_plan;
-pub use pass_start::{PASS_START_NOTE, PASS_START_REST_NOTE, PASS_START_ZIGZAG_NOTE, PassStart, StartSide, pass_start_fallbacks};
+pub use crate::approach::OUTSIDE_AIR_REFUSAL;
+pub use entry_warn::{ENTRY_STAND_IN_NOTE, PLUNGE_INTO_STOCK_NOTE, entry_stand_ins, entry_warnings, is_entry_stand_in};
+pub use pass_start::{
+    PASS_START_NOTE, PASS_START_REST_NOTE, PASS_START_ZIGZAG_NOTE, PassStart, StartSide, advised, entry_advice, pass_start_fallbacks,
+};
 pub use pocket::{
     pocket, pocket_entered, pocket_entered_with_relief, pocket_started, pocket_started_on, PocketParams, PocketStrategy,
 };
-pub use pocket_avoid::{pocket_avoid, pocket_avoid_started, pocket_avoid_started_on, pocket_avoid_with_relief};
+pub use pocket_avoid::{
+    pocket_avoid, pocket_avoid_entered_started, pocket_avoid_entered_with_relief, pocket_avoid_started,
+    pocket_avoid_started_on, pocket_avoid_with_relief,
+};
 pub use predrilled::PreHole;
 pub use rest2d::{
-    rest_plan, rest_pocket, rest_pocket_with_relief, rest_strategy, RestParams, RestPlan, RestSource, REST_FILM,
-    REST_MARGIN, REST_NEEDS_STOCK, REST_REACH,
+    rest_plan, rest_pocket, rest_pocket_avoid_with_relief, rest_pocket_with_relief, rest_strategy, RestParams,
+    RestPlan, RestSource, REST_FILM, REST_MARGIN, REST_NEEDS_STOCK, REST_REACH,
 };
 pub use rest_prior::{
-    rest_plan_stock, rest_pocket_previous, rest_pocket_previous_with_relief, rest_stock_from_columns, PRIOR_Z_TOL,
+    rest_plan_stock, rest_pocket_previous, rest_pocket_previous_avoid_with_relief, rest_pocket_previous_with_relief,
+    rest_stock_from_columns, PRIOR_Z_TOL,
 };
 pub use rest_prior_adaptive::{rest_adaptive_previous, REST_ADAPTIVE_ENTERED, REST_ADAPTIVE_NO_STOCK};
 pub use ring::{on_boundary, ring_is_circular};
+pub use sketch_trace::TraceStrokes;
 pub use slot_band::slot_centre_band;
+pub use pocket_plan::pocket_tool_fits;
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
 pub use trace_avoid::trace_avoid;
 pub use slot_ends::extended_ends as slot_extended_ends;
+pub use slot_picks::picked_ends as slot_picked_ends;
 pub use slot_room::{SlotBound, SlotFit, FIT_TOL as SLOT_FIT_TOL};
 pub use undercut::{undercut, undercut_band, undercut_station, UndercutParams, MAX_BULGE as UNDERCUT_MAX_BULGE};
 pub use vcarve::{v_carve, VCarveParams};
@@ -208,7 +231,8 @@ pub use trochoid_slot::{
 };
 pub use thread_mill::{thread_mill, PassSchedule, ThreadHole, ThreadParams, ThreadPasses, MAX_SPRING_PASSES, EXTERNAL_THREAD_DEPTH_PER_PITCH, THREAD_DEPTH_PER_PITCH};
 pub(crate) use pocket::plan_passes;
-pub(crate) use pocket_zigzag::rest_passes as zigzag_ringed_passes;
+pub(crate) use pocket_zigzag::{SeamWrap, ringed_passes as zigzag_ringed_passes};
+pub use pocket_zigzag::boundary_rings_probe;
 pub(crate) use adaptive_troch_level::{TrochLevel, WHO_3D, plan_troch_level, refusal_text as troch_refusal_text};
 pub(crate) use adaptive::PLAN_SAG;
 // The HSM planner's door, its arc proofs and its microlift link, read

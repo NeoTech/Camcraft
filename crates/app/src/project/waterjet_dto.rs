@@ -51,6 +51,8 @@ pub struct WaterjetDto {
     pub abrasive_delay: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linearize: Option<f64>,
+    #[serde(default, skip_serializing_if = "PathPicksDto::is_empty")]
+    pub picks: PathPicksDto,
 }
 
 impl WaterjetDto {
@@ -78,6 +80,7 @@ impl WaterjetDto {
             pierce_time: p.pierce_time,
             abrasive_delay: p.abrasive_delay,
             linearize: p.linearize,
+            picks: PathPicksDto::from_picks(&p.picks),
         }
     }
 
@@ -105,6 +108,7 @@ impl WaterjetDto {
             pierce_time: self.pierce_time,
             abrasive_delay: self.abrasive_delay,
             linearize: self.linearize,
+            picks: self.picks.to_picks(),
         })
     }
 }

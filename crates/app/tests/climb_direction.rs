@@ -138,6 +138,7 @@ fn pocket(strategy: PocketStrategy, climb: bool) -> OpParams {
         blend_turns: false,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -160,10 +161,11 @@ fn contour(side: Side, climb: bool, lead: Lead, bottom: f64) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -231,6 +233,7 @@ fn adaptive2d(climb: bool) -> OpParams {
         tilt: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

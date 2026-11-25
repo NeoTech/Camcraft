@@ -111,8 +111,9 @@ fn contour_disc_hole_matches_golden() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&region, &p).unwrap();
     assert!(t.has_arcs(), "a fine polygon bore rim must fit to arcs");
@@ -148,8 +149,9 @@ fn contour_tangential_lead_matches_golden() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&region, &p).unwrap();
     assert!(t.has_arcs());
@@ -170,7 +172,7 @@ fn face_square_40x40_matches_golden() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stock_top: None,
     };
     let t = face(&rect(0.0, 0.0, 40.0, 40.0), &p).unwrap();
@@ -195,7 +197,7 @@ fn face_square_40x40_blended_matches_golden() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
-        blend_turns: true,
+        blend_turns: true, blend_radius: None,
         stock_top: None,
     };
     let t = face(&rect(0.0, 0.0, 40.0, 40.0), &p).unwrap();
@@ -220,7 +222,7 @@ fn face_square_40x40_stepped_matches_golden() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stock_top: None,
     };
     let t = face(&rect(0.0, 0.0, 40.0, 40.0), &p).unwrap();
@@ -256,8 +258,9 @@ fn contour_plate_with_hole_matches_golden() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&plate_with_hole(), &p).unwrap();
     write_golden("contour_plate_with_hole.cl", &gen_to_cltext(&t));
@@ -318,8 +321,9 @@ fn contour_plate_with_hole_blended_matches_golden() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: true,
+        blend_turns: true, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&plate_with_hole(), &p).unwrap();
     let sharp = contour(&plate_with_hole(), &ContourParams { blend_turns: false, ..p }).unwrap();
@@ -407,7 +411,7 @@ fn slot_fullwidth_centerline_matches_golden() {
         plunge_feed: 100.0,
         climb: true,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
     };
     let t = slot(Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), &p).unwrap();
     write_golden("slot_fullwidth_centerline.cl", &gen_to_cltext(&t));
@@ -433,7 +437,7 @@ fn slot_wide_channel_rows_matches_golden() {
         plunge_feed: 100.0,
         climb: true,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
     };
     let t = slot(Point2::new(-10.0, 0.0), Point2::new(50.0, 0.0), &p).unwrap();
     write_golden("slot_wide_channel_rows.cl", &gen_to_cltext(&t));
@@ -488,6 +492,9 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 
@@ -659,6 +666,7 @@ fn finish3d_waterline_cone() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();
@@ -715,6 +723,7 @@ fn finish3d_scallop_plateau() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();
@@ -767,6 +776,7 @@ fn finish3d_ramp_parallel_plateau() {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     };
     let t = parallel_with_angle(&facets, &params, 0.0).unwrap();
     assert_eq!(t.moves, parallel(&facets, &params).unwrap().moves);
@@ -839,6 +849,7 @@ fn finish3d_radial_dome() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();
@@ -887,6 +898,7 @@ fn finish3d_spiral_plateau() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();
@@ -935,6 +947,7 @@ fn finish3d_contour_plateau() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();
@@ -1001,6 +1014,7 @@ fn finish3d_project_dome() {
             entry_ramp: false,
             steep_stepover: None,
             pencil_reference: None,
+            waterlines: true,
         },
     )
     .unwrap();

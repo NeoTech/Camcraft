@@ -10,6 +10,7 @@
 //! `motion::wire_edm`); no vendor material consulted.
 
 use super::height::Height;
+use crate::path_picks::PathPicks;
 
 pub use crate::wire_edm::{WireSide, WireWidening};
 
@@ -58,9 +59,9 @@ pub struct WireContourOp {
     /// closed profile, the kerf's left / right of travel for an open
     /// run (#1109).
     pub side: WireSide,
-    /// The start hole / threading point, world XY mm; `None` is not
-    /// stated, and a closed profile is refused at generation without it.
-    pub start: Option<[f64; 2]>,
+    /// The start / threading pick (#532, #3339): empty is not stated,
+    /// and a closed profile is refused at generation without it.
+    pub picks: PathPicks,
     /// The tabs (#539); `None` is off, the default (#290 D6).
     pub tabs: Option<WireTabs>,
     /// The operator states the freed piece is caught (a slug catcher, a
@@ -68,6 +69,10 @@ pub struct WireContourOp {
     /// cut closes. `false` - the default - refuses a cut whose slug
     /// would drop unheld (#534's slug law, #539).
     pub capture: bool,
+    /// Both pieces are independently restrained after a through cutoff, including all trims.
+    pub both_pieces_restrained: bool,
+    /// The operator has centered the stock at the midpoint of the installed XY strokes.
+    pub stock_centered_in_xy_travel: bool,
     /// The constant taper (#536), degrees from vertical: 0 is a
     /// vertical cut; positive widens the profile downward from the top
     /// plane (a die's relief, a drafted punch's base), negative narrows
@@ -204,7 +209,7 @@ impl WireContourOp {
     pub fn is_sane(&self) -> bool {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
-            && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.picks.refusal().is_none()
             && self.taper_deg.is_finite()
             && self.taper_deg.abs() < 90.0
             && self.four_axis.as_ref().is_none_or(WireFourAxis::is_sane)

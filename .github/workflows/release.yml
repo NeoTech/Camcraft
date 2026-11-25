@@ -144,6 +144,7 @@ jobs:
           if-no-files-found: error
 
   aur:
+    # #3773: packages the linux-packages binaries of this run; no cargo build.
     needs: linux
     uses: ./.github/workflows/aur-package.yml
     permissions:

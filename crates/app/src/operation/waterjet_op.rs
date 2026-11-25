@@ -43,6 +43,7 @@ pub(super) fn seed_waterjet_profile(c: &Carried) -> OpParams {
         pierce_time: 1.0,
         abrasive_delay: 0.0,
         linearize: None,
+        picks: crate::path_picks::PathPicks::default(),
     })
 }
 

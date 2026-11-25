@@ -23,7 +23,17 @@ pub struct EditOperationParams {
 
 impl EditOperationParams {
     pub fn new(world: &World, name: &str, params: OpParams) -> Result<Self, CommandError> {
-        Self::edit(world, name, params, None)
+        Self::with_named_entry(world, name, params, false)
+    }
+
+    /// #3863: edit door carrying whether the request explicitly named an entry.
+    pub fn with_named_entry(
+        world: &World,
+        name: &str,
+        params: OpParams,
+        named_entry: bool,
+    ) -> Result<Self, CommandError> {
+        Self::edit(world, name, params, None, named_entry)
     }
 
     /// The same edit carrying the area controls too (M11.5): one undo
@@ -34,7 +44,7 @@ impl EditOperationParams {
         params: OpParams,
         area: operation::AreaControls,
     ) -> Result<Self, CommandError> {
-        Self::edit(world, name, params, Some(area))
+        Self::edit(world, name, params, Some(area), false)
     }
 
     /// Change only the coolant (#112): one undo unit, the parameters and
@@ -90,6 +100,7 @@ impl EditOperationParams {
         name: &str,
         params: OpParams,
         area: Option<operation::AreaControls>,
+        named_entry: bool,
     ) -> Result<Self, CommandError> {
         let Some(entity) = model::find_by_name(world, name) else {
             return Err(CommandError::NotFound(name.to_string()));
@@ -110,6 +121,8 @@ impl EditOperationParams {
         }
         // #2599: new angles on a legacy tilt take the current frame basis.
         let params = params.with_stepped_tilt_basis(&prev.params);
+        // #3843 / #3863: a 2D Offset moved off Auto with the seed Helix takes Arc.
+        let params = params.with_start_side_entry(&prev.params, named_entry);
         infeed_plan_gate(world, &params, &prev.tool)?;
         if let Some(why) = params.named_refusal() {
             return Err(CommandError::Invalid(why));
@@ -131,6 +144,14 @@ impl EditOperationParams {
         super::gates::thread_gate(world, &params, &prev.tool)?;
         // #1489: the rest group's previous tool against the mounted one.
         super::gates::rest_gate(world, &params, &prev.tool)?;
+        // #3631: a Slot width or wall stock edit that leaves the mounted
+        // tool wider than the slot, by the #3475 door. Other edits keep
+        // an older document editable.
+        if let (OpParams::Slot { width, stock_to_leave, .. }, OpParams::Slot { width: w0, stock_to_leave: l0, .. }) = (&params, &prev.params)
+            && (width != w0 || stock_to_leave != l0)
+        {
+            slot_gate(world, prev.setup.as_deref(), &prev.src, &params, &prev.tool)?;
+        }
         if let Some(msg) = crate::operation::side_sane(world, &params, &prev.src) {
             return Err(CommandError::Invalid(msg));
         }

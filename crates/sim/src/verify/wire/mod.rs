@@ -60,6 +60,12 @@
 //! the last pass under it: a move that cuts a drafted wall at one
 //! height must cut it at every height.
 //!
+//! Arcs read from a meshed model (#3215): a vertical cut whose arcs were
+//! read back from the facets passes between the facet chords and the
+//! true circle. The caller states the model's chord as the verify
+//! tolerance (`taper_chord`) for it too. The undercut law runs only for
+//! a cut that states a taper.
+//!
 //! Provenance: plain 2D distance and region geometry (point-segment
 //! distance, polygon booleans and the disc sweep of `geo2d`, clipper2)
 //! over the public wire EDM practice the umbrella #290 cites: the kerf
@@ -68,12 +74,15 @@
 //! region (die slug or punch). Our own code; no vendor post, control
 //! manual or CAM product behaviour was consulted.
 
+mod arcs;
 mod dist;
 mod finding;
 mod kerf;
 mod passes;
 mod slug;
 mod undercut;
+#[cfg(test)]
+mod arc_tests;
 #[cfg(test)]
 mod depth_tests;
 #[cfg(test)]
@@ -88,6 +97,7 @@ mod tol_tests;
 use crate::cl::Toolpath;
 use crate::geo2d::{Point2, Region};
 
+pub use arcs::ARC_SAG;
 pub use finding::{slugs_said, WireFinding, WireUnder};
 pub use slug::Slug;
 
@@ -172,8 +182,9 @@ pub struct WireJob<'a> {
     /// kerf may enter the model's facets and still pass the kerf law.
     /// 0 judges the facets as they stand.
     pub verify_tol: f64,
-    /// A constant-taper cut (#3210, module head): `verify_tol` is the
-    /// model's chord tolerance, and the undercut law runs under it.
+    /// `verify_tol` is the model's chord tolerance (module head): a
+    /// constant-taper cut (#3210), whose undercut law runs under it, or a
+    /// vertical cut of arcs read from the facets (#3215).
     pub taper_chord: bool,
 }
 
@@ -261,6 +272,10 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
     }
     // A tabbed cut's skims (#538 x #539) are not cut: the hold law
     // reads one pass's main cut and its cut-off.
+    if job.cutoff_from.is_some() && wire.has_arcs() {
+        v.findings.push(WireFinding::Unreadable("a tabbed cut holds arc moves - tabs are read on straight moves only".into()));
+        return v;
+    }
     if job.cutoff_from.is_some() && !job.skim_offsets.is_empty() {
         v.findings.push(WireFinding::Unreadable("a tabbed cut states skim passes - skims are cut on an untabbed profile only".into()));
         return v;
@@ -307,7 +322,10 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
     }
     if job.taper_chord {
         gouge = gouge.map(WireFinding::under_chord);
-        // A burnout is cut vertical and never states a taper.
+    }
+    // A burnout is cut vertical and never states a taper; nor does a
+    // vertical cut of arcs read from the facets (#3215).
+    if job.taper_chord && job.taper {
         v.findings.extend(undercut::judge(&job.sections, |s| product(s, opening), &wire, &passes, tol));
     }
     v.findings.extend(gouge);

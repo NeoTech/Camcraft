@@ -242,9 +242,11 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                     &mut fields,
                     &[
                         ("condition", "string", json!("")),
-                        ("start", "array", Value::Null),
+                        ("picks", "object", json!({})),
                         ("tabs", "object", Value::Null),
                         ("capture", "boolean", json!(false)),
+                        ("both_pieces_restrained", "boolean", json!(false)),
+                        ("stock_centered_in_xy_travel", "boolean", json!(false)),
                         ("taper_deg", "number", json!(0.0)),
                         ("burnout_clearance", "number", Value::Null),
                         ("clearance", "number", json!(crate::operation::DEFAULT_CLEARANCE)),
@@ -258,6 +260,21 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 fields.push(json!({ "name": "cavity_outline", "type": "array", "default": Value::Null }));
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
+            // The zero default is omitted by ParamsDto to preserve old
+            // project bytes, but it is still an authored operation
+            // parameter on the MCP surface (#3153).
+            if key == "chamfer2_d"
+                && !fields.iter().any(|f| f["name"] == "minimum_cone_radius")
+            {
+                fields.push(json!({
+                    "name": "minimum_cone_radius",
+                    "type": "number",
+                    "default": 0.0
+                }));
+                fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            }
+            // #3449: every accepted field, optional ones and enum values too.
+            let traced = super::kind_fields::complete(&key, &defaults, &mut fields);
             let mut kind = json!({
                 "label": k.label,
                 "key": key,
@@ -267,6 +284,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 "fields": fields,
                 "start_exit": start_exit(k),
             });
+            if !traced {
+                kind["fields_incomplete"] = json!(true);
+            }
             if !k.mounts_tool() {
                 kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind");
             }
@@ -277,7 +297,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
     let kinds = super::compact::filter_kinds(kinds, a)?;
     Ok(json!({
         "kinds": kinds,
-        "note": "Fields absent from the defaults are optional and off; set them in a params patch to turn them on.",
+        "note": "Each kind lists every field it accepts. \"optional\": true marks a field absent from the defaults: it is off until a params patch sets it. \"values\" lists the words of an enum field; \"shape\" spells an object or array field (key? is optional). Type \"any\" is a value that reads itself, such as a height: a number or {reference, offset}.",
     }))
 }
 
@@ -288,8 +308,12 @@ fn start_exit(k: &KindInfo) -> Value {
     let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
     match cap {
         operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
-        operation::PickCapability::Threading => out["field"] = json!("start"),
-        _ => out["field"] = json!("links.approach.start_point / exit_point"),
+        // #3331: a turning pick is [x, y, z] - the lathe (Z, X) plane needs the z.
+        operation::PickCapability::Meridian => {
+            out["field"] = json!("picks");
+            out["plane"] = json!("lathe (Z, X): each pick states its z; the radius is read about the turning axis");
+        }
+        _ => out["field"] = json!("picks"),
     }
     out
 }
@@ -312,6 +336,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::HolderHit { at, .. } => ("holder_hit", *at),
         Warning::SweepHit { at, .. } => ("sweep_hit", *at),
         Warning::RapidInStock { at } => ("rapid_in_stock", *at),
+        Warning::RapidInPart { at } => ("rapid_in_part", *at),
         Warning::FirstTraverseLow { at, .. } => ("first_traverse_low", *at),
         Warning::FirstTraverseUnderTable { at, .. } => ("first_traverse_under_table", *at),
         Warning::FixtureHit { at, .. } => ("fixture_hit", *at),
@@ -326,6 +351,10 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::UndercutLift { at } => ("undercut_lift", *at),
         Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
         Warning::FluteShort { at, .. } => ("flute_short", *at),
+        Warning::PlungeTooDeep { at, .. } => ("plunge_too_deep", *at),
+        Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
+        Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
+        Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
     };
     json!({
         "op": op,
@@ -352,6 +381,13 @@ pub(super) fn verify(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
             findings.extend(t.warnings.iter().map(|w| finding(&label, w)));
         }
     }
+    // #3456: a program law's warning (a plasma tip-up, a kerf crossing)
+    // names its op but no move; the law decides it holds nothing.
+    if let Some(warnings) = report["gate"]["warnings"].as_array() {
+        for w in warnings {
+            findings.push(json!({ "op": w["op"], "move": null, "kind": w["kind"], "message": w["message"], "blocks_post": false }));
+        }
+    }
     // The program gate's problems speak of the whole program, not one
     // move: they ride as findings with no op and no move index.
     if let Some(problems) = report["gate"]["problems"].as_array() {
@@ -367,6 +403,20 @@ pub(super) fn verify(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Str
 mod tests {
     use super::{Warning, finding};
     use crate::verify::FallbackCause;
+
+    #[test]
+    fn part_and_stock_rapids_keep_their_kind_message_and_blocking_state() {
+        for (warning, kind, message) in [
+            (Warning::RapidInPart { at: 7 }, "rapid_in_part", "tool meets the part on rapid move 7"),
+            (Warning::RapidInStock { at: 7 }, "rapid_in_stock", "rapid move 7 travels through stock (below the clearance plane, or at it below the stock top)"),
+        ] {
+            let f = finding("op", &warning);
+            assert_eq!(f["kind"], kind, "{f}");
+            assert_eq!(f["message"], message, "{f}");
+            assert_eq!(f["move"], 7, "{f}");
+            assert_eq!(f["blocks_post"], true, "{f}");
+        }
+    }
 
     /// #3542: the pass-start cause keeps the MCP kind `strategy_fallback`
     /// and stays advisory; only its message names the other cause.

@@ -21,6 +21,7 @@ pub mod import_fixture;
 pub mod import_model;
 // #1862: a DXF profile placed on a setup's stock, and its move on the stock face.
 pub mod import_dxf;
+pub mod import_svg;
 pub mod move_sketch;
 // #2679: typed text placed as a profile of engraving strokes.
 pub mod insert_text;
@@ -110,6 +111,7 @@ pub use mod_vise::PlaceModVisePair;
 pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_dxf::{DxfOptions, ImportDxf};
+pub use import_svg::ImportSvg;
 pub use import_model::ImportModel;
 pub use insert_text::{InsertText, TextOptions};
 pub use insert_outline_text::{InsertOutlineText, OutlineTextOptions};
@@ -190,6 +192,9 @@ pub enum CommandError {
     /// #1862: every other refusal of a DXF import, in the reader's words.
     #[error("DXF import: {0}")]
     Dxf(String),
+    /// #1880: a refusal of an SVG import, in the reader's words.
+    #[error("SVG import: {0}")]
+    Svg(String),
     #[error("could not generate the toolpath: {0}")]
     Machining(String),
     /// A [`Machining`](CommandError::Machining) refusal about one spot

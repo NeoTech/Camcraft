@@ -27,7 +27,11 @@ impl OpParams {
     /// The corner-arc option's door (#1733), for the kinds that carry it.
     fn arc_turn_refusal(&self) -> Option<&'static str> {
         let (on, radius, trochoidal) = match self {
+            // #1759: Face, 2D Contour and Slot carry the option too.
             OpParams::Pocket { blend_turns, blend_radius, .. }
+            | OpParams::Face { blend_turns, blend_radius, .. }
+            | OpParams::Contour { blend_turns, blend_radius, .. }
+            | OpParams::Slot { blend_turns, blend_radius, .. }
             | OpParams::Offset2D { blend_turns, blend_radius, .. } => (*blend_turns, *blend_radius, false),
             OpParams::Adaptive2D { blend_turns, blend_radius, method, .. } => {
                 (*blend_turns, *blend_radius, *method == crate::machining2d::AdaptiveMethod::Trochoidal)
@@ -74,6 +78,10 @@ impl OpParams {
         if let Some(why) = self.pick_refusal() {
             return Some(why);
         }
+        // #3745: the approach distance outside the stock, by name.
+        if let Some(why) = self.links().and_then(|l| l.approach.approach_distance_refusal()) {
+            return Some(why.into());
+        }
         match self {
             OpParams::Finish3D { direction_angle, .. } => {
                 crate::finishing3d::parallel_angle_refusal(*direction_angle).map(str::to_owned)
@@ -92,6 +100,12 @@ impl OpParams {
                     corner_relief.validate().err().map(|e| e.to_string())
                 }
             }),
+            OpParams::Chamfer2D {
+                minimum_cone_radius,
+                ..
+            } if !(minimum_cone_radius.is_finite() && *minimum_cone_radius >= 0.0) => {
+                Some("tip offset must be finite and non-negative".into())
+            }
             _ => None,
         }
     }
@@ -127,6 +141,8 @@ impl OpParams {
         let links_ok = links_ok && self.arc_turn_refusal().is_none();
         // #1489: a rest group the generator would refuse.
         let links_ok = links_ok && crate::operation::rest_op::rest_refusal(self).is_none();
+        // #1448 / #3339: every pick coordinate finite, in bounds, and within the cap.
+        let links_ok = links_ok && self.path_picks().refusal().is_none();
         tilt_ok
             && links_ok
             && match self {
@@ -390,6 +406,7 @@ impl OpParams {
             OpParams::Chamfer2D {
                 width,
                 angle_deg,
+                minimum_cone_radius,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -400,6 +417,7 @@ impl OpParams {
             } => {
                 pos(*width)
                     && (0.0..90.0).contains(angle_deg)
+                    && nneg(*minimum_cone_radius)
                     && pos(*tolerance)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
@@ -549,6 +567,7 @@ impl OpParams {
                 // #1889: the policy is an enum; each value is legal.
                 unreachable: _,
                 sizing,
+                picks: _,
             } => {
                 pos(*width)
                     // #1890: a positive depth and 1..=100 passes.
@@ -590,6 +609,7 @@ impl OpParams {
                 lag_deg,
                 max_tilt_deg,
                 shank_avoid: _,
+                picks: _,
             } => {
                 let cap = crate::multiaxis::MAX_TILT_CAP_DEG;
                 let deg = |v: f64| v.is_finite() && (0.0..=cap).contains(&v);
@@ -735,6 +755,13 @@ impl OpParams {
                 // stepover rides the same Some-or-derived law as the
                 // finish's.
                 let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                // #2772: a stated rotation axis is a direction - three
+                // finite numbers, not all zero. A leaning line is a
+                // statement the resolver and the letter door judge by
+                // name, not a sanity matter here.
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
                 pos(*tolerance)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
@@ -746,6 +773,15 @@ impl OpParams {
                     && angle(lag_deg)
                     && *max_tilt_deg > 0.0
                     && *max_tilt_deg <= 180.0
+                    // #2772: the twins' read-back (the or-pattern shares
+                    // Flow and the drive-curve contour, which state no
+                    // axis of their own).
+                    && (match self {
+                        OpParams::RotaryContour { stated_axis, .. } | OpParams::RotaryParallel { stated_axis, .. } => {
+                            direction(stated_axis)
+                        }
+                        _ => true,
+                    })
                     && (match self {
                         OpParams::Parallel5D { stepover, .. }
                         | OpParams::Swarf { stepover, .. }
@@ -753,6 +789,40 @@ impl OpParams {
                         | OpParams::Flow5D { stepover, .. } => stepover.is_none_or(pos),
                         _ => true,
                     })
+            }
+            // The flow band's door (#2826): the twins' shape minus the
+            // station window the picks replace - the same pose door,
+            // the same stated-direction law, the raster's derived
+            // stepover, and heights read as radii (their own guard
+            // lives in the kernel, against the work's true radius).
+            OpParams::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb: _,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => {
+                let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
+                pos(*tolerance)
+                    && stepover.is_none_or(pos)
+                    && clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && pos(*feed)
+                    && pos(*plunge_feed)
+                    && angle(lead_deg)
+                    && angle(lag_deg)
+                    && *max_tilt_deg > 0.0
+                    && *max_tilt_deg <= 180.0
+                    && direction(stated_axis)
             }
             // The wrap ladder's door (M5.1 stage E2): the Pocket3D
             // door's numbers - plain stepover, radial stepdown, the
@@ -778,9 +848,15 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
                 ..
             } => {
                 let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                // #2772: the twins' own direction law for the op's
+                // stated axis.
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
                 pos(*tolerance)
                     && pos(*stepover)
                     && nneg(*stock_to_leave)
@@ -798,6 +874,7 @@ impl OpParams {
                     && angle(lag_deg)
                     && *max_tilt_deg > 0.0
                     && *max_tilt_deg <= 180.0
+                    && direction(stated_axis)
             }
             // The stamped ladder's door (M5.1 stage E3): the Pocket3D
             // door verbatim - the hop plane included, which the plain
@@ -1022,6 +1099,7 @@ impl OpParams {
                 stepdown,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1047,6 +1125,7 @@ impl OpParams {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1065,6 +1144,7 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1088,6 +1168,7 @@ impl OpParams {
                 stock_to_leave,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1106,6 +1187,7 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1170,6 +1252,7 @@ impl OpParams {
                 plunge_feed,
                 infeed_plan,
                 hand: _,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1200,6 +1283,7 @@ impl OpParams {
                 angle_deg,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1221,6 +1305,7 @@ impl OpParams {
                 top_dia,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1246,6 +1331,7 @@ impl OpParams {
                 passes,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1270,6 +1356,7 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()
@@ -1290,6 +1377,7 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                picks: _,
             } => {
                 pos(*tolerance)
                     && clearance_z.is_sane()

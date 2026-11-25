@@ -91,6 +91,9 @@ pub(crate) fn finish_tol_of(params: &OpParams) -> Option<f64> {
         // the picks (M5.1 J).
         | OpParams::Flow5D { tolerance, .. }
         | OpParams::MultiAxisContour { tolerance, .. }
+        // The flow band reads it the same way (#2826):
+        // the scallop budget, and the envelope's.
+        | OpParams::RotaryFlow { tolerance, .. }
         // Facing reads it the same way - its ONLY
         // reading: the stations come from the
         // profile, the budget judges them (M5.2 A).

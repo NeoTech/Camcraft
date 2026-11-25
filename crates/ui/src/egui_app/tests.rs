@@ -120,11 +120,28 @@ mod lathe_view;
 // #1997: the orbit pivot ignores the work envelope; open frames the part.
 mod camera_target;
 mod structural;
+// #2772 parts 1-2 (PR #3674 item 5): the stated rotation axis group.
+mod rotary_stated_axis;
+// #2827: the Rotary Flow band's Passes tab - axis group, band rows, guide hint.
+mod rotary_flow_page;
 // #2181: the transport row of the calculation before playback.
 mod transport_precalc;
 mod sim_op_steps;
 mod page_layout;
 mod page_layout_windows;
+// #3892: the tool library window (page_layout.rs is full).
+mod page_layout_tool_library;
+// #3893: the tool editor in the tool library window.
+mod tool_library_editor;
+// #3894: the 3D and side preview of the tool library window's editor.
+mod tool_library_preview;
+// #3895: the holder, gauge length and stick-out in the tool library window.
+mod tool_library_assembly;
+// #3896: the Recipes tab of the tool library window's editor.
+mod tool_library_recipes;
+// #3897 (U6 of #3663): the Holders page and the mock-up gaps.
+mod tool_library_holders_ui;
+mod tool_library_mockup;
 mod anchors;
 mod stock_fit;
 mod stock_source_default;
@@ -178,6 +195,8 @@ mod wcs_page_picks;
 // #343: the per-setup browser tree.
 mod setup_tree;
 mod mcp_live;
+// #3751: camcraft-cli --ui drives the window; Ctrl+Z undoes it.
+mod ui_link;
 // #389: per-setup post options and the tool-list export.
 mod setup_post_options;
 // #2374: the machine's own post offered on the Post page.
@@ -219,6 +238,8 @@ mod theme_door;
 mod recent_door;
 // #2384: the Home button and the recent projects start page.
 mod home_page;
+// #2428: startup update check, Settings dropdown toggle, and title-bar notice.
+mod update_check;
 // #1431: the browser build's Save, Save As and Post as downloads; the rest refused by name.
 mod browser_files;
 mod browser_delete;
@@ -1325,6 +1346,7 @@ fn every_field_lives_on_exactly_one_section() {
                     "Stepover",
                     "Minimum step",
                     "Ramp between lines",
+                    "Steep flanks",
                     "Tolerance",
                 ]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
@@ -1996,6 +2018,7 @@ fn headless_run_succeeds() {
 #[test]
 #[ignore = "release lane (#255): pixel snapshot golden, run and regenerated only at minor/major cuts (gate -Tier release); structural twin in tests/structural.rs"]
 fn egui_shell_snapshot() {
+    let _gpu = super::gpu_test_lock::gpu_guard(); // #3379
     let _g = snapshot_guard();
     let mut harness = shell_harness();
     harness.run_steps(3);
@@ -2026,6 +2049,7 @@ fn snapshot_guard() -> std::sync::MutexGuard<'static, ()> {
 #[test]
 #[ignore = "release lane (#255): pixel snapshot golden, run and regenerated only at minor/major cuts (gate -Tier release); structural twin in tests/structural.rs"]
 fn egui_shell_snapshot_light() {
+    let _gpu = super::gpu_test_lock::gpu_guard(); // #3379
     let _g = snapshot_guard();
     let mut harness = shell_harness();
     theme_set(&harness.state_mut().state.world, &ThemeRef::Named("light".to_owned()));
@@ -2047,15 +2071,18 @@ fn egui_shell_snapshot_light() {
     harness.run_steps(1); // leave LIVE dark for whatever frame follows.
 }
 
-/// #2397: the settings are edited live in Properties through the real
-/// drain, and the tool shape editor is its own window. A drag stages into
-/// `tool_ui` WITHOUT touching the world (the draft law); `Apply` lands it
-/// through `ChangeTool`; and the dock's `Delete` proves the ghost law -
-/// the named tool is gone, so the shape window is gone the next frame.
+/// #2397: the settings are edited live through the real drain, and the
+/// tool shape editor is its own window. #3930: the edit is in the tool
+/// library window (Properties shows a summary). A drag stages into the
+/// window's draft WITHOUT touching the world (the draft law); `Apply` lands
+/// it through `ChangeTool`; and the dock's `Delete` proves the ghost law -
+/// the named tool is gone, so the shape window and the window's editor are
+/// gone the next frame.
 #[test]
 fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
-    // A tall shell: the whole tool page, Apply and Delete included, is on
-    // screen without a scroll.
+    use tool_library_editor::{click_window_button, draft, library_window, open_in_window};
+    // A tall shell: the whole tool page, Delete included, is on screen
+    // without a scroll.
     let mut harness = Harness::builder()
         .with_size(Vec2::new(1280.0, 1400.0))
         .build_ui_state(frame, ShellUi::seeded());
@@ -2069,17 +2096,15 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
             .and_then(|e| model::tool_of(&h.state().state.world, &e))
             .map(|t| t.diameter)
     };
-    assert!(harness.query_by_label("Diameter").is_some(), "Properties owns the selected tool's settings");
+    assert!(harness.query_by_label("Diameter").is_some(), "Properties states the selected tool's settings");
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
-    assert!(
-        (harness.state().state.tool_ui.diameter - d0).abs() < 1e-12,
-        "the page must open on the world's diameter"
-    );
-    // The Properties page owns the DragValues now: 30 px at speed 0.1.
-    let c = harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
+    open_in_window(&mut harness, "EM-0600-4FL");
+    assert!((draft(&mut harness).diameter - d0).abs() < 1e-12, "the window must open on the world's diameter");
+    // The window owns the DragValues: 30 px at speed 0.1.
+    let c = library_window(&harness)
+        .query_all_by_role(egui::accesskit::Role::SpinButton)
         .next()
-        .expect("the tool page owns DragValues")
+        .expect("the window owns DragValues")
         .rect()
         .center();
     harness.drag_at(c);
@@ -2088,23 +2113,19 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
     harness.run();
     harness.drop_at(c + Vec2::new(30.0, 0.0));
     harness.run();
-    assert!(
-        (harness.state().state.tool_ui.diameter - (d0 + 3.0)).abs() < 0.05,
-        "the drag must stage the draft"
-    );
+    assert!((draft(&mut harness).diameter - (d0 + 3.0)).abs() < 0.05, "the drag must stage the draft");
     assert!(
         (world_d(&harness).expect("still there") - d0).abs() < 1e-12,
         "a drag must not touch the world"
     );
-    harness.get_by_label("Apply").click();
-    harness.run();
+    click_window_button(&mut harness, "Apply");
     assert!(
         (world_d(&harness).expect("still there") - (d0 + 3.0)).abs() < 0.05,
         "Apply must land the staged number (status: {})",
         harness.state().state.status
     );
-    // #2397: the shape editor is its own window, with the settings left in
-    // Properties.
+    // #2397: the shape editor is its own window; #3930: without the
+    // holder library, which is the tool library window's.
     crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, "EM-0600-4FL");
     harness.run();
     harness.run();
@@ -2112,8 +2133,9 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
         harness.state().state.tool_shape_editor.as_deref(),
         Some("EM-0600-4FL")
     );
-    assert!(harness.query_by_label("Holder library").is_some(), "the shape window holds the holder library");
-    assert!(harness.query_by_label("Diameter").is_some(), "the settings stay in Properties");
+    assert!(library_window(&harness).query_by_label("Holder library").is_some(), "the tool library window holds the holder library");
+    assert!(harness.query_all_by_label("Holder library").count() == 1, "the shape window has none");
+    assert!(harness.query_all_by_label("Diameter").next().is_some(), "the settings stay in view");
     // Ghost law: deleting the tool from the library closes the shape window.
     let pane_top = harness
         .state()
@@ -2128,13 +2150,14 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
         .expect("Tools page Delete button")
         .click();
     harness.run();
+    harness.run();
     assert!(
         harness.state().state.tool_shape_editor.is_none(),
         "the window must not outlive its tool"
     );
     assert!(
-        harness.query_by_label("Shank diameter").is_none(),
-        "the window's widgets must go with it"
+        harness.state().state.tool_library.as_ref().and_then(|v| v.open_tool()).is_none(),
+        "the tool library window's editor must not outlive its tool"
     );
     assert!(world_d(&harness).is_none(), "Delete must empty the library too");
 }
@@ -2146,6 +2169,7 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
 #[test]
 #[ignore = "release lane (#255): pixel snapshot golden, run and regenerated only at minor/major cuts (gate -Tier release); structural twin in tests/structural.rs"]
 fn tool_editor_snapshot() {
+    let _gpu = super::gpu_test_lock::gpu_guard(); // #3379
     let _g = snapshot_guard();
     let mut harness = shell_harness();
     harness.state_mut().state.ui_target = UiTarget::Tool("EM-0600-4FL".to_owned());
@@ -3007,22 +3031,22 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
     harness.run();
     assert_eq!(harness.state().state.units(), Unit::Inches);
 
-    harness.state_mut().state.ui_target = UiTarget::Tool("EM-0600-4FL".to_owned());
-    harness.run();
-    harness.run();
+    // #3930: the tool's numbers are edited in the tool library window.
+    tool_library_editor::open_in_window(&mut harness, "EM-0600-4FL");
     let world_d = |h: &Harness<'static, ShellUi>| {
         model::find_by_name(&h.state().state.world, "EM-0600-4FL")
             .and_then(|e| model::tool_of(&h.state().state.world, &e))
             .map(|t| t.diameter)
     };
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
-
-    let c = harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the tool page owns DragValues")
-        .rect()
-        .center();
+    let spin = |h: &Harness<'static, ShellUi>| {
+        tool_library_editor::library_window(h)
+            .query_all_by_role(egui::accesskit::Role::SpinButton)
+            .next()
+            .expect("the window owns DragValues")
+            .rect()
+    };
+    let c = spin(&harness).center();
     harness.drag_at(c);
     harness.run();
     harness.hover_at(c + Vec2::new(30.0, 0.0));
@@ -3034,40 +3058,34 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
     // the SHOWN unit inside a one-physical-pixel radius, which by the
     // speed-÷25.4 law is the identical ±0.1 mm in both modes (here it
     // pulled 9.000 to 0.355 in = 9.017 mm, 0.017 off).
+    let staged = tool_library_editor::draft(&mut harness).diameter;
     assert!(
-        (harness.state().state.tool_ui.diameter - (d0 + 3.0)).abs() < 0.05,
-        "inch px-parity: 30 px must move 3.0 mm from {d0}, got {}",
-        harness.state().state.tool_ui.diameter
+        (staged - (d0 + 3.0)).abs() < 0.05,
+        "inch px-parity: 30 px must move 3.0 mm from {d0}, got {staged}"
     );
     assert!(
         (world_d(&harness).expect("still there") - d0).abs() < 1e-12,
         "a drag must not touch the world"
     );
 
-    harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
+    tool_library_editor::library_window(&harness)
+        .query_all_by_role(egui::accesskit::Role::SpinButton)
         .next()
-        .unwrap()
+        .expect("the window owns DragValues")
         .click();
     harness.run();
-    harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
+    tool_library_editor::library_window(&harness)
+        .query_all_by_role(egui::accesskit::Role::SpinButton)
         .next()
-        .unwrap()
+        .expect("the window owns DragValues")
         .type_text("0.5");
     harness.run();
     assert_eq!(
-        harness.state().state.tool_ui.diameter,
+        tool_library_editor::draft(&mut harness).diameter,
         12.7,
         "a typed half inch must store exactly 12.7 mm"
     );
-    // The tool settings page scrolls: on the default-height shell the
-    // Apply button sits below the fold, so the click needs the settled
-    // scrolled rect (the idiom the op-page draft test carries).
-    harness.get_by_label("Apply").scroll_to_me();
-    harness.run();
-    harness.get_by_label("Apply").click();
-    harness.run();
+    tool_library_editor::click_window_button(&mut harness, "Apply");
     assert_eq!(
         world_d(&harness).expect("still there"),
         12.7,
@@ -3370,7 +3388,8 @@ fn a_create_cell_darkens_with_the_tool_laws_reason() {
         assert!(model::find_by_name(&st.world, "Drill1").is_none(), "a dark cell creates nothing");
         assert!(st.status.contains(&reason), "the click answers with the reason: {}", st.status);
         // #191: and takes the user to the fix - the tool library.
-        assert!(super::layout::is_open(&harness.state().dock, &Tab::Tools), "the click opens the tool library dock");
+        // #3892: the tool library is its own window.
+        assert!(st.tool_library.is_some(), "the click opens the tool library window");
         assert!(st.status.ends_with("opened the tool library"), "{}", st.status);
     }
     rack(&mut harness.state_mut().state, &["DR-0400"]);
@@ -3909,6 +3928,195 @@ fn finish3d_pattern_and_stepover_apply_through_commands() {
             _ => panic!("kind drift"),
         });
     assert_eq!(back, Some(None), "undo restores the march's own floor");
+}
+
+#[test]
+fn finish3d_waterlines_radio_consequence_apply_undo_and_status_note() {
+    use camcraft_app::commands::{GenerateOperation, ImportModel, SetStock};
+    use camcraft_app::geometry::{Point3, cube};
+    use camcraft_app::stock::StockShape;
+    use camcraft_app::schema::Location;
+
+    let mut harness = shell_harness();
+    {
+        let st = &mut harness.state_mut().state;
+        rack(st, &["BN-0600"]);
+        let prism = cube(Point3::new(-10.0, -10.0, 0.0), Point3::new(10.0, 10.0, 10.0));
+        st.history.execute(&st.world, ImportModel::from_mesh("Prism", prism));
+        st.history.execute(
+            &st.world,
+            SetStock::new(&st.world, StockShape::Box { dx: 40.0, dy: 40.0, dz: 12.0 }, Location::default())
+                .expect("stock"),
+        );
+        crate::actions::add_operation(st, camcraft_app::operation::OpType::Finish3D as usize);
+        if let OpParams::Finish3D { top_z, bottom_z, tolerance, .. } = &mut st.op_ui.params {
+            *top_z = Height::fixed(10.0);
+            *bottom_z = Height::fixed(0.0);
+            *tolerance = 0.1;
+        }
+        st.op_tab = 2; // Passes
+    }
+    harness.run_steps(2);
+    harness.get_by_label("Apply").scroll_to_me();
+    harness.run();
+    harness.get_by_label("Apply").click();
+    harness.run();
+
+    harness.get_by_label("Steep flanks").scroll_to_me();
+    harness.run();
+    assert!(harness.query_by_label("Waterlines").is_some());
+    assert!(harness.query_by_label("Leave uncut").is_some());
+    assert!(harness.query_by_label_contains("Steep flanks (>45 deg) stay uncut").is_none());
+
+    harness.get_by_label("Leave uncut").click();
+    harness.run();
+    assert!(
+        harness.query_by_label_contains("Steep flanks (>45 deg) stay uncut").is_some(),
+        "consequence caption must appear when Leave uncut is chosen"
+    );
+    assert!(
+        !harness.state().state.pending.iter().any(|c| matches!(c, CommandKind::EditOperationParams { .. })),
+        "radio click stages draft only; Apply commits"
+    );
+
+    harness.get_by_label("Apply").scroll_to_me();
+    harness.run();
+    harness.get_by_label("Apply").click();
+    harness.run();
+
+    let live_wl = model::find_by_name(&harness.state().state.world, "3D Finish1")
+        .and_then(|e| model::operation_of(&harness.state().state.world, &e))
+        .map(|o| matches!(o.params, OpParams::Finish3D { waterlines: false, .. }));
+    assert_eq!(live_wl, Some(true), "Apply commits waterlines: false");
+
+    // Generate and check the UI status banner surfaces the steep-flank warning.
+    {
+        let st = &mut harness.state_mut().state;
+        let cmd = GenerateOperation::new(&st.world, "3D Finish1").expect("generate");
+        st.history.execute(&st.world, cmd);
+        st.doc_version += 1;
+    }
+    harness.run();
+    let (line, tone, details) = super::op_page::status_text(&harness.state().state, "3D Finish1");
+    assert_eq!(tone, super::layout::Tone::Warn, "status banner tone: {line}");
+    assert!(line.contains("warning"), "status banner line: {line}");
+    assert!(
+        details.iter().any(|d| d.starts_with("warning: ") && d.contains(camcraft_app::finishing3d::WATERLINES_OFF_NOTE)),
+        "status details must expose uncut steep flanks: {details:?}"
+    );
+    harness.get_by_label_contains("OK ·").scroll_to_me();
+    harness.run();
+    harness.get_by_label_contains("OK ·").click();
+    harness.run();
+    assert!(
+        harness.query_by_label_contains(camcraft_app::finishing3d::WATERLINES_OFF_NOTE).is_some(),
+        "expanded status banner must render the steep-flank warning"
+    );
+
+    // Undo GenerateOperation, then undo EditOperationParams -> waterlines returns to true.
+    for _ in 0..2 {
+        harness.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND));
+        harness.input_mut().events.push(Event::Key {
+            key: Key::Z,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::COMMAND,
+        });
+        harness.run_steps(2);
+    }
+    let back_wl = model::find_by_name(&harness.state().state.world, "3D Finish1")
+        .and_then(|e| model::operation_of(&harness.state().state.world, &e))
+        .map(|o| matches!(o.params, OpParams::Finish3D { waterlines: true, .. }));
+    assert_eq!(back_wl, Some(true), "Ctrl+Z undo restores waterlines: true");
+}
+
+#[test]
+fn finish3d_waterlines_pattern_switch_resets_and_stays_visible_when_off() {
+    use camcraft_app::commands::{GenerateOperation, ImportModel, SetStock};
+    use camcraft_app::finishing3d::FinishPattern;
+    use camcraft_app::geometry::{Point3, cube};
+    use camcraft_app::schema::Location;
+    use camcraft_app::stock::StockShape;
+
+    let mut harness = shell_harness();
+    {
+        let st = &mut harness.state_mut().state;
+        rack(st, &["BN-0600"]);
+        let prism = cube(Point3::new(-10.0, -10.0, 0.0), Point3::new(10.0, 10.0, 10.0));
+        st.history.execute(&st.world, ImportModel::from_mesh("Prism", prism));
+        st.history.execute(
+            &st.world,
+            SetStock::new(&st.world, StockShape::Box { dx: 40.0, dy: 40.0, dz: 12.0 }, Location::default())
+                .expect("stock"),
+        );
+        crate::actions::add_operation(st, camcraft_app::operation::OpType::Finish3D as usize);
+        if let OpParams::Finish3D { top_z, bottom_z, tolerance, .. } = &mut st.op_ui.params {
+            *top_z = Height::fixed(10.0);
+            *bottom_z = Height::fixed(0.0);
+            *tolerance = 0.1;
+        }
+        st.op_tab = 2; // Passes
+    }
+    harness.run_steps(2);
+
+    for (target_pat, pat_label) in [
+        (FinishPattern::Blend, "Blend"),
+        (FinishPattern::Morph, "Morph"),
+        (FinishPattern::Waterline, "Waterline"),
+    ] {
+        // Set Parallel + Leave uncut first.
+        if let OpParams::Finish3D { pattern, waterlines, .. } = &mut harness.state_mut().state.op_ui.params {
+            *pattern = FinishPattern::Parallel;
+            *waterlines = true;
+        }
+        harness.run();
+        harness.get_by_label("Leave uncut").scroll_to_me();
+        harness.run();
+        harness.get_by_label("Leave uncut").click();
+        harness.run();
+        assert!(matches!(harness.state().state.op_ui.params, OpParams::Finish3D { waterlines: false, .. }));
+
+        harness.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("Parallel")).scroll_to_me();
+        harness.run();
+        harness.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("Parallel")).click();
+        harness.run_steps(2);
+        harness.get_by_label(pat_label).scroll_to_me();
+        harness.run();
+        harness.get_by_label(pat_label).click();
+        harness.run_steps(2);
+        let draft = match &harness.state().state.op_ui.params {
+            OpParams::Finish3D { pattern, waterlines, .. } => (*pattern, *waterlines),
+            _ => panic!("kind drift"),
+        };
+        assert_eq!(draft, (target_pat, true), "switching to {pat_label} resets waterlines to true");
+    }
+
+    // Apply & Generate on Waterline works without refusal.
+    harness.get_by_label("Apply").scroll_to_me();
+    harness.run();
+    harness.get_by_label("Apply").click();
+    harness.run();
+    {
+        let st = &mut harness.state_mut().state;
+        let cmd = GenerateOperation::new(&st.world, "3D Finish1").expect("generate Waterline after reset");
+        st.history.execute(&st.world, cmd);
+    }
+
+    // Even if Waterline or Blend enters with waterlines: false, Steep flanks stays visible so the user can re-enable Waterlines.
+    for pat in [FinishPattern::Waterline, FinishPattern::Blend, FinishPattern::Morph] {
+        if let OpParams::Finish3D { pattern, waterlines, .. } = &mut harness.state_mut().state.op_ui.params {
+            *pattern = pat;
+            *waterlines = false;
+        }
+        harness.run();
+        assert!(harness.query_by_label("Steep flanks").is_some(), "{pat:?} with waterlines=false must show Steep flanks");
+        harness.get_by_label("Waterlines").scroll_to_me();
+        harness.run();
+        harness.get_by_label("Waterlines").click();
+        harness.run();
+        assert!(matches!(harness.state().state.op_ui.params, OpParams::Finish3D { waterlines: true, .. }));
+    }
 }
 
 #[test]

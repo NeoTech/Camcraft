@@ -47,6 +47,25 @@ fn a_dovetail_whose_flank_cuts_under_its_neck_is_refused_by_name() {
     assert!(why.contains("flank angle 90 degrees"), "{why}");
 }
 
+/// #3662: an inch dovetail (0.24 in head, 0.0575 in high, 45 degree
+/// flank, 1/8 in neck) in mm. Its flank meets the neck exactly, and the
+/// conversion puts the flank top one ulp under the neck.
+#[test]
+fn a_neck_that_meets_the_flank_exactly_is_accepted() {
+    let (d, h, n) = (0.24 * 25.4, 0.0575 * 25.4, 0.125 * 25.4);
+    let t = cutter(ToolKind::Dovetail, d, h, n, 20.0, 45.0);
+    let top = d * 0.5 - h / 45f64.to_radians().tan();
+    assert!(top < n * 0.5 && n * 0.5 - top < 1e-12, "the fixture is float dust under the neck: {top}");
+    assert_eq!(t.why_not_sane(), None);
+    assert!(Undercut::of(&t).is_some_and(|u| u.overhang() > 0.0));
+    check(&t, parametric(&t)).expect("its drawn outline passes the drawn cutter law");
+    // A neck wider than the flank top by a real amount is still refused.
+    for wider in [1e-6, 0.002] {
+        let why = Tool { shank_d: n + wider, ..t.clone() }.why_not_sane().unwrap_or_default();
+        assert!(why.contains("dovetail cutter") && why.contains("neck"), "{wider}: {why}");
+    }
+}
+
 #[test]
 fn a_lollipop_neck_must_leave_the_ball_above_its_centre() {
     let why = Tool { flute_len: 4.0, ..lollipop() }.why_not_sane().unwrap();

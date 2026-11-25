@@ -96,6 +96,12 @@ impl Undercut {
     }
 }
 
+/// Slack (mm) where a dovetail's flank top meets its neck: float dust
+/// only (#3662). Inch sizes converted to mm put a flank that meets the
+/// neck exactly one ulp under it; a neck wider by a real amount is
+/// still refused.
+const NECK_MEETS: f64 = 1e-9;
+
 /// The first rule `tool` breaks as an undercut cutter, in plain words.
 /// `None` for a sound cutter and for every other kind.
 #[must_use]
@@ -124,7 +130,7 @@ pub fn refusal(tool: &Tool) -> Option<String> {
                 return Some(format!("a dovetail cutter's flank angle {a} degrees must be over 0 and under 90"));
             }
             let top = r - fl / a.to_radians().tan();
-            if top < sr {
+            if top < sr - NECK_MEETS {
                 return Some(format!(
                     "a dovetail cutter's {a} degree flank narrows its {d} mm head to {:.3} mm at {fl} mm height, under its {sd} mm neck",
                     2.0 * top
@@ -187,6 +193,9 @@ pub fn cutter(kind: ToolKind, d: f64, head_h: f64, neck_d: f64, neck_len: f64, a
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 

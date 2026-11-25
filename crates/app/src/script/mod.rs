@@ -77,6 +77,10 @@ pub(crate) struct Env {
     /// The document file a `cam.load` opened, or a `cam.save` wrote to
     /// - what a bare `cam.save()` means the way the app's Ctrl+S does.
     pub doc_path: Option<PathBuf>,
+    /// `doc_path` is open read-only (`open_project` with `read_only`,
+    /// or a window started with `--read-only` on the live seam, #3609): a
+    /// save to it is refused, and a save to another file ends it.
+    pub doc_read_only: bool,
     /// The disk stamp of `doc_path` when `cam.load` read it or `cam.save`
     /// wrote it (#3608): a save over that file is refused when another
     /// program changed it since, unless the call says `overwrite`.
@@ -99,6 +103,7 @@ pub(crate) const VERBS: &[Verb] = &[
     Verb::new("save", -1, api::v_save, "save(path?: string | null, options?: { overwrite?: boolean }): { path: string }"),
     Verb::new("import", -1, api::v_import, "import(path: string, name?: string | null, facetBudget?: number | null, units?: \"mm\" | \"in\"): { model: string; facets: number; facet_budget?: number; notes?: string[] }"),
     Verb::new("importDxf", -1, dxf::v_import_dxf, "importDxf(path: string, options?: { setup?: string; units?: \"mm\" | \"in\"; join_tol?: number; name?: string }): DxfProfile"),
+    Verb::new("importSvg", -1, dxf::v_import_svg, "importSvg(path: string, options?: { setup?: string; units?: \"mm\" | \"in\"; join_tol?: number; name?: string }): DxfProfile"),
     Verb::new("insertText", -1, text::v_insert_text, "insertText(text: string, options: { height: number; position?: [number, number]; angle?: number; letter_spacing?: number; setup?: string; name?: string }): TextProfile"),
     Verb::new("exportTools", -1, api::v_export_tools, "exportTools(path: string, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; tools: number; format: string }"),
     Verb::new("importTools", -1, api::v_import_tools, "importTools(path: string, mode?: \"add\" | \"update\" | \"replace\", holders?: boolean, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; format: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string }"),
@@ -134,6 +139,7 @@ impl Env {
             logs: Vec::new(),
             errors: Vec::new(),
             doc_path: None,
+            doc_read_only: false,
             doc_stamp: None,
             posted: None,
             last_value: Value::Null,

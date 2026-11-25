@@ -14,6 +14,7 @@ use camcraft_motion::entry::Entry3D;
 use camcraft_motion::geo2d::{Loop, Point2, Region};
 use camcraft_motion::links::{Approach, Compensation, Links};
 use camcraft_motion::machining2d::{contour, ContourParams, Lead, Side};
+use camcraft_motion::path_picks::{PathPick, PathPicks};
 
 fn square() -> Region {
     let pts = [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0), (0.0, 40.0)];
@@ -49,10 +50,12 @@ fn params(pick: Point2, comp: Compensation) -> ContourParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         blend_turns: false,
+        blend_radius: None,
         links: Links {
-            approach: Approach { start_point: Some(pick), compensation: comp, ..Approach::DEFAULT },
+            approach: Approach { compensation: comp, ..Approach::DEFAULT },
             ..Links::PLANAR
         },
+        picks: PathPicks { start: vec![PathPick::xy(pick)], exit: Vec::new() },
     }
 }
 

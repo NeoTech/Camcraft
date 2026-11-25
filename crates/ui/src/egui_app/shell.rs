@@ -48,6 +48,8 @@ pub(crate) enum Tab {
     Properties,
     Machines,
     AiChat,
+    /// #3892: retired - the tool library is its own window now. Kept
+    /// because a saved panel setup can name it; `setups::decode` drops it.
     Tools,
     DebugInfo,
 }
@@ -175,6 +177,8 @@ pub(crate) fn shell_layout(
     // no panel below it ever moves in the snapshot until something opens it.
     let windows = crate::frame_cost::span("ui/windows");
     pages::tool_shape_editor_window(ui.ctx(), state);
+    // #3892: the tool library - same window law, closed on a fresh State.
+    super::tool_library_dialog::tool_library_window(ui.ctx(), state);
     // M1.7d: the G-code viewer - same window law as the tool editor (an
     // in-app egui::Window over the dock; the single-OS-window law
     // stands). None on a fresh State, closed by ✖, reopened by the next
@@ -284,7 +288,9 @@ impl TabViewer for ShellTabs<'_> {
                 let pal = theme::current();
                 pages::properties(ui, self.state, &pal);
             }
-            Tab::Tools => super::tool_library::draw(ui, self.state),
+            // #3892: the tool library is a window now; a dock that still
+            // holds the old tab (a saved setup) drops it on load.
+            Tab::Tools => {}
             Tab::Machines => {
                 let pal = theme::current();
                 machines_pane::draw(ui, self.state, &pal);

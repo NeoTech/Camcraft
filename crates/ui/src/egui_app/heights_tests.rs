@@ -39,6 +39,7 @@ fn pocket(clearance_z: Height, top_z: Height, bottom_z: Height) -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -200,9 +201,9 @@ fn an_unresolved_relation_says_why_never_a_number() {
         note.as_deref(),
         Some("retract vs clearance unresolved: no operation selection in this context")
     );
-    let corner =
+    let tip =
         crate::operations::corner_note(&state.world, None, None, None, &Height::of(R::TopOfSelection, 0.0), 1.0);
-    assert_eq!(corner, "the corner is unresolved: no operation selection in this context");
+    assert_eq!(tip, "the cone tip is unresolved: no operation selection in this context");
 }
 
 

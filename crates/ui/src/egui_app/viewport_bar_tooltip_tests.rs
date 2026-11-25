@@ -145,6 +145,7 @@ fn nav_buttons_attach_tooltips_on_hover() {
 #[test]
 #[ignore = "evidence generator: opt-in with CAMCRAFT_EVIDENCE_SCREENSHOTS_OUT"]
 fn generate_evidence_screenshots() {
+    let _gpu = crate::headless_gpu::gpu_guard(); // #3605: the kittest renderer makes devices
     let Some(out_dir) = std::env::var_os("CAMCRAFT_EVIDENCE_SCREENSHOTS_OUT")
         .map(std::path::PathBuf::from)
     else {

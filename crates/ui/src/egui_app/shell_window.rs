@@ -33,7 +33,7 @@ mod start;
 
 /// The windowed shell (the `--ui egui` entry without `--headless`); returns
 /// the process exit code.
-pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode) -> i32 {
+pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
     let event_loop = match EventLoop::new() {
         Ok(el) => el,
         Err(err) => {
@@ -49,7 +49,7 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
     shell.start = start;
     // #2462: a file named on the command line goes through the same
     // import / open command as the dialogs, on the first frame.
-    crate::launch_file::queue(&mut shell.state, files);
+    crate::launch_file::queue(&mut shell.state, files, read_only);
     // #2384: with no file named, the start page lists the recent projects.
     super::home::at_start(&mut shell.state, files);
     // #1946: wake the Wait event loop whenever the AI chat worker queues
@@ -57,6 +57,11 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
     let ai_proxy = event_loop.create_proxy();
     shell.state.set_ai_wake(std::sync::Arc::new(move || {
         let _ = ai_proxy.send_event(());
+    }));
+    // #2428: check GitHub for a newer release once per day on native startup.
+    let update_proxy = event_loop.create_proxy();
+    shell.state.start_update_check(std::sync::Arc::new(move || {
+        let _ = update_proxy.send_event(());
     }));
     // #183: the opt-in live MCP server. Its waker posts an empty user
     // event, which wakes the idle loop for a frame that answers the call.
@@ -76,6 +81,27 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
                 diag_warn!("mcp: cannot listen on 127.0.0.1:{port}: {err}");
                 shell.state.status = format!("MCP server not started: 127.0.0.1:{port}: {err}");
             }
+        }
+    }
+    // #3751: the UI link for `camcraft-cli --ui`, on by default. A window
+    // without it still runs; the status line says why.
+    let link_env = std::env::var(camcraft_app::mcp::link::OFF_ENV).ok();
+    if camcraft_app::mcp::link::enabled(link_env.as_deref()) {
+        match camcraft_app::mcp::link::dir() {
+            Some(dir) => {
+                let proxy = event_loop.create_proxy();
+                let wake: camcraft_app::mcp::Wake = Box::new(move || {
+                    let _ = proxy.send_event(());
+                });
+                match camcraft_app::mcp::Inbox::link(&dir, wake) {
+                    Ok(inbox) => shell.state.ui_link = Some(inbox),
+                    Err(err) => {
+                        diag_warn!("ui link: cannot open in {}: {err}", dir.display());
+                        shell.state.status = format!("CLI link not started: {err}");
+                    }
+                }
+            }
+            None => diag_warn!("ui link: no user folder for the link file; camcraft-cli --ui cannot reach this window"),
         }
     }
     let code = match event_loop.run_app(&mut shell) {
@@ -271,6 +297,8 @@ impl Shell {
         // #2958: the anti-aliasing the Display menu offers on this device.
         self.state.samples_offered = crate::viewport::offered_samples(&adapter, device.features(), VIEW3D_FORMAT);
         diag_info!("viewport: sample counts offered {:?}", self.state.samples_offered);
+        // #3336: the playback's GPU cut runs on this render device, or not at all.
+        self.state.layer_play.cutter = crate::play_layer::shell_cutter(&adapter, &device, &queue);
 
         let mut renderer = Renderer::new(&device, config.format, RendererOptions::default());
         let scene = world::collect(&self.state);
@@ -357,6 +385,7 @@ impl Shell {
         // #183: the MCP listener stops (and its thread is joined) first,
         // so no wake-up reaches a closing loop.
         self.state.ai_chat.shutdown();
+        self.state.update_watcher.clear();
         self.state.ai_mcp_inbox = None;
         self.state.mcp = None;
         self.renderer = None;

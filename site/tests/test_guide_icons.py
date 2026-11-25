@@ -45,13 +45,18 @@ def section_lead(body):
     operation heading, and `cargo xtask catalog --check` holds it there. The
     section's own content starts after that block. Only one leading,
     well-formed block is skipped: a block elsewhere or without its end
-    marker leaves the body as it is, so the icon check still fails.
+    marker before section text leaves the body as it is, so the icon check
+    still fails.
     """
     body = body.lstrip()
-    if body.startswith(CATALOG_START + "\n"):
-        end = body.find("\n" + CATALOG_END + "\n")
-        if end != -1:
-            body = body[end + len(CATALOG_END) + 2:].lstrip()
+    block = re.match(
+        re.escape(CATALOG_START) + r"\n\*\*Example cases\*\*\n\n"
+        r"(?:No catalog case yet\.\n|(?:- \[[^\n]+\]\([^\n]+\)\n)+)"
+        + re.escape(CATALOG_END) + r"\n",
+        body,
+    )
+    if block:
+        body = body[block.end():].lstrip()
     return body
 
 
@@ -84,6 +89,42 @@ class RenderedIcons(HTMLParser):
 
 
 class GuideIcons(unittest.TestCase):
+    def test_vcarve_stepdown_default_is_five(self):
+        page = SITE / "content/guide/operations/operations-2d.md"
+        text = page.read_text()
+        body = text.split("\n## V-Carve\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("| Heights | Stepdown | 5 |", body)
+
+    def test_section_lead_preserves_unclosed_catalog_before_later_block(self):
+        icon = '{{ <icon name="op-v-carve" /> }}'
+        body = (
+            f"\n{CATALOG_START}\n**Example cases**\n\nNo catalog case yet.\n\n"
+            f"{icon}\n\nSection text.\n\n"
+            f"{CATALOG_START}\n**Example cases**\n\nNo catalog case yet.\n"
+            f"{CATALOG_END}\n\n{icon}\n"
+        )
+        self.assertEqual(section_lead(body), body.lstrip())
+
+    def test_section_lead_preserves_catalog_with_intervening_section_text(self):
+        body = (
+            f"\n{CATALOG_START}\n**Example cases**\n\nNo catalog case yet.\n\n"
+            f"Section text before the end marker.\n{CATALOG_END}\n\n"
+            '{{ <icon name="op-v-carve" /> }}\n'
+        )
+        self.assertEqual(section_lead(body), body.lstrip())
+
+    def test_section_lead_skips_only_a_valid_leading_catalog(self):
+        icon = '{{ <icon name="op-v-carve" /> }}\n'
+        for cases in (
+            "No catalog case yet.",
+            "- [2d/first-part](https://example.test/2d/first-part)",
+        ):
+            with self.subTest(cases=cases):
+                block = f"{CATALOG_START}\n**Example cases**\n\n{cases}\n{CATALOG_END}\n\n"
+                self.assertEqual(section_lead("\n" + block + icon), icon)
+                self.assertEqual(section_lead("\n" + icon + block), icon + block)
+        self.assertEqual(section_lead("\n" + icon), icon)
+
     def test_component_static_icons_and_license_match_app(self):
         component = SITE / "templates/shortcodes/icon.html"
         self.assertTrue(component.is_file(), "Missing Zola icon component")
@@ -94,6 +135,7 @@ class GuideIcons(unittest.TestCase):
 
         table = parse_icon_table()
         expected_stems = set(table.values())
+        expected_stems.update({"op-multiaxis-deburr", "op-waterjet-profile"})
         static_icons = SITE / "static/icons"
         self.assertTrue(static_icons.is_dir(), "Missing site/static/icons directory")
 

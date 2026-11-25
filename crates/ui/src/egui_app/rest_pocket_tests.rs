@@ -60,6 +60,7 @@ fn pocket(strategy: PocketStrategy, rest: Option<RestParams>) -> OpParams {
         rest,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

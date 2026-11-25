@@ -148,6 +148,7 @@ fn thread_at(holes: Vec<Hole>, top: f64) -> OpParams {
         top_z: Height::fixed(top), bottom_z: None, infeed: 0.1, feed: 400.0, plunge_feed: 150.0,
         climb: true, holes, pitch: None, hand: camcraft_app::cl::ThreadHand::Right,
         external: false, passes: camcraft_app::machining2d::ThreadPasses::default(),
+        picks: Default::default(),
     }
 }
 
@@ -184,6 +185,7 @@ fn open_ahead(world: &World, h: &mut History, thread: &OpParams) {
             climb: true,
             tolerance: 0.01,
             holes: vec![*hole],
+            picks: Default::default(),
         };
         h.execute(world, CreateOperation::new(world, &op, &t, SrcRef::Entity("part".into()), bore).expect("create bore"));
         h.execute(world, GenerateOperation::new(world, &op).expect("generate bore"));
@@ -251,7 +253,7 @@ fn a_thread_taken_below_the_models_hole_floor_convicts() {
     let OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, pitch, hand, .. } = thread(0.0, 5.0) else {
         unreachable!("a thread op")
     };
-    let p = OpParams::Thread { break_through: None, clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h], pitch, hand, external: false, passes: camcraft_app::machining2d::ThreadPasses::default() };
+    let p = OpParams::Thread { break_through: None, clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h], pitch, hand, external: false, passes: camcraft_app::machining2d::ThreadPasses::default(), picks: Default::default() };
     let w = verdict(drilled_block(5.0), p);
     assert!(gouged(&w), "{w:?}");
 }

@@ -42,10 +42,11 @@ pub struct WireContourDto {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub condition: String,
     pub side: WireSideDto,
-    /// The start hole / threading point, `[x, y]` mm; absent is not
-    /// stated.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Legacy pre-#3339 start hole, read on load and migrated into `picks`.
+    #[serde(default, skip_serializing)]
     pub start: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "PathPicksDto::is_empty")]
+    pub picks: PathPicksDto,
     /// The tabs (#539); absent is off. Each key inside is optional in
     /// the file so a missing one is refused by name at generation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -53,6 +54,10 @@ pub struct WireContourDto {
     /// The operator states the slug is caught; absent is not (#539).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub capture: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub both_pieces_restrained: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stock_centered_in_xy_travel: bool,
     /// The constant taper, degrees (#536); absent is a vertical cut, so
     /// every file written before it reads unchanged.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -168,7 +173,8 @@ impl WireContourDto {
                 WireSide::Left => WireSideDto::Left,
                 WireSide::Right => WireSideDto::Right,
             },
-            start: p.start,
+            start: None,
+            picks: PathPicksDto::from_picks(&p.picks),
             tabs: p.tabs.as_ref().map(|t| WireTabsDto {
                 count: t.count,
                 width: t.width,
@@ -176,6 +182,8 @@ impl WireContourDto {
                 cutoff_condition: t.cutoff_condition.clone(),
             }),
             capture: p.capture,
+            both_pieces_restrained: p.both_pieces_restrained,
+            stock_centered_in_xy_travel: p.stock_centered_in_xy_travel,
             taper_deg: p.taper_deg,
             four_axis: p.four_axis.as_ref().map(|f| WireFourAxisDto {
                 pairing: match f.pairing {
@@ -208,7 +216,7 @@ impl WireContourDto {
                 WireSideDto::Left => WireSide::Left,
                 WireSideDto::Right => WireSide::Right,
             },
-            start: self.start,
+            picks: self.picks.with_legacy(self.start, None),
             tabs: self.tabs.as_ref().map(|t| WireTabs {
                 count: t.count,
                 width: t.width,
@@ -216,6 +224,8 @@ impl WireContourDto {
                 cutoff_condition: t.cutoff_condition.clone(),
             }),
             capture: self.capture,
+            both_pieces_restrained: self.both_pieces_restrained,
+            stock_centered_in_xy_travel: self.stock_centered_in_xy_travel,
             taper_deg: self.taper_deg,
             four_axis: self.four_axis.as_ref().map(|f| WireFourAxis {
                 pairing: match f.pairing {
@@ -249,9 +259,14 @@ mod tests {
             bottom_z: Height::fixed(0.0),
             condition: "C110".into(),
             side: WireSide::Die,
-            start: Some([0.0, 0.0]),
+            picks: crate::path_picks::PathPicks {
+                start: vec![crate::path_picks::PathPick::xy(Point2::new(0.0, 0.0))],
+                exit: Vec::new(),
+            },
             tabs,
             capture,
+            both_pieces_restrained: false,
+            stock_centered_in_xy_travel: false,
             taper_deg: 0.0,
             four_axis: None,
             burnout: None,
@@ -282,4 +297,20 @@ mod tests {
         let OpParams::WireContour(p) = partial.to_params() else { unreachable!() };
         assert!(p.tabs.is_some_and(|t| t.width.is_none()));
     }
+
+    #[test]
+    fn cutoff_setup_statements_round_trip_and_old_files_have_neither() {
+        let mut original = op(None, false);
+        original.side = WireSide::Right;
+        original.picks.start.clear();
+        let old = serde_json::to_string(&WireContourDto::from_op(&original)).unwrap();
+        assert!(!old.contains("both_pieces_restrained"));
+        assert!(!old.contains("stock_centered_in_xy_travel"));
+        assert_eq!(serde_json::from_str::<WireContourDto>(&old).unwrap().to_params(), OpParams::WireContour(original.clone()));
+        original.both_pieces_restrained = true;
+        original.stock_centered_in_xy_travel = true;
+        let saved = serde_json::to_string(&WireContourDto::from_op(&original)).unwrap();
+        assert_eq!(serde_json::from_str::<WireContourDto>(&saved).unwrap().to_params(), OpParams::WireContour(original));
+    }
+
 }

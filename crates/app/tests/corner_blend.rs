@@ -90,8 +90,9 @@ fn cp(blend: bool) -> ContourParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: blend,
+        blend_turns: blend, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 
@@ -164,6 +165,7 @@ fn pocket_op(blend: bool) -> OpParams {
         blend_turns: blend,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -186,10 +188,11 @@ fn contour_op(blend: bool) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: blend,
+        blend_turns: blend, blend_radius: None,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

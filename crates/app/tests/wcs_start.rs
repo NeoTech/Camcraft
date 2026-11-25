@@ -78,7 +78,7 @@ fn face() -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(CLEAR),
         cut_z: Height::fixed(10.0),
@@ -87,6 +87,7 @@ fn face() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -112,6 +113,8 @@ fn finish() -> OpParams {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        waterlines: true,
+        picks: Default::default(),
     }
 }
 
@@ -131,6 +134,7 @@ fn drill() -> OpParams {
         cross: Vec::new(),
         break_through: None,
         break_through_from: Default::default(),
+        picks: Default::default(),
     }
 }
 

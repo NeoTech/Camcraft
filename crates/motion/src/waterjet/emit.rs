@@ -140,9 +140,12 @@ fn head(cs: &[Contour], order: &[usize], gaps: &[Vec<Gap>], pierces: usize, p: &
         "waterjet: outer contours clockwise, holes counter-clockwise".into()
     });
     out.push(format!(
-        "waterjet: pierce time {:.2} s and abrasive delay {:.2} s at each pierce (the post's waterjet record carries them, #1882)",
+        "waterjet: requested pierce time {:.2} s and abrasive delay {:.2} s at each pierce; jet and dwell records are not implemented",
         p.pierce_time, p.abrasive_delay
     ));
+    if p.lead_in == 0.0 {
+        out.push("waterjet: zero lead-in can place a pierce on the kerf ring at the part edge".into());
+    }
     if let Some(t) = p.linearize {
         out.push(format!("waterjet: arcs sent as chords within {t:.4} mm - the control reads no G2/G3"));
     }

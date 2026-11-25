@@ -195,7 +195,8 @@ pub fn detect_holes(
     if let OpParams::Thread { external: true, holes, .. } = &mut params {
         let found = bosses_of(world, setup, src).map_err(|e| e.to_string())?;
         if found.is_empty() {
-            return Err("no upright round bosses found in the source model - an external thread is milled on one".to_string());
+            let (place, hint) = (super::detect_source::searched(src), super::detect_source::stock_hint(world, name, src));
+            return Err(format!("no upright round bosses found in {place} - an external thread is milled on one{hint}"));
         }
         *holes = found;
         return Ok(DetectedHoles { params, skipped: Vec::new(), undersize: Vec::new() });
@@ -217,10 +218,11 @@ pub fn detect_holes(
     if axial.is_empty() && radial.is_empty() {
         return Err(if !side.is_empty() {
             format!("no hole this Drill op can make along Z: {}", side.join("; "))
-        } else if is_drill {
-            "no drilled holes found in the source model - Z or radial".to_string()
         } else {
-            "no Z-axis holes found in the source model - this ride reads only those".to_string()
+            let (place, hint) = (super::detect_source::searched(src), super::detect_source::stock_hint(world, name, src));
+            let what = if is_drill { "drilled holes" } else { "Z-axis holes" };
+            let note = if is_drill { "Z or radial" } else { "this ride reads only those" };
+            format!("no {what} found in {place} - {note}{hint}")
         });
     }
     *holes = axial;

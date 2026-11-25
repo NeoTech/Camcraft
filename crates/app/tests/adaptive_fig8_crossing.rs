@@ -54,6 +54,7 @@ fn fig8_params() -> OpParams {
         links: Links::PLANAR,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

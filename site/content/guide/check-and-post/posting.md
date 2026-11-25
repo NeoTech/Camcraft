@@ -13,13 +13,55 @@ G-code viewer.
 ## Post processors
 
 The post is chosen on the **Post** page: a setup can pick its own, and a
-setup that picks none uses the document's. CamCraft ships posts for Fanuc,
-Haas, Siemens 840D, Heidenhain, Mazak, Tormach PathPilot, Makera Carvera and
-Fanuc Lathe. Other built-ins include grblHAL, TinyG, Tormach PathPilot
-Lathe and Plasma, Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), G-EDM
-Wire EDM, and Sinker EDM (ISO). Select a post for your machine kind and control.
+setup that picks none uses the document's. Select a post for your machine
+kind and control. The 0.26.0 release includes these scripts in
+`assets/posts/`; machine filenames below are in `assets/machines/`.
+A machine template is a starting point, not proof of the installed control
+or machine configuration. Check its travel, tools and clearance before use.
+
+| Post choice | Script | Control | Supplied machine files |
+|---|---|---|---|
+| Fanuc | `fanuc.cps` | Fanuc milling | No control-specific file; generic `vmc.mch` and `3axis-vmc.mch` templates |
+| Haas | `haas.cps` | Haas milling | `haas-vf2.mch`, `haas-vf2ss.mch`, `haas-mini-mill.mch`, `haas-dt1.mch`, `haas-dm1.mch` |
+| Siemens 840D | `sinumerik.cps` | Siemens Sinumerik 840D | None dedicated |
+| Siemens 810M | `sinumerik-810m.cps` | Siemens Sinumerik 810M / WinNC 810M | `emco-vmc-200.mch` (EMCO VMC-200) |
+| Heidenhain | `heidenhain.cps` | Heidenhain TNC DIN/ISO | None dedicated |
+| Mazak | `mazak.cps` | Mazak ISO milling | None dedicated |
+| Tormach PathPilot | `tormach.cps` | PathPilot milling | `tormach-770mx.mch`, `tormach-770mx-ml.mch`, `tormach-770mx-microarc4.mch`, `tormach-770m.mch`, `tormach-770m-plus.mch`, `tormach-1100mx.mch`, `tormach-1100m.mch`, `tormach-1100m-plus.mch`, `tormach-1500mx.mch`, `tormach-pcnc440.mch`, `tormach-24r.mch`, `tormach-xstech.mch`, `tormach-xstech-pro.mch` |
+| grblHAL | `grblhal.cps` | grblHAL | `grblhal-3axis.mch`, `sienci-altmill-2x4.mch`, `sienci-altmill-4x4.mch`, `sienci-altmill-4x8.mch` |
+| TinyG | `tinyg.cps` | Synthetos TinyG | `tinyg-3axis.mch` |
+| LinuxCNC | `linuxcnc.cps` | LinuxCNC RS274NGC | `linuxcnc-3axis.mch` |
+| Grbl 1.1 | `grbl.cps` | Grbl 1.1 | `grbl-3axis.mch` |
+| Doosan DNM | `doosan-dnm.cps` | Fanuc 0i/31i-M on Doosan DNM | `doosan-dnm-3axis.mch`, `doosan-dnm.mch` |
+| Makera Carvera | `carvera.cps` | Makera Carvera | `makera-carvera.mch`, `makera-carvera-air.mch`, `makera-z1.mch` |
+| Mach4 | `mach4.cps` | Mach4 Mill | None dedicated |
+| RichAuto DSP A11 | `richauto.cps` | RichAuto DSP A11 router | None dedicated |
+| Mach3 | `mach3.cps` | Mach3 Mill | Mach3-era templates: `tormach-pcnc770.mch`, `tormach-pcnc770-s3.mch`, `tormach-pcnc1100-s1.mch`, `tormach-pcnc1100-s2.mch`, `tormach-pcnc1100-s3.mch`; select the post manually and check the installed control |
+| Heidenhain Klartext | `heidenhain-klartext.cps` | iTNC 530, NC software 340490-03 | `fehlmann-picomax55.mch` |
+| Fanuc Lathe | `fanuc-lathe.cps` | Fanuc turning | No control-specific file; generic `lathe.mch` template |
+| Tormach PathPilot Lathe | `tormach-lathe.cps` | PathPilot turning | `tormach-8l.mch`, `tormach-15l-slant-pro.mch`, `tormach-15lx-slant-pro.mch` |
+| Tormach PathPilot Plasma | `tormach-plasma.cps` | PathPilot plasma | `tormach-1300pl.mch` |
+| Generic ISO Wire EDM | `wire-iso.cps` | Generic RS-274 motion; EDM words from machine codes | No control-specific pairing; fill the wire machine's EDM code templates |
+| Sodick Wire EDM (Mark 21) | `sodick-wire.cps` | Sodick Mark 21 / EX21, vertical 2-axis work | `sodick-alc400g.mch`; select the post manually and replace example technology values |
+| Native wire EDM job files | `agie-native.cps` | Agie Classic Cut 2S native job | `agiecut-classic-2s.mch` template; select the post manually |
+| G-EDM Wire EDM | `g-edm.cps` | G-EDM G-RBLv3, 2-axis wire | None dedicated |
+| Sinker EDM (ISO) | `sinker-iso.cps` | Generic ISO-style sinker; EDM words from machine codes | `sinker-edm.mch` template; fill its EDM code templates |
+| Load by file | `waterjet-iso.cps` | Generic ISO abrasive waterjet | None dedicated; this supplied script is not a built-in picker entry in 0.26.0 |
+
+The generic `tilthead.mch` and `millturn.mch` templates do not name a
+control-specific post. The `ooznest-workbee-1000x1500.mch` file describes
+an Estlcam machine, but 0.26.0 supplies no Estlcam post. A machine file
+alone does not establish that a compatible post exists.
+
 A post is a `.cps` script, so you can load your own with
 **Load post (.cps)**.
+
+**Native wire EDM job:** choose **One program** and write to a new job
+directory. The job includes nominal ISO geometry, a resource manifest and
+a setup script with zero erosion steps. See
+[Native wire EDM job files](@/guide/operations/operations-edm.md#native-wire-edm-job-files)
+for supported cuts, separation settings and the checks to make on the
+control.
 
 To write or debug a script, see the
 [Post-processor API](@/guide/reference/post-processors.md).

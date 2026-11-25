@@ -72,6 +72,9 @@ fn judge(t: &Toolpath, region: &Region, model: Option<&[Triangle]>) -> Vec<Warni
         spindle: None,
         rims: &[],
         corner_reliefs: &[],
+        // #3679: this fixture states no stepdown, so the plunge law
+        // stays silent.
+        plunge_stepdown: None,
     };
     verify(t, &cx)
 }

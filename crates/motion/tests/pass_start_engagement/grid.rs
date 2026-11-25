@@ -1,6 +1,6 @@
 //! The 2-D material grid of the #3567 entry pins (`pass_start_engagement`):
-//! the stock as cells, the tool disc that clears them, the rim reading of
-//! the width of cut, and the sweep of a move. Provenance: a plain raster
+//! the stock as cells, the tool disc that clears them, and the sweep of a
+//! move. Provenance: a plain raster
 //! material model of the public milling handbooks; the rim law is the
 //! shape-mask helper's (`common/mask_grid.rs`); no vendor material consulted.
 
@@ -57,50 +57,6 @@ impl Grid {
                 let p = self.cell(i, j);
                 if (p.x - c.x).hypot(p.y - c.y) <= R && self.cells[j * self.nx + i] {
                     self.cells[j * self.nx + i] = false;
-                    n += 1;
-                }
-            }
-        }
-        n as f64 * CELL * CELL
-    }
-
-    /// The width of cut (mm) of the disc at `c` moving along `dir`: the
-    /// longest run of standing stock on the leading half of its rim, read
-    /// as the chord depth `R (1 - cos)` - the law of the shape-mask
-    /// helper's `contact_width`, on this grid.
-    pub fn width(&self, c: Point2, dir: (f64, f64)) -> f64 {
-        const RIM: usize = 64;
-        if dir.0.hypot(dir.1) <= 1e-12 {
-            return 0.0;
-        }
-        let rim = R + 0.75 * CELL;
-        let base = dir.1.atan2(dir.0) - std::f64::consts::FRAC_PI_2;
-        let (mut best, mut run) = (0usize, 0usize);
-        for k in 0..RIM {
-            let a = base + (k as f64 + 0.5) * std::f64::consts::PI / RIM as f64;
-            let q = Point2::new(c.x + rim * a.cos(), c.y + rim * a.sin());
-            let i = (q.x - self.lo.x) / CELL;
-            let j = (q.y - self.lo.y) / CELL;
-            let stock = i >= 0.0
-                && j >= 0.0
-                && (i as usize) < self.nx
-                && (j as usize) < self.ny
-                && self.cells[j as usize * self.nx + i as usize];
-            run = if stock { run + 1 } else { 0 };
-            best = best.max(run);
-        }
-        let theta = (best as f64 * std::f64::consts::PI / RIM as f64).min(std::f64::consts::PI);
-        R * (1.0 - theta.cos())
-    }
-
-    /// The stock area (mm^2) still standing within `r` of `c`.
-    pub fn standing(&self, c: Point2, r: f64) -> f64 {
-        let (i0, j0, i1, j1) = self.window(c, r);
-        let mut n = 0usize;
-        for j in j0..j1 {
-            for i in i0..i1 {
-                let p = self.cell(i, j);
-                if self.cells[j * self.nx + i] && (p.x - c.x).hypot(p.y - c.y) <= r {
                     n += 1;
                 }
             }

@@ -42,6 +42,8 @@ fn face(cut_z: f64) -> OpParams {
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false,
+        blend_radius: None,
+        picks: Default::default(),
     }
 }
 

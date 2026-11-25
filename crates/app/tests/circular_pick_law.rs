@@ -118,6 +118,7 @@ fn circular(bottom: f64) -> OpParams {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

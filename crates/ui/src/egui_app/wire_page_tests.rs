@@ -209,6 +209,27 @@ fn wire_four_axis_states_the_stand_off_choice_and_the_verify_tolerance() {
     assert_eq!(draft(&h).four_axis.as_ref().expect("the block").widening, WireWidening::Uniform);
 }
 
+#[test]
+fn the_open_cutoff_declarations_apply_and_undo_together() {
+    let mut h = wire_page();
+    let hold = "Both pieces clamped through all passes";
+    let travel = "Stock centered in installed XY travel";
+    assert!(h.query_by_label(hold).is_none());
+    agie_post(&mut h);
+    let OpParams::WireContour(op) = &mut h.state_mut().op_ui.params else { panic!("wire draft") };
+    op.side = camcraft_app::operation::WireSide::Left;
+    h.run_steps(3);
+    press(&mut h, hold);
+    press(&mut h, travel);
+    assert!(!live(&h).both_pieces_restrained && !live(&h).stock_centered_in_xy_travel);
+    press(&mut h, "Apply");
+    h.state_mut().drain_actions();
+    assert!(live(&h).both_pieces_restrained && live(&h).stock_centered_in_xy_travel);
+    let st = h.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert!(!live(&h).both_pieces_restrained && !live(&h).stock_centered_in_xy_travel);
+}
+
 /// #3207: the sharp-inside-corner option is off by default, its row is
 /// on the geometry tab, and Apply stores it as one undoable edit.
 #[test]
@@ -226,4 +247,36 @@ fn wire_sharp_inside_corners_toggle_applies_and_undoes() {
     let st = h.state_mut();
     assert!(st.history.undo(&st.world));
     assert!(!live(&h).sharp_corners, "one undo restores the default");
+}
+
+/// Only the native Agie post reads the open-cut statements (#3996). The
+/// frames after the post change let the page draft follow the new document.
+fn agie_post(h: &mut Harness<'static, State>) {
+    h.state_mut().pending.push_back(CommandKind::SelectPostNamed(camcraft_app::posting::agie::POST.into()));
+    h.state_mut().drain_actions();
+    h.run_steps(3);
+}
+
+fn open_cut(h: &mut Harness<'static, State>) {
+    let OpParams::WireContour(op) = &mut h.state_mut().op_ui.params else { panic!("wire draft") };
+    op.side = camcraft_app::operation::WireSide::Right;
+    h.run_steps(3);
+}
+
+/// The two open-cut statements are Agie-only: another wire post does not
+/// read them, so its open cut does not show them (#3996).
+#[test]
+fn open_cut_hides_the_agie_statements_for_another_wire_post() {
+    let rows = ["Both pieces clamped through all passes", "Stock centered in installed XY travel"];
+    let mut h = wire_page();
+    open_cut(&mut h);
+    assert!(h.query_by_label("Freed piece captured").is_some(), "the Passes tab shows");
+    for row in rows {
+        assert!(h.query_by_label(row).is_none(), "{row} shows for a non-Agie post");
+    }
+    agie_post(&mut h);
+    open_cut(&mut h);
+    for row in rows {
+        assert!(h.query_by_label(row).is_some(), "{row} is missing for the Agie post");
+    }
 }

@@ -48,13 +48,14 @@ impl DoNotTouch {
 }
 
 /// Operations that honor "Do not touch" across generation and
-/// verification; 2D Adaptive with both methods (#3346), 3D Finish (#3347),
-/// and Engrave (#3349).
+/// verification; 2D Pocket (#3345), 2D Adaptive with both methods (#3346),
+/// 3D Finish (#3347), and Engrave (#3349).
 #[must_use]
 pub fn do_not_touch_applies(kind: OpType) -> bool {
     matches!(
         kind,
-        OpType::Offset2D
+        OpType::Pocket
+            | OpType::Offset2D
             | OpType::Adaptive2D
             | OpType::Pocket3D
             | OpType::Trace
@@ -71,7 +72,7 @@ pub fn do_not_touch_unsupported(kind: OpType) -> Option<String> {
         None
     } else {
         Some(format!(
-            "'Do not touch' is supported on Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave operations - clear it on {kind}"
+            "'Do not touch' is supported on 2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave operations - clear it on {kind}"
         ))
     }
 }

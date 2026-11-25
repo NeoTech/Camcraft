@@ -196,7 +196,8 @@ Read the plan before asking:
   again without the one to defer, and say so.
 - A stacked child whose base is not `main` is retargeted
   (`gh pr edit B --base main`) before its parent merges with
-  `--delete-branch`; otherwise GitHub closes it.
+  `--delete-branch`; otherwise GitHub closes it. A sub-PR whose base is a
+  side branch (`side/*`) keeps that base (AGENTS.md **Side branch**).
 - Process PRs no longer touch `.claude/PROCESS_VERSION` (#1153), so they do
   not conflict with each other on it. A PR that still edits that file is
   sent back: the merging session is its one writer (see "After all merges").
@@ -301,6 +302,9 @@ when a session chooses to check a wave before the merges. A missing
      `gh pr merge N --merge --delete-branch`;
    - a fork PR: `gh pr merge N --merge` (the fork's branch is not ours to
      delete).
+   - a PR whose head is a side branch (`side/*`, the switch-over PR):
+     only on the maintainer's word, and `gh pr merge N --merge` without
+     `--delete-branch` (AGENTS.md **Side branch**).
 3. Confirm `gh pr view N --json state` is `MERGED`; note the merge commit.
 4. About 5 seconds, then re-read the next PR's `mergeable` (retry while
    `UNKNOWN`). The simulation said it is clean; if GitHub says `CONFLICTING`
@@ -333,7 +337,10 @@ Do not re-review, re-gate or refresh anything between wave-1 merges.
 
 **After all merges:**
 - For each merged PR, read the issues it closed (`closingIssuesReferences`)
-  and remove `in-review` and `claimed` from those issues.
+  and remove `in-review` and `claimed` from those issues. A sub-PR whose
+  base is a side branch closes no issue: its issue keeps `in-review` and
+  gets the comment `merged to side/<name> in PR #M; closes at the
+  switch-over` (AGENTS.md **Side branch**).
 - **Process files:** if a merged PR changed process files (`AGENTS.md`,
   `.claude/agents/`, `.claude/skills/`, `scripts/gate.*`, `xtask/`), once
   for the whole batch: run `cargo xtask process-bump` in a worktree off the

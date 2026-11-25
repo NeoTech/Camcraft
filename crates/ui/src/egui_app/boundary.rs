@@ -380,7 +380,7 @@ mod frame {
         let tool = catalog().into_iter().find(|(n, _)| *n == "EM-0400-2FL").map(|(_, t)| t).expect("tool");
         state.pending.push_back(CommandKind::AddTool { name: "EM-0400-2FL".into(), tool });
         let params = OpParams::Face { holes: Default::default(),
-            blend_turns: false,
+            blend_turns: false, blend_radius: None,
             tilt: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
@@ -390,6 +390,7 @@ mod frame {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         };
         state.pending.push_back(CommandKind::CreateOperation {
             name: "Face1".into(),

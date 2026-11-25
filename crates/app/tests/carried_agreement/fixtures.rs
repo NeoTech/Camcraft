@@ -75,7 +75,7 @@ fn face(cut_z: f64, stepover: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover,
         clearance_z: Height::fixed(30.0),
         cut_z: Height::fixed(cut_z),
@@ -84,6 +84,7 @@ fn face(cut_z: f64, stepover: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -152,6 +153,7 @@ fn pocket(bottom_z: f64, stepover: f64, rest_rough: bool) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -194,9 +196,10 @@ fn contour() -> OpParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

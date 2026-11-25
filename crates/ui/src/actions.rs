@@ -188,13 +188,13 @@ fn walk_whole_program(state: &mut State) {
 /// thread, and until its first publication the sheet stands.
 fn follow_playhead(state: &mut State, judged: bool) -> Result<(), String> {
     use camcraft_app::stock_play::{progress, PlaySeed};
-    use camcraft_app::stock_play_worker::PlayWorker;
     use camcraft_app::stock_view::DEFAULT_TEXELS;
     if state.field_play.is_none() {
         let seed = PlaySeed::gather(&state.world, judged, DEFAULT_TEXELS)?;
         // #2181: the removal is calculated once before playback, then
         // replayed from keyframes (the transport row shows the progress).
-        state.field_play = Some(PlayWorker::spawn_precalc(seed, camcraft_app::stock_play::PRECALC_BUDGET)?);
+        // #3336: on the GPU layer when the eye can show it (`play_layer`).
+        state.field_play = Some(crate::play_layer::spawn(state, seed)?);
     }
     let sc = crate::egui_app::shell::cached_script(state);
     let t = state.sim.as_ref().map_or(0.0, |s| s.t);
@@ -333,8 +333,11 @@ pub(crate) fn target(state: &mut State, t: UiTarget) {
     // A retarget ends the blank new-tool form (#2397).
     state.new_tool_form = false;
     if let UiTarget::Tool(name) = &t {
+        // #3892: the empty name is the tool library. Every door (the
+        // ribbon's Tools cell, the View menu, the gate route) opens its
+        // window and keeps the Properties subject.
         if name.is_empty() {
-            state.layout_request = Some(LayoutRequest::ToolLibrary);
+            state.open_tool_library();
             return;
         }
         if state.tool_shape_editor.is_some() {

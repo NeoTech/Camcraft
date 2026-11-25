@@ -30,7 +30,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             bottom_z,
             stepdown,
             feed,
-            plunge_feed,
+            plunge_feed, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -71,7 +71,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             stepdown,
             stock_to_leave,
             feed,
-            plunge_feed,
+            plunge_feed, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -120,7 +120,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             top_z,
             bottom_z,
             feed,
-            plunge_feed,
+            plunge_feed, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -172,7 +172,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             stepdown,
             stock_to_leave,
             feed: _,
-            plunge_feed,
+            plunge_feed, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -222,7 +222,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             top_z,
             bottom_z,
             feed: _,
-            plunge_feed,
+            plunge_feed, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -279,7 +279,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             bar_unload,
             bar_transfer,
             inspect_tol,
-            kerf,
+            kerf, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(

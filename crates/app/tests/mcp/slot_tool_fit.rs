@@ -32,6 +32,26 @@ fn set_tool_refuses_a_tool_wider_than_the_slot_without_mutation() {
     assert!(msg.contains("the slot is 4 mm wide: choose a tool of 4 mm or less"), "{msg}");
 }
 
+/// #3631: an edit of a plain Slot's width or wall stock that leaves the
+/// mounted tool too wide is refused at the command with the #3475
+/// sentence, and changes nothing. An edit of another field passes.
+#[test]
+fn edit_operation_refuses_a_slot_width_below_the_tool_without_mutation() {
+    let mut c = Client::new();
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 50.0, "dz": 10.0 } }));
+    c.ok("add_tool", json!({ "catalog": "EM-0600-4FL" }));
+    c.ok("add_operation", json!({
+        "kind": "Slot", "tool": "EM-0600-4FL", "name": "S6", "params": { "width": 6.0, "stock_to_leave": 0.0 }
+    }));
+    let before = c.ok("get_job", json!({}));
+    let msg = c.refused("edit_operation", json!({ "name": "S6", "params": { "width": 4.0 } }));
+    assert_eq!(msg, "edit_operation: invalid parameters: the tool 'EM-0600-4FL' is 6 mm wide and the slot is 4 mm wide: choose a tool of 4 mm or less");
+    let msg = c.refused("edit_operation", json!({ "name": "S6", "params": { "stock_to_leave": 0.5 } }));
+    assert!(msg.contains("with 0.5 mm left on each wall: choose a tool of 5 mm or less"), "{msg}");
+    assert_eq!(c.ok("get_job", json!({})), before, "the refused edits change nothing");
+    c.ok("edit_operation", json!({ "name": "S6", "params": { "feed": 900.0 } }));
+}
+
 /// A Slot added with no width takes the larger of the seed's 4 mm and its
 /// tool's diameter, so the default Slot always holds its own tool.
 #[test]

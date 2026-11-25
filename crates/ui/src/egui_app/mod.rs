@@ -48,9 +48,13 @@ mod report_scrub;
 mod status_alert;
 
 mod stock_info;
+mod browser_open;
 mod donate;
 // #2384: the Home button and the recent projects start page.
 pub(crate) mod home;
+// #2428: top-band Settings dropdown and startup update-available notice.
+mod settings_drop;
+mod update_notice;
 mod machine_page;
 mod tool_list_page;
 mod stock_page;
@@ -102,6 +106,7 @@ mod spindle_row;
 mod approach_page;
 mod lead_page;
 mod start_exit_rows;
+mod turning_start_exit_rows;
 mod predrilled_page;
 pub(crate) mod op_tabs;
 mod painted;
@@ -122,6 +127,8 @@ mod stock_material_row;
 mod tool_body_assembly_page;
 mod tool_body_lathe_page;
 mod tool_body_page;
+// #3894: the orbitable model view shared by the body page and the tool library window.
+mod tool_model_view;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
 // #894: the Thread operation's pitch and hand rows.
@@ -130,18 +137,27 @@ mod thread_page;
 mod tool_thread_mill_row;
 // #1444: the undercut cutters' seeding and dovetail flank angle row.
 mod tool_undercut_row;
+// #3368: a chamfer mill's tip form and tip diameter rows.
+mod tool_taper_tip_row;
+// #3369: a form mill's preset list, number rows and pilot length.
+mod tool_form_mill_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
 mod tool_settings;
+// #3930: a saved tool's Properties summary and its "Edit in tool library" door.
+mod tool_summary;
 // #2014: the tool Properties' label-left property grid and its groups.
 mod tool_settings_grid;
-mod tool_library;
+// #3892: the tool library window (U1 of #3663).
+mod tool_library_dialog;
 mod tool_preview;
 // #890: the tool editor's per-material cutting data.
 mod tool_cutting_rows;
 mod tool_turning_row;
 mod tool_profile_page;
-// #793: the built-in taper holder picker in the Profile section.
+// #2007/#3914: what the Properties tool preview draws, with the cutter outline memo.
+mod tool_preview_inputs;
+// #793: the built-in taper holder picker (#3930: the tool library window's assembly group).
 mod tool_holder_picker;
 // #93 slice 2: the Profile tab's drawn cutter, neck and shank.
 mod tool_cutter_page;
@@ -150,6 +166,7 @@ mod setup_wcs_pick;
 // #870: the WCS page's footer (Set origin beside Close) and origin line.
 mod wcs_footer;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
+mod agie_inspection;
 mod setup_pages;
 mod setup_settings_page;
 mod setup_post_page;
@@ -452,8 +469,9 @@ pub fn run(args: &[String]) -> i32 {
             }
         }
     } else {
-        // #2462: the file named on the command line opens in the window.
-        run_windowed(pick, want, mcp_port, &crate::cli_options::files(args), crate::cli_options::start_mode(args))
+        // #2462: the file named on the command line opens in the window;
+        // #3609: read-only with `--read-only`.
+        run_windowed(pick, want, mcp_port, &crate::cli_options::files(args), crate::cli_options::start_mode(args), crate::cli_options::read_only(args))
     }
 }
 
@@ -480,15 +498,15 @@ fn run_headless(_open: Option<crate::state::CommandKind>) -> i32 {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode) -> i32 {
-    shell_window::run_windowed(pick, want, mcp_port, files, start)
+fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
+    shell_window::run_windowed(pick, want, mcp_port, files, start, read_only)
 }
 
 /// #31: the browser build has no winit window to open - its shell is the
 /// web runner still owed on that issue - so the windowed entry refuses by
 /// name instead of pretending.
 #[cfg(target_arch = "wasm32")]
-fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _files: &[String], _start: crate::cli_options::StartMode) -> i32 {
+fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _files: &[String], _start: crate::cli_options::StartMode, _read_only: bool) -> i32 {
     diag_warn!("{WASM_NO_WINDOW}");
     2
 }

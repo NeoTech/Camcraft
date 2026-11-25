@@ -150,6 +150,15 @@ ground. Use it after a 3D Pocket has roughed the part.
 settings, the whole-model path is clipped to the area, and it leaves and
 re-enters through the clearance plane.
 
+**Do not touch** on **Geometry > Boundary > Boundaries** also protects
+model faces or edge chains on 3D Finish. Choose **Pick protected**, pick
+the items, choose **Done**, set **Clearance**, then **Apply**. CamCraft
+restricts the finishing area so the full tool assembly (flutes, shank and
+holder) stays clear from the cut depths up to the clearance plane.
+Clearance adds to positive **Stock to leave**. The final check includes cuts,
+entries, lifts and rapid links; an unsafe path is refused and cannot post.
+Protected items stay highlighted while the operation is selected.
+
 | Tab | Setting | Default |
 |---|---|---|
 | Heights | Top Z / Bottom Z | model top / model bottom: the first ring's plane and the last level's |
@@ -162,6 +171,14 @@ re-enters through the clearance plane.
 | Passes | Ramp angle (when ramping) | 45° |
 | Passes | Steep stepover (Steep and shallow only) | Auto |
 | Passes | Reference ball (Pencil only) | None: every concave corner |
+
+For patterns that add wall rings after the shallow passes, **Passes >
+Steep flanks** defaults to **Waterlines**. Select **Leave uncut**
+(`waterlines: false`) to skip the rings on flanks steeper than 45°.
+The operation warns that the steep flanks remain uncut. Check the
+remaining stock before the next operation. Generation refuses the
+operation if there is no shallow cut. Waterline, Blend and Morph
+require the rings.
 
 **Gap link** (`gap_link`) chooses how 3D Finish crosses a gap between
 surface runs. **Jump**, the default, keeps the retract hop. **Straight**

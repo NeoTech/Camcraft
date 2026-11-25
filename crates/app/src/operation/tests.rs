@@ -31,7 +31,7 @@ fn params_sanity_gates() {
     // unresolved reference is never a lie there: refusing happens at
     // generate, by name.
     let world = crate::world::new_world();
-    let ok = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let ok = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -40,11 +40,12 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(ok.is_sane() && depth_sane(&world, None, None, &ok));
     // Staged facing is sane when it descends: a top below the
     // finished height, or a zero stepdown, is not.
-    let staged = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let staged = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -53,9 +54,10 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(staged.is_sane() && depth_sane(&world, None, None, &staged));
-    let low = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let low = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -64,13 +66,14 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(low.is_sane(), "structurally fine - the order is the flaw");
     assert!(
         !depth_sane(&world, None, None, &low),
         "staged top below the finished height"
     );
-    let no_step = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let no_step = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -79,6 +82,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(!no_step.is_sane(), "stepdown must be positive when set");
     let bad = OpParams::Pocket { rest: None, tilt: None, blend_radius: None,
@@ -100,6 +104,7 @@ fn params_sanity_gates() {
         blend_turns: false,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     assert!(!bad.is_sane());
     // A depth range that runs upward is nonsense, refused at command
@@ -113,6 +118,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(up.is_sane());
     assert!(!depth_sane(&world, None, None, &up));
@@ -128,7 +134,7 @@ fn stamp_follows_every_input() {
     // param path is deterministic here (Fixed heights resolve without
     // touching the world).
     let world = crate::world::new_world();
-    let a = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let a = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -137,9 +143,10 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     // (No struct-update syntax on enum variants: write it out.)
-    let b = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let b = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.6),
@@ -148,8 +155,9 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
-    let c = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let c = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -158,6 +166,7 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     let mut ha = std::hash::DefaultHasher::new();
     let mut hb = std::hash::DefaultHasher::new();
@@ -193,6 +202,7 @@ fn stamp_follows_every_input() {
         hand: crate::cl::ThreadHand::Right,
         external,
         passes: crate::machining2d::ThreadPasses::default(),
+        picks: Default::default(),
     };
     let mut hi = std::hash::DefaultHasher::new();
     let mut he = std::hash::DefaultHasher::new();
@@ -226,8 +236,9 @@ fn stamp_follows_every_input() {
     // undercut, appended behind it, to 45 - #1443's V-carve,
     // appended behind that, to 46 - #1883's waterjet profile,
     // appended as the waterjet's own section, to 47 - #1894's multi-axis deburr,
-    // appended behind that, to 48.)
-    assert_eq!(KindInfo::ALL.len(), 48);
+    // appended behind that, to 48 - #2826's Rotary Flow, appended
+    // as the Multi-axis section's flow-line kind, to 49.)
+    assert_eq!(KindInfo::ALL.len(), 49);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");
@@ -246,7 +257,7 @@ fn face_stamp_moves_with_stepdown() {
     // answer for a staged one - and two stagings that cut different
     // stacks must not claim each other's cache either.
     let world = crate::world::new_world();
-    let face_with = |top_z: Option<Height>, stepdown: Option<f64>| OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    let face_with = |top_z: Option<Height>, stepdown: Option<f64>| OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
         clearance_z: Height::fixed(5.0),
         cut_z: Height::fixed(-0.5),
@@ -255,6 +266,7 @@ fn face_stamp_moves_with_stepdown() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -293,6 +305,7 @@ fn advanced_swarf_stamp_moves_with_passes() {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         passes,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -314,6 +327,7 @@ fn advanced_swarf_stamp_moves_with_passes() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: Default::default(),
     };
     assert_ne!(digest(&plain), digest(&ladder(1)), "the family's rows must digest apart");
 }
@@ -338,6 +352,8 @@ fn rotary_twins_stamp_apart_and_with_their_stepover() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        stated_axis: None,
+        picks: Default::default(),
     };
     let parallel = |stepover: Option<f64>| OpParams::RotaryParallel {
         tolerance: 0.05,
@@ -352,6 +368,8 @@ fn rotary_twins_stamp_apart_and_with_their_stepover() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        stated_axis: None,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -391,6 +409,8 @@ fn rotary_offset_stamp_moves_with_its_wrap_numbers() {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 90.0,
+            stated_axis: None,
+            picks: Default::default(),
         }
     };
     let digest = |p: &OpParams| {
@@ -449,6 +469,7 @@ fn multiaxis_rough_stamp_moves_with_its_ladder_and_cone() {
         lag_deg: lag,
         max_tilt_deg: tilt,
         shank_avoid: false,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -479,6 +500,7 @@ fn multiaxis_rough_stamp_moves_with_its_ladder_and_cone() {
         feed_opt: false,
         shell: false,
         method: crate::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     assert_ne!(
         digest(&rough(0.0, 0.0, 90.0)),
@@ -524,6 +546,7 @@ fn the_arc_entry_splits_the_stamp_and_leaves_the_others_alone() {
         blend_turns: false,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();

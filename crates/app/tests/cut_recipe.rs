@@ -36,6 +36,7 @@ fn face_params() -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         blend_turns: false,
+        blend_radius: None,
         tilt: None,
         stepover: 2.5,
         clearance_z: Height::fixed(25.0),
@@ -45,6 +46,7 @@ fn face_params() -> OpParams {
         feed: 900.0,
         plunge_feed: 250.0,
         climb: false,
+        picks: Default::default(),
     }
 }
 

@@ -57,6 +57,8 @@ pub struct MultiAxisDeburrDto {
     pub lag_deg: f64,
     pub max_tilt_deg: f64,
     pub shank_avoid: bool,
+    #[serde(default, skip_serializing_if = "PathPicksDto::is_empty")]
+    pub picks: PathPicksDto,
 }
 
 impl MultiAxisDeburrDto {
@@ -83,6 +85,7 @@ impl MultiAxisDeburrDto {
             lag_deg: self.lag_deg,
             max_tilt_deg: self.max_tilt_deg,
             shank_avoid: self.shank_avoid,
+            picks: self.picks.to_picks(),
         }
     }
 }

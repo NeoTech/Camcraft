@@ -13,6 +13,7 @@
 //! published CAM practice. No vendor material consulted.
 
 use crate::geo2d::{Loop, Point2};
+use crate::path_picks::PickRole;
 
 use super::arcs::Seg;
 use super::contour_comp;
@@ -70,7 +71,7 @@ fn reach(p: &ContourParams) -> f64 {
 /// first window begins there.
 pub(super) fn pick_ring(loops: &[&Loop], p: &ContourParams) -> Result<Option<(usize, Point2)>, GenError> {
     let ap = &p.links.approach;
-    let Some(q) = ap.start_point else {
+    let Some(q) = p.picks.first(PickRole::Start).map(|k| k.xy) else {
         return Ok(None);
     };
     let at = format!("start point ({:.3}, {:.3})", q.x, q.y);
@@ -128,7 +129,7 @@ fn nearest_ring(loops: &[&Loop], q: Point2, at: &str, what: &str, p: &ContourPar
 /// the seam) and an overlap beside it (both say where the cut leaves).
 pub(super) fn pick_exit(loops: &[&Loop], p: &ContourParams) -> Result<Option<(usize, Point2)>, GenError> {
     let ap = &p.links.approach;
-    let Some(q) = ap.exit_point else {
+    let Some(q) = p.picks.first(PickRole::Exit).map(|k| k.xy) else {
         return Ok(None);
     };
     let at = format!("exit point ({:.3}, {:.3})", q.x, q.y);

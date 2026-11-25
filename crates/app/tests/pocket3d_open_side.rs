@@ -128,6 +128,7 @@ fn pocket3d() -> OpParams {
         feed_opt: false,
         shell: true,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -407,6 +408,7 @@ fn multiaxis_rough_post_refuses_a_part_added_after_clean_generation_on_rotated_s
         lag_deg: 0.0,
         max_tilt_deg: 1.0,
         shank_avoid: false,
+        picks: Default::default(),
     };
     added_part_blocks_live_post(world, params, "BN-0600", "multi-live", |path| {
         let p = path

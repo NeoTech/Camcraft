@@ -48,7 +48,7 @@ impl OpParams {
                     h.write(b"burnout");
                     w(h, c);
                 }
-                match p.start {
+                match p.picks.first(crate::path_picks::PickRole::Start).map(|k| [k.xy.x, k.xy.y]) {
                     Some([x, y]) => {
                         h.write_u8(1);
                         w(h, x);

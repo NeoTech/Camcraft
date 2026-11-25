@@ -87,7 +87,7 @@ fn faced_doc() -> (World, History) {
         "Face1",
         "EM-0400-2FL",
         SrcRef::Stock,
-        OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+        OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
             cut_z: Height::fixed(18.0),
@@ -96,6 +96,7 @@ fn faced_doc() -> (World, History) {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         },
     );
     history.execute(&world, cmd.expect("create face"));
@@ -641,7 +642,7 @@ fn the_changer_counts_the_distinct_tools() {
             "Face2",
             "EM-0600-4FL",
             SrcRef::Stock,
-            OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+            OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
                 stepover: 3.0,
                 clearance_z: Height::fixed(25.0),
                 cut_z: Height::fixed(18.0),
@@ -650,6 +651,7 @@ fn the_changer_counts_the_distinct_tools() {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("second op"),

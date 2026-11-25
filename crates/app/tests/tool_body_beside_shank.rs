@@ -110,6 +110,7 @@ fn run_pocket3d(tool: Tool, holder: Vec<SpunPoint>, depth: f64) -> Result<(Toolp
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     let mut o = op(SrcRef::Entity("cavity".into()), params, AreaControls::default());
     o.tool = T31.into();

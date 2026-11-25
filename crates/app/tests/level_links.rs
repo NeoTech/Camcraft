@@ -47,10 +47,11 @@ fn contour_op(links: Links) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Arc,
         helix_radius: 1.0,
-        blend_turns: true,
+        blend_turns: true, blend_radius: None,
         tilt: None,
         links,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -80,6 +81,7 @@ fn pocket_op(entry: Entry3D, links: Links) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
