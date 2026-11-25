@@ -67,6 +67,17 @@ const CHUNK: usize = 8 * 1024;
 /// is dropped so the next one can be served (#567).
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
+/// How long a UI link client has to send its hello line before it is
+/// dropped (#3873): a client without the token must not hold the only
+/// session for the idle window. Applies only before the token check;
+/// after it, [`IDLE_TIMEOUT`] governs.
+const PRE_HELLO_DEADLINE: Duration = Duration::from_secs(5);
+
+/// How large a client's buffered bytes may grow before the token check
+/// (#3873): an unauthenticated client must not grow the app's memory.
+/// After the token check, [`MAX_LINE`] governs.
+const PRE_HELLO_MAX_LINE: usize = 4 * 1024;
+
 /// How a served client's session ended, for the listener's log line.
 enum End {
     /// It hung up, was refused, or the app is stopping.
@@ -255,7 +266,10 @@ fn accept_loop(listener: &Listener, tx: &Sender<Request>, stop: &AtomicBool, wak
 }
 
 /// One client until it hangs up, the app stops, the app's end of the
-/// channel is gone, or it sends no complete line for `idle`.
+/// channel is gone, or it sends no complete line for `idle`. On the UI
+/// link, the hello line must arrive within [`PRE_HELLO_DEADLINE`] and
+/// stay under [`PRE_HELLO_MAX_LINE`] (#3873); `idle` and [`MAX_LINE`]
+/// govern only after the token check.
 ///
 /// The idle deadline is enforced inside the read (#567 review): each
 /// read waits at most the poll step or the time left in the window,
@@ -285,11 +299,22 @@ fn serve_client(mut stream: Stream, tx: &Sender<Request>, stop: &AtomicBool, wak
             return Ok(End::Closed);
         }
         let quiet = active.elapsed();
-        let Some(left) = idle.checked_sub(quiet).filter(|d| !d.is_zero()) else {
-            let note = format!(
-                r#"{{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"warning","logger":"camcraft","data":"idle for {}s with no complete message - the connection is closed"}}}}"#,
-                quiet.as_secs()
-            );
+        // Before the token check, the short pre-hello window applies
+        // (#3873); after it, the idle window. `active` is reset only
+        // when the hello passes, so `quiet` covers the whole wait.
+        let window = if gate.is_some() { idle.min(PRE_HELLO_DEADLINE) } else { idle };
+        let Some(left) = window.checked_sub(quiet).filter(|d| !d.is_zero()) else {
+            let note = if gate.is_some() {
+                format!(
+                    r#"{{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"warning","logger":"camcraft","data":"no hello line in {}s - the connection is closed"}}}}"#,
+                    quiet.as_secs()
+                )
+            } else {
+                format!(
+                    r#"{{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"warning","logger":"camcraft","data":"idle for {}s with no complete message - the connection is closed"}}}}"#,
+                    quiet.as_secs()
+                )
+            };
             // Best effort: the write times out, and the client goes either way.
             let _ = writeln!(writer, "{note}").and_then(|()| writer.flush());
             return Ok(End::Idle(quiet));
@@ -299,7 +324,9 @@ fn serve_client(mut stream: Stream, tx: &Sender<Request>, stop: &AtomicBool, wak
         // is non-zero, and a sub-millisecond rest rounds up to 1 ms.
         stream.set_read_timeout(Some(left.min(POLL).max(Duration::from_millis(1))))?;
         // Bounded as it reads: never more than one byte past the cap.
-        let room = (MAX_LINE + 1).saturating_sub(buf.len()).clamp(1, CHUNK);
+        // The small cap applies before the token check (#3873).
+        let cap = if gate.is_some() { PRE_HELLO_MAX_LINE } else { MAX_LINE };
+        let room = (cap + 1).saturating_sub(buf.len()).clamp(1, CHUNK);
         let got = match chunk.get_mut(..room).map(|c| stream.read(c)) {
             Some(Ok(n)) => n,
             Some(Err(e))
@@ -342,7 +369,7 @@ fn serve_client(mut stream: Stream, tx: &Sender<Request>, stop: &AtomicBool, wak
             }
             active = Instant::now();
         }
-        if buf.len() > MAX_LINE {
+        if buf.len() > cap {
             let refusal = r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"message too long - the connection is closed"}}"#;
             writeln!(writer, "{refusal}")?;
             writer.flush()?;

@@ -162,6 +162,60 @@ fn the_link_file_follows_the_open_project() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn a_client_that_sends_no_hello_cannot_hold_the_session() {
+    let dir = fresh_dir("prehello");
+    let inbox = Inbox::link(&dir, Box::new(|| {})).expect("open the link");
+    let entry = inbox.link_entry().expect("a link entry").clone();
+
+    // Client 1 connects to the socket and sends nothing: no hello, no
+    // newline. Before #3873 it held the only session for the 5-minute
+    // idle window.
+    let addr = entry.address.clone();
+    let transport = entry.transport.clone();
+    let (connected_tx, connected_rx) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        let stream = match transport.as_str() {
+            "tcp" => std::net::TcpStream::connect(&addr).expect("tcp"),
+            other => panic!("unknown transport: {other}"),
+        };
+        let _ = connected_tx.send(());
+        std::thread::sleep(Duration::from_secs(30));
+        drop(stream);
+    });
+    connected_rx.recv().expect("client 1 connected");
+    std::thread::sleep(Duration::from_millis(50));
+
+    // Client 2, with the token, must get a session within seconds: the
+    // silent client is dropped after the short pre-hello deadline, not
+    // after the idle window. The link call gives up while the session
+    // is held (exit 4), so it retries until the drop frees the session.
+    let good_dir = dir.clone();
+    let client = std::thread::spawn(move || {
+        let started = Instant::now();
+        loop {
+            match link_call(&good_dir, &Select::Only, "get_job", &json!({})) {
+                Ok(answer) => break Ok(answer),
+                Err(e) if e.exit_code() == 4 && started.elapsed() < Duration::from_secs(12) => {
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+                Err(e) => break Err(e),
+            }
+        }
+    });
+    let started = Instant::now();
+    let (result, lines) = serve_until(&inbox, client);
+    assert!(started.elapsed() < Duration::from_secs(15), "the second client waited too long");
+    let result = result.expect("a client with the token is served after the silent one is dropped");
+    assert_eq!(result["structuredContent"]["echo"], json!("get_job"));
+    assert_eq!(lines.len(), 1, "one tools/call reached the window: {lines:?}");
+
+    drop(inbox);
+    // Detach the holder; it only sleeps and drops its stream.
+    drop(holder);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 fn lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<std::ffi::OsString> {
     let pairs: Vec<(String, String)> = pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect();
     move |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.into())
@@ -202,12 +256,18 @@ fn a_second_ui_call_during_a_slow_call_reports_busy_and_exits_4() {
     let (finish_tx, finish_rx) = std::sync::mpsc::channel();
 
     let client1 = std::thread::spawn(move || {
-        let stream = match transport.as_str() {
-            "tcp" => Box::new(std::net::TcpStream::connect(&addr).expect("tcp")) as Box<dyn std::io::Read + Send>,
+        let mut stream: Box<dyn std::io::Write + Send> = match transport.as_str() {
+            "tcp" => Box::new(std::net::TcpStream::connect(&addr).expect("tcp")),
             #[cfg(unix)]
-            "unix" => Box::new(std::os::unix::net::UnixStream::connect(&addr).expect("unix")) as Box<dyn std::io::Read + Send>,
+            "unix" => Box::new(std::os::unix::net::UnixStream::connect(&addr).expect("unix")),
             other => panic!("unknown: {other}"),
         };
+        use std::io::Write;
+        // A slow call is a served client: it passes the token check and
+        // then holds the session while its call runs. (A client that
+        // sends nothing is dropped after the short pre-hello deadline,
+        // #3873.)
+        writeln!(stream, "{}", link::hello_line(&entry.token)).expect("hello");
         let _ = connected_tx.send(());
         let _ = finish_rx.recv();
         drop(stream);
