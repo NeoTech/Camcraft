@@ -52,6 +52,21 @@ for this step.
    `ALL_CRATES` without `ui`; `CLIPPY` is `ALL_CRATES` without `kernel` (as
    before this change).
 
+10. **The quick-plan pin follows the gate maps.** The issue asks that
+   `gate quick` on a diff in the new crate lists the crate's suites and
+   the `motion` and `app` suites that depend on it. The quick gate selects
+   suites of another crate only by their Gate map; it has no
+   reverse-dependency fan-out (as for `kernel`). No motion code calls the
+   kernel yet, so no motion suite can name a kernel module truthfully. The
+   app suite `offset_pass_start` names `pathkernel::engine` (its switch
+   pins use it). The xtask pin
+   `a_pathkernel_change_plans_its_suites_and_the_mapped_app_suite` checks
+   this. Each kind PR that makes motion call the kernel names the kernel
+   module in its motion suite's Gate map. A change to `Cargo.toml` or
+   `Cargo.lock` (as in this PR) still makes quick a batch. Dropped: adding
+   the crate to `SHARED` (the record says no) and a fan-out rule for every
+   crate (a gate change outside this issue).
+
 **Why**: the record fixes the place and the default of the switch, but not
 how a test sets it, and not where the 16 kinds are listed. One check
 before the arms keeps the old arms byte-for-byte unchanged.

@@ -360,3 +360,18 @@ fn packaging_build_clears_compiler_wrappers() {
     assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
     assert!(exec::packaging_env_clear(|_| false).is_empty());
 }
+
+/// #4055 pin: a source change in the path kernel plans the kernel's own suites, and the suites of the
+/// crates above it whose Gate map names the changed module (on the real workspace, not the fixture). The
+/// quick gate has no reverse-dependency fan-out: a suite of motion or app joins when its map names a
+/// `pathkernel::` module. Today only app's `offset_pass_start` does (the switch, `pathkernel::engine`).
+#[test]
+fn a_pathkernel_change_plans_its_suites_and_the_mapped_app_suite() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let plan = |f: &str| -> Vec<String> { steps(quick_plan(&root, &[f], &[], &[], false)).iter().map(line).collect() };
+    let got = plan("crates/pathkernel/src/engine.rs");
+    assert!(got.iter().any(|s| s.starts_with("pathkernel suites: lib")), "{got:#?}");
+    assert!(got.iter().any(|s| s.starts_with("app suites: offset_pass_start")), "{got:#?}");
+    let got = plan("crates/pathkernel/src/verdict.rs");
+    assert!(got.iter().any(|s| s.starts_with("pathkernel suites: lib")), "{got:#?}");
+}

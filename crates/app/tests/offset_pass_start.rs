@@ -15,7 +15,7 @@
 //! (edit_operation, undo), app::project (params, params_impl),
 //! motion::machining2d (pass_start, level_rings, level_order, air_entry,
 //! ring_set, ring_links, ring_entry),
-//! sim::verify (entry_advice).
+//! sim::verify (entry_advice), pathkernel::engine (the #4055 switch).
 //! Provenance: our own regression of the maintainer's report; no vendor
 //! material consulted.
 
