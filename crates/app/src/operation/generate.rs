@@ -2390,12 +2390,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 max_tilt_deg: Some(*max_tilt_deg),
             };
             let shank = (*shank_avoid).then(|| shank_of(&tool));
-            let path = crate::multiaxis::contour_curve(
+            // #3330: the start / exit picks re-sequence the nearest drive
+            // curve; an empty seam is the automatic path, byte for byte.
+            let seam = crate::multiaxis::CurveSeam::of(&params.path_picks());
+            let path = crate::multiaxis::contour_curve_seamed(
                 &chains,
                 &material.facets,
                 &cp,
                 &axis,
                 shank.as_ref(),
+                &seam,
             )?;
             super::plunge_solid::audit_posed(
                 "Multi-Axis Contour", tool.center_cutting, stock_facets.as_deref(), m_gen, frame.as_ref(), &path, d * 0.5,

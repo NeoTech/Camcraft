@@ -28,6 +28,7 @@
 
 mod avoid;
 mod curv;
+mod curve_seam;
 mod curve_walk;
 pub mod deburr_axis;
 #[cfg(test)]
@@ -77,7 +78,8 @@ pub mod tilt;
 
 pub use avoid::Shank;
 pub use contour5d::{contour5d, contour5d_seamed};
-pub use curve::{contour_curve, CurveParams};
+pub use curve::{contour_curve, contour_curve_seamed, CurveParams};
+pub use curve_seam::CurveSeam;
 pub use deburr_axis::{multiaxis_deburr, AxisDeburrParams, MAX_TILT_CAP_DEG};
 pub use deburr_pose::DeburrAxisMode;
 pub use flow::{flow3d, flow5d};

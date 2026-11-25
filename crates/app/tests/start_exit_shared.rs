@@ -8,6 +8,8 @@
 //! path_picks accessor, sane), app::mcp (tools schema, job kind list).
 //! #3330: app::operation (generate, the 5-Axis Contour arm) and
 //! motion::finishing3d (ring_seam) through the application.
+//! #3330: app::operation (generate, the Multi-Axis Contour arm) and
+//! motion::multiaxis (curve_seam) through the application.
 //! Gate map (#3331): covers app::operation (generate: the Facing, Profile
 //! Rough and Profile Finish picks), app::commands (EditOperationParams).
 
@@ -64,6 +66,8 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
             OpType::Contour => assert_eq!(cap, PickCapability::Ring, "the contour takes a ring pick"),
             // #3330: the 5-axis contour seats its waterline rings at the pick.
             OpType::Contour5D => assert_eq!(cap, PickCapability::Ring, "the 5-axis contour takes a ring pick"),
+            // #3330: the multi-axis contour re-sequences its nearest drive curve.
+            OpType::MultiAxisContour => assert_eq!(cap, PickCapability::Ring, "the multi-axis contour takes a curve pick"),
             OpType::WireContour => assert_eq!(cap, PickCapability::Threading, "the wire takes its threading point"),
             // #3331 slice 1: a point in the lathe (Z, X) plane.
             OpType::Facing | OpType::ProfileRough | OpType::ProfileFinish => {
@@ -156,3 +160,7 @@ fn the_mcp_doors_name_the_pick_fields_and_the_kinds_that_take_them() {
 // #3330: the 5-Axis Contour takes a start and an exit pick.
 #[path = "start_exit_shared/contour5d.rs"]
 mod contour5d;
+
+// #3330: the Multi-Axis Contour takes a start and an exit pick.
+#[path = "start_exit_shared/multiaxis_contour.rs"]
+mod multiaxis_contour;

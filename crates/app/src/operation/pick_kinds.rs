@@ -18,7 +18,9 @@ use super::types::{OpParams, OpType};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickCapability {
     /// A point on a closed ring: the ring is re-sequenced to start there
-    /// (the 2D contour). Snaps to a wall. Takes a start and an exit.
+    /// (the 2D contour). Snaps to a wall. Takes a start and an exit. On
+    /// the multi-axis contour (#3330) a pick acts on the drive curve
+    /// nearest it, and an open curve starts and leaves at its ends.
     Ring,
     /// A point inside the region: the descent place of the first pass
     /// and the end of the last pass. Snaps to a point in the region.
@@ -72,8 +74,9 @@ impl KindInfo {
     pub fn pick(&self) -> PickCapability {
         match self.ty {
             // #3330: the 5-axis contour's waterline rings are seated at
-            // the start pick and run on to the exit pick.
-            OpType::Contour | OpType::Contour5D => PickCapability::Ring,
+            // the start pick and run on to the exit pick; the multi-axis
+            // contour re-sequences the drive curve nearest each pick.
+            OpType::Contour | OpType::Contour5D | OpType::MultiAxisContour => PickCapability::Ring,
             OpType::WireContour => PickCapability::Threading,
             OpType::Probe => PickCapability::NotTaken(PICK_NO_PATH),
             // #3331 slice 1: the pick is a point in the lathe (Z, X) plane.
@@ -104,7 +107,6 @@ impl KindInfo {
             | OpType::RotaryOffset
             | OpType::MultiAxisRough
             | OpType::Flow5D
-            | OpType::MultiAxisContour
             | OpType::GrooveRough
             | OpType::GrooveFinish
             | OpType::Part
