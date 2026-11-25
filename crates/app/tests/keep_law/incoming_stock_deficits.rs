@@ -88,6 +88,7 @@ fn bore(xy: Point2, radius: f64, floor: f64) -> OpParams {
         plunge_feed: 150.0,
         climb: true,
         tolerance: 0.01,
+        picks: Vec::new(),
         holes: vec![Hole { xy, radius, entry_z: MOUTH, floor_z: floor, through: false, stepped: false }],
     }
 }
