@@ -343,10 +343,18 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
     match params {
         OpParams::Circular { center, .. } => *center = r.p2(*center),
         OpParams::Pocket { corner_relief, .. }
-        | OpParams::Adaptive2D { corner_relief, .. }
         | OpParams::Offset2D { corner_relief, .. } => {
             for ov in &mut corner_relief.overrides {
                 ov.at = r.p2(ov.at);
+            }
+        }
+        // #3327: the 2D Adaptive's start and exit points ride the frame too.
+        OpParams::Adaptive2D { corner_relief, picks, .. } => {
+            for ov in &mut corner_relief.overrides {
+                ov.at = r.p2(ov.at);
+            }
+            for pick in picks.start.iter_mut().chain(picks.exit.iter_mut()) {
+                pick.xy = r.p2(pick.xy);
             }
         }
         OpParams::Slot { a, b, picks, .. } => {

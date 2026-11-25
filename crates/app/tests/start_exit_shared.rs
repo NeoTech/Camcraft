@@ -6,6 +6,14 @@
 //!
 //! Gate map (#3324): covers app::operation (kinds pick capability,
 //! path_picks accessor, sane), app::mcp (tools schema, job kind list).
+//! #3327 (`adaptive`): covers app::operation (adaptive_pick_op, generate
+//! Adaptive2D arm, pick_kinds, wcs_yaw), app::commands
+//! (EditOperationParams), app::project, motion::machining2d
+//! (adaptive_picks, pocket_hsm, adaptive_avoid).
+
+mod common;
+#[path = "start_exit_shared/adaptive.rs"]
+mod adaptive;
 
 use camcraft_app::mcp::Server;
 use camcraft_app::geo2d::Point2;
@@ -57,8 +65,10 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
             OpType::WireContour => assert_eq!(cap, PickCapability::Threading, "the wire takes its threading point"),
             // #3325: the Slot's slice of #1448 shipped.
             OpType::Slot => assert_eq!(cap, PickCapability::Ends, "the slot takes a pick at one of its ends"),
+            // #3327: the 2D Adaptive's slice of #1448 shipped.
+            OpType::Adaptive2D => assert_eq!(cap, PickCapability::Region, "the 2D Adaptive takes a point in its area"),
             _ => {
-                let PickCapability::NotTaken(why) = cap else { panic!("{}: only the contour, the slot and the wire take a pick", k.label) };
+                let PickCapability::NotTaken(why) = cap else { panic!("{}: only the contour, the slot, the 2D Adaptive and the wire take a pick", k.label) };
                 assert!(!why.is_empty(), "{}: the reason is named", k.label);
             }
         }

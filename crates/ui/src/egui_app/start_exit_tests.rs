@@ -178,6 +178,39 @@ fn the_slot_lead_tab_has_both_point_groups_and_takes_a_start() {
 }
 
 #[test]
+fn the_2d_adaptive_lead_tab_has_both_point_groups_and_takes_an_exit() {
+    // #3327: the 2D Adaptive picks a point in its area. Its Lead tab has
+    // the two groups, off, with no "Not taken" line; Apply commits, Ctrl+Z
+    // undoes.
+    let mut state = opened(crate::operations::retype(&face(), kind("2D Adaptive")));
+    state.op_tab = SEC_LEADS;
+    let mut harness = page(state);
+    harness.run();
+    for g in [START_GROUP, EXIT_GROUP] {
+        assert_eq!(harness.query_all_by_label(g).count(), 1, "the {g} group is on the tab one time");
+        assert_eq!(on_row(&harness, g, Role::CheckBox).accesskit_node().toggled(), Some(Toggled::False), "{g} is off");
+    }
+    assert_eq!(harness.query_all_by_label_contains(super::NOT_TAKEN).count(), 0, "the 2D Adaptive takes both picks");
+    assert_eq!(draft(&harness), (None, None), "drawing the tab writes no point");
+
+    on_row(&harness, EXIT_GROUP, Role::CheckBox).click();
+    harness.run();
+    assert!(same(draft(&harness).1, 0.0, 0.0), "switching on seeds the origin: {:?}", draft(&harness));
+    assert!(harness.query_by_label("Pick exit").is_some(), "the viewport pick is offered");
+    assert!(
+        harness.query_by_label_contains("refused by name - the exit never moves").is_some(),
+        "the safety consequence is said under the rows"
+    );
+    harness.get_by_label("Apply").click();
+    harness.run();
+    harness.state_mut().drain_actions();
+    assert!(same(live(harness.state()).1, 0.0, 0.0), "Apply committed it: {:?}", live(harness.state()));
+    let st = harness.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert_eq!(live(harness.state()), (None, None), "Ctrl+Z puts the automatic exit back");
+}
+
+#[test]
 fn kinds_without_a_picked_start_say_so_by_name() {
     // #3324: the maintainer's 2D Offset, a lead-tab kind (2D Pocket) and
     // a Geometry-only kind (Face): each draws both groups, no switch and

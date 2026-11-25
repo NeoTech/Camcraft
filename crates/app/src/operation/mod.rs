@@ -73,6 +73,8 @@ pub use heights_sel::*;
 mod kinds;
 pub use kinds::*;
 mod pick_kinds;
+// #3327: the 2D Adaptive's start and exit points at generation.
+mod adaptive_pick_op;
 pub use pick_kinds::*;
 mod seed;
 pub use seed::seed_params;

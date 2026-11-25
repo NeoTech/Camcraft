@@ -181,6 +181,16 @@ pub struct Approach {
     /// the first level - never a rapid into it. `None` (every stored op):
     /// the top of the cut is the material's top, as before.
     pub material_top: Option<f64>,
+    /// The user's start point of a 2D Adaptive (#3327): the first pass
+    /// of each level enters there (`machining2d::adaptive_picks`). Not a
+    /// saved parameter: the application lays the operation's start pick
+    /// over each generation's copy. `None` (every other kind, every op
+    /// without a pick) leaves the planner's own entry.
+    pub start_point: Option<crate::geo2d::Point2>,
+    /// The user's exit point of a 2D Adaptive (#3327): the last pass of
+    /// each level ends at the point of its closing lap nearest it. Laid
+    /// over like [`Self::start_point`]; `None` ends where the plan ends.
+    pub exit_point: Option<crate::geo2d::Point2>,
 }
 
 /// The note prefix of a non-centre-cutting fallback.
@@ -272,6 +282,8 @@ impl Approach {
         compensation: Compensation::Computer,
         center_cutting: true,
         material_top: None,
+        start_point: None,
+        exit_point: None,
     };
 
     /// The material's top over the first level (#1559): the top of the

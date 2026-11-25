@@ -70,10 +70,11 @@ impl KindInfo {
             OpType::Probe => PickCapability::NotTaken(PICK_NO_PATH),
             // #3325: the end where the pass starts, and where it stops.
             OpType::Slot => PickCapability::Ends,
+            // #3327: the entry of the first pass, the end of the last.
+            OpType::Adaptive2D => PickCapability::Region,
             OpType::Face
             | OpType::Pocket
             | OpType::Trace
-            | OpType::Adaptive2D
             | OpType::Offset2D
             | OpType::Engrave
             | OpType::Chamfer2D
@@ -279,6 +280,16 @@ impl OpParams {
         }
         match self {
             OpParams::WireContour(w) => wire_exit_refusal(w),
+            OpParams::Adaptive2D { method, pass_start, entry, rest, tilt, .. } => {
+                let door = crate::machining2d::AdaptivePickDoor {
+                    method: *method,
+                    pass_start: *pass_start,
+                    entry: *entry,
+                    rest: rest.is_some(),
+                    tilted: tilt.is_some(),
+                };
+                crate::machining2d::adaptive_pick_refusal(&picks, &door)
+            }
             _ => None,
         }
     }

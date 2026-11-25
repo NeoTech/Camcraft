@@ -89,6 +89,28 @@ pub(super) fn end_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
     pick_list_group(ui, u, &SLOT_EXIT, &mut picks.exit);
 }
 
+// #3327: the 2D Adaptive's words. A pick is a point inside the area.
+const ADAPTIVE_START: PointRows = PointRows {
+    pick_help: "click a face, edge or corner in the viewport to place the 2D Adaptive start point",
+    help: "a point in model X and Y inside the area: the entry goes down here and the cleared area grows out from it",
+    says: "the helix or plunge goes in here; where it has no room, the operation is refused by name - the start never moves",
+    ..START
+};
+
+const ADAPTIVE_EXIT: PointRows = PointRows {
+    pick_help: "click a face, edge or corner in the viewport to place the 2D Adaptive exit point",
+    help: "a point in model X and Y near a wall: the last pass of each level runs on along its closing lap to the lap point nearest this point",
+    says: "the tool leaves the cut there; a point far from the closing lap is refused by name - the exit never moves",
+    ..EXIT
+};
+
+/// Both groups, for a kind whose pick is a point in the area (the 2D
+/// Adaptive, #3327).
+pub(super) fn region_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
+    pick_list_group(ui, u, &ADAPTIVE_START, &mut picks.start);
+    pick_list_group(ui, u, &ADAPTIVE_EXIT, &mut picks.exit);
+}
+
 /// Both groups, for the closed 2D contour's lead tab.
 pub(super) fn start_exit_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
     pick_list_group(ui, u, &START, &mut picks.start);

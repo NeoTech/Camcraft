@@ -7,8 +7,9 @@
 //! the full tool width, never cross the part wall and cut the band whole.
 //!
 //! Gate map: covers camcraft_motion::machining2d (pass_start, level_rings,
-//! level_order, ring_side, pocket, pocket_avoid, ladder_links) and
-//! camcraft_geometry::geo2d (clip_line).
+//! level_order, ring_side, pocket, pocket_avoid, ladder_links, pocket_hsm,
+//! adaptive_picks) and camcraft_geometry::geo2d (clip_line).
+//! #3327: `adaptive_picks` pins the 2D Adaptive's start and exit points.
 //! Provenance: our own regression of the second read on PR #3353; no
 //! vendor material consulted.
 
@@ -19,6 +20,8 @@ mod one_ring_set;
 mod ring_links;
 #[path = "pass_start_levels/pocket_outside.rs"]
 mod pocket_outside;
+#[path = "pass_start_levels/adaptive_picks.rs"]
+mod adaptive_picks;
 
 use camcraft_motion::cl::Toolpath;
 use camcraft_motion::entry::Entry3D;

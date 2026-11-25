@@ -194,5 +194,8 @@ pub fn approach_from_dto(d: Option<&ApproachDto>) -> Approach {
         stock_top: None,
         // #1559: runtime only - the generation lays the carried top over it.
         material_top: None,
+        // #3327: runtime only - the 2D Adaptive lays its picks over it.
+        start_point: None,
+        exit_point: None,
     }
 }

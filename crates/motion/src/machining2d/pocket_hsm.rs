@@ -67,6 +67,8 @@ pub(super) fn adaptive_ordered(region: Option<&Region>, center: &Region, p: &Poc
     let levels = super::equal_steps::cut_levels_for(p.top_z, &p.links.approach,p.bottom_z, p.stepdown)?.len();
     let budget = refused.or_else(|| over_budget(&travel, levels));
     if rest <= HSM_REST_MAX && cross.is_none() && budget.is_none() {
+        // #3327: a picked start holds the optimal load from the first pass on.
+        if let Some(e) = super::adaptive_picks::overload_refusal(&p.links.approach, &notes) { return Err(e); }
         return Ok((passes, notes, PocketStrategy::Adaptive, room, joins));
     }
     let s = PocketStrategy::OffsetRings;
@@ -75,6 +77,8 @@ pub(super) fn adaptive_ordered(region: Option<&Region>, center: &Region, p: &Poc
         (None, Some(why)) => why,
         (None, None) => format!("left {:.0}% of the area it could not cut within twice the load", rest * 100.0),
     };
+    // #3327: a start or exit point holds on the HSM plan only.
+    if let Some(e) = super::adaptive_picks::fallback_refusal(&p.links.approach, &why) { return Err(e); }
     let troch = if trochoid { super::pocket_troch::trochoid_passes(center, p)? } else { Err("is not tried here".to_owned()) };
     let note = match troch {
         Ok((passes, tnotes, room, joins)) => {
@@ -217,6 +221,8 @@ pub(super) fn triangle_about(c: Point2, inr: f64) -> Result<Region, GenError> {
 /// soonest);
 /// the helix narrowed to fit. `None` leaves the ladder's own choice.
 pub(crate) fn choose_entry(center: &Region, p: &PocketParams, notes: &mut Vec<String>) -> Result<Option<EntryRoom>, GenError> {
+    // #3327: the user's start point is the seed, or refused by name.
+    if let Some(q) = p.links.approach.start_point { return super::adaptive_picks::picked_entry(center, p, q).map(Some); }
     let helix = p.entry == Entry3D::Helix;
     if !(helix || p.entry == Entry3D::Plunge) {
         return Ok(None);
@@ -273,8 +279,8 @@ fn hsm_passes(center: &Region, p: &PocketParams, stock: Option<&Region>, air_onl
         }
     };
     let mut comps = components(center)?;
-    // The entry's own piece first.
-    comps.sort_by_key(|c| !c.contains(seed));
+    // The entry's own piece first; the exit point's last (#3327).
+    super::adaptive_picks::order_pieces(&mut comps, seed, p.links.approach.exit_point)?;
     let first = AdaptiveSpec {
         r,
         load: p.optimal_load,
@@ -376,22 +382,3 @@ pub(crate) fn in_air(stock: &Region, e: Point2, r: f64) -> bool {
 #[cfg(test)]
 #[path = "pocket_hsm_ring.rs"]
 mod ring_tests;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Round 4's budget: a plan riding air past 1.5x its cut, or posting
-    /// past the move budget, is named and handed to the Offset rings.
-    #[test]
-    fn a_plan_past_its_air_or_move_budget_is_refused_by_name() {
-        let ok = Travel { cut: 1000.0, air: 300.0, lift: 900.0, moves: 9000, hops: 2 };
-        assert!(over_budget(&ok, 2).is_none());
-        let airy = Travel { air: 2000.0, ..ok };
-        assert!(over_budget(&airy, 2).is_some_and(|w| w.contains("out of cut")));
-        let long = Travel { moves: 70_000, ..ok };
-        assert!(over_budget(&long, 2).is_some_and(|w| w.contains("moves")));
-        let hoppy = Travel { hops: HOP_BUDGET + 1, ..ok };
-        assert!(over_budget(&hoppy, 2).is_some_and(|w| w.contains("retract hops")));
-    }
-}

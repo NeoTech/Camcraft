@@ -150,6 +150,11 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
             }
             None => super::params_page::params_fields(ui, state, tab),
         }
+        // #3327: the 2D Adaptive's start and exit points, on its Lead tab.
+        let u = state.units();
+        if tab == SEC_LEADS && let operation::OpParams::Adaptive2D { picks, .. } = &mut state.op_ui.params {
+            super::start_exit_rows::region_groups(ui, u, picks);
+        }
         if let Some(act) = ui.ctx().data(|d| d.get_temp::<Option<StartExitAct>>(act_id())).flatten() {
             match act {
                 StartExitAct::Toggle(role) => start_exit_pick::toggle(state, role),

@@ -80,7 +80,7 @@ pub fn collecting(state: &State) -> bool {
         && state.panels_open.properties
         && state.properties_shown
         && state.op_tab == crate::egui_app::op_tabs::SEC_LEADS
-        && matches!(state.op_ui.params, OpParams::Contour { .. } | OpParams::Slot { .. })
+        && matches!(state.op_ui.params, OpParams::Contour { .. } | OpParams::Slot { .. } | OpParams::Adaptive2D { .. })
         && state.pane_target() == UiTarget::Operation(state.op_ui.name.clone())
 }
 
@@ -105,9 +105,11 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         state.status = format!("that pick on '{}' has no finite position", found.entity);
         return;
     }
-    // #3325: the Slot takes the same pick as the 2D Contour.
+    // #3325 / #3327: the Slot and the 2D Adaptive take the same pick as the 2D Contour.
     let kind = state.op_ui.params.kind().info().label;
-    let (OpParams::Contour { picks, tilt, .. } | OpParams::Slot { picks, tilt, .. }) = &mut state.op_ui.params else {
+    let (OpParams::Contour { picks, tilt, .. } | OpParams::Slot { picks, tilt, .. } | OpParams::Adaptive2D { picks, tilt, .. }) =
+        &mut state.op_ui.params
+    else {
         state.op_ui.start_exit_pick = None;
         return;
     };
@@ -155,7 +157,10 @@ pub(crate) fn marks(state: &State, aspect: f64) -> (Vec<Seg>, Vec<Seg>) {
     {
         return (start_segs, exit_segs);
     }
-    let (OpParams::Contour { picks, top_z, tilt: None, .. } | OpParams::Slot { picks, top_z, tilt: None, .. }) = &state.op_ui.params else {
+    let (OpParams::Contour { picks, top_z, tilt: None, .. }
+    | OpParams::Slot { picks, top_z, tilt: None, .. }
+    | OpParams::Adaptive2D { picks, top_z, tilt: None, .. }) = &state.op_ui.params
+    else {
         return (start_segs, exit_segs);
     };
     let Some(op) = model::find_by_name(&state.world, &state.op_ui.name)
@@ -268,6 +273,23 @@ mod tests {
         assert!(picks.start.is_empty());
         assert_eq!(picks.exit, vec![camcraft_app::path_picks::PathPick::xy(Point2::new(60.0, 18.0))]);
         assert_eq!(marks(&st, 1.5).1.len(), 2, "the exit point renders its X-cross");
+    }
+
+    #[test]
+    fn a_2d_adaptive_takes_the_viewport_pick_and_shows_its_marks() {
+        // #3327: the 2D Adaptive's Lead tab collects the same pick as the contour's.
+        let mut st = contour_state();
+        let adaptive = operation::KindInfo::ALL.iter().position(|k| k.label == "2D Adaptive").expect("the 2D Adaptive");
+        st.op_ui.params = crate::operations::retype(&st.op_ui.params, adaptive);
+        assert!(matches!(st.op_ui.params, OpParams::Adaptive2D { .. }));
+        arm(&mut st, StartExitRole::Start);
+        assert!(collecting(&st), "an armed 2D Adaptive page collects the click");
+        take(&mut st, &wall_hit("Block", [20.0, 10.0, 15.0]));
+        assert!(st.status.starts_with("2D Adaptive start point"), "{}", st.status);
+        let picks = st.op_ui.params.path_picks();
+        assert_eq!(picks.start, vec![camcraft_app::path_picks::PathPick::xy(Point2::new(20.0, 10.0))]);
+        assert!(picks.exit.is_empty());
+        assert_eq!(marks(&st, 1.5).0.len(), 4, "the start point renders its diamond");
     }
 
     #[test]

@@ -150,3 +150,17 @@ fn probe_air_slack() {
     let Ok(Some(p)) = super::super::adaptive::plan_from_air(&mat, &stock(), ring, &s) else { panic!("air") };
     eprintln!("worst {:.6} at {:?}, ends {:.6}, slack {:.9} deg, over {:?}, hops {}", p.worst.0, p.worst.1, p.ends.0, p.slack_deg, p.over, p.plan.travel.hops);
 }
+
+/// Round 4's budget: a plan riding air past 1.5x its cut, or posting
+/// past the move budget, is named and handed to the Offset rings.
+#[test]
+fn a_plan_past_its_air_or_move_budget_is_refused_by_name() {
+    let ok = Travel { cut: 1000.0, air: 300.0, lift: 900.0, moves: 9000, hops: 2 };
+    assert!(over_budget(&ok, 2).is_none());
+    let airy = Travel { air: 2000.0, ..ok };
+    assert!(over_budget(&airy, 2).is_some_and(|w| w.contains("out of cut")));
+    let long = Travel { moves: 70_000, ..ok };
+    assert!(over_budget(&long, 2).is_some_and(|w| w.contains("moves")));
+    let hoppy = Travel { hops: HOP_BUDGET + 1, ..ok };
+    assert!(over_budget(&hoppy, 2).is_some_and(|w| w.contains("retract hops")));
+}

@@ -85,6 +85,10 @@ pub fn adaptive_spiral_avoid_on(
         return Err(GenError::Empty("empty pocket region".into()));
     }
     let names = avoid.names_list();
+    // #3327: a start or exit point in a keep-out is refused by its name.
+    if let Some(e) = super::adaptive_picks::keepout_refusal(&p.links.approach, &ko, &names) {
+        return Err(e);
+    }
     let off = p.tool_diameter * 0.5 + p.stock_to_leave;
     let center = non_sliver_center(region, off)?;
     if center.is_empty() {

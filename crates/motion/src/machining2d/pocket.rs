@@ -351,7 +351,7 @@ pub(super) fn pocket_over_with_relief(
     {
         b.note_once(&n);
     }
-    emit_pocket_passes(
+    let path = emit_pocket_passes(
         b,
         p,
         PocketWalks {
@@ -371,5 +371,7 @@ pub(super) fn pocket_over_with_relief(
             },
             air,
         },
-    )
+    )?;
+    // #3327: the last pass of each level runs back to the exit point.
+    super::adaptive_picks::exit_on_path(path, center, p)
 }

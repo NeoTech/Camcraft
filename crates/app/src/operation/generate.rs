@@ -1005,6 +1005,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 blend_radius: *blend_radius,
             };
             pp.validate()?;
+            // #3327: the start and exit points, refused by name or laid over the plan.
+            super::adaptive_pick_op::lay(&params, &mut pp)?;
             let (relieved_region, zones) = super::corner_relief::check_op_relief(
                 &region,
                 &super::corner_relief::JobReliefCtx {
