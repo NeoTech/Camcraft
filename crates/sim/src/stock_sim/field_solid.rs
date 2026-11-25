@@ -37,8 +37,8 @@ pub(crate) enum ToolKind {
     Taper { r: f64, cot: f64 },
     Drill { r: f64, cot: f64, flank: f64 },
     Bull { r: f64, corner: f64, flank: f64 },
-    /// The dovetail head's frustum (#1444), widest at the tip.
-    Dove { r: f64, cot: f64, flank: f64 },
+    /// The dovetail head (#1444, #4004), widest at `corner` above tip.
+    Dove { r: f64, cot: f64, corner: f64, flank: f64 },
     /// The turning tool's footprint (M13.1 owed; the blade's, #21):
     /// the annular-sector sweep about the lathe axis, `field_cut`'s
     /// `Sweep::Lathe`.
@@ -100,16 +100,33 @@ pub(crate) fn tool_kind(tool: &SdfTool) -> Result<ToolKind, StockError> {
             }
             ToolKind::Bull { r: *r, corner: *corner, flank: *flank }
         }
-        SdfTool::Dovetail { r, cot, flank } => {
+        SdfTool::Dovetail { r, cot, corner, flank } => {
             radius(r)?;
             length("dovetail flank slope", cot)?;
             length("flank length", flank)?;
-            if r - flank * cot <= 0.0 {
+            if !corner.is_finite() || *corner < 0.0 || *corner > *r {
+                return Err(StockError::Invalid(format!(
+                    "field subtract: dovetail corner radius {corner} must be in [0, {r}]"
+                )));
+            }
+            let h = 1.0_f64.hypot(*cot);
+            let arc_top = *corner * (1.0 + *cot / h);
+            if *corner > 0.0 && arc_top > *flank + 1e-9 {
+                return Err(StockError::Invalid(format!(
+                    "field subtract: dovetail corner {corner} reaches {arc_top} past flank {flank}"
+                )));
+            }
+            let top = if *corner > 0.0 {
+                *r - *corner + *corner * (h + *cot) - *flank * *cot
+            } else {
+                *r - *flank * *cot
+            };
+            if top <= 0.0 {
                 return Err(StockError::Invalid(format!(
                     "field subtract: a dovetail of radius {r} narrows to nothing within its flank {flank} (slope {cot})"
                 )));
             }
-            ToolKind::Dove { r: *r, cot: *cot, flank: *flank }
+            ToolKind::Dove { r: *r, cot: *cot, corner: *corner, flank: *flank }
         }
         SdfTool::Lathe { profile, axis } => {
             let foot = profile.footprint()?;
@@ -190,9 +207,9 @@ pub(crate) enum RevKind {
     /// bull nose (M13.1): cylinder of `r` to `flank`, its bottom edge
     /// rounded by `corner` (`field_bull`'s profile)
     Bull { r: f64, corner: f64, flank: f64 },
-    /// dovetail head (#1444): a frustum of radius `r` at the anchor that
-    /// narrows by `cot` per unit height, up to `flank`
-    Dove { r: f64, cot: f64, flank: f64 },
+    /// dovetail head (#1444, #4004): widest radius `r` at `corner` above
+    /// the anchor, narrowing by `cot` per unit height up to `flank`
+    Dove { r: f64, cot: f64, corner: f64, flank: f64 },
 }
 
 /// The distance from `q` to the tool solid sitting at anchor `t` with
@@ -226,27 +243,8 @@ pub(crate) fn pose_dist(ax: [f64; 3], t: Point3, q: Point3, kind: &RevKind) -> f
         }
         RevKind::Drill { r, cot, flank } => drill_dist(rho, zl, *r, *cot, *flank),
         RevKind::Bull { r, corner, flank } => super::field_bull::bull_dist(rho, zl, *r, *corner, *flank),
-        RevKind::Dove { r, cot, flank } => dove_dist(rho, zl, *r, *cot, *flank),
+        RevKind::Dove { r, cot, corner, flank } => super::field_dove::dove_dist(rho, zl, *r, *cot, *corner, *flank),
     }
-}
-
-/// Exact Euclidean SDF to the dovetail frustum's meridian (#1444): the
-/// convex quadrilateral (0, 0), (r, 0), (r - flank cot, flank),
-/// (0, flank) in the (rho, along-axis) half-plane. A convex profile
-/// that holds its axis revolves into a convex solid whose nearest point
-/// lies in the query's own meridian, so the 2-D distance is the 3-D one.
-fn dove_dist(rho: f64, zl: f64, r: f64, cot: f64, flank: f64) -> f64 {
-    let top = r - flank * cot;
-    // Signed distance to the flank line, positive outside.
-    let side = (rho - r + zl * cot) / (1.0 + cot * cot).sqrt();
-    if zl >= 0.0 && zl <= flank && side <= 0.0 {
-        return side.max(-zl).max(zl - flank);
-    }
-    min3(
-        dist_pt_seg2(rho, zl, 0.0, 0.0, r, 0.0),
-        dist_pt_seg2(rho, zl, r, 0.0, top, flank),
-        dist_pt_seg2(rho, zl, 0.0, flank, top, flank),
-    )
 }
 
 /// Exact Euclidean SDF to a twist drill profile: cone from apex `(0, 0)`

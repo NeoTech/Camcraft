@@ -121,7 +121,7 @@ pub(super) fn shapes(atoms: &[Atom], tip: Point3, a: V3, fl: f64) -> Vec<(Shape,
                 v.push((cyl(at.rho_max(), at.z0, at.z1), flute, false));
                 v.push((cyl(flat, at.z0, at.z1), flute, flute));
             }
-            Prof::Cone { .. } | Prof::Dove { .. } => v.push((cyl(at.rho_max(), at.z0, at.z1), flute, false)),
+            Prof::Cone { .. } | Prof::Dove { .. } | Prof::Zone { .. } => v.push((cyl(at.rho_max(), at.z0, at.z1), flute, false)),
             Prof::Ball(r) => v.push((Shape::Sph { c: add_s(t, a, at.z0 + r), r }, flute, flute)),
         }
     }

@@ -173,3 +173,24 @@ fn the_band_is_the_slot_outline() {
     assert!((arc[0].x - (30.0 - 34.5 * (30.0 / 37.5))).abs() < 1e-9, "{:?}", arc[0]);
     assert!(undercut_band(A, B, 0.0, 0.0).is_err() && undercut_band(A, Point2::new(5.0, 0.0), 1.0, 3.0).is_err());
 }
+
+#[test]
+fn a_rounded_dovetail_shifts_by_its_widest_corner_and_keeps_z_at_station() {
+    let base = cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0);
+    for cr in [0.254, 3.0] {
+        let tool = camcraft_tools::tools::Tool { corner_r: cr, ..base.clone() };
+        let u = Undercut::of(&tool).unwrap();
+        assert_eq!(u.contact(), (9.525, cr));
+        let p = UndercutParams { cutter: u, ..params(ToolKind::Dovetail, 24.0) };
+        let path = undercut(A, B, &p).unwrap();
+        let shift = 12.0 - 9.525;
+        assert!((max_off_axis(&path) - shift).abs() < 1e-9);
+        let station = undercut_station(A, B, &p).unwrap();
+        for m in path.moves.iter().filter(|m| m.from.z != m.to.z) {
+            for q in [m.from, m.to] {
+                assert!((q.x - station.x).hypot(q.y - station.y) < 1e-9);
+            }
+        }
+        assert!(path.moves.iter().filter(|m| m.kind == MoveKind::Feed).all(|m| m.from.z == -12.0 && m.to.z == -12.0));
+    }
+}

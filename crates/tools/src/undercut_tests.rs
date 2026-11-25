@@ -185,3 +185,89 @@ fn the_fixture_stack_carries_the_whole_ball_and_keeps_the_neck_top() {
     assert_eq!(fixture_geom(&tslot()), tslot().geom());
     assert_eq!(fixture_geom(&dovetail()), dovetail().geom());
 }
+
+#[test]
+fn a_rounded_dovetail_reads_its_corner_radius_and_widened_flank() {
+    // Issue #4004 example: Ø19.05 mm, 30 deg off axis (tip_angle 60),
+    // head height 9.525 mm, corner_r 0.254 mm and 3.0 mm.
+    let base = cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0);
+    let sharp = Undercut::of(&base).unwrap();
+    let t = 30.0_f64.to_radians();
+    let sharp_top = 9.525 - 9.525 * t.tan();
+    assert!((sharp.rho(9.525) - sharp_top).abs() < 1e-12);
+    assert!((sharp_top - 4.025738686).abs() < 1e-6);
+
+    let r254 = Tool { corner_r: 0.254, ..base.clone() };
+    assert_eq!(r254.why_not_sane(), None);
+    let u254 = Undercut::of(&r254).unwrap();
+    assert_eq!(u254.contact(), (9.525, 0.254));
+    assert!((u254.rho(0.0) - (9.525 - 0.254)).abs() < 1e-12);
+    assert!((u254.rho(0.254) - 9.525).abs() < 1e-12);
+    let s_tan = 0.254 * (1.0 + t.sin());
+    let arc_tan = 9.525 - 0.254 + (0.254 * 0.254 - (s_tan - 0.254).powi(2)).sqrt();
+    let flank_tan = 9.525 - 0.254 + 0.254 * (1.0 + t.sin()) / t.cos() - s_tan * t.tan();
+    assert!((arc_tan - flank_tan).abs() < 1e-12);
+    assert!((u254.rho(s_tan) - flank_tan).abs() < 1e-12);
+    let want_top_254 = 9.525 - 0.254 + 0.254 * (1.0 + t.sin()) / t.cos() - 9.525 * t.tan();
+    assert!((u254.rho(9.525) - want_top_254).abs() < 1e-12);
+    assert!((want_top_254 - 4.21167959).abs() < 1e-6);
+    assert!(((u254.rho(9.525) - sharp.rho(9.525)) - 0.1859409).abs() < 1e-6);
+
+    let r3 = Tool { corner_r: 3.0, ..base.clone() };
+    let u3 = Undercut::of(&r3).unwrap();
+    assert_eq!(u3.contact(), (9.525, 3.0));
+    let want_top_3 = 9.525 - 3.0 + 3.0 * (1.0 + t.sin()) / t.cos() - 9.525 * t.tan();
+    assert!((u3.rho(9.525) - want_top_3).abs() < 1e-12);
+    assert!(((u3.rho(9.525) - sharp.rho(9.525)) - 2.1961524).abs() < 1e-6);
+
+    // Drawn profile + spun law pass for small, medium, large, and boundary radii.
+    let exact_arc = Tool { corner_r: 2.0, ..cutter(ToolKind::Dovetail, 20.0, 3.0, 8.0, 20.0, 60.0) };
+    let full_r = Tool { corner_r: 10.0, ..cutter(ToolKind::Dovetail, 20.0, 16.0, 4.0, 20.0, 60.0) };
+    let tiny = Tool { corner_r: 0.005, ..base };
+    for tool in [&r254, &r3, &exact_arc, &full_r, &tiny] {
+        assert_eq!(tool.why_not_sane(), None, "{tool:?}");
+        let u = Undercut::of(tool).unwrap();
+        let p = tool.profile();
+        assert!(p.windows(2).all(|w| w[1].0 >= w[0].0 - 1e-12), "{p:?}");
+        assert!(
+            p.iter().any(|&(z, rad)| (z - tool.corner_r).abs() < 1e-12 && (rad - u.r).abs() < 1e-12),
+            "profile hits widest corner point ({}, {}): {p:?}",
+            tool.corner_r,
+            u.r
+        );
+        for &(z, rad) in p.iter().filter(|q| q.0 > 0.0 && q.0 < tool.flute_len) {
+            assert!((rad - u.rho(z)).abs() < 1e-9, "z {z}: profile {rad} vs rho {}", u.rho(z));
+        }
+        assert!(
+            p.iter().any(|&(z, rad)| (z - tool.flute_len).abs() < 1e-12 && (rad - u.rho(tool.flute_len)).abs() < 1e-9),
+            "flute top radius matches rho({}): {p:?}",
+            tool.flute_len
+        );
+        check(tool, parametric(tool)).unwrap_or_else(|e| panic!("corner_r {}: {e}", tool.corner_r));
+    }
+}
+
+#[test]
+fn a_dovetail_corner_radius_refusals_name_the_rule() {
+    // 3 mm corner at 60 deg reaches 4.5 mm up the flank, over a 4 mm head.
+    let tall_arc = Tool { corner_r: 3.0, ..cutter(ToolKind::Dovetail, 20.0, 4.0, 8.0, 30.0, 60.0) };
+    let why = tall_arc.why_not_sane().unwrap();
+    assert!(why.contains("dovetail cutter") && why.contains("corner radius"), "{why}");
+    assert_eq!(Undercut::of(&tall_arc), None);
+
+    // Direct undercut::refusal also guards negative and over-radius values.
+    let neg = Tool { corner_r: -0.2, ..dovetail() };
+    assert!(refusal(&neg).unwrap().contains("corner radius"));
+    let over_r = Tool { corner_r: 10.5, ..dovetail() };
+    assert!(refusal(&over_r).unwrap().contains("corner radius"));
+
+    // Neck clearance checks the widened rounded flank, not the sharp cone:
+    // Ø20, h=5, 60 deg -> sharp top radius 7.113, corner_r=2 -> rounded top 8.577.
+    let sd15_sharp = Tool { shank_d: 15.0, ..dovetail() };
+    assert!(sd15_sharp.why_not_sane().is_some());
+    let sd15_round = Tool { corner_r: 2.0, shank_d: 15.0, ..dovetail() };
+    assert_eq!(sd15_round.why_not_sane(), None);
+    let sd175_round = Tool { corner_r: 2.0, shank_d: 17.5, ..dovetail() };
+    let why = sd175_round.why_not_sane().unwrap();
+    assert!(why.contains("dovetail cutter") && why.contains("neck"), "{why}");
+}

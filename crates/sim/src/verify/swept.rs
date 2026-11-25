@@ -141,6 +141,19 @@ pub(super) fn rho_expanded(atom: &super::probe::Atom, w: f64, m: f64) -> f64 {
                 r + m
             }
         }
+        Prof::Zone { rc, sc, rad } => {
+            let r_max = (rc + rad).max(0.0);
+            let z_arc = atom.z0 + sc;
+            if w < z_arc && (sc - rad).abs() <= 1e-12 {
+                rc + ((rad + m).powi(2) - (z_arc - w).powi(2)).max(0.0).sqrt()
+            } else if w < atom.z0 {
+                r_max + (m * m - (atom.z0 - w).powi(2)).max(0.0).sqrt()
+            } else if w > atom.z1 {
+                r_max + (m * m - (w - atom.z1).powi(2)).max(0.0).sqrt()
+            } else {
+                r_max + m
+            }
+        }
         Prof::Bull { flat, cr } => {
             let z_arc = atom.z0 + cr;
             if w < z_arc {

@@ -73,8 +73,8 @@ impl ArcKind {
             ArcKind::Rev(RevKind::Bull { r, corner, flank }) => {
                 ArcKind::Rev(RevKind::Bull { r: *r, corner: *corner, flank: *flank })
             }
-            ArcKind::Rev(RevKind::Dove { r, cot, flank }) => {
-                ArcKind::Rev(RevKind::Dove { r: *r, cot: *cot, flank: *flank })
+            ArcKind::Rev(RevKind::Dove { r, cot, corner, flank }) => {
+                ArcKind::Rev(RevKind::Dove { r: *r, cot: *cot, corner: *corner, flank: *flank })
             }
         }
     }
@@ -298,7 +298,9 @@ fn arc_kind(kind: &ToolKind) -> Option<(f64, ArcKind)> {
         ToolKind::Taper { r, cot } => (0.0, ArcKind::Rev(RevKind::Taper { r: *r, cot: *cot })),
         ToolKind::Drill { r, cot, flank } => (0.0, ArcKind::Rev(RevKind::Drill { r: *r, cot: *cot, flank: *flank })),
         ToolKind::Bull { r, corner, flank } => (0.0, ArcKind::Rev(RevKind::Bull { r: *r, corner: *corner, flank: *flank })),
-        ToolKind::Dove { r, cot, flank } => (0.0, ArcKind::Rev(RevKind::Dove { r: *r, cot: *cot, flank: *flank })),
+        ToolKind::Dove { r, cot, corner, flank } => {
+            (0.0, ArcKind::Rev(RevKind::Dove { r: *r, cot: *cot, corner: *corner, flank: *flank }))
+        }
         ToolKind::Lathe { .. } => return None,
     })
 }

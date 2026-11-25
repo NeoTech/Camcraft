@@ -49,6 +49,12 @@ fn a_lifted_dovetail_head_is_never_grown_smaller_than_its_solid() {
 }
 
 #[test]
+fn a_lifted_dovetail_corner_zone_is_never_grown_smaller_than_its_solid() {
+    let head = Atom { z0: 0.0, z1: 4.5, prof: Prof::Zone { rc: 6.525, sc: 3.0, rad: 3.0 }, cap: false };
+    never_below_the_solid(head);
+}
+
+#[test]
 fn a_lifted_lollipop_ball_is_never_grown_smaller_than_its_solid() {
     // Main's law reads the ball as its circumscribed cylinder: it may
     // over-report the keep-out, never under-report it.
