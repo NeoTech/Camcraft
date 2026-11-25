@@ -62,6 +62,8 @@ mod medial;
 mod morph;
 mod near;
 mod raster;
+// Issue #3933: the planner's stock read over the Offset rings spiral.
+mod reading;
 // Issue 2031: rest machining over proved remaining stock.
 mod rest;
 mod rings;
@@ -85,6 +87,9 @@ pub(crate) use guard::first_crossing;
 pub(crate) use troch_plan::{plan as plan_trochoid, seed as trochoid_seed};
 
 pub(crate) use lift::Travel;
+// #3933: the Offset rings spiral joins its rings with this morph.
+pub(crate) use reading::{read_rim, worst_load};
+pub(crate) use spiral::revolution as ring_morph;
 pub(crate) use air_rings::plan_from_air;
 pub(crate) use lift_link::Return;
 pub(crate) use loops::boundary_dist;

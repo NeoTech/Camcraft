@@ -23,10 +23,11 @@ pub enum PocketStrategy {
     /// port) and falls back to [`PocketStrategy::OffsetRings`] by name
     /// where the planner refuses a level.
     Adaptive,
-    /// The pre-M11.4 C adaptive (M2.1c's law, planar since M5.1 H):
-    /// the Waterline ring tiling spaced at `optimal_load` x D instead
-    /// of a free stepover - concentric rings, kept as an explicit
-    /// choice so every program it posted stays byte-identical.
+    /// The Waterline ring tiling spaced at `optimal_load` x D instead
+    /// of a free stepover (M2.1c's law, planar since M5.1 H). In the
+    /// 2D Pocket (#3933, `offset_spiral`) the rings are one outward
+    /// spiral, each revolution morphing into the next ring, the wall
+    /// ring last as one lap; the 3-D ladder still cuts them one by one.
     OffsetRings,
     /// Waterline where the pocket's outer boundary is round enough for
     /// rings to be the honest shape, Zigzag otherwise. The resolution is

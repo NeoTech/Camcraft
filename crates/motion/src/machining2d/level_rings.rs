@@ -21,6 +21,7 @@ use crate::geo2d::{Loop, Point2, Region, RingClip};
 
 use super::face::GenError;
 use super::level_order::{Piece, WALL, order};
+use super::offset_spiral::offset_spiral;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::PocketParams;
 use super::pocket_plan::plan_passes;
@@ -56,8 +57,17 @@ pub(super) fn ring_plan(
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
     let off = p.tool_diameter * 0.5 + p.stock_to_leave;
-    side_plan(region, center, (off, p.tool_diameter * 0.5), (p.tiling_step(), p.climb), strategy, side)
+    let (step, r) = (p.tiling_step(), p.tool_diameter * 0.5);
+    // #3933: the 2D Pocket's Offset rings are one outward spiral.
+    let auto = || match strategy {
+        PocketStrategy::OffsetRings => offset_spiral(center, step, p.climb, r),
+        s => Ok((plan_passes(center, step, p.climb, s)?, Vec::new())),
+    };
+    side_plan(region, center, (off, r), (step, p.climb), strategy, side, &auto)
 }
+
+/// The plan of an area that takes no start-side pieces, with its notes.
+type AutoPlan<'a> = &'a dyn Fn() -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError>;
 
 /// The 3-D rough's level (#3361): [`ring_plan`] over a cutter-centre
 /// area that is its own outline (the level law erodes the target once,
@@ -71,7 +81,8 @@ pub fn level_ring_plan(
     strategy: PocketStrategy,
     side: &StartSide,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side)
+    let auto = || Ok((plan_passes(center, step, climb, strategy)?, Vec::new()));
+    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side, &auto)
 }
 
 fn side_plan(
@@ -81,6 +92,7 @@ fn side_plan(
     (step, climb): (f64, bool),
     strategy: PocketStrategy,
     side: &StartSide,
+    auto: AutoPlan,
 ) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
     let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings | PocketStrategy::Adaptive);
     if side.start != PassStart::Auto
@@ -92,10 +104,11 @@ fn side_plan(
         if left <= LEFT_TOL {
             return Ok((plan.passes, plan.notes));
         }
-        let auto = plan_passes(center, step, climb, strategy)?;
-        return Ok((auto, vec![side.fallback_note(left)]));
+        let (passes, mut notes) = auto()?;
+        notes.insert(0, side.fallback_note(left));
+        return Ok((passes, notes));
     }
-    Ok((plan_passes(center, step, climb, strategy)?, Vec::new()))
+    auto()
 }
 
 /// The most area (mm2) of the cutter-centre area that the passes may leave

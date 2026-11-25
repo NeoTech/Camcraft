@@ -244,6 +244,19 @@ Only the ring strategies (Waterline, Offset rings) have a ring order.
 Zigzag rows and rest machining keep their own order. When you set Inside
 or Outside on them, the path notes say that the option is not used.
 
+The three ring-like strategies cut in different ways:
+
+- **Waterline** cuts closed rings at the stepover. A straight step joins
+  two rings. The step cuts at up to the full tool width.
+- **Offset rings** cuts the same offset rings, but at the optimal load,
+  as one spiral that goes out from the core. Each revolution moves from
+  one ring to the next ring, so the step stays at the load. The last
+  pass is one full ring on the wall. Where two rings cannot join as a
+  spiral, the step stays. The path notes name the worst load where it
+  is more than the optimal load, for example at a sharp corner.
+- **Adaptive** plans each cut on the stock that is left. It holds the
+  load in corners and narrow channels too.
+
 **Common refusals:** "pocket is narrower than the tool"; "stepover leaves
 bands the tool cannot reach"; a pick that "projects to a line from above
 and bounds no area".

@@ -39,7 +39,7 @@ fn project(b: &[Point2], p: Point2) -> Point2 {
 /// travelled the same way, `b` rotated to start nearest `a`'s start),
 /// the blend weight running 0 -> 1 with `a`'s arc length. Ending on
 /// `b[0]`, it chains straight into the revolution after it.
-pub(super) fn revolution(a: &[Point2], b: &[Point2]) -> Vec<Point2> {
+pub(crate) fn revolution(a: &[Point2], b: &[Point2]) -> Vec<Point2> {
     let mut out: Vec<Point2> = Vec::new();
     let b = rotate_to(b, a.first().copied().unwrap_or_default());
     {

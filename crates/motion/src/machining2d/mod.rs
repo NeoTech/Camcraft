@@ -96,6 +96,8 @@ mod ring_links;
 mod ring_side;
 mod pocket;
 mod pocket_plan;
+mod offset_law;
+mod offset_spiral;
 mod pocket_emit;
 mod pocket_zigzag;
 mod pocket_hsm;

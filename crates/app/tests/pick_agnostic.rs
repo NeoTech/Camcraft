@@ -246,17 +246,45 @@ fn the_chosen_strategy_runs_on_the_round_region_never_a_substitute() {
     let picks = bore_picks(&world, &name);
     let floor = picks.iter().find(|(l, _)| l.starts_with("face")).map(|(_, s)| s.clone()).expect("floor face");
     let cut = |p: &OpParams| generate(&world, &name, std::slice::from_ref(&floor), p).expect("generates").0;
-    // Offset rings (the pre-M11.4 C adaptive, kept by name): rings
-    // stepped by the optimal load, 14.64% of D = 1.464 mm.
-    let o = cut(&pocket(PocketStrategy::OffsetRings, 20.0, 0.0));
-    let mut radii: Vec<f64> =
-        level_feeds(&o, 15.0).iter().map(|m| (m.to.x.hypot(m.to.y) * 100.0).round() / 100.0).collect();
-    radii.dedup();
-    assert!(radii.len() >= 4, "{radii:?}");
+    // Offset rings (#3933): the rings stepped by the optimal load,
+    // 14.64% of D = 1.464 mm, cut as ONE outward spiral - the core ring,
+    // then each revolution morphing into the next ring out, the wall
+    // ring last as one lap. No radial step across between rings.
+    let (o, owarns) = generate(&world, &name, std::slice::from_ref(&floor), &pocket(PocketStrategy::OffsetRings, 20.0, 0.0))
+        .expect("generates");
+    assert!(owarns.is_empty(), "the Offset rings spiral verifies clean: {owarns:?} {:?}", o.notes);
+    assert!(!o.notes.iter().any(|n| n.contains("worst load")), "a round floor holds the load: {:?}", o.notes);
     let step = camcraft_app::load::DEFAULT_OPTIMAL_LOAD * 10.0;
+    let feeds = level_feeds(&o, 15.0);
+    let pts: Vec<(f64, f64)> = feeds.iter().map(|m| (m.to.x, m.to.y)).collect();
+    let radii: Vec<f64> = pts.iter().map(|p| p.0.hypot(p.1)).collect();
+    let wall = radii.iter().copied().fold(0.0f64, f64::max);
+    assert!(radii.len() >= 4 && wall > 3.0 * step, "{radii:?}");
     for w in radii.windows(2) {
-        assert!((w[1] - w[0] - step).abs() < 0.02, "ring spacing {radii:?} must be ae = {step}");
+        assert!(w[1] >= w[0] - 0.02, "the spiral never steps back in: {} -> {}", w[0], w[1]);
+        assert!(w[1] - w[0] < 0.5 * step, "no step across between rings: {} -> {}", w[0], w[1]);
     }
+    assert!((radii.last().copied().unwrap_or(0.0) - wall).abs() < 0.02, "the wall ring is cut last");
+    // The turns (core lap, spiral, wall lap) step out one load step a turn.
+    let tau = std::f64::consts::TAU;
+    let mut turn = 0.0f64;
+    for m in &feeds {
+        let mut d = m.to.y.atan2(m.to.x) - m.from.y.atan2(m.from.x);
+        // An arc may sweep past half a turn: take the turn nearest its sweep.
+        let near = m.arc.map_or(0.0, |a| {
+            let s = (m.to.y - a.center.y).atan2(m.to.x - a.center.x) - (m.from.y - a.center.y).atan2(m.from.x - a.center.x);
+            if a.ccw { s.rem_euclid(tau) } else { -(-s).rem_euclid(tau) }
+        });
+        d -= tau * ((d - near) / tau).round();
+        turn += d;
+    }
+    let spiral_turns = turn.abs() / tau - 2.0;
+    let grown = wall - feeds[0].from.x.hypot(feeds[0].from.y);
+    assert!(
+        (grown - spiral_turns * step).abs() < 0.5 * step,
+        "{spiral_turns:.2} spiral turns grow {grown:.3} mm, not {step} mm a turn"
+    );
+    let rings = (wall / step).ceil() as usize;
     // Adaptive (M11.4 C) is the HSM plan on the very same round floor:
     // a spiral whose cut points sweep the radii continuously - never a
     // handful of concentric ring radii (the user's "just because it's a
@@ -282,7 +310,7 @@ fn the_chosen_strategy_runs_on_the_round_region_never_a_substitute() {
         level_feeds(&a, 15.0).iter().map(|m| (m.to.x.hypot(m.to.y) * 100.0).round() / 100.0).collect();
     ar.sort_by(f64::total_cmp);
     ar.dedup();
-    assert!(ar.len() > 4 * radii.len(), "a spiral, not rings: {} radii vs the rings' {}", ar.len(), radii.len());
+    assert!(ar.len() > 4 * rings, "a spiral, not rings: {} radii vs {rings} rings", ar.len());
     assert_ne!(common::gen_to_cltext(&a), common::gen_to_cltext(&o));
     // Zigzag on the same round floor stays rows: straight, no ring arcs.
     let z = cut(&pocket(PocketStrategy::Zigzag, 20.0, 0.0));

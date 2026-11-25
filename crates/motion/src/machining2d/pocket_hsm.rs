@@ -18,7 +18,7 @@ use super::adaptive::{AdaptiveSpec, Return, Travel, boundary_dist, central_point
 use super::face::GenError;
 use super::level_rings::ring_plan;
 use super::pass_start::{PassStart, StartSide};
-use super::pocket::{PocketParams, PocketStrategy, plan_passes};
+use super::pocket::{PocketParams, PocketStrategy};
 
 /// Where the plan put the entry: the spot, the radius of the disc
 /// about it that is inside the center area, the helix radius the
@@ -96,7 +96,7 @@ pub(super) fn adaptive_ordered(region: Option<&Region>, center: &Region, p: &Poc
         }
         _ => {
             let step = crate::load::load_step(p.tool_diameter, p.optimal_load);
-            (plan_passes(center, step, p.climb, s)?, Vec::new())
+            super::offset_spiral::offset_spiral(center, step, p.climb, p.tool_diameter * 0.5)?
         }
     };
     let mut notes = vec![note];

@@ -60,6 +60,30 @@ pub(crate) fn chord_crosses_path(a: Point2, b: Point2, pts: &[Point2], closed: b
 /// with rapids and a plunge - the same fallback `chord_clears` alone
 /// already forced.
 pub(super) fn waterline_passes(center: &Region, stepover: f64, climb: bool) -> Result<Vec<Vec<Point2>>, GenError> {
+    let (loops, chains) = waterline_chains(center, stepover, climb)?;
+    let mut passes: Vec<Vec<Point2>> = Vec::new();
+    for chain in &chains {
+        let mut cur: Vec<Point2> = Vec::new();
+        for &l in chain {
+            cur.extend_from_slice(&loops[l].1);
+            cur.push(loops[l].1[0]);
+        }
+        if cur.len() >= 2 {
+            passes.push(cur);
+        }
+    }
+    Ok(passes)
+}
+
+/// The ring loops of [`waterline_passes`] (offset index, points in the
+/// walking sense, open) and its chains (indices into the loops, each
+/// consecutive pair joined by a proved chord from entry to entry): the
+/// plan before it is flattened, which the Offset rings spiral joins by
+/// morphs instead (#3933, `offset_spiral`).
+pub(super) type RingChains = (Vec<(u32, Vec<Point2>)>, Vec<Vec<usize>>);
+
+/// [`waterline_passes`] before the flattening: its loops and chains.
+fn waterline_chains(center: &Region, stepover: f64, climb: bool) -> Result<RingChains, GenError> {
     let (lo, hi) = match center.bounds() {
         Some(b) => b,
         None => return Err(GenError::Empty("empty pocket region".into())),
@@ -67,17 +91,25 @@ pub(super) fn waterline_passes(center: &Region, stepover: f64, climb: bool) -> R
     // Erosion by more than the diagonal can never be non-empty; the cap
     // only fires if some Clipper path stops shrinking.
     let cap = (dist(lo, hi) / stepover + 10.0).max(16.0) as u32;
+    chains_at(center, &|k| Some(f64::from(k) * stepover), cap, climb)
+}
+
+/// [`waterline_chains`] over the ring depths `depth(k)` (mm in from
+/// `center`'s edge, ascending, `depth(0)` = 0; `None` ends the family)
+/// for `k` up to `cap` (#3933: the Offset rings spiral spaces its rings
+/// by the engagement law, `offset_spiral`).
+pub(super) fn chains_at(center: &Region, depth: &dyn Fn(u32) -> Option<f64>, cap: u32, climb: bool) -> Result<RingChains, GenError> {
     // Phase 1: every loop of every ring, in (offset, |area| descending)
     // order - the nesting order, so a chain step's honest candidates
     // (the adjacent ring of the same family) come first.
     let mut loops: Vec<(u32, Vec<Point2>)> = Vec::new();
     let mut converged = false;
     for k in 0..=cap {
-        let ring = if k == 0 {
-            center.clone()
-        } else {
-            center.offset(-f64::from(k) * stepover)?
+        let Some(d) = depth(k) else {
+            converged = true;
+            break;
         };
+        let ring = if k == 0 { center.clone() } else { center.offset(-d)? };
         if ring.is_empty() {
             converged = true;
             break;
@@ -196,18 +228,7 @@ pub(super) fn waterline_passes(center: &Region, stepover: f64, climb: bool) -> R
         let tail: Vec<usize> = chains[ci].split_off(w + 1);
         chains.push(tail);
     }
-    let mut passes: Vec<Vec<Point2>> = Vec::new();
-    for chain in &chains {
-        let mut cur: Vec<Point2> = Vec::new();
-        for &l in chain {
-            cur.extend_from_slice(&loops[l].1);
-            cur.push(loops[l].1[0]);
-        }
-        if cur.len() >= 2 {
-            passes.push(cur);
-        }
-    }
-    Ok(passes)
+    Ok((loops, chains))
 }
 
 /// The join chords of a chain: one per consecutive loop pair, running
