@@ -73,6 +73,7 @@ fn circular_world(stepover: f64, climb: bool) -> flecs_ecs::prelude::World {
         entry: Entry3D::Ramp,
         helix_radius: 1.0,
         tilt: None,
+        picks: Default::default(),
     };
     history.execute(
         &world,

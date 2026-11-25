@@ -128,6 +128,7 @@ pub enum OpParams {
         /// 3+2 index (M5.1 stage B): the plane this face cuts, tilted;
         /// `None` is the world XY the kind has always meant.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     Contour {
         stock_to_leave: f64,
@@ -180,6 +181,7 @@ pub enum OpParams {
         /// sketch contours; empty by default so legacy operations stamp
         /// identically.
         chain_overrides: Vec<super::sel::ChainOverride>,
+        picks: crate::path_picks::PathPicks,
     },
     Pocket {
         stepover: f64,
@@ -232,6 +234,7 @@ pub enum OpParams {
         /// parameter); read by the ring strategies. `Auto` is every
         /// earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// 2D Adaptive roughing (M2.4 A): the pocket's constant-engagement
     /// ladder as its own catalog name. The rings are the `Adaptive`
@@ -291,6 +294,7 @@ pub enum OpParams {
         /// pass-order parameter of #3316. `Auto` is every earlier file,
         /// byte for byte; the Trochoidal method refuses the other two.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// 2D Offset pocket roughing, style A (M2.4 A): concentric rings
     /// from the boundary inward at the roughing stepover - the pocket's
@@ -327,6 +331,7 @@ pub enum OpParams {
         /// Where each level's rings start (#3316): the shared pass-order
         /// parameter. `Auto` is every earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// Engraving (M2.4 B): the trace's numbers under the catalog name -
     /// the twin law again (as `Adaptive2D` is the pocket's). The chain
@@ -346,6 +351,7 @@ pub enum OpParams {
         climb: bool,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     /// V-carve (#1443): a V-bit cuts the picked closed region with its
     /// tip on the medial axis; the depth at each point is the depth at
@@ -368,6 +374,7 @@ pub enum OpParams {
         flat_stepover: f64,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     /// 2D chamfer (M2.4 B): one ride whose center line stands so the
     /// taper tool's CONE lies on the chamfer face the two authored
@@ -399,6 +406,7 @@ pub enum OpParams {
         tolerance: f64,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     /// Circular pocket / vault (M2.4 B): concentric rings about an
     /// AUTHORED center at an AUTHORED radius - the geometry authored
@@ -434,6 +442,7 @@ pub enum OpParams {
         links: Links,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     Slot {
         a: Point2,
@@ -477,6 +486,7 @@ pub enum OpParams {
         extend_start: f64,
         /// How far the pass runs past `b`, on along `a -> b`, mm (#1731).
         extend_end: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Trochoidal slotting (#220): the channel of `width` along `a -> b`
     /// cleared by trochoid loops whose engagement the planner measures
@@ -505,6 +515,7 @@ pub enum OpParams {
         return_feed: f64,
         plunge_feed: f64,
         climb: bool,
+        picks: crate::path_picks::PathPicks,
     },
     Trace {
         clearance_z: Height,
@@ -517,6 +528,7 @@ pub enum OpParams {
         climb: bool,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
+        picks: crate::path_picks::PathPicks,
     },
     /// Hole machining. The hole list is params data - recognized from the
     /// model by an action in the panel, or typed - so it is undoable,
@@ -555,6 +567,7 @@ pub enum OpParams {
         /// `FullDiameter` (default) adds the drill point cone so the full
         /// diameter clears the hole; `Tip` stops the tip at `floor - break_through`.
         break_through_from: crate::drilling::BreakThroughFrom,
+        picks: crate::path_picks::PathPicks,
     },
     /// Mesh-driven 3D pocketing. The model is the final part: every
     /// level cuts the footprint minus the model's section strictly above
@@ -622,6 +635,7 @@ pub enum OpParams {
         /// of #3316): read by Waterline and Offset rings. `Auto` is
         /// every earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// Ball-nose surface finishing. The model is the finished
     /// surface. `Waterline`: each ring is the ball-center tangent
@@ -722,6 +736,7 @@ pub enum OpParams {
         /// parameter of #3316): read by Contour and Flat only. `Auto`
         /// is every earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the chamfer's chord across the
@@ -770,6 +785,7 @@ pub enum OpParams {
         /// #1890: the break mode (Constant Width or Constant Depth and
         /// its depth), the profile, and the passes.
         sizing: finishing3d::DeburrBreak,
+        picks: crate::path_picks::PathPicks,
     },
     /// Multi-axis Deburr (#1894): every field of [`Self::Deburr`] with
     /// the same meaning, and the tool axis tilted onto each break - one
@@ -801,6 +817,7 @@ pub enum OpParams {
         max_tilt_deg: f64,
         /// Tilt the axis off the shank and holder; off tests nothing.
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// Simultaneous 5-axis level finishing (M5.1 stage C): the waterline
     /// ring ladder a [`Self::Finish3D`] Waterline cuts, with a tool-axis
@@ -847,6 +864,7 @@ pub enum OpParams {
         /// same path either way - a sphere has no opinion about its
         /// own axis - so this is safety, never shape.
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// The raster sibling of [`Self::Contour5D`]: the Z-following
     /// parallel pass with the same axis law. No `pattern` field - the
@@ -870,6 +888,7 @@ pub enum OpParams {
         /// See [`Self::Contour5D`]: the shank dodges within the cone,
         /// the raster's positions standing still.
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// Ruled-surface (bladed) finishing (M5.1 stage D): the raster run
     /// ALONG the direction [`crate::multiaxis::ruling`] reads off the
@@ -895,6 +914,7 @@ pub enum OpParams {
         lead_deg: f64,
         lag_deg: f64,
         max_tilt_deg: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// The swarf family's tolerance ladder (M5.1 stage D): the same
     /// path run coarse-first - pass i from the top at `tol·4^i`, every
@@ -917,6 +937,7 @@ pub enum OpParams {
         max_tilt_deg: f64,
         /// Coarse-to-fine passes, 1..4; 1 is the plain ladder alone.
         passes: u32,
+        picks: crate::path_picks::PathPicks,
     },
     /// Rotary 4-axis finishing of a turned work (M5.1 stage E): the
     /// waterline ring ladder about the axis [`crate::multiaxis::axis`]
@@ -943,6 +964,7 @@ pub enum OpParams {
         lead_deg: f64,
         lag_deg: f64,
         max_tilt_deg: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// The laid-down sibling of [`Self::RotaryContour`]: generatrix
     /// passes ALONG the fitted axis, stepping around the bar - the
@@ -965,6 +987,7 @@ pub enum OpParams {
         lead_deg: f64,
         lag_deg: f64,
         max_tilt_deg: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// The rotary family's rough ladder (M5.1 stage E2): the pocket
     /// machinery run in WRAP SPACE - the developed skin of the fitted
@@ -1000,6 +1023,7 @@ pub enum OpParams {
         lead_deg: f64,
         lag_deg: f64,
         max_tilt_deg: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Multi-axis roughing (M5.1 stage E3): the [`Self::Pocket3D`]
     /// ladder, positions bit-identical, with a tool-axis pose stamped
@@ -1037,6 +1061,7 @@ pub enum OpParams {
         /// shank too - and the floors it left unposed take a pose when
         /// (only when) the shank speaks (M5.1 stage F).
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// Flowline finishing (M5.1 tail): [`Self::Parallel5D`]'s numbers
     /// run on a direction that TURNS - each pass follows the
@@ -1064,6 +1089,7 @@ pub enum OpParams {
         max_tilt_deg: f64,
         /// See [`Self::Contour5D`]: the dodge, on curved lines.
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// Multi-axis contour on drive curves (M5.1 tail, stage J): the
     /// edge chains picked off the model in `op.src`, machined WHERE
@@ -1091,6 +1117,7 @@ pub enum OpParams {
         /// See [`Self::Contour5D`]: the dodge, on the chain's own
         /// vertices.
         shank_avoid: bool,
+        picks: crate::path_picks::PathPicks,
     },
     /// Turning facing (M5.2 stage A): the lathe's answer to
     /// [`Self::Face`]. The stations ride the FITTED axis (same
@@ -1111,6 +1138,7 @@ pub enum OpParams {
         stepdown: f64,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Profile roughing (M5.2 stage B): the RADIAL ladder on the
     /// turned silhouette. `top_z`/`bottom_z` bound the station
@@ -1130,6 +1158,7 @@ pub enum OpParams {
         stock_to_leave: f64,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Profile finishing (M5.2 stage B): one ride of the nose along
     /// the offset of the silhouette, between the two heights. No
@@ -1143,6 +1172,7 @@ pub enum OpParams {
         bottom_z: Height,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Grooving roughing (M5.2 stage C): the blade window on the
     /// bar. `top_z`/`bottom_z` bound the station range the band
@@ -1160,6 +1190,7 @@ pub enum OpParams {
         stock_to_leave: f64,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Grooving finishing (M5.2 stage C): one full-depth plunge per
     /// center - the floor is the model's own, so no infeed exists
@@ -1171,6 +1202,7 @@ pub enum OpParams {
         bottom_z: Height,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Parting (M5.2 stage C): `bottom_z` is the PARTING PLANE -
     /// the station the blade sinks through - and `top_z` names the
@@ -1217,6 +1249,7 @@ pub enum OpParams {
         bar_transfer: bool,
         inspect_tol: f64,
         kerf: crate::turning::PartKerf,
+        picks: crate::path_picks::PathPicks,
     },
     /// Threading (M5.2 stage D): the helical ladder on a MODELED
     /// thread. `pitch` is that thread's lead - the lattice of V's
@@ -1246,6 +1279,7 @@ pub enum OpParams {
         plunge_feed: f64,
         infeed_plan: crate::turning::ThreadInfeed,
         hand: crate::cl::ThreadHand,
+        picks: crate::path_picks::PathPicks,
     },
     /// Chamfer turning (M5.2 stage E): one ride across the cone
     /// face the window `top_z`/`bottom_z` bounds. `angle_deg` is
@@ -1263,6 +1297,7 @@ pub enum OpParams {
         angle_deg: f64,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Taper turning (M5.2 stage E): the ride of the cone the two
     /// diameters state - `bottom_dia` at the window's low station,
@@ -1279,6 +1314,7 @@ pub enum OpParams {
         top_dia: f64,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Multi-pass turning (M5.2 stage E): stage B's concentric
     /// ladder down to `stock_to_leave`, then `passes` finishing
@@ -1297,6 +1333,7 @@ pub enum OpParams {
         passes: u32,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Form turning (M5.2 stage E2): one plunge of a crown gauge per
     /// MODELED formed surface in the window `top_z`/`bottom_z`
@@ -1313,6 +1350,7 @@ pub enum OpParams {
         bottom_z: Height,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Turning boring (M5.2 stage F): one ascending ride of the
     /// nose offset INSIDE a MODELED hole in the window
@@ -1329,6 +1367,7 @@ pub enum OpParams {
         bottom_z: Height,
         feed: f64,
         plunge_feed: f64,
+        picks: crate::path_picks::PathPicks,
     },
     /// Standalone boring (M2.4 C). The hole list is params data, the
     /// drill's own law: recognized by an action, undoable, stamped -
@@ -1365,6 +1404,7 @@ pub enum OpParams {
         /// Where each level's rings start (#3360): the shared pass-order
         /// parameter. `Auto` is every earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        picks: crate::path_picks::PathPicks,
     },
     /// Helical thread milling (M2.4 C, reworked by #894): internal
     /// threads in the listed holes - or, `external`, on the listed
@@ -1407,6 +1447,7 @@ pub enum OpParams {
         /// before the option posted; checked at generation against the
         /// stock bottom, refused by name below it.
         break_through: Option<f64>,
+        picks: crate::path_picks::PathPicks,
     },
     /// Probing (#108): a spindle touch probe finds a face, an edge, an
     /// outside corner or a bore / boss centre, then sets a work offset

@@ -47,7 +47,7 @@ fn contour_op(equal: bool) -> OpParams {
         blend_turns: false,
         tilt: None,
         chain_overrides: Vec::new(),
-        links: Links { approach: Approach { equal_steps: equal, ..Approach::DEFAULT }, ..Links::PLANAR },
+        links: Links { approach: Approach { equal_steps: equal, ..Approach::DEFAULT }, ..Links::PLANAR }, picks: Default::default(),
     }
 }
 

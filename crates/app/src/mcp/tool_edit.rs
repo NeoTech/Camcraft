@@ -44,6 +44,13 @@ pub(super) fn edit_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
     if checked.get("outline").and_then(Value::as_array).is_some_and(Vec::is_empty) {
         checked.remove("outline");
     }
+    // #3368: a sharp tip and a zero tip diameter are written as absent.
+    if checked.get("tip_form").and_then(Value::as_str) == Some("sharp") {
+        checked.remove("tip_form");
+    }
+    if checked.get("tip_diameter").and_then(Value::as_f64) == Some(0.0) {
+        checked.remove("tip_diameter");
+    }
     if let Some(path) = lost(&checked, &back, "") {
         return Err(format!("bad tool patch: unknown field {path} - a tool definition has no field \"{path}\""));
     }

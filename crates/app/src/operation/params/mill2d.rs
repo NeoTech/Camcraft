@@ -39,7 +39,7 @@ impl OpParams {
                 entry,
                 helix_radius,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -88,7 +88,7 @@ impl OpParams {
                 helix_radius, blend_turns, blend_radius,
                 tilt,
                 extend_start,
-                extend_end,
+                extend_end, picks: _
             } => {
                 wp2(h, *a);
                 wp2(h, *b);
@@ -148,7 +148,7 @@ impl OpParams {
                 feed,
                 return_feed,
                 plunge_feed,
-                climb,
+                climb, picks: _
             } => {
                 wp2(h, *a);
                 wp2(h, *b);
@@ -180,7 +180,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -203,7 +203,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -230,7 +230,7 @@ impl OpParams {
                 climb,
                 side,
                 tolerance,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -267,7 +267,7 @@ impl OpParams {
                 climb,
                 entry,
                 helix_radius,
-                tilt,
+                tilt, picks: _
             } => {
                 wp2(h, *center);
                 w(h, *radius);
@@ -303,7 +303,7 @@ impl OpParams {
                 plunge_feed,
                 flat_clear,
                 flat_stepover,
-                tilt,
+                tilt, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);

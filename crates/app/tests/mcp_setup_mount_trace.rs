@@ -65,6 +65,7 @@ fn saved_project(dir: &std::path::Path) -> PathBuf {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         };
         h.execute(&world, CreateOperation::new(&world, op, TOOL, SrcRef::Stock, face).expect("face"));
     }

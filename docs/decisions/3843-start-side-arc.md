@@ -17,6 +17,7 @@ and undo stays one step.
 
 **Kept as the user set it.**
 - An entry that the same edit changes (for example Plunge to Helix).
+- An explicit entry named in the same edit or create request (#3863).
 - A Plunge or Ramp set before the start side moves.
 - A Helix on an Inside pass that moves to Outside (the user kept it).
 - A Helix that the user selects again on an Inside or Outside pass.

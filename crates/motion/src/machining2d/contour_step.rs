@@ -21,6 +21,7 @@ use crate::approach::CENTER_CUT_REFUSAL;
 use super::contour_bore::{BoreStep, bore_entry};
 use super::contour_entry::Engage;
 use super::contour_params::Lead;
+use super::contour_peck;
 use super::contour_wall_ramp::wall_ramp;
 use super::descent::feed_down;
 
@@ -45,6 +46,15 @@ pub(super) struct Step {
     /// or the vertical lead-in's height over it (M11.3 C) - the lead then
     /// descends along itself.
     pub lead_top: f64,
+    /// A ring after another one at the same level: the plane of the
+    /// traverse (the pass link's). The tool stands at the end of the
+    /// earlier ring, so it lifts there, crosses to the lead-in and starts
+    /// the descent from it.
+    pub traverse: Option<f64>,
+    /// #3678: the floor with no cut under the disc on a level below the
+    /// ring's first (`contour_peck::uncut_floor`); the dive pecks where it
+    /// would go more than one stepdown below the floor under the disc.
+    pub uncut: Option<f64>,
 }
 
 /// Structural refusals, each said once per path.
@@ -74,16 +84,20 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
     // The level link's plane. Keep down reaches here only where the
     // stay-down descent could not be planned (a new ring, a tab, a ring
     // too short): retract and re-enter, as before the option.
-    let tz = match (s.first, p.links.level) {
-        (true, _) => p.clearance_z,
-        (false, Link::Retract) => eng.m.hop_z,
-        (false, _) => p.clearance_z,
+    let tz = match (s.first, p.links.level, s.traverse) {
+        (_, _, Some(plane)) => plane,
+        (true, _, _) => p.clearance_z,
+        (false, Link::Retract, _) => eng.m.hop_z,
+        (false, _, _) => p.clearance_z,
     };
     let cur = b.at();
     if !s.first {
         b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, tz), None);
     }
     let (e2, z) = (s.e2, s.z);
+    if s.traverse.is_some() && (cur.x != e2.x || cur.y != e2.y) {
+        b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, tz), None);
+    }
     if s.inside && s.tabbed {
         // M8.2 C: the arm stands down where a tab is material. dive_room
         // and chord_clears certify against the eroded region - the FULL-
@@ -103,7 +117,7 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top, s.arm);
+        graze(b, eng, e2, s.lead_top, s.arm, s.uncut);
         None
     } else if s.inside {
         // The bore side: the eroded region states the bounded air
@@ -143,7 +157,7 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
         }
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, cur.z), None);
-        graze(b, eng, e2, s.lead_top, s.arm);
+        graze(b, eng, e2, s.lead_top, s.arm, s.uncut);
         None
     }
 }
@@ -153,8 +167,9 @@ pub(super) fn engage_level(b: &mut PathBuilder, eng: &Engage, s: &Step, lead: &[
 /// generator's contract, nothing is engaged above it (M11.3) - then feed.
 /// A tool that is not centre-cutting may not plunge here (the stock
 /// beside the wall is not proved cleared): the operation is refused by
-/// name.
-fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D) {
+/// name. Below a ring's first level the dive pecks where it would go more
+/// than one stepdown below the floor under the disc (#3678).
+fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D, uncut: Option<f64>) {
     let p = eng.p;
     let a = &p.links.approach;
     if !a.center_cutting {
@@ -165,7 +180,8 @@ fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64, arm: Entry3D) {
             graze_hint(arm, p.lead == Lead::None)
         ));
     }
-    feed_down(b, e2, z, p.entry_top(), eng.m, a.plunge(p.plunge_feed));
+    let feed = a.plunge(p.plunge_feed);
+    contour_peck::dive(b, p, e2, z, uncut, eng.m.hop_z, feed, |b, d| feed_down(b, e2, d, p.entry_top(), eng.m, feed));
 }
 
 /// What the user can change to lift the refusal. The Arc entry is already

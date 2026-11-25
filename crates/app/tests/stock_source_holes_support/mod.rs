@@ -164,6 +164,7 @@ pub fn tap_through_a_lid(rotated: bool) -> Vec<Warning> {
         plunge_feed: 600.0,
         holes: vec![hole],
         cross: Vec::new(),
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "S1", TAP, SrcRef::Entity("part".into()), params).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "S1").expect("generate"));
@@ -195,6 +196,7 @@ fn drill(cut: Cut, cycle: CycleChoice) -> OpParams {
         plunge_feed: 100.0,
         holes: vec![cut.hole()],
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -214,6 +216,7 @@ fn bore(cut: Cut) -> OpParams {
         climb: true,
         tolerance: 0.01,
         holes: vec![cut.hole()],
+        picks: Default::default(),
     }
 }
 
@@ -234,6 +237,7 @@ fn thread(cut: Cut) -> OpParams {
         hand: camcraft_app::cl::ThreadHand::Right,
         external: false,
         passes: camcraft_app::machining2d::ThreadPasses::default(),
+        picks: Default::default(),
     }
 }
 
@@ -251,6 +255,7 @@ pub fn chamfer(width: f64) -> OpParams {
         side: Side::Auto,
         tolerance: 0.01,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

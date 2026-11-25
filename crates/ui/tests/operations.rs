@@ -33,6 +33,7 @@ fn face_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -192,6 +193,7 @@ fn create_generate_undo_redo_replays_the_same_path() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.pending.push_back(CommandKind::EditOperationParams {
         name: "Face1".into(),
@@ -300,6 +302,7 @@ fn a_work_offset_reference_survives_apply_undo_and_the_draft() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.pending.push_back(CommandKind::EditOperationParams {
         name: "Face1".into(),
@@ -383,6 +386,7 @@ fn retargeting_a_tool_and_bad_params() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.pending.push_back(CommandKind::EditOperationParams {
         name: "Face1".into(),
@@ -729,6 +733,7 @@ fn apply_reports_queued_then_updated_on_drain() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.apply_operation_params("Face1");
     assert_eq!(state.pending.len(), 1, "the changed draft queued the edit");
@@ -941,6 +946,7 @@ fn contour_draft() -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -996,6 +1002,7 @@ fn generate_flushes_a_dirty_draft_before_generating() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.generate_operation("Face1");
     assert_eq!(state.pending.len(), 2, "the edit rides the click, then the generate");

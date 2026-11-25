@@ -176,6 +176,46 @@ use super::*;
 /// and post a cutting tool at a reserved probe pocket.
 pub const PROJECT_VERSION: u32 = 78;
 
+/// v79 (#3368), a conditional step: only a file that holds a flat or
+/// ball taper tip says 79. A file without one still says
+/// [`PROJECT_VERSION`], so an older build opens it as before. An older
+/// reader must refuse a v79 file rather than read the tip as sharp: a
+/// sharp tip is a smaller tool than the real one, and a toolpath planned
+/// for it can gouge. A v79 file is a v78 file plus the tip keys.
+///
+/// The step is isolated here: [`written_project_version`] and
+/// [`tip_form_read_version`]. To remove it, delete the two functions,
+/// this const and [`NEWEST_PROJECT_VERSION`], and call sites read
+/// `PROJECT_VERSION` again.
+pub const TIP_FORM_PROJECT_VERSION: u32 = 79;
+/// The newest version this build reads: a tip-form file's, else
+/// [`PROJECT_VERSION`].
+pub const NEWEST_PROJECT_VERSION: u32 =
+    if TIP_FORM_PROJECT_VERSION > PROJECT_VERSION { TIP_FORM_PROJECT_VERSION } else { PROJECT_VERSION };
+const _: () = assert!(
+    PROJECT_VERSION != TIP_FORM_PROJECT_VERSION,
+    "v79 is the tip-form step of #3368: step PROJECT_VERSION past it, or fold the tip form into the unconditional ladder"
+);
+
+/// #3368: the version a save writes - [`TIP_FORM_PROJECT_VERSION`] when a
+/// tool states a flat or ball taper tip and the ladder is still below it,
+/// else [`PROJECT_VERSION`].
+#[must_use]
+pub fn written_project_version(holds_tip_form: bool) -> u32 {
+    if holds_tip_form { PROJECT_VERSION.max(TIP_FORM_PROJECT_VERSION) } else { PROJECT_VERSION }
+}
+
+/// #3368: a v79 tip-form file reads as the v78 file it is (plus the tip
+/// keys, which every v78 tool reads as absent = sharp).
+#[must_use]
+pub fn tip_form_read_version(version: u32) -> u32 {
+    if version == TIP_FORM_PROJECT_VERSION && TIP_FORM_PROJECT_VERSION > PROJECT_VERSION {
+        PROJECT_VERSION
+    } else {
+        version
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
     #[error("I/O error: {0}")]
@@ -522,6 +562,14 @@ pub struct ToolDto {
     /// sizes - the outline's bounds, so never a smaller electrode.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outline: Vec<[f64; 2]>,
+    /// #3368: a chamfer mill's tip form and tip diameter. Absent is a
+    /// sharp tip, what every older file meant; written only for a flat
+    /// or ball tip. Such a file says [`TIP_FORM_PROJECT_VERSION`], so an
+    /// older build refuses it and never reads the tip as sharp.
+    #[serde(default, skip_serializing_if = "camcraft_tools::taper::TaperTip::is_sharp")]
+    pub tip_form: camcraft_tools::taper::TaperTip,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tip_diameter: f64,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -667,6 +715,8 @@ impl ToolDto {
             cutting_data: super::cutting_rows_dto::rows_to_write(&t.cutting, t.rpm, t.feed),
             turning: t.turning,
             outline: t.outline.clone(),
+            tip_form: t.tip_form,
+            tip_diameter: t.tip_diameter,
         }
     }
 
@@ -740,6 +790,8 @@ impl ToolDto {
             cutting: self.cutting_data.iter().map(|r| r.to_row()).collect(),
             turning: self.turning,
             outline: self.outline.clone(),
+            tip_form: self.tip_form,
+            tip_diameter: self.tip_diameter,
         }
     }
 }

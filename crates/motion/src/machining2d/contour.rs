@@ -13,7 +13,8 @@ use super::arcs::push_segs;
 use super::contour_depth::Ladder;
 use super::contour_entry::{Engage, crosses, flatten, say, seam_leads, wall_arc, wall_arc_top};
 use super::contour_comp::{self, SpanCtx};
-use super::contour_link::{plan_links, push_stay, ring_link};
+use super::contour_link::{plan_links, push_stay, ring_entry, ring_link, tab_window_dive, wall_arc_hop};
+use super::contour_peck::uncut_floor;
 use super::contour_step::{Said, Step, engage_level};
 use super::levels::{Cert, Motion};
 use super::ring::Ring;
@@ -246,14 +247,16 @@ pub(super) fn emit_band(
             // pre-M11.2 shape) - unless the pass link keeps down, which
             // feeds straight over where proved (contour_link::ring_link).
             let ring_to_ring = k == 0 && same_level && !first_entry;
+            // A ring after another one is entered by the user's arm too, never
+            // by the pass link's plunge into material (#3830, #3917 wall side).
+            let ring_in = ring_entry(p, ring_to_ring && !tabbed, inside, rzi == 0, arm, hop_z);
+            let enter_ring = ring_in.is_some();
             let wall_arc_on = !inside
                 && arm == Entry3D::Arc
                 && k == 0
                 && !(ring_to_ring && p.links.pass == Link::KeepDown);
             if wall_arc_on && ring_to_ring && p.links.pass == Link::Clearance {
-                let cur = b.at();
-                b.push(MoveKind::Feed, Point3::new(cur.x, cur.y, hop_z), Some(p.feed));
-                b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
+                wall_arc_hop(b, p, hop_z);
             }
             let mut arced = false;
             // #3132: a None lead-in adds no XY travel at the seam - the
@@ -283,21 +286,23 @@ pub(super) fn emit_band(
                         .into(),
                 );
             }
-            if arced {
-                // Engaged: the arc ends standing at (e2, z).
-            } else if ring_to_ring {
-                // Ring to ring within one level: the pass link, proved
-                // against the rings and this level's dive links.
+            // Ring to ring within one level: the pass link, proved against
+            // the rings and this level's dive links.
+            let linked = !arced && ring_to_ring && {
                 let cut = if dives.0.to_bits() == z.to_bits() { dives.1.as_slice() } else { &[] };
-                ring_link(b, p, &legal, &[&band.plan, cut, &link_leads], e2, z, hop_z, tabbed, &mut lifted);
+                ring_link(b, p, &legal, &[&band.plan, cut, &link_leads], e2, z, hop_z, tabbed, &mut lifted, enter_ring)
+            };
+            if arced || linked {
+                // Engaged: the arc ends standing at (e2, z), or the pass link posted the move.
             } else if k == 0 {
                 // The level's first engagement: a crossing, or the path's
                 // first entry (prev_z falls back to clearance there).
                 let prev_z = if rzi == 0 { p.clearance_z } else { rz[rzi - 1] };
                 // #2004: the column of this descent is open down to prev_z
                 // when the descent one level up was the same arm.
+                let arm = ring_in.as_ref().map_or(arm, |r| r.arm);
                 let opened = rzi >= 2 || (rzi == 1 && arm == p.entry);
-                let step = Step { arm, e2, z, prev_z, first: first_entry, opened, inside, tabbed, lead_top };
+                let step = Step { arm, e2, z, prev_z, first: first_entry, opened, inside, tabbed, lead_top, uncut: uncut_floor(p, rz, rzi), traverse: ring_in.as_ref().map(|r| r.plane) };
                 if let Some(d) = engage_level(b, &eng, &step, &lead, &walk, said) {
                     if dives.0.to_bits() != z.to_bits() {
                         dives = (z, Vec::new());
@@ -305,12 +310,7 @@ pub(super) fn emit_band(
                     dives.1.push(vec![d, e2]);
                 }
             } else {
-                // Tab window to tab window: up over the tab, across, down.
-                let cur = b.at();
-                b.push(MoveKind::Feed, Point3::new(cur.x, cur.y, hop_z), Some(p.feed));
-                b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, hop_z), None);
-                super::contour_link::guard(b, p, e2, lead_top, p.entry_top(), "the dive past a tab");
-                b.push(MoveKind::Plunge, Point3::new(e2.x, e2.y, lead_top), Some(p.plunge_feed));
+                tab_window_dive(b, p, e2, hop_z, lead_top, uncut_floor(p, rz, rzi));
             }
             first_entry = false;
             let at = b.at();

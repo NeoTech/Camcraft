@@ -5,6 +5,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // before any entity touches the world. Anything newer than this build
     // remains refused. The chain must run its steps sequentially - a v1
     // file passes through v2's effects before v3's are applied.
+    // #3368: a tip-form file reads as the v78 file it is (file.rs).
+    file.version = super::tip_form_read_version(file.version);
     let from = file.version;
     if file.version == 1 {
         // v1 -> v2: entities gained `rotation`; v1 had translation-only

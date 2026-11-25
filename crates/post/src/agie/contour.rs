@@ -1,7 +1,7 @@
 //! Quantize the nominal polygon of a punch or a die opening, check the swept
 //! rough pass and find a perpendicular entry on the waste side (planar geometry).
 use super::{AgieJob, AgieSide};
-use crate::agie_setup::{PunchSetup20, QN2_OFFSETS_UM, qn2_offsets_um};
+use crate::agie_setup::{PunchSetup20, Quality};
 
 pub(super) type Point = [i64; 2];
 const UNITS: f64 = 100_000.0; // Five decimal places in the native ISO geometry file.
@@ -51,26 +51,33 @@ pub(super) fn micrometres(value: f64) -> Result<i32, String> {
     Ok(microns)
 }
 
-pub(super) fn punch_setup<'a>(job: &AgieJob, program: &'a str) -> Result<PunchSetup20<'a>, String> {
+pub(super) fn punch_setup<'a>(
+    job: &AgieJob,
+    program: &'a str,
+    quality: Quality,
+) -> Result<PunchSetup20<'a>, String> {
     let [width, depth, height] = std::array::from_fn(|i| job.stock_max[i] - job.stock_min[i]);
     if !(width > 0.0 && width <= 350.0 && depth > 0.0 && depth <= 250.0) {
         return Err("The stock must fit the stated 350 × 250 mm working span".into());
     }
+    // The CCB030 texts are those of #2984 and #2954, unchanged.
+    let (profile, recipe) = match quality {
+        Quality::Ccb030 => ("The Berco Fine Ra0.30 profile", "The QN2 recipe"),
+        Quality::Ccb035 => ("The Berco Fine+ Ra0.35 profile", "The CCB035 quality"),
+    };
     if job.stock_max[2] != 0.0 {
-        return Err("The Berco Fine Ra0.30 profile requires stock top Z0".into());
+        return Err(format!("{profile} requires stock top Z0"));
     }
-    // Only a measured thickness has known QN2 offsets. No height is interpolated.
-    let Some(&(mm, _)) = QN2_OFFSETS_UM
-        .iter()
-        .find(|(mm, _)| height == f64::from(*mm))
-    else {
-        let supported = QN2_OFFSETS_UM
+    // Only a measured thickness has known offsets. No height is interpolated.
+    let table = quality.thicknesses_mm();
+    let Some(&mm) = table.iter().find(|mm| height == f64::from(**mm)) else {
+        let supported = table
             .iter()
-            .map(|(mm, _)| mm.to_string())
+            .map(u16::to_string)
             .collect::<Vec<_>>()
             .join(", ");
         return Err(format!(
-            "The QN2 recipe has no measured offset for stock thickness {height} mm. Supported thicknesses in mm are {supported}"
+            "{recipe} has no measured offset for stock thickness {height} mm. Supported thicknesses in mm are {supported}"
         ));
     };
     // The control checked the die cycle on a 20 mm plate only (#2957).
@@ -109,7 +116,7 @@ pub(super) fn prepare<'a>(
     job: &AgieJob,
     program: &'a str,
 ) -> Result<(Vec<[f64; 2]>, PunchSetup20<'a>), String> {
-    prepare_with_reach(job, program).map(|(points, setup, _)| (points, setup))
+    prepare_with_reach(job, program, Quality::Ccb030).map(|(points, setup, _)| (points, setup))
 }
 
 /// [`prepare`], and the largest distance in mm from a nominal vertex to its
@@ -117,10 +124,13 @@ pub(super) fn prepare<'a>(
 pub(super) fn prepare_with_reach<'a>(
     job: &AgieJob,
     program: &'a str,
+    quality: Quality,
 ) -> Result<(Vec<[f64; 2]>, PunchSetup20<'a>, f64), String> {
-    let setup = punch_setup(job, program)?;
-    let [rough_um, ..] = qn2_offsets_um(setup.height_um)
-        .ok_or("The QN2 recipe has no measured offset for this stock thickness")?;
+    let setup = punch_setup(job, program, quality)?;
+    // The clearance and miter checks use the rough offset of this quality.
+    let rough_um = quality
+        .rough_um(setup.height_um)
+        .ok_or("The selected quality has no measured offset for this stock thickness")?;
     let input = &job.contour;
     if input.len() < 3 || input.len() > MAX_VERTICES + 1 {
         return Err(format!(
@@ -280,7 +290,7 @@ fn check_cut_envelope(ring: &[Point], job: &AgieJob, rough_um: u16) -> Result<f6
             reentrant = true;
             // At an inside turn the two offset faces intersect outside the
             // drawing corner. The strict wire cover law permits 0.002 mm of
-            // rest. Use the largest resident offset across all four passes.
+            // rest. Use the largest resident offset of all passes (the main cut).
             if reach - rough_offset > 0.002 * UNITS {
                 return Err(
                     "The rough compensation cannot reach the reentrant corner within 0.002 mm"

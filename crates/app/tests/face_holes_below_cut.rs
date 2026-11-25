@@ -63,6 +63,7 @@ fn face_at(cut_z: Height) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 

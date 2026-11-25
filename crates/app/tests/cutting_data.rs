@@ -47,6 +47,7 @@ fn slot_params() -> OpParams {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -118,6 +119,7 @@ fn faced_doc() -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, face).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate"));

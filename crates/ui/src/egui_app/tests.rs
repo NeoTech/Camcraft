@@ -127,6 +127,17 @@ mod page_layout;
 mod page_layout_windows;
 // #3892: the tool library window (page_layout.rs is full).
 mod page_layout_tool_library;
+// #3893: the tool editor in the tool library window.
+mod tool_library_editor;
+// #3894: the 3D and side preview of the tool library window's editor.
+mod tool_library_preview;
+// #3895: the holder, gauge length and stick-out in the tool library window.
+mod tool_library_assembly;
+// #3896: the Recipes tab of the tool library window's editor.
+mod tool_library_recipes;
+// #3897 (U6 of #3663): the Holders page and the mock-up gaps.
+mod tool_library_holders_ui;
+mod tool_library_mockup;
 mod anchors;
 mod stock_fit;
 mod stock_source_default;

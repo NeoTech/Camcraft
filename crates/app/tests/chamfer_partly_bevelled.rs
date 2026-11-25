@@ -101,6 +101,7 @@ fn chamfer(width: f64) -> OpParams {
         climb: true,
         blend_radius: None,
         blend_turns: false,
+        picks: Default::default(),
     };
     let mut p = operation::retype_params(&base, OpType::Chamfer2D.ordinal());
     if let OpParams::Chamfer2D { width: w, .. } = &mut p {

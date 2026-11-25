@@ -63,6 +63,7 @@ pub fn pocket(top: f64, bottom: f64) -> OpParams {
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -96,6 +97,7 @@ pub fn face(cut: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 

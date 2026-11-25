@@ -134,6 +134,7 @@ fn drill(entry: f64, floor: f64, r: f64) -> OpParams {
         plunge_feed: 80.0,
         holes: vec![hole],
         cross: vec![],
+        picks: Default::default(),
     }
 }
 
@@ -159,6 +160,7 @@ fn pocket(bottom: f64) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -175,6 +177,7 @@ fn face(cut: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -345,6 +348,7 @@ fn facing() -> OpParams {
         stepdown: 0.5,
         feed: 150.0,
         plunge_feed: 80.0,
+        picks: Default::default(),
     }
 }
 
@@ -402,6 +406,7 @@ fn a_parting_op_ahead_does_not_credit_the_lathe_end_face() {
         bar_unload: false,
         bar_transfer: false,
         inspect_tol: 0.0, kerf: Default::default(),
+        picks: Default::default(),
     };
     create(&world, &mut h, "Op1", "GT-0300", "bar", part);
     generate(&world, &mut h, "Op1").expect("the parting generates");

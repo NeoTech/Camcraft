@@ -102,7 +102,22 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         // build (M2.4 B): the congruence door reads it against the
         // face's angle, so a re-cut cone is a different chamfer even
         // when width, depth and the wall itself never moved.
-        crate::tools::ToolKind::Taper => w(h, tool.tip_angle),
+        // #3368: a flat or ball tip is another cutter - bytes only then,
+        // so no sharp taper's digest moves.
+        crate::tools::ToolKind::Taper => {
+            w(h, tool.tip_angle);
+            match tool.tip_form {
+                crate::tools::TaperTip::Sharp => {}
+                crate::tools::TaperTip::Flat => {
+                    h.write_u8(1);
+                    w(h, tool.tip_diameter);
+                }
+                crate::tools::TaperTip::Ball => {
+                    h.write_u8(2);
+                    w(h, tool.tip_diameter);
+                }
+            }
+        }
         // The thread mills digest their form (#894): the flank angle
         // and the pitch range decide which threads the tool may cut
         // and how many rows ride a revolution (the pitch itself rides

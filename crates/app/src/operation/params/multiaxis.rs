@@ -83,7 +83,7 @@ impl OpParams {
                 climb,
                 lead_deg,
                 lag_deg,
-                max_tilt_deg,
+                max_tilt_deg, picks: _
             }
             | OpParams::RotaryParallel {
                 tolerance,
@@ -198,7 +198,7 @@ impl OpParams {
                 optimal_load,
                 lead_deg,
                 lag_deg,
-                max_tilt_deg,
+                max_tilt_deg, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -252,7 +252,7 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
-                shank_avoid,
+                shank_avoid, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -301,7 +301,7 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
-                passes,
+                passes, picks: _
             } => {
                 w(h, *tolerance);
                 match stepover {

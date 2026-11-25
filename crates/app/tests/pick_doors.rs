@@ -88,6 +88,7 @@ fn pocket() -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -104,6 +105,7 @@ fn facing() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     }
 }
 

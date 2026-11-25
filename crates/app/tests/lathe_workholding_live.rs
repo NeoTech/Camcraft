@@ -145,6 +145,7 @@ fn wrapped(m: Machine, chuck: Option<f64>) -> World {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     let op = CreateOperation::new(&world, "W1", "BN-0600", SrcRef::Entity("bar".into()), params);
     h.execute(&world, op.expect("create"));

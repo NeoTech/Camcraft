@@ -59,7 +59,9 @@ mod program_info;
 mod tool_library_io;
 #[path = "state_tool_library_dialog.rs"]
 mod tool_library_dialog;
-pub use tool_library_dialog::{ToolLibraryView, ToolSource};
+pub use tool_library_dialog::{
+    EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
+};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -109,7 +111,7 @@ mod program_entry;
 pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
-pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+pub use tool_body_ui::{BodyDraft, BodyPickMode, Orbit, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_body_lathe.rs"]
 mod tool_body_lathe_ui;
 pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
@@ -1053,6 +1055,7 @@ impl Default for OpUi {
                 climb: true,
                 // Opt-in, like `seed_face` (M11.1 A).
                 blend_turns: false, blend_radius: None,
+                picks: Default::default(),
             },
         }
     }
@@ -1255,6 +1258,9 @@ pub struct ToolUi {
     /// #1152: a sinker body electrode's section - carried so an Apply
     /// never turns the body into the rectangle of its two sizes.
     pub outline: Vec<[f64; 2]>,
+    /// #3368: a chamfer mill's tip form and flat-tip diameter.
+    pub tip_form: camcraft_app::tools::TaperTip,
+    pub tip_diameter: f64,
 }
 
 impl Default for ToolUi {
@@ -1325,6 +1331,8 @@ impl ToolUi {
             cutting: t.cutting.clone(),
             turning: t.turning,
             outline: t.outline.clone(),
+            tip_form: t.tip_form,
+            tip_diameter: t.tip_diameter,
         }
     }
 
@@ -1407,6 +1415,8 @@ impl ToolUi {
             cutting: self.cutting.clone(),
             turning: self.turning,
             outline: self.outline.clone(),
+            tip_form: self.tip_form,
+            tip_diameter: self.tip_diameter,
         };
         tool.corner_r = tool.tip_corner_r();
         // #2015: the shown Unknown row, untouched, stays derived.

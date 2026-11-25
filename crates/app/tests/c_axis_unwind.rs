@@ -174,6 +174,7 @@ fn contour() -> Operation {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,

@@ -3,12 +3,16 @@
 //! This encoder references an existing ISO geometry file for one closed punch
 //! ([`PunchSetup20::encode`]) or one convex die opening on a 20 mm plate
 //! ([`PunchSetup20::encode_die`]). The two differ only in the work side.
+//! [`PunchGroup20::encode`] and [`PunchGroup20::encode_die`] write two to
+//! nine punches or two die openings of one 20 mm plate as one native group.
 //! [`CutoffSetup20::encode`] writes one straight open cut on a 20 mm plate,
 //! with a left or right side and two air endpoints instead of a start hole.
 //! The caller must verify the nominal contour, its lead from the threading hole,
 //! and the compensated cuts against the stock, installed travel and fixtures.
 //! The piece uses stock top Z0, steel 0001, Berco Cut 0.25 and a 1 mm separation.
 //! The stock thickness must be one of the measured QN2 heights in [`QN2_OFFSETS_UM`].
+//! A punch can request [`Quality::Ccb035`] instead ([`PunchSetup20::encode_quality`]),
+//! on a 20 mm plate only.
 //!
 //! Place the SBL script and SBR resource manifest beside the ISO, with the same
 //! stem and their respective extensions. Import the ISO geometry into ISO Sys.
@@ -36,7 +40,9 @@
 
 mod inspection;
 mod publish;
+mod quality;
 pub use inspection::{INSPECTION_RECEIPT, InspectionProfile, InspectionSegment};
+pub use quality::{CCB035_OFFSETS_UM, CCB035_TECHNOLOGY, Quality};
 
 /// Wire-centre offsets in µm of the rough pass and the three trims on a
 /// straight outside face, for each measured stock thickness in mm. Offline
@@ -101,6 +107,10 @@ pub enum SetupError {
     )]
     UnqualifiedHeight,
     #[error(
+        "Use a 20 mm plate for quality CCB035. The control checked CCB035 on one 20 mm punch only."
+    )]
+    UnqualifiedQualityHeight,
+    #[error(
         "Use a 20 mm plate for a die opening. The control checked the die cycle at 20 mm only."
     )]
     UnqualifiedDieHeight,
@@ -113,11 +123,11 @@ pub enum SetupError {
     )]
     CutoffEndpoints,
     #[error(
-        "Use a 20 mm plate for a punch group. The control checked the punch group at 20 mm only."
+        "Use a 20 mm plate for a work group. The control checked the punch and die groups at 20 mm only."
     )]
     UnqualifiedGroupHeight,
     #[error(
-        "Use two punch works with distinct ISO stems. The control checked a group of two punches only."
+        "Use 2 to 9 punch works or two die openings, each with a distinct ISO stem. The control checked punch groups of up to nine works and die groups of two openings only."
     )]
     GroupWorks,
 }
@@ -149,7 +159,7 @@ mod cutoff;
 mod group;
 mod piece;
 pub use cutoff::{CUTOFF_HEIGHT_UM, CutoffSetup20, CutoffSide};
-pub use group::{GROUP_HEIGHT_UM, GroupPunch, PunchGroup20};
+pub use group::{GROUP_HEIGHT_UM, GroupPunch, MAX_PUNCH_WORKS, PunchGroup20};
 use piece::{attribute_call, checked};
 
 impl PunchSetup20<'_> {
@@ -159,7 +169,18 @@ impl PunchSetup20<'_> {
     /// Refuses invalid file stems, stock bounds, threading-hole positions and
     /// stock thicknesses without measured offsets.
     pub fn encode(&self) -> Result<SetupFiles, SetupError> {
-        self.encode_side(WorkSide::Punch)
+        self.encode_side(WorkSide::Punch, Quality::Ccb030)
+    }
+
+    /// Encode one native punch as [`Self::encode`] does, with the requested
+    /// work quality. [`Quality::Ccb030`] gives the bytes of [`Self::encode`].
+    /// [`Quality::Ccb035`] is qualified for a 20 mm punch only (#2966).
+    ///
+    /// # Errors
+    /// The errors of [`Self::encode`], and a thickness that the quality has no
+    /// measured offsets for.
+    pub fn encode_quality(&self, quality: Quality) -> Result<SetupFiles, SetupError> {
+        self.encode_side(WorkSide::Punch, quality)
     }
 
     /// Encode one native die opening (`ID_PUNCH,c_die`) with zero erosion
@@ -172,15 +193,17 @@ impl PunchSetup20<'_> {
         if self.height_um != DIE_HEIGHT_UM {
             return Err(SetupError::UnqualifiedDieHeight);
         }
-        self.encode_side(WorkSide::Die)
+        self.encode_side(WorkSide::Die, Quality::Ccb030)
     }
 
-    fn encode_side(&self, side: WorkSide) -> Result<SetupFiles, SetupError> {
+    fn encode_side(&self, side: WorkSide, quality: Quality) -> Result<SetupFiles, SetupError> {
         if !valid_stem(self.stem) {
             return Err(SetupError::InvalidStem);
         }
-        let [rough, trim1, trim2, trim3] =
-            qn2_offsets_um(self.height_um).ok_or(SetupError::UnqualifiedHeight)?;
+        let offsets = quality.offsets_um(self.height_um).ok_or(match quality {
+            Quality::Ccb030 => SetupError::UnqualifiedHeight,
+            Quality::Ccb035 => SetupError::UnqualifiedQualityHeight,
+        })?;
         for (axis, stroke_um) in [350_000, 250_000].into_iter().enumerate() {
             let min = i64::from(self.stock_min_um[axis]);
             let max = i64::from(self.stock_max_um[axis]);
@@ -205,6 +228,7 @@ impl PunchSetup20<'_> {
             stock_min_um: self.stock_min_um,
             stock_max_um: self.stock_max_um,
             height_um: self.height_um,
+            quality,
         };
         let work = piece::Work {
             geometry: self.stem,
@@ -216,7 +240,7 @@ impl PunchSetup20<'_> {
             &piece,
             &work,
             "geometry and start hole",
-            [rough, trim1, trim2, trim3],
+            offsets,
             die_check,
         ))
     }
@@ -227,7 +251,7 @@ fn setup_files(
     piece: &piece::Piece<'_>,
     work: &piece::Work<'_>,
     points: &str,
-    [rough, trim1, trim2, trim3]: [u16; 4],
+    offsets: &[u16],
     side_check: &str,
 ) -> SetupFiles {
     SetupFiles {
@@ -238,19 +262,32 @@ fn setup_files(
                 "Import the ISO into ISO Sys and keep its SBR beside the SBL during script import. ",
                 "Select the newly created piece. Earlier pieces can retain their steps on repeat import. ",
                 "Match this work's ISO resource, {points} to the setup. Confirm zero steps. ",
-                "Verify steel 0001, Berco Cut 0.25 and {height} mm. CCB030 requests Ra 0.30, Te 1.50, ",
-                "Tkm 1.00 and three disabled options. Check the effective values and both visible options ",
-                "on this work. Assign the matching TECCUT row. Check offsets of {rough}, {trim1}, {trim2} and ",
-                "{trim3} µm in order before GRAFICHECK and FORMALCHECK.{side_check}",
+                "Verify steel 0001, Berco Cut 0.25 and {height} mm. {quality} requests Ra {ra}, Te 1.50, ",
+                "Tkm 1.00 and {options}. Check the effective values and both visible options ",
+                "on this work. {teccut} Check offsets of {offsets} ",
+                "µm in order before GRAFICHECK and FORMALCHECK.{side_check}",
             ),
             points = points,
             height = piece.height_um / 1000,
-            rough = rough,
-            trim1 = trim1,
-            trim2 = trim2,
-            trim3 = trim3,
+            quality = piece.quality.name(),
+            ra = piece.quality.ra(),
+            options = piece.quality.options_text(),
+            teccut = piece.quality.teccut_text(),
+            offsets = offset_list(offsets),
             side_check = side_check,
         ),
+    }
+}
+
+/// "a, b, c and d": the offsets of all passes in µm, main cut first.
+fn offset_list(offsets: &[u16]) -> String {
+    match offsets.split_last() {
+        Some((last, [])) => last.to_string(),
+        Some((last, rest)) => {
+            let rest: Vec<String> = rest.iter().map(u16::to_string).collect();
+            format!("{} and {last}", rest.join(", "))
+        }
+        None => String::new(),
     }
 }
 

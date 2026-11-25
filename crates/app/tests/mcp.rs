@@ -319,6 +319,27 @@ fn job_tool_names(c: &mut Client) -> Vec<String> {
     job["tools"].as_array().map(|t| t.iter().filter_map(|t| t["name"].as_str().map(str::to_owned)).collect()).unwrap_or_default()
 }
 
+/// #3036: `add_tool` picks the small ball tools and the metric tap-drill and
+/// clearance drills by their catalog names.
+#[test]
+fn add_tool_picks_the_metric_hole_drills_and_small_ball_tools_by_name() {
+    let names = [
+        "BN-0300", "BB-0600-R1", "DR-0250", "DR-0330", "DR-0340", "DR-0420", "DR-0450", "DR-0500", "DR-0550", "DR-0660",
+        "DR-0680", "DR-0850", "DR-0900", "DR-1020", "DR-1100", "DR-1350",
+    ];
+    let mut c = Client::new();
+    let listed = c.ok("list_tool_catalog", json!({}));
+    for name in names {
+        assert!(listed.to_string().contains(&format!("\"{name}\"")), "list_tool_catalog shows {name}");
+        c.ok("add_tool", json!({ "catalog": name }));
+    }
+    let mut got = job_tool_names(&mut c);
+    got.sort();
+    let mut want = names.map(str::to_owned).to_vec();
+    want.sort();
+    assert_eq!(got, want, "each tool arrives under its catalog name");
+}
+
 #[test]
 fn tool_library_export_import_roundtrip_into_a_fresh_document() {
     let dir = tmp_dir("toollib-roundtrip");

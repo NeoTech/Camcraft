@@ -132,6 +132,7 @@ fn doc(machine: Machine, len: f64, tilt: Option<(f64, f64)>) -> World {
         tilt: tilt.map(|(a_deg, b_deg)| Tilt { basis_version: 1, a_deg, b_deg, origin: [0.0; 3] }),
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     };
     h.execute(&world, ok(CreateOperation::new(&world, "FLAT", "EM 1/4", SrcRef::Stock, flat), "op"));
     h.execute(&world, ok(GenerateOperation::new(&world, "FLAT"), "generate"));

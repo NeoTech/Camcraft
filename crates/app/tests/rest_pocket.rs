@@ -80,6 +80,7 @@ fn pocket(stepover: f64, entry: Entry3D, strategy: PocketStrategy, rest: Option<
         blend_turns: false,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

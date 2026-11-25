@@ -31,6 +31,7 @@ fn part_off() -> OpParams {
         bar_transfer: false,
         inspect_tol: 0.0,
         kerf: PartKerf::default(),
+        picks: Default::default(),
     }
 }
 

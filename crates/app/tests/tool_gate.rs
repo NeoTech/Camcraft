@@ -70,6 +70,7 @@ fn face() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -81,6 +82,7 @@ fn groove() -> OpParams {
         bottom_z: Height::fixed(-6.8),
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 

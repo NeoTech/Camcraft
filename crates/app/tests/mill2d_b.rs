@@ -96,6 +96,7 @@ fn engrave() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -110,6 +111,7 @@ fn trace() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -126,6 +128,7 @@ fn chamfer(width: f64) -> OpParams {
         side: Side::Auto,
         tolerance: 0.01,
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -149,6 +152,7 @@ fn circular(vault: bool, stepover: f64, radius: f64) -> OpParams {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -316,6 +320,8 @@ fn taper(diameter: f64, tip_angle: f64, flute_len: f64) -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
     }
 }
 

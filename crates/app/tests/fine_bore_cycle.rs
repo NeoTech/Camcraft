@@ -90,6 +90,7 @@ fn params(cycle: CycleChoice, dwell: f64) -> OpParams {
             stepped: false,
         }],
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 

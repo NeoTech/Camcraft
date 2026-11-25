@@ -8,6 +8,7 @@
 //! G41/G42 and linear-only controls. No torch height or THC field.
 
 use super::height::Height;
+use crate::path_picks::PathPicks;
 
 /// Which side of an open run's travel the kerf stands on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -68,6 +69,8 @@ pub struct WaterjetOp {
     pub abrasive_delay: f64,
     /// Arcs sent as chords within this tolerance, mm; `None` keeps them.
     pub linearize: Option<f64>,
+    /// The operation's start and exit picks (#3339).
+    pub picks: PathPicks,
 }
 
 impl WaterjetOp {
@@ -94,5 +97,6 @@ impl WaterjetOp {
                     && pos(t.width)
                     && t.at.iter().all(|p| p[0].is_finite() && p[1].is_finite())
             })
+            && self.picks.refusal().is_none()
     }
 }

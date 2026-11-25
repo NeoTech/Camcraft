@@ -65,6 +65,7 @@ fn contour_with_links(links: Links, climb: bool) -> Toolpath {
             helix_radius: 1.0,
             blend_turns: false, blend_radius: None,
             links,
+            picks: Default::default(),
         },
     )
     .expect("a legal inside contour")

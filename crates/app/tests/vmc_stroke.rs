@@ -55,6 +55,7 @@ fn contour(clearance: f64) -> OpParams {
         blend_turns: false, blend_radius: None,
         links: Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

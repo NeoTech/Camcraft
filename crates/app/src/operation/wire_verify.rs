@@ -8,7 +8,6 @@
 
 use flecs_ecs::prelude::*;
 
-use crate::geo2d::Point2;
 use crate::geometry::{slice, Triangle};
 use crate::model;
 use crate::verify::wire::{judge, CutSide, WireFinding, WireJob, WireSection, WireVerdict};
@@ -80,7 +79,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         // A closed cut with no start hole never generates; said by the
         // law's own name, not as a missing path. An open run (#1109,
         // left / right) states none: it is threaded outside the stock.
-        if w.start.is_none() && !w.side.is_open_side() {
+        if w.picks.first(crate::path_picks::PickRole::Start).is_none() && !w.side.is_open_side() {
             return Ok(WireVerdict { findings: vec![WireFinding::NoStart], ..WireVerdict::default() });
         }
         let cache = model::toolpath_of(world, e).ok_or("the wire laws have no toolpath to judge - generate it first")?;
@@ -107,7 +106,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             WireSide::Punch => CutSide::Punch,
             WireSide::Left | WireSide::Right => CutSide::Open,
         };
-        let start = w.start.map(|[x, y]| Point2::new(x, y));
+        let start = w.picks.first(crate::path_picks::PickRole::Start).map(|p| p.xy);
         let cutoff_from = cutoff_from(w, &cache.path)?;
         Ok(judge(&WireJob {
             path: &cache.path,
@@ -192,10 +191,10 @@ fn model_sections(world: &World, op: &crate::schema::Operation, hs: &super::Reso
 /// (generated before the tabs were set, or not a tabbed path).
 pub fn cutoff_from(w: &super::types::WireContourOp, path: &crate::cl::Toolpath) -> Result<Option<usize>, String> {
     let Some(t) = &w.tabs else { return Ok(None) };
-    let (Some(n), Some([x, y])) = (t.count, w.start) else {
+    let (Some(n), Some(pick)) = (t.count, w.picks.first(crate::path_picks::PickRole::Start)) else {
         return Err("the tabs are not fully stated - the tab count and the start hole place the cut-off".into());
     };
-    crate::wire_edm::cutoff_split(path, Point2::new(x, y), n as usize).map(Some).ok_or_else(|| {
+    crate::wire_edm::cutoff_split(path, pick.xy, n as usize).map(Some).ok_or_else(|| {
         format!("the path does not hold the tab cut-off its {n} tab(s) state - regenerate it")
     })
 }

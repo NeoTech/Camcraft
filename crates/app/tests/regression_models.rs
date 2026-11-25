@@ -84,6 +84,7 @@ fn pipeline(model_path: &Path, op_name: &str, stock: StockShape, cut_z: f64, ste
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, op_name, "EM-0400-2FL", SrcRef::Stock, params);
     history.execute(&world, cmd.unwrap_or_else(|e| panic!("{op_name}: create refused: {e}")));

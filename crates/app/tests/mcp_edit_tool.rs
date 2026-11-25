@@ -1,7 +1,7 @@
 //! `edit_tool` over MCP (#1062): a partial tool definition through the
 //! undoable `ChangeTool`, in-process over the JSON-RPC handler.
 //!
-//! Gate map (M4.4): covers app::mcp::tool_edit, app::commands (ChangeTool).
+//! Gate map (M4.4): covers app::mcp::tool_edit, app::mcp::cutter_tools, app::commands (ChangeTool).
 
 use camcraft_app::mcp::Server;
 
@@ -107,4 +107,31 @@ fn edit_tool_refusals_name_the_problem() {
     let e = c.refused("edit_tool", json!({ "name": "EM-0400-2FL", "patch": { "kind": "drill", "tip_angle": 118.0 } }));
     assert!(e.contains("F1"), "{e}");
     assert_eq!(c.tool("EM-0400-2FL")["definition"]["kind"], json!("end_mill"));
+}
+
+/// #3368: `edit_tool` and `set_tool_cutter_params` set a chamfer mill's
+/// tip form and tip diameter, one undo step each; a bad tip is refused by
+/// name, and "sharp" is no lost key.
+#[test]
+fn edit_tool_sets_the_tip_form() {
+    let mut c = setup();
+    c.ok("add_tool", json!({ "catalog": "CM-0600-90" }));
+    assert!(c.tool("CM-0600-90")["definition"]["tip_form"].is_null(), "a sharp tip writes no key");
+    let r = c.ok("edit_tool", json!({ "name": "CM-0600-90", "patch": { "tip_form": "flat", "tip_diameter": 1.0 } }));
+    assert_eq!(r["definition"]["tip_form"], json!("flat"), "{r}");
+    assert_eq!(r["definition"]["tip_diameter"], json!(1.0), "{r}");
+    c.ok("undo", json!({}));
+    assert!(c.tool("CM-0600-90")["definition"]["tip_form"].is_null(), "one undo gives the sharp tip back");
+    c.ok("edit_tool", json!({ "name": "CM-0600-90", "patch": { "tip_form": "sharp", "tip_diameter": 0.0 } }));
+    let e = c.refused("edit_tool", json!({ "name": "CM-0600-90", "patch": { "tip_form": "flat" } }));
+    assert!(e.contains("tip diameter"), "a flat tip with no diameter is refused by name: {e}");
+    let e = c.refused("edit_tool", json!({ "name": "EM-0400-2FL", "patch": { "tip_form": "ball" } }));
+    assert!(e.contains("only a chamfer mill"), "{e}");
+    c.ok("set_tool_cutter_params", json!({ "tool": "CM-0600-90", "params": { "tip_form": "ball", "corner_r": 0.5 } }));
+    let d = c.tool("CM-0600-90")["definition"].clone();
+    assert_eq!((d["tip_form"].clone(), d["corner_r"].clone()), (json!("ball"), json!(0.5)), "{d}");
+    c.ok("undo", json!({}));
+    assert!(c.tool("CM-0600-90")["definition"]["tip_form"].is_null(), "one undo step for the cutter params too");
+    let e = c.refused("set_tool_cutter_params", json!({ "tool": "CM-0600-90", "params": { "tip_form": "round" } }));
+    assert!(e.contains("tip_form"), "{e}");
 }

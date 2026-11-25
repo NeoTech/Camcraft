@@ -67,6 +67,7 @@ fn pocket(bottom_z: f64, stepover: f64, rest_rough: bool) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 

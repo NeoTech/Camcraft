@@ -40,6 +40,7 @@ fn stream(stock: StockShape, at: Location) -> Vec<cnc::Record> {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, "Face1", "EM-0600-4FL", SrcRef::Stock, face);
     history.execute(&world, cmd.expect("create"));

@@ -133,6 +133,7 @@ fn groove_finish(tolerance: f64) -> OpParams {
         bottom_z: Height::fixed(-6.8),
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -149,6 +150,7 @@ fn threading(depth: f64) -> OpParams {
         plunge_feed: 40.0,
         infeed_plan: Default::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
+        picks: Default::default(),
     }
 }
 
@@ -220,6 +222,7 @@ fn probed(coarse: Option<f64>, ask: f64, sink: f64) -> World {
         bar_unload: true,
         bar_transfer: true,
         inspect_tol: ask, kerf: Default::default(),
+        picks: Default::default(),
     };
     create(&world, &mut h, "P1", "GT-0300", part);
     let e = model::find_by_name(&world, "G2").expect("op");
@@ -281,6 +284,7 @@ fn rotary(coarse: Option<f64>, clearance: f64) -> World {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     create(&world, &mut h, "OP", "BN-0600", params);
     world
@@ -317,6 +321,7 @@ fn face() -> OpParams {
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     }
 }
 

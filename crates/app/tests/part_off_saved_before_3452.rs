@@ -100,6 +100,7 @@ fn saved_world() -> World {
         bottom_z: Height::fixed(-33.0),
         feed: 120.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     };
     let part = OpParams::Part {
         tolerance: 0.05,
@@ -115,6 +116,7 @@ fn saved_world() -> World {
         bar_transfer: false,
         inspect_tol: 0.0,
         kerf: Default::default(),
+        picks: Default::default(),
     };
     for (name, params) in [("G1", groove), ("P1", part)] {
         h.execute(&world, CreateOperation::new(&world, name, "GT-0300", SrcRef::Entity("pin".into()), params).expect("op"));

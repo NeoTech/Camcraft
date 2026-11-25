@@ -43,6 +43,9 @@ pub fn moves_named(w: &Warning) -> [Option<usize>; 2] {
         | Warning::DrillUndersize { at, .. }
         // #3525: the first cutting move below the flute's reach.
         | Warning::FluteShort { at, .. }
+        // #3679: the feed plunge deeper than one stepdown below the
+        // uncut floor.
+        | Warning::PlungeTooDeep { at, .. } => [Some(*at), None],
         // #3748: the first cut of the selected entry.
         | Warning::EntryNotRecommended { at, .. } => [Some(*at), None],
         // #3035: the fallback names areas in the notes, not one move.

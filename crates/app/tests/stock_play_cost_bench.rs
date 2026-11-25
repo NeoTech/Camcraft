@@ -90,6 +90,7 @@ fn fig8_offset() -> (World, String) {
         rest: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     let params = operation::retype_params(&adaptive, OpType::Offset2D as usize);
     assert!(matches!(params, OpParams::Offset2D { .. }), "the retype gives a 2D Offset");
@@ -126,6 +127,7 @@ fn pocket3d() -> (World, String) {
         feed_opt: false,
         shell: false,
         method: AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Op1", "EM-1000-4FL", SrcRef::Entity(part), params.clone()).expect("create"));
     let inside = AreaControls { containment: Some(Containment::Inside), ..Default::default() };

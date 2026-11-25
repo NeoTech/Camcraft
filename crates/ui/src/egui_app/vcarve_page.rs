@@ -21,7 +21,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         plunge_feed,
         flat_clear,
         flat_stepover,
-        tilt,
+        tilt, picks: _,
     } = params
     else {
         return;

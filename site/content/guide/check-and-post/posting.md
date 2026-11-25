@@ -56,12 +56,12 @@ alone does not establish that a compatible post exists.
 A post is a `.cps` script, so you can load your own with
 **Load post (.cps)**.
 
-**Native Agie job:** choose **One program** in the desktop or CLI and
-write to a new job directory. This writes a setup-only native job for one
-vertical punch, not an ISO NC file. Set the separation cut length to
-1 mm and review the effective work technology on the control before
-assigning cutting steps. The Classic 2S machine is a template: enter the
-installed travel endpoints, guide heights and cutting conditions first.
+**Native wire EDM job:** choose **One program** and write to a new job
+directory. The job includes nominal ISO geometry, a resource manifest and
+a setup script with zero erosion steps. See
+[Native wire EDM job files](@/guide/operations/operations-edm.md#native-wire-edm-job-files)
+for supported cuts, separation settings and the checks to make on the
+control.
 
 To write or debug a script, see the
 [Post-processor API](@/guide/reference/post-processors.md).

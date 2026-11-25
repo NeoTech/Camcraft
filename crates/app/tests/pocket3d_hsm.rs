@@ -51,6 +51,7 @@ fn pocket_op(strategy: PocketStrategy) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 

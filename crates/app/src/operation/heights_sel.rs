@@ -231,6 +231,7 @@ mod tests {
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
+            picks: Default::default(),
         }
     }
 

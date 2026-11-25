@@ -56,7 +56,7 @@ fn burnout(clearance: Option<f64>) -> WireContourOp {
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Die,
-        start: Some([0.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(0.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: false,
         both_pieces_restrained: false,

@@ -51,6 +51,7 @@ fn slot(a_deg: f64) -> OpParams {
         tilt: Some(Tilt { basis_version: 1, a_deg, b_deg: 0.0, origin: [0.0; 3] }),
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 

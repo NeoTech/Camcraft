@@ -81,6 +81,7 @@ impl CutoffSetup20<'_> {
             stock_min_um: self.stock_min_um,
             stock_max_um: self.stock_max_um,
             height_um: self.height_um,
+            quality: super::Quality::Ccb030,
         };
         let work = piece::Work {
             geometry: self.stem,
@@ -99,7 +100,7 @@ impl CutoffSetup20<'_> {
             &piece,
             &work,
             "geometry, entry point and exit point",
-            offsets,
+            &offsets,
             &side_check,
         ))
     }

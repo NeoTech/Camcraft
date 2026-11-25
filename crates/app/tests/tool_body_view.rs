@@ -130,6 +130,7 @@ fn an_operation_reads_its_tools_body() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(&world, CreateOperation::new(&world, "Face1", TOOL, SrcRef::Stock, face).expect("op"));
     assert!(view::body_for_operation(&world, "Face1").is_none(), "no body yet");

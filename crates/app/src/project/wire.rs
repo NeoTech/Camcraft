@@ -37,7 +37,7 @@ pub(super) fn dto_to_facets(v: Vec<[[f64; 3]; 3]>) -> Vec<Triangle> {
 }
 
 pub fn collect(world: &World) -> ProjectFile {
-    let entities = model::named_entities(world)
+    let entities: Vec<EntityDto> = model::named_entities(world)
         .into_iter()
         .map(|(name, entity)| {
             let loc = model::transform_of(world, &entity).unwrap_or_default();
@@ -204,7 +204,10 @@ pub fn collect(world: &World) -> ProjectFile {
         })
         .collect();
     ProjectFile {
-        version: PROJECT_VERSION,
+        // #3368: a flat or ball taper tip steps the version (file.rs).
+        version: super::written_project_version(
+            entities.iter().filter_map(|e| e.tool.as_ref()).any(|t| !t.tip_form.is_sharp()),
+        ),
         // mm omits the field (the default); only an inch document pays
         // for saying so.
         units: match units::of(world) {

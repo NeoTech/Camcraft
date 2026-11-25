@@ -113,6 +113,8 @@ mod params;
 pub use params::*;
 mod pass_start_dto;
 pub use pass_start_dto::PassStartDto;
+mod path_picks_dto;
+pub use path_picks_dto::{migrate_legacy_patch, PathPickDto, PathPicksDto};
 mod entity;
 // #2463: a linked model's source file and its digest.
 mod source_dto;

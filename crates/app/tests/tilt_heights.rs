@@ -52,6 +52,7 @@ fn slot(tilt: Tilt) -> OpParams {
         tilt: Some(tilt),
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -147,6 +148,7 @@ fn contour(tilt: Tilt) -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -277,6 +279,7 @@ fn tilted_reference_pocket_preserves_part(src: SrcRef) {
         tilt: Some(tilt(90.0, 0.0, [0.0; 3])),
         links: camcraft_app::links::Links::PLANAR,
         corner_relief: Default::default(),
+        picks: Default::default(),
     };
     history.execute(
         &world,

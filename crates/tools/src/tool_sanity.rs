@@ -98,6 +98,10 @@ impl Tool {
                 return Some(format!("spindle speed {} rpm is over the tool's turning max rpm {m}", self.rpm));
             }
         }
+        // #3368: a chamfer mill's tip form and tip diameter.
+        if let Some(why) = crate::taper::refusal(self) {
+            return Some(why);
+        }
         self.kind_rule()
     }
 

@@ -147,6 +147,7 @@ fn groove_finish_params() -> OpParams {
         bottom_z: Height::fixed(-6.8),
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -164,6 +165,7 @@ fn part_params(plane_z: f64) -> OpParams {
         bar_unload: false,
         bar_transfer: false,
         inspect_tol: 0.0, kerf: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -263,6 +265,7 @@ fn an_empty_window_refuses_by_name() {
         bottom_z: Height::fixed(-5.0),
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     };
     let Err(err) =
         CreateOperation::new(&world, "G1", "GT-0200", SrcRef::Entity("bar".into()), params)
@@ -458,6 +461,7 @@ fn groove_rough_params(leave: f64) -> OpParams {
         stock_to_leave: leave,
         feed: 150.0,
         plunge_feed: 60.0,
+        picks: Default::default(),
     }
 }
 

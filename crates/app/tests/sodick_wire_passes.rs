@@ -72,7 +72,7 @@ fn punch(machine_text: &str, condition: &str, skims: Vec<WireSkim>) -> World {
         bottom_z: Height::fixed(0.0),
         condition: condition.into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
         both_pieces_restrained: false,

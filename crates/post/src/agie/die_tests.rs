@@ -6,7 +6,7 @@ use super::*;
 /// The 38-sided slot of `examples/agie/die-plate.obj`: straight walls at
 /// X±12.5 from Y-6 to Y6, joined by faceted semicircles of radius 12.5 with
 /// 10° facets. Counter-clockwise.
-fn slot() -> Vec<[f64; 2]> {
+pub(super) fn slot() -> Vec<[f64; 2]> {
     let arc = |cy: f64, from: i32| {
         (0..=18).map(move |k| {
             let a = f64::from(from + 10 * k).to_radians();

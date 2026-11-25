@@ -242,7 +242,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                     &mut fields,
                     &[
                         ("condition", "string", json!("")),
-                        ("start", "array", Value::Null),
+                        ("picks", "object", json!({})),
                         ("tabs", "object", Value::Null),
                         ("capture", "boolean", json!(false)),
                         ("both_pieces_restrained", "boolean", json!(false)),
@@ -290,8 +290,7 @@ fn start_exit(k: &KindInfo) -> Value {
     let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
     match cap {
         operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
-        operation::PickCapability::Threading => out["field"] = json!("start"),
-        _ => out["field"] = json!("links.approach.start_point / exit_point"),
+        _ => out["field"] = json!("picks"),
     }
     out
 }
@@ -329,6 +328,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::UndercutLift { at } => ("undercut_lift", *at),
         Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
         Warning::FluteShort { at, .. } => ("flute_short", *at),
+        Warning::PlungeTooDeep { at, .. } => ("plunge_too_deep", *at),
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
     };
     json!({

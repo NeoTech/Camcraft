@@ -33,7 +33,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            shank_avoid,
+            shank_avoid, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -84,7 +84,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            shank_avoid,
+            shank_avoid, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -141,7 +141,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            shank_avoid,
+            shank_avoid, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -198,7 +198,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            shank_avoid,
+            shank_avoid, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -259,7 +259,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             lead_deg,
             lag_deg,
-            max_tilt_deg,
+            max_tilt_deg, picks: _,
         } => swarf_editor(
             ui,
             world,
@@ -293,7 +293,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            passes,
+            passes, picks: _,
         } => swarf_editor(
             ui,
             world,

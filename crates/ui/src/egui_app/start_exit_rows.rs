@@ -15,9 +15,8 @@
 use egui::{Align, Label, Layout, Margin, RichText, Ui};
 
 use camcraft_app::geo2d::Point2;
-use camcraft_app::links::Approach;
 use camcraft_app::operation::{OpType, PickCapability};
-use camcraft_app::path_picks::PickRole;
+use camcraft_app::path_picks::{PathPick, PathPicks, PickRole};
 use camcraft_app::units::Unit;
 
 use crate::start_exit_pick::{StartExitAct, StartExitRole, act_id, armed_id};
@@ -70,23 +69,37 @@ const EXIT: PointRows = PointRows {
 };
 
 /// Both groups, for the closed 2D contour's lead tab.
-pub(super) fn start_exit_groups(ui: &mut Ui, u: Unit, a: &mut Approach) {
-    point_group(ui, u, &START, &mut a.start_point);
-    point_group(ui, u, &EXIT, &mut a.exit_point);
+pub(super) fn start_exit_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
+    pick_list_group(ui, u, &START, &mut picks.start);
+    pick_list_group(ui, u, &EXIT, &mut picks.exit);
+}
+
+fn pick_list_group(ui: &mut Ui, u: Unit, rows: &PointRows, list: &mut Vec<PathPick>) {
+    let mut pt = list.first().map(|p| p.xy);
+    point_group(ui, u, rows, &mut pt);
+    match pt {
+        Some(xy) if list.is_empty() => list.push(PathPick::xy(xy)),
+        Some(xy) => {
+            if let Some(first) = list.first_mut() {
+                first.xy = xy;
+            }
+        }
+        None => list.clear(),
+    }
 }
 
 /// The wire's threading point uses the same Start point group on Geometry.
-pub(super) fn wire_start_group(ui: &mut Ui, u: Unit, start: &mut Option<[f64; 2]>) {
+pub(super) fn wire_start_group(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
     group(ui, START_GROUP, None, |ui| {
-        let mut stated = start.is_some();
+        let mut stated = !picks.start.is_empty();
         check_row(ui, "Start hole stated", &mut stated);
-        match (stated, start.as_mut()) {
-            (true, Some(s)) => {
-                prop_row(ui, "Start hole X", |ui| num(ui, u, &mut s[0]));
-                prop_row(ui, "Start hole Y", |ui| num(ui, u, &mut s[1]));
+        match (stated, picks.start.first_mut()) {
+            (true, Some(p)) => {
+                prop_row(ui, "Start hole X", |ui| num(ui, u, &mut p.xy.x));
+                prop_row(ui, "Start hole Y", |ui| num(ui, u, &mut p.xy.y));
             }
-            (true, None) => *start = Some([0.0, 0.0]),
-            (false, _) => *start = None,
+            (true, None) => picks.start.push(PathPick::xy(Point2::new(0.0, 0.0))),
+            (false, _) => picks.start.clear(),
         }
     });
 }

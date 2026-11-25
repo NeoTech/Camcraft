@@ -113,6 +113,7 @@ fn drill(tip: f64, radius: f64) -> OpParams {
         plunge_feed: 80.0,
         holes: vec![hole],
         cross: vec![],
+        picks: Default::default(),
     }
 }
 
@@ -136,7 +137,7 @@ fn pocket(predrilled: bool) -> OpParams {
         blend_turns: false,
         tilt: None,
         links: Links { approach: Approach { predrilled, ..Approach::DEFAULT }, ..Links::PLANAR },
-        corner_relief: Default::default(),
+        corner_relief: Default::default(), picks: Default::default(),
     }
 }
 

@@ -127,6 +127,7 @@ fn drill(x: f64, y: f64) -> OpParams {
         plunge_feed: 80.0,
         holes: vec![Hole { xy: Point2::new(x, y), radius: 2.05, entry_z: 20.0, floor_z: 10.0, through: false, stepped: false }],
         cross: vec![],
+        picks: Default::default(),
     }
 }
 
@@ -153,6 +154,7 @@ fn faced() -> (World, History) {
         feed: 300.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     create(&world, &mut h, "F1", "EM-0400-2FL", SrcRef::Stock, params);
     (world, h)
@@ -333,6 +335,7 @@ fn live_tool_and_turning_sections_pass_the_lathe_door() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     create(&world, &mut h, "C1", "BN-0600", SrcRef::Entity("bar".into()), wrap);
     assert_eq!(voice(&world, "C1"), Some(LatheVoice::LiveTool));
@@ -368,6 +371,7 @@ fn live_tool_and_turning_sections_pass_the_lathe_door() {
         stepdown: 0.5,
         feed: 150.0,
         plunge_feed: 80.0,
+        picks: Default::default(),
     };
     create(&world, &mut h, "T1", "TN", SrcRef::Entity("bar".into()), facing);
     let dir = scratch("admitted-turn");

@@ -91,6 +91,7 @@ fn under_flat() -> OpParams {
         tilt: Some(UNDER),
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 

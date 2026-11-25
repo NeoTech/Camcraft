@@ -105,7 +105,7 @@ fn a_group_rejects_an_unqualified_height_or_reserved_geometry_alias() {
 }
 
 #[test]
-fn a_group_refuses_a_die_three_works_another_stock_or_no_separation() {
+fn a_group_refuses_a_die_two_works_on_one_area_another_stock_or_no_separation() {
     let temp = tempfile::tempdir().unwrap();
     let die = AgieJob {
         side: AgieSide::Die,
@@ -115,7 +115,7 @@ fn a_group_refuses_a_die_three_works_another_stock_or_no_separation() {
     wide.stock_max[0] = 41.;
     for (jobs, separation, expected) in [
         (vec![left(), die], 1.0, "closed punches"),
-        (vec![left(), right(1.), right(1.)], 1.0, "two independent"),
+        (vec![left(), right(1.), right(1.)], 1.0, "PAIR2 and PAIR3 share"),
         (vec![left(), wide], 1.0, "same 20 mm stock"),
         (vec![left(), right(1.)], 0.0, "1.0 mm"),
     ] {

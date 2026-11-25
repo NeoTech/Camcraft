@@ -136,6 +136,7 @@ fn contour5d_over_a_dome_ramps_or_refuses_a_tool_that_is_not_centre_cutting() {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     };
     let (cc, nc) = both(&world, params.clone());
     let (again, _) = operation::generate(&world, &op(BALL, params), "").expect("again");
@@ -178,6 +179,7 @@ fn multiaxis_rough_is_judged_on_its_posed_path() {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: Default::default(),
     };
     let (cc, nc) = both(&world, params);
     let solid = Solid { top: 0.0, footprint: None };
@@ -244,6 +246,7 @@ fn rotary_offset_on_the_bar() -> (World, OpParams) {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     (world, params)
 }

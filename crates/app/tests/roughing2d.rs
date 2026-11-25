@@ -129,6 +129,7 @@ fn pocket(strategy: PocketStrategy, eng: f64) -> OpParams {
         tilt: None,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -155,6 +156,7 @@ fn adaptive(eng: f64) -> OpParams {
         tilt: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -177,6 +179,7 @@ fn offset() -> OpParams {
         tilt: None,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

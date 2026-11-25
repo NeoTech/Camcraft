@@ -346,9 +346,15 @@ fn contour_tabs_case_posts_the_lead_moves_and_the_tab_lifts() {
     assert_eq!(lead_ins(0.0), 4, "one lead-in arc for each run between two tabs at Z0");
 
     // A lift goes from a cut level to a height above the stock top (Z6).
-    // The block before it is the end of the linear lead-out.
-    let lifts: Vec<usize> =
-        (1..blocks.len()).filter(|&i| blocks[i - 1].1 <= 4.0 && blocks[i].1 > 6.0).collect();
+    // The block before it is the end of the linear lead-out. #3678: a rise
+    // after a G01 that went down is a peck retract, not a lift. Tab windows
+    // 1 to 3 start where the levels above left stock under the disc, so
+    // each dive pecks Z4, Z2, Z0: two retracts each.
+    let rises: Vec<usize> =
+        (2..blocks.len()).filter(|&i| blocks[i - 1].1 <= 4.0 && blocks[i].1 > 6.0).collect();
+    let peck = |i: usize| blocks[i - 1].0 == "G01" && blocks[i - 2].1 > blocks[i - 1].1;
+    let (pecks, lifts): (Vec<usize>, Vec<usize>) = rises.into_iter().partition(|&i| peck(i));
+    assert_eq!(pecks.len(), 6, "tab windows 1 to 3 each peck to Z0 with two retracts");
     assert_eq!(lifts.len(), 6, "two whole rings and four tab runs each end with a lift");
     for &i in &lifts {
         assert_eq!(blocks[i - 1].0, "G01", "the block before lift {i} is the linear lead-out");

@@ -78,6 +78,7 @@ fn configured_spot(depth: f64, stock_top: f64, diameter: f64, tip_angle: f64) ->
         plunge_feed: 80.0,
         holes: vec![Hole { xy: Point2::new(0.0, 0.0), radius: BORE, entry_z: TOP, floor_z: FLOOR, through: false, stepped: false }],
         cross: vec![],
+        picks: Default::default(),
     };
     history.execute(
         &world,

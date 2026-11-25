@@ -58,6 +58,7 @@ fn face_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -84,6 +85,7 @@ fn contour_params() -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -111,6 +113,7 @@ fn slot_params() -> OpParams {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -356,6 +359,7 @@ fn create_operation_validates_every_reference() {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         ),
         Err(CommandError::Invalid(_))
@@ -427,6 +431,7 @@ fn edit_params_clears_the_stamp_not_the_cache() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -873,6 +878,7 @@ fn face_params_5() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -1144,6 +1150,7 @@ fn stale_reason_names_a_height_whose_source_is_gone() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(
         &world,
@@ -1650,6 +1657,7 @@ fn region_of_is_the_preview_of_what_generate_would_cut() {
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -1691,6 +1699,7 @@ fn region_of_is_the_preview_of_what_generate_would_cut() {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -1806,6 +1815,7 @@ fn face_sel_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -2018,6 +2028,7 @@ fn pocket_refuses_an_open_run() {
             optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
             blend_turns: false,
             corner_relief: Default::default(),
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -2519,6 +2530,7 @@ fn a_closed_chain_routes_the_boundary_path_not_a_centerline() {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -3278,6 +3290,7 @@ fn straight_runs_face_their_material_and_trace_refuses_by_name() {
                 feed: 500.0,
                 plunge_feed: 100.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("create"),
@@ -3340,6 +3353,7 @@ fn selection_notes_report_stitching_and_extension() {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     let notes = operation::selection_notes(&world, None, &items, &contour);
     assert!(
@@ -3388,6 +3402,7 @@ fn contour_at(side: Side, z: f64) -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -3843,6 +3858,7 @@ fn drill_params(holes: Vec<Hole>, top_z: f64, clearance_z: f64) -> OpParams {
         plunge_feed: 100.0,
         holes,
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -4093,6 +4109,7 @@ fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
         pencil_reference: None,
         fill_openings: None,
         waterlines: true,
+        picks: Default::default(),
     }
 }
 
@@ -4978,6 +4995,7 @@ fn flow5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -4995,6 +5013,7 @@ fn contour5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -5059,6 +5078,7 @@ fn parallel5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -5358,6 +5378,7 @@ fn swarf_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 15.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -5378,6 +5399,7 @@ fn advanced_swarf_params(top_z: f64, bottom_z: f64, passes: u32) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         passes,
+        picks: Default::default(),
     }
 }
 
@@ -5763,6 +5785,7 @@ fn rotary_contour_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -5780,6 +5803,7 @@ fn rotary_parallel_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -5810,6 +5834,7 @@ fn rotary_offset_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -6443,6 +6468,7 @@ fn multiaxis_rough_params() -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -6468,6 +6494,7 @@ fn multiaxis_rough_pocket_twin() -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -6770,6 +6797,8 @@ fn stub_tool() -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
     }
 }
 
@@ -7159,6 +7188,7 @@ fn multiaxis_contour_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -7617,6 +7647,7 @@ fn deburr_params(setback: f64, top_z: f64, bottom_z: f64) -> OpParams {
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     }
 }
 

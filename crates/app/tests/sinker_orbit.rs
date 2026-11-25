@@ -106,6 +106,7 @@ fn burn(orbit: Option<SinkerOrbit>) -> OpParams {
         layer: None,
         wear_lost: None,
         wear_over: None,
+        picks: Default::default(),
     })
 }
 

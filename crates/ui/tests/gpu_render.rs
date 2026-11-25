@@ -292,6 +292,7 @@ fn machined_mesh_paints_as_stock() {
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     };
     history.execute(&world, CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, params).expect("create"));
     history.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate"));

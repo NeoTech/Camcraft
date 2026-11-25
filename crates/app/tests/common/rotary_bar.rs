@@ -94,6 +94,7 @@ pub fn params(kind: Kind) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            picks: Default::default(),
         },
         Kind::Parallel => OpParams::RotaryParallel {
             tolerance: 0.1,
@@ -108,6 +109,7 @@ pub fn params(kind: Kind) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            picks: Default::default(),
         },
         Kind::Offset => OpParams::RotaryOffset {
             links: camcraft_app::links::Links::ROUGH3D,
@@ -128,6 +130,7 @@ pub fn params(kind: Kind) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            picks: Default::default(),
         },
     }
 }

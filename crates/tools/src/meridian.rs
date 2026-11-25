@@ -194,6 +194,11 @@ impl Tool {
         self.check_meridian_inputs()?;
         let (r, fl) = (self.diameter * 0.5, self.flute_len);
         let line = SpunPoint::line;
+        // #3368: a flat or ball taper tip draws its own face and arc.
+        if let Some(pts) = crate::taper::meridian_points(self, r, fl) {
+            let n = pts.len().saturating_sub(1);
+            return Meridian::new(pts, vec![true; n]);
+        }
         let square = vec![line(0.0, 0.0), line(0.0, r), line(fl, r)];
         let pts = match self.kind {
             ToolKind::EndMill => square,
@@ -299,6 +304,12 @@ impl Tool {
                     "a tip angle must be at least 0 and less than 180 degrees".into(),
                 ));
             }
+        }
+        // #3368: a flat or ball tip that breaks a tip rule draws nothing.
+        if crate::taper::is_unread_tip(self)
+            && let Some(why) = crate::taper::refusal(self)
+        {
+            return Err(MeridianError::Unsound(why));
         }
         if matches!(
             self.kind,

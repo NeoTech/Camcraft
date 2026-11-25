@@ -1,8 +1,7 @@
 //! The 2D Contour page's Start point / Exit point viewport pick (#1448,
 //! #1473 item 2): while armed on the Lead in / Lead out tab, a click on a
 //! part or stock face, edge or corner writes its model `(x, y)` into the
-//! page draft (`OpUi::params`'s `links.approach.start_point` or
-//! `exit_point`). Apply / Generate then rides `EditOperationParams`,
+//! page draft (`OpUi::params`'s `picks`). Apply / Generate then rides `EditOperationParams`,
 //! undoable like any parameter edit; leaving the tab, closing the editor,
 //! clearing a point, or applying disarms the pick. Fixtures and tilted
 //! contours are refused by name and change nothing.
@@ -106,7 +105,7 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         state.status = format!("that pick on '{}' has no finite position", found.entity);
         return;
     }
-    let OpParams::Contour { links, tilt, .. } = &mut state.op_ui.params else {
+    let OpParams::Contour { picks, tilt, .. } = &mut state.op_ui.params else {
         state.op_ui.start_exit_pick = None;
         return;
     };
@@ -114,10 +113,15 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         state.status = format!("2D Contour: clear tilt before picking the {}", role.label());
         return;
     }
-    let pt = Point2::new(x, y);
-    match role {
-        StartExitRole::Start => links.approach.start_point = Some(pt),
-        StartExitRole::Exit => links.approach.exit_point = Some(pt),
+    let pick = camcraft_app::path_picks::PathPick::xy(Point2::new(x, y));
+    let list = match role {
+        StartExitRole::Start => &mut picks.start,
+        StartExitRole::Exit => &mut picks.exit,
+    };
+    if let Some(first) = list.first_mut() {
+        *first = pick;
+    } else {
+        list.push(pick);
     }
     let u = state.units();
     state.status = format!(
@@ -149,7 +153,7 @@ pub(crate) fn marks(state: &State, aspect: f64) -> (Vec<Seg>, Vec<Seg>) {
     {
         return (start_segs, exit_segs);
     }
-    let OpParams::Contour { links, top_z, tilt: None, .. } = &state.op_ui.params else {
+    let OpParams::Contour { picks, top_z, tilt: None, .. } = &state.op_ui.params else {
         return (start_segs, exit_segs);
     };
     let Some(op) = model::find_by_name(&state.world, &state.op_ui.name)
@@ -165,10 +169,10 @@ pub(crate) fn marks(state: &State, aspect: f64) -> (Vec<Seg>, Vec<Seg>) {
         return (start_segs, exit_segs);
     };
     let mvp = state.cam.mvp(aspect);
-    if let Some(p) = links.approach.start_point.filter(|p| p.x.is_finite() && p.y.is_finite()) {
+    if let Some(p) = picks.first(camcraft_app::path_picks::PickRole::Start).map(|k| k.xy).filter(|p| p.x.is_finite() && p.y.is_finite()) {
         crate::vertex_pick::vertex_marker(&mvp, [p.x, p.y, z], aspect, &mut start_segs);
     }
-    if let Some(p) = links.approach.exit_point.filter(|p| p.x.is_finite() && p.y.is_finite()) {
+    if let Some(p) = picks.first(camcraft_app::path_picks::PickRole::Exit).map(|k| k.xy).filter(|p| p.x.is_finite() && p.y.is_finite()) {
         x_marker(&mvp, [p.x, p.y, z], aspect, &mut exit_segs);
     }
     (start_segs, exit_segs)
@@ -217,9 +221,9 @@ mod tests {
     #[test]
     fn marks_draw_for_picked_start_and_exit_and_hide_elsewhere() {
         let mut st = contour_state();
-        if let OpParams::Contour { links, .. } = &mut st.op_ui.params {
-            links.approach.start_point = Some(Point2::new(30.0, 0.0));
-            links.approach.exit_point = Some(Point2::new(60.0, 30.0));
+        if let OpParams::Contour { picks, .. } = &mut st.op_ui.params {
+            picks.start = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(30.0, 0.0))];
+            picks.exit = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(60.0, 30.0))];
         }
         let (start, exit) = marks(&st, 1.5);
         assert_eq!(start.len(), 4, "start point renders a 4-segment diamond");
@@ -242,8 +246,8 @@ mod tests {
         arm(&mut st, StartExitRole::Start);
         take(&mut st, &wall_hit("Block", [60.0, 18.0, 15.0]));
         assert!(st.status.contains("tilt"), "{}", st.status);
-        if let OpParams::Contour { links, .. } = &st.op_ui.params {
-            assert_eq!(links.approach.start_point, None);
+        if let OpParams::Contour { picks, .. } = &st.op_ui.params {
+            assert!(picks.start.is_empty());
         }
     }
 
@@ -253,8 +257,8 @@ mod tests {
         arm(&mut st, StartExitRole::Exit);
         take(&mut st, &wall_hit("Block", [f64::NAN, 18.0, 15.0]));
         assert!(st.status.contains("finite"), "{}", st.status);
-        if let OpParams::Contour { links, .. } = &st.op_ui.params {
-            assert_eq!(links.approach.exit_point, None);
+        if let OpParams::Contour { picks, .. } = &st.op_ui.params {
+            assert!(picks.exit.is_empty());
         }
     }
 }

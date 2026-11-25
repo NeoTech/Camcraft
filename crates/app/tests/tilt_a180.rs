@@ -48,6 +48,7 @@ fn slot_with_tilt(tilt: Option<Tilt>) -> OpParams {
         tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 

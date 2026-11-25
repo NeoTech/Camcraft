@@ -48,6 +48,7 @@ fn bore_world(holes: Vec<Hole>) -> World {
         climb: true,
         tolerance: 0.01,
         holes,
+        picks: Default::default(),
     };
     history.execute(&world, CreateOperation::new(&world, "BOR", TOOL, SrcRef::Stock, params).expect("create"));
     world

@@ -284,6 +284,7 @@ mod tests {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         }
     }
 
@@ -300,6 +301,7 @@ mod tests {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            picks: Default::default(),
         }
     }
 

@@ -36,7 +36,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             helix_radius, blend_turns, blend_radius,
             tilt,
             extend_start,
-            extend_end,
+            extend_end, picks: _,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "s", Some((entry, helix_radius)), links);
@@ -102,7 +102,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             feed,
             plunge_feed,
             climb,
-            tilt,
+            tilt, picks: _,
         }
         | OpParams::Engrave {
             clearance_z,
@@ -113,7 +113,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             feed,
             plunge_feed,
             climb,
-            tilt,
+            tilt, picks: _,
         } => {
             let tg = if engrave { "engrave" } else { "trace" };
             if tab == SEC_HEIGHTS {
@@ -163,7 +163,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             side,
             tolerance,
-            tilt,
+            tilt, picks: _,
         } => {
             if tab == SEC_GEO {
                 prop_row(ui, "Chamfer width", |ui| num(ui, u, width));
@@ -226,7 +226,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             hole_min_diameter,
             hole_max_diameter,
             unreachable,
-            sizing,
+            sizing, picks: _,
         } => {
             if tab == SEC_GEO {
                 // #1890: the break mode, its width or depth, the profile
@@ -298,7 +298,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             entry,
             helix_radius,
-            tilt,
+            tilt, picks: _,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "circ", Some((entry, helix_radius)), links);

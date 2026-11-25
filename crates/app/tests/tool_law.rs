@@ -7,10 +7,12 @@
 //! Provenance: machine-tool handbook tooling practice read against our
 //! own generators' tool doors; no vendor material consulted.
 //!
-//! Gate map (M4.4): covers app::operation (kinds table, tool_law), tools::tools.
+//! Gate map (M4.4): covers app::operation (kinds table, tool_law), tools::tools,
+//! app::operation::tool_gate (#3368: a flat or ball taper tip).
 
-use camcraft_app::operation::{tool_law, KindInfo, OpType, Section};
-use camcraft_app::tools::ToolKind;
+use camcraft_app::commands::{AddTool, History};
+use camcraft_app::operation::{tool_gate, tool_law, KindInfo, OpType, Section};
+use camcraft_app::tools::{catalog, TaperTip, Tool, ToolKind};
 
 /// Every `ToolKind`, kept honest by the exhaustive match below: a new
 /// variant fails to compile here until it joins the list (and so the
@@ -169,4 +171,36 @@ fn undercut_cutters_mount_only_the_slot_undercut() {
     }
     assert_eq!(OpType::SlotUndercut.info().tool_kinds, tool_law::UNDERCUT);
     assert!(!OpType::SlotUndercut.info().accepts(ToolKind::EndMill));
+}
+
+/// #3368: until a generator reads a taper's tip, every operation that
+/// mounts a chamfer mill refuses a flat or ball tip by name - the tool
+/// door at creation, edit and re-tool. A sharp tip passes the same door,
+/// and the catalog hint never offers a flat or ball tip.
+#[test]
+fn every_operation_refuses_a_non_sharp_taper_by_name() {
+    let world = camcraft_app::world::new_world();
+    let mut h = History::default();
+    let Some((_, sharp)) = catalog().into_iter().find(|(n, _)| *n == "CM-0600-90") else {
+        panic!("the catalog has CM-0600-90");
+    };
+    let flat = Tool { tip_form: TaperTip::Flat, tip_diameter: 1.0, ..sharp.clone() };
+    let ball = Tool { tip_form: TaperTip::Ball, corner_r: 0.5, ..sharp.clone() };
+    for (name, t) in [("SHARP", sharp), ("FLAT", flat), ("BALL", ball)] {
+        let cmd = AddTool::new(&world, name, t).unwrap_or_else(|e| panic!("{name}: {e}"));
+        h.execute(&world, cmd);
+    }
+    let rows: Vec<&KindInfo> = KindInfo::ALL.iter().filter(|r| r.accepts(ToolKind::Taper)).collect();
+    assert!(rows.len() >= 4, "the chamfer mill's operations: {:?}", rows.iter().map(|r| r.ty).collect::<Vec<_>>());
+    for row in rows {
+        assert_eq!(tool_gate::tool_refusal(&world, row, "SHARP"), None, "{:?} takes a sharp tip", row.ty);
+        for (name, form) in [("FLAT", "flat"), ("BALL", "ball")] {
+            let why = tool_gate::tool_refusal(&world, row, name).unwrap_or_else(|| panic!("{:?} took {name}", row.ty));
+            assert!(why.contains(&format!("'{name}' has a {form} tip")), "{:?}: {why}", row.ty);
+            assert!(why.contains(row.label), "{:?} names itself: {why}", row.ty);
+        }
+        assert!(!tool_gate::fitting_tools(&world, row).iter().any(|n| n != "SHARP"), "{:?} offers only the sharp tip", row.ty);
+        let hint = tool_gate::catalog_suggestion(&catalog(), &[ToolKind::Taper]).unwrap_or_default();
+        assert!(!hint.contains("-F10") && !hint.contains("-R05"), "{hint}");
+    }
 }

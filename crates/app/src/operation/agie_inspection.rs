@@ -124,10 +124,11 @@ pub(crate) fn prepare_inspection(
             "Agie inspection needs 10 mm through stock with work Z0 on its top face".into(),
         );
     }
-    let [hx, hy] = wire
-        .start
+    let hole_pick = wire
+        .picks
+        .first(crate::path_picks::PickRole::Start)
         .ok_or("state the centre of the 3 mm threading hole")?;
-    let hole = Point2::new(hx - ox, hy - oy);
+    let hole = Point2::new(hole_pick.xy.x - ox, hole_pick.xy.y - oy);
     let pose = selected.pose;
     let place = |p: Point2| {
         let q = transform_point(Point3::new(p.x, p.y, 0.0), pose.pos, pose.rot);
@@ -162,7 +163,7 @@ pub(crate) fn prepare_inspection(
     }
     let local_hole = quat_rotate_point(
         quat_conjugate(pose.rot),
-        Point3::new(hx - pose.pos.x, hy - pose.pos.y, 0.0),
+        Point3::new(hole_pick.xy.x - pose.pos.x, hole_pick.xy.y - pose.pos.y, 0.0),
     );
     let mut source_clearance = ChainClearance::new(ring).map_err(|e| e.to_string())?;
     if !source_clearance.contains_disk(Point2::new(local_hole.x, local_hole.y), 1.5 + 1e-8) {

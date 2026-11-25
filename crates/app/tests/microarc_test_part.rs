@@ -103,6 +103,7 @@ fn flat(tilt: Option<Tilt>) -> OpParams {
         tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -130,6 +131,7 @@ fn cross() -> OpParams {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -237,6 +239,7 @@ fn wrap_world() -> World {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     let ball = tool("BN-0600", 0.125, 8000.0, 8.0 * IN);
     h.execute(&world, ok(AddTool::new(&world, "BN 1/8", ball), "ball"));

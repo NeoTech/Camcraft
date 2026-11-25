@@ -115,6 +115,11 @@ struct Def {
     /// A sinker electrode's section (#1152); the starter catalog states none.
     #[serde(default)]
     outline: Vec<[f64; 2]>,
+    /// #3368: a chamfer mill's tip form and tip diameter; absent is sharp.
+    #[serde(default)]
+    tip_form: crate::taper::TaperTip,
+    #[serde(default)]
+    tip_diameter: f64,
 }
 
 fn yes() -> bool {
@@ -175,6 +180,8 @@ impl Def {
             cutting: Vec::new(),
             outline: self.outline,
             turning: self.turning,
+            tip_form: self.tip_form,
+            tip_diameter: self.tip_diameter,
         }
     }
 }

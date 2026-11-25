@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/app", "crates/cl", "crates/motion", "crates/post", "crates/sim",
+members = ["crates/app", "crates/cl", "crates/gcode", "crates/motion", "crates/post", "crates/sim",
   "crates/tools", "crates/ui", "crates/geometry", "crates/kernel", "crates/gpu", "xtask"]
 
 [workspace.package]
@@ -12,6 +12,7 @@ rust-version = "1.90"
 camcraft-app = { path = "crates/app" }
 camcraft-geometry = { path = "crates/geometry" }
 camcraft-cl = { path = "crates/cl" }
+camcraft-gcode = { path = "crates/gcode" }
 camcraft-tools = { path = "crates/tools" }
 camcraft-post = { path = "crates/post" }
 camcraft-sim = { path = "crates/sim" }

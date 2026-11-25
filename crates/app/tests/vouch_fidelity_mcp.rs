@@ -46,6 +46,7 @@ fn face() -> OpParams {
         climb: true,
         blend_radius: None,
         blend_turns: false,
+        picks: Default::default(),
     }
 }
 

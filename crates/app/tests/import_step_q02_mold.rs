@@ -119,6 +119,7 @@ fn the_recorded_q02_mould_generates_a_3d_flat_finish() {
         pencil_reference: None,
         fill_openings: None,
         waterlines: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,

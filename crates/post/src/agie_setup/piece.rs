@@ -8,6 +8,8 @@ pub(super) struct Piece<'a> {
     pub stock_min_um: [i32; 2],
     pub stock_max_um: [i32; 2],
     pub height_um: i32,
+    /// The one quality object that every work of the piece refers to.
+    pub quality: super::Quality,
 }
 
 /// One native work. A closed cycle has a 2 mm start hole. An open cut has an
@@ -103,7 +105,11 @@ pub(super) fn piece(piece: &Piece<'_>, works: &[Work<'_>]) -> String {
     // second quality name can bind to other resident data (#2984).
     checked(
         &mut lines,
-        "  ok=JE_CreateQuality(je_piece,\"CCB030\",\"0.30,1.50,1.00,F,F,F\",je_q1)".into(),
+        format!(
+            "  ok=JE_CreateQuality(je_piece,\"{}\",\"{}\",je_q1)",
+            piece.quality.name(),
+            piece.quality.request()
+        ),
     );
     checked(
         &mut lines,

@@ -62,6 +62,7 @@ fn params() -> OpParams {
         side: Side::Outside,
         tolerance: 0.01,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

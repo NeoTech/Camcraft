@@ -14,7 +14,7 @@ use crate::model;
 #[path = "posting_agie_group.rs"]
 mod group;
 
-pub(crate) use camcraft_post::agie::{AgieJob, AgieSide};
+pub(crate) use camcraft_post::agie::{AgieJob, AgieSide, MAX_PUNCH_WORKS, Quality};
 pub use camcraft_post::agie::valid_name;
 
 /// The registry name of the native wire EDM post, the one place it is spelled (#3537).
@@ -24,8 +24,26 @@ pub const POST: &str = "Native wire EDM job files";
 /// that still says it selects [`POST`].
 pub const LEGACY_POST: &str = "Agie native wire EDM";
 const MODEL: &str = "AGIECUT CLASSIC 2S";
-pub(crate) const CONDITION: &str = "AGIE_QN2";
 pub(crate) const PREVIEW_GAP: f64 = 0.005;
+
+/// The work quality that a Wire Contour machine condition requests (#2966).
+/// `AGIE_QN2` requests CCB030 (Ra 0.30 µm) for every qualified job.
+/// `AGIE_BERCO_RA035` requests CCB035 (Ra 0.35 µm) for one 20 mm polygon punch.
+pub(crate) fn quality_of(condition: &str) -> Option<Quality> {
+    match condition {
+        "AGIE_QN2" => Some(Quality::Ccb030),
+        "AGIE_BERCO_RA035" => Some(Quality::Ccb035),
+        _ => None,
+    }
+}
+
+/// The machine condition that requests `quality`: the inverse of [`quality_of`].
+fn condition_name(quality: Quality) -> &'static str {
+    match quality {
+        Quality::Ccb030 => "AGIE_QN2",
+        Quality::Ccb035 => "AGIE_BERCO_RA035",
+    }
+}
 
 /// The registry name that `name` selects: [`POST`] for its hidden alias, else `name`.
 #[must_use]
@@ -81,8 +99,8 @@ pub(super) fn post(
     let name = dest.file_name().and_then(|x| x.to_str()).filter(|s| valid_name(s))
         .ok_or("Choose a new native wire EDM job directory named with 1 to 8 uppercase letters or digits, starting with a letter")?;
     let ops = super::program_ops(world)?;
-    if !(1..=2).contains(&ops.len()) {
-        return Err("A native wire EDM job requires exactly one active Wire Contour operation, or two for a group of captured punches".into());
+    if !(1..=MAX_PUNCH_WORKS).contains(&ops.len()) {
+        return Err(format!("A native wire EDM job requires one active Wire Contour operation, 2 to {MAX_PUNCH_WORKS} for a group of captured punches, or two for the openings of one die plate"));
     }
     let operations = ops
         .iter()
@@ -100,7 +118,7 @@ pub(super) fn post(
         .iter()
         .any(|(_, other)| other.setup != op.setup || other.tool != op.tool)
     {
-        return Err("The punches of a group must use the same setup and wire tool".into());
+        return Err("The works of a group must use the same setup and wire tool".into());
     }
     if crate::setup_post_options::of(world, setup) != PostOptions::default() {
         return Err("Native wire EDM jobs require default post options and One program output".into());
@@ -132,8 +150,9 @@ pub(super) fn post(
             report.problems.join("; ")
         ));
     }
-    // One selected DXF circle or racetrack posts native arcs (#2022). A
-    // group reads modeled punches only.
+    // One selected DXF circle, racetrack (#2022) or convex tangent loop (#2983)
+    // posts native arcs. A group reads modeled punches or the openings of one
+    // modeled die plate.
     let round = match operations.as_slice() {
         [(op_name, op)] if crate::operation::wire_sketch::selected(&op.src, &op.params) => {
             Some(crate::operation::agie_sketch_job(world, op, op_name)?)
@@ -141,6 +160,29 @@ pub(super) fn post(
         _ => None,
     };
     let jobs = if round.is_some() { Vec::new() } else { group::jobs(world, &operations)? };
+    // The control checked CCB035 on one 20 mm polygon punch only (#2966).
+    let qualities = operations
+        .iter()
+        .map(|(_, op)| crate::operation::agie_quality(world, op))
+        .collect::<Result<Vec<_>, _>>()?;
+    // The piece registers one quality for all its works (#2984). Name a mixed
+    // group in either work order before the single-punch limit of CCB035.
+    let mut conditions: Vec<_> = qualities.iter().map(|q| condition_name(*q)).collect();
+    conditions.sort_unstable();
+    conditions.dedup();
+    if conditions.len() > 1 {
+        return Err(format!(
+            "The works of a group must use the same wire condition. This group mixes {}",
+            conditions.join(" and ")
+        ));
+    }
+    let quality = match qualities.as_slice() {
+        [quality] if round.is_none() => *quality,
+        _ if qualities.iter().all(|q| *q == Quality::Ccb030) => Quality::Ccb030,
+        _ => {
+            return Err("AGIE_BERCO_RA035 is qualified for one closed polygon punch on a 20 mm plate only. Select AGIE_QN2 for a punch group or a DXF arc punch".into());
+        }
+    };
     let options = super::program_options_for_script(
         world,
         super::builtin_post_text(POST)?,
@@ -156,10 +198,18 @@ pub(super) fn post(
         Some((job, shape)) => {
             (camcraft_post::agie::export_round_with_review(job, shape, dest, name, separation)?, 1)
         }
-        None => (
-            camcraft_post::agie::export_group_with_review(&jobs, dest, name, separation)?,
-            jobs.len(),
-        ),
+        None => match (quality, jobs.as_slice()) {
+            (Quality::Ccb035, [job]) => (
+                camcraft_post::agie::export_punch_with_review(
+                    job, quality, dest, name, separation,
+                )?,
+                1,
+            ),
+            _ => (
+                camcraft_post::agie::export_group_with_review(&jobs, dest, name, separation)?,
+                jobs.len(),
+            ),
+        },
     };
     Ok(Posted {
         bundle_files: bundle.files,

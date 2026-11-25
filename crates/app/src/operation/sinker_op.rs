@@ -53,6 +53,7 @@ pub(super) fn burn_draft(c: &Carried) -> SinkerBurnOp {
         layer: None,
         wear_lost: None,
         wear_over: None,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 

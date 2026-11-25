@@ -733,6 +733,7 @@ fn seed_face(c: &Carried) -> OpParams {
         // is bridged in the air; cutting across is the user's choice.
         holes: Default::default(),
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -765,6 +766,7 @@ fn seed_contour(c: &Carried) -> OpParams {
         links: crate::links::Links::PLANAR,
         tilt: c.tilt,
         chain_overrides: Vec::new(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -798,6 +800,7 @@ fn seed_pocket(c: &Carried) -> OpParams {
         corner_relief: crate::machining2d::CornerRelief::default(),
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -828,6 +831,7 @@ fn seed_adaptive2d(c: &Carried) -> OpParams {
         rest: None,
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -853,6 +857,7 @@ fn seed_offset2d(c: &Carried) -> OpParams {
         helix_radius: 1.0,
         tilt: c.tilt,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -869,6 +874,7 @@ fn seed_engrave(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -888,6 +894,7 @@ fn seed_chamfer2d(c: &Carried) -> OpParams {
         side: Side::Auto,
         tolerance: 0.01,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -913,6 +920,7 @@ fn seed_circular(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -937,6 +945,7 @@ fn seed_slot(c: &Carried) -> OpParams {
         tilt: c.tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -963,6 +972,7 @@ fn seed_trochoidal_slot(c: &Carried) -> OpParams {
         return_feed: c.feed * 2.0,
         plunge_feed: c.plunge,
         climb: c.climb,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -977,6 +987,7 @@ fn seed_trace(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1002,6 +1013,7 @@ fn seed_drill(c: &Carried) -> OpParams {
         // the full cutting diameter so a twist drill's point exits clean.
         break_through: None,
         break_through_from: crate::drilling::BreakThroughFrom::FullDiameter,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1027,6 +1039,7 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
         holes: Vec::new(),
         break_through: None,
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1053,6 +1066,7 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         // #988: the #894 ride - equal passes, M3, right-hand-cut mill.
         passes: crate::machining2d::ThreadPasses::default(),
         break_through: None,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1117,6 +1131,7 @@ fn seed_pocket3d(c: &Carried) -> OpParams {
         shell: false,
         // #3361: the core-first order every earlier 3D pocket cut.
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1165,6 +1180,7 @@ fn seed_finish3d(c: &Carried) -> OpParams {
         waterlines: true,
         // #3362: the outside-in order every earlier finish cut.
         pass_start: crate::machining2d::PassStart::Auto,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1195,6 +1211,7 @@ fn seed_deburr(c: &Carried) -> OpParams {
         unreachable: crate::finishing3d::UnreachableEdges::SkipWithNote,
         // #1890: one Constant Width chamfer pass.
         sizing: crate::finishing3d::DeburrBreak::default(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1218,6 +1235,7 @@ fn seed_contour5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1238,6 +1256,7 @@ fn seed_parallel5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1264,6 +1283,7 @@ fn seed_flow5d(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1287,6 +1307,7 @@ fn seed_multi_axis_contour(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1318,6 +1339,7 @@ fn seed_facing(c: &Carried) -> OpParams {
         stepdown: 0.5,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1337,6 +1359,7 @@ fn seed_profile_rough(c: &Carried) -> OpParams {
         stock_to_leave: 0.25,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1351,6 +1374,7 @@ fn seed_profile_finish(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1370,6 +1394,7 @@ fn seed_groove_rough(c: &Carried) -> OpParams {
         stock_to_leave: 0.25,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1384,6 +1409,7 @@ fn seed_groove_finish(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1410,6 +1436,7 @@ fn seed_part(c: &Carried) -> OpParams {
         inspect_tol: 0.0,
         // #3469: the #3452 kerf - the cut-off piece is the part.
         kerf: crate::turning::PartKerf::default(),
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1431,6 +1458,7 @@ fn seed_threading(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         infeed_plan: crate::turning::ThreadInfeed::default(),
         hand: crate::cl::ThreadHand::Right,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1449,6 +1477,7 @@ fn seed_chamfer(c: &Carried) -> OpParams {
         angle_deg: 45.0,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1467,6 +1496,7 @@ fn seed_taper(c: &Carried) -> OpParams {
         top_dia: 16.0,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1486,6 +1516,7 @@ fn seed_multi_pass(c: &Carried) -> OpParams {
         passes: 3,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1501,6 +1532,7 @@ fn seed_form(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1516,6 +1548,7 @@ fn seed_bore(c: &Carried) -> OpParams {
         bottom_z: c.bottom,
         feed: c.feed,
         plunge_feed: c.plunge,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1538,6 +1571,7 @@ fn seed_swarf(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1560,6 +1594,7 @@ fn seed_advanced_swarf(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         passes: 2,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1582,6 +1617,7 @@ fn seed_rotary_contour(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1599,6 +1635,7 @@ fn seed_rotary_parallel(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1630,6 +1667,7 @@ fn seed_multiaxis_rough(c: &Carried) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 
@@ -1659,6 +1697,7 @@ fn seed_rotary_offset(c: &Carried) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 

@@ -38,7 +38,7 @@ fn wire_op() -> WireContourOp {
         top_z: Height::of(HeightReference::TopOfStock, 0.0),
         bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),
         side: WireSide::Punch,
-        start: Some([-4.0, 5.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-4.0, 5.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
         both_pieces_restrained: false,
@@ -248,21 +248,21 @@ fn selected_chain_requires_clear_stock_a_stated_start_and_slug_capture() {
         ),
         (
             WireContourOp {
-                start: None,
+                picks: Default::default(),
                 ..wire_op()
             },
             "no start hole",
         ),
         (
             WireContourOp {
-                start: Some([6.0, 5.0]),
+                picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(6.0, 5.0))], exit: Vec::new() },
                 ..wire_op()
             },
             "inside the profile",
         ),
         (
             WireContourOp {
-                start: Some([-50.0, 5.0]),
+                picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-50.0, 5.0))], exit: Vec::new() },
                 ..wire_op()
             },
             "inside the box stock",

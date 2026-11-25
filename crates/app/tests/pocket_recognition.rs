@@ -199,6 +199,7 @@ fn machine(world: &World, h: &mut History, p: &Pocket, tool: &str, name: &str) -
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     };
     let (src, params) = recognize::operation_for(p, &base).expect("an operation");
     h.execute(world, CreateOperation::new(world, name, tool, src, params.clone()).expect("create"));

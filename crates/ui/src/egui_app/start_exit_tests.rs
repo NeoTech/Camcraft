@@ -13,6 +13,7 @@ use egui_kittest::kittest::{NodeT, Queryable};
 use camcraft_app::geo2d::Point2;
 use camcraft_app::model;
 use camcraft_app::operation::{KindInfo, OpParams};
+use camcraft_app::path_picks::{PathPick, PickRole};
 
 use super::super::dialog_tests::{face, opened, page};
 use super::super::op_tabs::SEC_LEADS;
@@ -33,10 +34,11 @@ fn contour_page() -> Harness<'static, State> {
 }
 
 fn points(p: &OpParams) -> (Option<Point2>, Option<Point2>) {
-    match p {
-        OpParams::Contour { links, .. } => (links.approach.start_point, links.approach.exit_point),
-        _ => (None, None),
-    }
+    let picks = p.path_picks();
+    (
+        picks.first(PickRole::Start).map(|k| k.xy),
+        picks.first(PickRole::Exit).map(|k| k.xy),
+    )
 }
 
 fn live(state: &State) -> (Option<Point2>, Option<Point2>) {
@@ -121,8 +123,8 @@ fn a_typed_start_point_applies_through_the_history_and_undoes() {
 #[test]
 fn switching_the_exit_point_off_clears_it() {
     let mut params = crate::operations::retype(&face(), kind("2D Contour"));
-    if let OpParams::Contour { links, .. } = &mut params {
-        links.approach.exit_point = Some(Point2 { x: -7.0, y: 3.0 });
+    if let Some(picks) = params.path_picks_mut() {
+        picks.exit = vec![PathPick::xy(Point2 { x: -7.0, y: 3.0 })];
     }
     let mut state = opened(params);
     state.op_tab = SEC_LEADS;
@@ -178,7 +180,7 @@ fn the_wire_geometry_tab_groups_the_start_hole_and_says_the_exit_is_not_taken() 
     state.drain_actions();
     state.sync_ops_ui();
     if let OpParams::WireContour(wire) = &mut state.op_ui.params {
-        wire.start = Some([2.0, 3.0]);
+        wire.picks.start = vec![PathPick::xy(Point2::new(2.0, 3.0))];
     }
     state.op_tab = super::super::op_tabs::SEC_GEO;
     let mut harness = page(state);
@@ -194,7 +196,11 @@ fn the_wire_geometry_tab_groups_the_start_hole_and_says_the_exit_is_not_taken() 
     }
     assert!(harness.query_by_label(EXIT_GROUP).is_some(), "folding the start leaves the exit group visible");
     let OpParams::WireContour(wire) = &harness.state().op_ui.params else { panic!("wire draft") };
-    assert_eq!(wire.start, Some([2.0, 3.0]), "folding the group preserves the threading point");
+    assert_eq!(
+        wire.picks.first(PickRole::Start).map(|p| [p.xy.x, p.xy.y]),
+        Some([2.0, 3.0]),
+        "folding the group preserves the threading point"
+    );
 }
 
 #[test]
@@ -226,9 +232,9 @@ fn the_contour_lead_tab_has_viewport_pick_buttons_for_start_and_exit() {
 #[test]
 fn clearing_a_picked_start_or_exit_resets_it_to_automatic() {
     let mut params = crate::operations::retype(&face(), kind("2D Contour"));
-    if let OpParams::Contour { links, .. } = &mut params {
-        links.approach.start_point = Some(Point2 { x: 12.5, y: 4.0 });
-        links.approach.exit_point = Some(Point2 { x: -7.0, y: 3.0 });
+    if let Some(picks) = params.path_picks_mut() {
+        picks.start = vec![PathPick::xy(Point2 { x: 12.5, y: 4.0 })];
+        picks.exit = vec![PathPick::xy(Point2 { x: -7.0, y: 3.0 })];
     }
     let mut state = opened(params);
     state.op_tab = SEC_LEADS;

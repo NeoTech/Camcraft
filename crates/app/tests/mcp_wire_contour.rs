@@ -116,7 +116,7 @@ fn wire_job_on(tag: &str, template: &str) -> Client {
 
 fn wire_args(condition: &str) -> Value {
     json!({ "kind": "Wire Contour", "name": "W", "tool": "EDM-W025", "source": "slug",
-        "params": { "condition": condition, "side": "die", "start": [0.0, 0.0] } })
+        "params": { "condition": condition, "side": "die", "picks": { "start": [[0.0, 0.0]] } } })
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn wire_contour_is_added_with_a_wire_tool_edited_generated_undone_and_redone() {
 
     let edited = c.ok("edit_operation", json!({ "name": "W", "params": { "side": "punch" } }));
     assert_eq!(edited["params"]["wire_contour"]["side"], json!("punch"));
-    c.ok("edit_operation", json!({ "name": "W", "params": { "start": [30.0, 0.0] } }));
+    c.ok("edit_operation", json!({ "name": "W", "params": { "picks": { "start": [[30.0, 0.0]] } } }));
     // The condition is patched too; an unknown one is refused by name.
     c.ok("edit_operation", json!({ "name": "W", "params": { "condition": "C110" } }));
     let bad = c.refused("edit_operation", json!({ "name": "W", "params": { "condition": "NOPE" } }));
@@ -271,7 +271,13 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
         bottom_z: serde_json::from_value(json!({ "reference": "fixed", "offset": 0.0 })).expect("bottom_z"),
         condition: "C110".into(),
         side: WireSideDto::Die,
-        start: Some([0.0, 0.0]),
+        start: None,
+        picks: camcraft_app::project::PathPicksDto {
+            start: vec![camcraft_app::project::PathPickDto(camcraft_app::path_picks::PathPick::xy(
+                camcraft_app::geo2d::Point2::new(0.0, 0.0),
+            ))],
+            exit: Vec::new(),
+        },
         tabs: Some(WireTabsDto {
             count: Some(1),
             width: Some(1.0),

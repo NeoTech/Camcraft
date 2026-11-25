@@ -95,6 +95,7 @@ fn slot(a_deg: f64) -> OpParams {
         tilt: Some(tilt(a_deg)),
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -132,6 +133,7 @@ fn pocket(a_deg: f64, depth: f64) -> OpParams {
         blend_turns: false,
         tilt: Some(tilt(a_deg)),
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

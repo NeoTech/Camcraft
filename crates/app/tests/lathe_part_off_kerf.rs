@@ -157,6 +157,7 @@ fn lathe_world_of_kerf(mesh: Mesh, corner: Option<u8>, hold: Hold, plane: f64, k
         bar_transfer: false,
         inspect_tol: 0.0,
         kerf,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, "P1", GT, SrcRef::Entity("pin".into()), part).expect("create");
     history.execute(&world, cmd);

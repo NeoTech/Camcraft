@@ -40,6 +40,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(ok.is_sane() && depth_sane(&world, None, None, &ok));
     // Staged facing is sane when it descends: a top below the
@@ -53,6 +54,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(staged.is_sane() && depth_sane(&world, None, None, &staged));
     let low = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
@@ -64,6 +66,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(low.is_sane(), "structurally fine - the order is the flaw");
     assert!(
@@ -79,6 +82,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(!no_step.is_sane(), "stepdown must be positive when set");
     let bad = OpParams::Pocket { rest: None, tilt: None, blend_radius: None,
@@ -100,6 +104,7 @@ fn params_sanity_gates() {
         blend_turns: false,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     assert!(!bad.is_sane());
     // A depth range that runs upward is nonsense, refused at command
@@ -113,6 +118,7 @@ fn params_sanity_gates() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     assert!(up.is_sane());
     assert!(!depth_sane(&world, None, None, &up));
@@ -137,6 +143,7 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     // (No struct-update syntax on enum variants: write it out.)
     let b = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
@@ -148,6 +155,7 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     let c = OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 8.0,
@@ -158,6 +166,7 @@ fn stamp_follows_every_input() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     let mut ha = std::hash::DefaultHasher::new();
     let mut hb = std::hash::DefaultHasher::new();
@@ -193,6 +202,7 @@ fn stamp_follows_every_input() {
         hand: crate::cl::ThreadHand::Right,
         external,
         passes: crate::machining2d::ThreadPasses::default(),
+        picks: Default::default(),
     };
     let mut hi = std::hash::DefaultHasher::new();
     let mut he = std::hash::DefaultHasher::new();
@@ -255,6 +265,7 @@ fn face_stamp_moves_with_stepdown() {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -293,6 +304,7 @@ fn advanced_swarf_stamp_moves_with_passes() {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         passes,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -314,6 +326,7 @@ fn advanced_swarf_stamp_moves_with_passes() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: Default::default(),
     };
     assert_ne!(digest(&plain), digest(&ladder(1)), "the family's rows must digest apart");
 }
@@ -338,6 +351,7 @@ fn rotary_twins_stamp_apart_and_with_their_stepover() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: Default::default(),
     };
     let parallel = |stepover: Option<f64>| OpParams::RotaryParallel {
         tolerance: 0.05,
@@ -352,6 +366,7 @@ fn rotary_twins_stamp_apart_and_with_their_stepover() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -391,6 +406,7 @@ fn rotary_offset_stamp_moves_with_its_wrap_numbers() {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 90.0,
+            picks: Default::default(),
         }
     };
     let digest = |p: &OpParams| {
@@ -449,6 +465,7 @@ fn multiaxis_rough_stamp_moves_with_its_ladder_and_cone() {
         lag_deg: lag,
         max_tilt_deg: tilt,
         shank_avoid: false,
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();
@@ -479,6 +496,7 @@ fn multiaxis_rough_stamp_moves_with_its_ladder_and_cone() {
         feed_opt: false,
         shell: false,
         method: crate::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     assert_ne!(
         digest(&rough(0.0, 0.0, 90.0)),
@@ -524,6 +542,7 @@ fn the_arc_entry_splits_the_stamp_and_leaves_the_others_alone() {
         blend_turns: false,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     };
     let digest = |p: &OpParams| {
         let mut h = std::hash::DefaultHasher::new();

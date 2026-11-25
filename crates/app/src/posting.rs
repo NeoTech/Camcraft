@@ -31,6 +31,9 @@ use std::path::Path;
 #[path = "posting_agie.rs"]
 pub mod agie;
 
+#[path = "posting_waterjet.rs"]
+mod waterjet;
+
 #[path = "posting_files.rs"]
 mod files;
 pub use files::{
@@ -922,6 +925,7 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // a mesh that cannot carry one.
     problems.extend(crate::model_fidelity::gate_problems(world));
     problems.extend(review_problems(world));
+    problems.extend(waterjet::problems(world));
 
     let sim = sim_clause(world);
     problems.extend(sim.problem);

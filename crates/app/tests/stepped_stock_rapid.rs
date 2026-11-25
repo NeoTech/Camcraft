@@ -115,6 +115,7 @@ fn bore() -> OpParams {
         climb: true,
         tolerance: 0.01,
         holes: vec![Hole { xy: Point2::new(0.0, 0.0), radius: 8.0, entry_z: MOUTH, floor_z: FLOOR, through: false, stepped: false }],
+        picks: Default::default(),
     }
 }
 

@@ -249,6 +249,7 @@ fn turned_contour5d_cuts_and_posts_like_the_baked_part() {
     let params = OpParams::Contour5D {
         tolerance: 0.1, clearance_z: Height::fixed(20.0), retract_z: None, top_z, bottom_z,
         feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+        picks: Default::default(),
     };
     let stock = box_stock(30.0, 30.0, 10.0, -5.0);
     prove_kind("Contour5D-XZ", unturn_xz(cap_facets(false)), TURN, &stock, BALL, params.clone());
@@ -261,6 +262,7 @@ fn turned_parallel5d_cuts_and_posts_like_the_baked_part() {
     let params = OpParams::Parallel5D {
         tolerance: 0.1, stepover: Some(3.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z, bottom_z,
         feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+        picks: Default::default(),
     };
     prove_kind("Parallel5D", unturn_xz(cap_facets(true)), TURN, &box_stock(30.0, 30.0, 10.0, -5.0), BALL, params);
 }
@@ -271,6 +273,7 @@ fn turned_flow5d_cuts_and_posts_like_the_baked_part() {
     let params = OpParams::Flow5D {
         tolerance: 0.1, stepover: Some(3.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z, bottom_z,
         feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+        picks: Default::default(),
     };
     prove_kind("Flow5D", unturn_xz(cap_facets(true)), TURN, &box_stock(30.0, 30.0, 10.0, -5.0), BALL, params);
 }
@@ -282,11 +285,13 @@ fn turned_swarf_and_advanced_swarf_cut_and_post_like_the_baked_part() {
         tolerance: 0.1, stepover: Some(2.0), clearance_z: Height::fixed(25.0), retract_z: None,
         top_z: Height::fixed(11.0), bottom_z: Height::fixed(5.0), feed: 500.0, plunge_feed: 100.0,
         climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     let adv = OpParams::AdvancedSwarf {
         tolerance: 0.1, stepover: Some(2.0), clearance_z: Height::fixed(25.0), retract_z: None,
         top_z: Height::fixed(11.0), bottom_z: Height::fixed(5.0), feed: 500.0, plunge_feed: 100.0,
         climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, passes: 2,
+        picks: Default::default(),
     };
     prove_kind("Swarf", unturn_xz(blade_facets()), TURN, &stock, SWARF_BALL, swarf);
     prove_kind("AdvancedSwarf", unturn_xz(blade_facets()), TURN, &stock, SWARF_BALL, adv);
@@ -302,6 +307,7 @@ fn turned_multiaxis_rough_cuts_and_posts_like_the_baked_part() {
         stepdown: 2.0, feed: 800.0, plunge_feed: 200.0, climb: true,
         strategy: PocketStrategy::Zigzag, entry: Entry3D::Plunge, helix_radius: 1.0,
         optimal_load: DEFAULT_OPTIMAL_LOAD, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 90.0, shank_avoid: false,
+        picks: Default::default(),
     };
     prove_kind("MultiAxisRough", unturn_xz(cap_facets(true)), TURN, &box_stock(30.0, 30.0, 6.0, -3.0), SWARF_BALL, params);
 }
@@ -354,13 +360,13 @@ fn prove_rotary(kind: &str, raw: Vec<Triangle>, stock: &(StockShape, Location), 
 
 #[test]
 fn turned_rotary_contour_cuts_posts_and_fits_axis_like_the_baked_part() {
-    let rc = OpParams::RotaryContour { tolerance: 0.1, clearance_z: Height::fixed(25.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(-6.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0 };
+    let rc = OpParams::RotaryContour { tolerance: 0.1, clearance_z: Height::fixed(25.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(-6.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, picks: Default::default() };
     prove_rotary("RotaryContour", unturn_xz(bar_facets()), &cyl_stock(12.4, 32.0, Point3::new(0.0, 0.0, -16.0), IDENTITY_Q), rc, [0.0, 0.0, 1.0], (false, true, OnModelled::CutsAbout([0.0, 1.0, 0.0])));
 }
 
 #[test]
 fn turned_rotary_parallel_cuts_posts_and_fits_axis_like_the_baked_part() {
-    let rp = OpParams::RotaryParallel { tolerance: 0.1, stepover: Some(4.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(1.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0 };
+    let rp = OpParams::RotaryParallel { tolerance: 0.1, stepover: Some(4.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(1.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, picks: Default::default() };
     prove_rotary("RotaryParallel", bar_facets(), &cyl_stock(12.4, 32.0, Point3::new(-16.0, 0.0, 0.0), quat_from_axis_angle(1, std::f64::consts::FRAC_PI_2)), rp, [1.0, 0.0, 0.0], (true, false, OnModelled::Refuses));
 }
 
@@ -372,6 +378,7 @@ fn turned_rotary_offset_cuts_posts_and_fits_axis_like_the_baked_part() {
         stepdown: 2.0, feed: 500.0, plunge_feed: 100.0, climb: true,
         strategy: PocketStrategy::Auto, entry: Entry3D::Plunge, helix_radius: 1.0,
         optimal_load: DEFAULT_OPTIMAL_LOAD, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     prove_rotary("RotaryOffset", unturn_xz(bar_facets()), &cyl_stock(20.0, 32.0, Point3::new(0.0, 0.0, -16.0), IDENTITY_Q), ro, [0.0, 0.0, 1.0], (false, false, OnModelled::DiffersOrRefuses));
 }
@@ -409,6 +416,7 @@ fn turned_multiaxis_contour_routes_drive_chains_through_setup_frame() {
             bottom_z: Height::of(HeightReference::TopOfModel, -1.0),
             feed: 500.0, plunge_feed: 120.0, climb: true,
             lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+            picks: Default::default(),
         };
         let (wt, mut ht) = document(raw.clone(), deg, Case::Turned, &stock, true);
         let (p_t, nc_t, _) = generate_and_post(&wt, &mut ht, Case::Turned, BALL, pick_edges(&wt, Case::Turned), params.clone(), false).expect("mac turned");

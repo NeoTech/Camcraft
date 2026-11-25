@@ -3,6 +3,10 @@
 //! faceted through-opening.
 use std::{fs, path::Path, process::Command};
 
+// Two openings of one plate (#2977).
+#[path = "die_group.rs"]
+mod die_group;
+
 const SCRIPT: &str = include_str!("../../../../examples/agie/die-plate.camscript");
 const PLATE: &str = include_str!("../../../../examples/agie/die-plate.obj");
 

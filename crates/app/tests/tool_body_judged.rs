@@ -299,6 +299,7 @@ fn the_simulation_draws_the_stack_the_reach_laws_judge() {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("face op"),

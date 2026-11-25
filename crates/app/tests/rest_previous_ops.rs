@@ -84,6 +84,7 @@ fn pocket(stepover: f64, bottom: f64, rest: Option<RestParams>, tilt: Option<Til
         blend_turns: false,
         tilt,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

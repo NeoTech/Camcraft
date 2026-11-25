@@ -155,6 +155,7 @@ fn face_params(blend: bool, radius: Option<f64>) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -181,6 +182,7 @@ fn slot_params(blend: bool, radius: Option<f64>) -> OpParams {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -304,6 +306,7 @@ fn contour_params(blend: bool, radius: Option<f64>) -> OpParams {
         blend_turns: blend,
         blend_radius: radius,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 

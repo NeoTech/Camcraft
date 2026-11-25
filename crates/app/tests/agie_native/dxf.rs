@@ -9,7 +9,7 @@ const CIRCLE_DXF: &str = include_str!("../../../../examples/agie/circle-punch.dx
 const SETUP: &str = include_str!("../golden/nc/agie-native/CCSEP20.SBL");
 
 /// Run `script` from a fresh project root that holds `drawing` as examples/agie/racetrack.dxf.
-fn run(dir: &Path, script: &str, drawing: &str) -> std::process::Output {
+pub(super) fn run(dir: &Path, script: &str, drawing: &str) -> std::process::Output {
     let paths = dir.join("examples/agie");
     fs::create_dir_all(&paths).unwrap();
     fs::write(paths.join("racetrack.dxf"), drawing).unwrap();
@@ -23,7 +23,7 @@ fn run(dir: &Path, script: &str, drawing: &str) -> std::process::Output {
 }
 
 /// The control-checked punch setup with only the stem and the threading hole changed.
-fn setup(stem: &str, hole: [&str; 2]) -> String {
+pub(super) fn setup(stem: &str, hole: [&str; 2]) -> String {
     let point = |axis: &str, value: &str| {
         format!("\"CCSEP20\",\"CUT1\",\"stp1\",ID_POS{axis},\"{value}\",je_dim)")
     };

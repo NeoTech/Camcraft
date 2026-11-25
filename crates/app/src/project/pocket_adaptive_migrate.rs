@@ -51,6 +51,7 @@ pub(super) fn settle(entities: &mut [EntityDto], from: u32) -> Vec<String> {
             // #3354: no retired Adaptive file carries the key; 2D
             // Adaptive takes it in its own issue.
             pass_start: _,
+            picks,
         } = op.params.clone()
         else {
             continue;
@@ -112,6 +113,7 @@ pub(super) fn settle(entities: &mut [EntityDto], from: u32) -> Vec<String> {
             corner_relief,
             tilt,
             pass_start: PassStartDto::Auto,
+            picks,
         };
         // Adaptive2D uses its own kind tag in the generation stamp digest.
         op.stamp = None;

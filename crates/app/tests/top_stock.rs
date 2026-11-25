@@ -55,6 +55,7 @@ fn scene(stock_top: f64, face: Option<f64>) -> World {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         };
         history.execute(
             &world,
@@ -87,6 +88,7 @@ fn scene(stock_top: f64, face: Option<f64>) -> World {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -156,6 +158,7 @@ fn a_slot_does_not_carry_the_stock_and_keeps_the_note_and_the_rapid_gate() {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     };
     history.execute(&world, CreateOperation::new(&world, "Op3Slot", "mill", SrcRef::Stock, slot).expect("slot"));
     history.execute(&world, GenerateOperation::new(&world, "Op3Slot").expect("slot generation"));
@@ -265,6 +268,7 @@ fn a_narrow_mesh_stock_feature_is_not_acquitted_by_an_unsampled_prior() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,

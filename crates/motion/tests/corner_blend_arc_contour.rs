@@ -35,6 +35,7 @@ fn cp(blend: bool) -> ContourParams {
         helix_radius: 1.0,
         blend_turns: blend, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 

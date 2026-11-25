@@ -75,7 +75,7 @@ fn doc(dz: f64) -> (World, History) {
 }
 
 fn cut(world: &World, h: &mut History, name: &str, side: WireSide, start: Option<[f64; 2]>) {
-    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, start, tabs: None, capture: true, both_pieces_restrained: false, stock_centered_in_xy_travel: false, burnout: None, taper_deg: 0.0, clearance: camcraft_app::operation::DEFAULT_CLEARANCE, four_axis: None, skims: Vec::new(), sharp_corners: false };
+    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, picks: camcraft_app::path_picks::PathPicks { start: start.map(|[x, y]| camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(x, y))).into_iter().collect(), exit: Vec::new() }, tabs: None, capture: true, both_pieces_restrained: false, stock_centered_in_xy_travel: false, burnout: None, taper_deg: 0.0, clearance: camcraft_app::operation::DEFAULT_CLEARANCE, four_axis: None, skims: Vec::new(), sharp_corners: false };
     let c = CreateOperation::new(world, name, "EDM-W025", SrcRef::Entity("part".into()), OpParams::WireContour(op)).expect("op");
     h.execute(world, c);
     if start.is_some() {

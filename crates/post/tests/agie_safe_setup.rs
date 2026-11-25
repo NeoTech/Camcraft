@@ -4,6 +4,8 @@ use camcraft_post::agie_setup::{PunchSetup20, SetupError};
 
 #[path = "agie_safe_setup/cutoff.rs"]
 mod cutoff;
+#[path = "agie_safe_setup/die_group.rs"]
+mod die_group;
 #[path = "agie_safe_setup/group.rs"]
 mod group;
 

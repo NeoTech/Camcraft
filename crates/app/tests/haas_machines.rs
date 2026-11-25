@@ -194,6 +194,7 @@ fn judged(m: &Machine, to: [f64; 3], feed: f64, rpm: f64) -> machine::MachineChe
                 feed,
                 plunge_feed: feed,
                 climb: true,
+                picks: Default::default(),
             },
         })
         .set(Toolpath::new(

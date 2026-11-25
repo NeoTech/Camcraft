@@ -1,5 +1,68 @@
 //! Setup-only punch group records from CamCraft's offline controller-checked synthetic punch pair (#2961).
-use camcraft_post::agie_setup::{GroupPunch, PunchGroup20, PunchSetup20, SetupError};
+//! Groups of three and nine punches from the CLI examples `punch-trio` and `punch-grid` (#2980).
+use camcraft_post::agie_setup::{
+    GroupPunch, MAX_PUNCH_WORKS, PunchGroup20, PunchSetup20, SetupError,
+};
+
+const TEN_STEMS: [&str; 10] = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"];
+
+/// The group `stem` of the examples `punch-trio` and `punch-grid`: one
+/// threading hole 13 mm left of each centre, on 120 × 100 × 20 mm stock.
+fn grid_files(stem: &str, centers: &[[i32; 2]]) -> camcraft_post::agie_setup::SetupFiles {
+    let stems: Vec<String> = (1..=centers.len()).map(|n| format!("{stem}{n}")).collect();
+    let punches: Vec<_> = stems
+        .iter()
+        .zip(centers)
+        .map(|(iso_stem, [x, y])| GroupPunch {
+            iso_stem,
+            start_hole_um: [(x - 13) * 1000, y * 1000],
+        })
+        .collect();
+    PunchGroup20 {
+        stem,
+        stock_min_um: [-60_000, -50_000],
+        stock_max_um: [60_000, 50_000],
+        height_um: 20_000,
+        punches: &punches,
+    }
+    .encode()
+    .unwrap()
+}
+
+#[test]
+fn trio_and_grid_files_match_their_goldens_with_one_quality() {
+    let trio = grid_files("TRIO20", &[[-32, 0], [0, 0], [32, 0]]);
+    assert_eq!(
+        trio.sbl.as_bytes(),
+        include_bytes!("../golden/agie-setup/TRIO20.SBL")
+    );
+    assert_eq!(
+        trio.sbr.as_bytes(),
+        include_bytes!("../golden/agie-setup/TRIO20.SBR")
+    );
+    let centers: Vec<[i32; 2]> = [-32, 0, 32]
+        .into_iter()
+        .flat_map(|y| [-32, 0, 32].map(|x| [x, y]))
+        .collect();
+    assert_eq!(centers.len(), MAX_PUNCH_WORKS);
+    let grid = grid_files("NINE20", &centers);
+    assert_eq!(
+        grid.sbl.as_bytes(),
+        include_bytes!("../golden/agie-setup/NINE20.SBL")
+    );
+    assert_eq!(
+        grid.sbr.as_bytes(),
+        include_bytes!("../golden/agie-setup/NINE20.SBR")
+    );
+    for (files, count) in [(&trio, 3), (&grid, 9)] {
+        // One quality object for the piece; each work refers to it (#2984).
+        assert_eq!(files.sbl.matches("JE_CreateQuality(").count(), 1);
+        assert_eq!(files.sbl.matches("ID_QUALITY,je_q1").count(), count);
+        assert_eq!(files.sbl.matches("ASDELETE").count(), count);
+        assert_eq!(files.sbr.lines().count(), count);
+    }
+    assert!(grid.controller_review.contains("CUT9 NINE209.ISO"));
+}
 
 const PUNCHES: [GroupPunch<'static>; 2] = [
     GroupPunch {
@@ -123,15 +186,15 @@ fn each_work_of_a_group_has_the_records_of_a_single_punch() {
 
 #[test]
 fn a_group_refuses_its_unqualified_inputs() {
-    let third = GroupPunch {
-        iso_stem: "PAIR203",
-        start_hole_um: [20_000, 20_000],
-    };
-    let three = [
-        GroupPunch { ..PUNCHES[0] },
-        GroupPunch { ..PUNCHES[1] },
-        third,
-    ];
+    // Ten distinct stems: one work above the largest control-checked group.
+    let ten: Vec<_> = TEN_STEMS
+        .iter()
+        .zip(-5..)
+        .map(|(iso_stem, i)| GroupPunch {
+            iso_stem,
+            start_hole_um: [i * 7_000, 0],
+        })
+        .collect();
     let repeated = [GroupPunch { ..PUNCHES[0] }, GroupPunch { ..PUNCHES[0] }];
     let reserved = [
         GroupPunch { ..PUNCHES[0] },
@@ -149,7 +212,7 @@ fn a_group_refuses_its_unqualified_inputs() {
     ];
     for (setup, expected) in [
         (pair(&PUNCHES[..1]), SetupError::GroupWorks),
-        (pair(&three), SetupError::GroupWorks),
+        (pair(&ten), SetupError::GroupWorks),
         (pair(&repeated), SetupError::GroupWorks),
         (pair(&reserved), SetupError::InvalidStem),
         (pair(&outside), SetupError::HoleOutsideStock),

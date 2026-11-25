@@ -148,6 +148,7 @@ fn a_contour_whose_stepdown_spans_the_depth_cuts_one_level() {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: Links::PLANAR,
+        picks: Default::default(),
     };
     one_level("2D contour", &contour(&square(0.0, 0.0, 30.0), &p).expect("contour"));
 }

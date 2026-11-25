@@ -34,6 +34,7 @@ fn seeded(ty: OpType) -> OpParams {
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     };
     operation::retype_params(&base, ty.ordinal())
 }

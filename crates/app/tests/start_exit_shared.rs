@@ -35,8 +35,8 @@ fn a_pick_on_a_kind_that_does_not_take_it_names_the_kind_and_the_reason() {
     for (kind, label) in [("2D Offset", "2D Offset"), ("2D Pocket", "2D Pocket"), ("3D Pocket", "3D Pocket")] {
         let (err, r) = call(&mut s, "add_operation", json!({ "kind": kind, "tool": "EM-1000-4FL", "name": "Op" }));
         assert!(!err, "{kind}: {r}");
-        for (key, what) in [("start_point", "start point"), ("exit_point", "exit point")] {
-            let patch = json!({ "name": "Op", "params": { "links": { "approach": { key: [35.0, 0.0] } } } });
+        for (role, what) in [("start", "start point"), ("exit", "exit point")] {
+            let patch = json!({ "name": "Op", "params": { "picks": { role: [[35.0, 0.0]] } } });
             let (err, r) = call(&mut s, "edit_operation", patch);
             let text = r.to_string();
             assert!(err, "{kind}: a {what} is refused: {text}");
@@ -71,9 +71,9 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
 fn path_picks_reads_the_contour_pick_and_the_wire_start() {
     let mut contour = seeded(OpType::Contour);
     assert!(contour.path_picks().is_empty(), "a new contour has no pick");
-    if let Some(l) = contour.links_mut() {
-        l.approach.start_point = Some(Point2::new(35.0, 0.0));
-        l.approach.exit_point = Some(Point2::new(0.0, 25.0));
+    if let Some(p) = contour.path_picks_mut() {
+        p.start = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(35.0, 0.0))];
+        p.exit = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(0.0, 25.0))];
     }
     let picks = contour.path_picks();
     let start = picks.first(PickRole::Start).expect("the start");
@@ -84,7 +84,7 @@ fn path_picks_reads_the_contour_pick_and_the_wire_start() {
 
     let mut wire = seeded(OpType::WireContour);
     if let OpParams::WireContour(w) = &mut wire {
-        w.start = Some([4.0, -3.0]);
+        w.picks.start = vec![camcraft_app::path_picks::PathPick::xy(Point2::new(4.0, -3.0))];
     }
     let picks = wire.path_picks();
     let start = picks.first(PickRole::Start).expect("the wire start");
@@ -126,7 +126,7 @@ fn the_mcp_doors_name_the_pick_fields_and_the_kinds_that_take_them() {
         .expect("edit_operation")
         .clone();
     let doc = edit["inputSchema"]["properties"]["params"]["description"].as_str().unwrap_or_default().to_owned();
-    for want in ["links.approach.start_point", "links.approach.exit_point", "2D Contour", "list_operation_types"] {
+    for want in ["picks", "2D Contour", "list_operation_types"] {
         assert!(doc.contains(want), "the schema names {want}: {doc}");
     }
     let (err, kinds) = call(&mut s, "list_operation_types", json!({}));

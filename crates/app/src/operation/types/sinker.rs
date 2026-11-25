@@ -8,6 +8,7 @@
 //! from the machine's condition (#531). No vendor material.
 
 use super::height::Height;
+use crate::path_picks::PathPicks;
 pub use crate::sinker::SinkerDatum;
 pub use crate::sinker_orbit::{Orbit as SinkerOrbit, OrbitKind as SinkerOrbitKind};
 pub use crate::sinker_undersize::SinkerPass;
@@ -58,6 +59,8 @@ pub struct SinkerBurnOp {
     /// machine lists and the radius within its stated maximum - both
     /// read at generation, refused by name.
     pub orbit: Option<SinkerOrbit>,
+    /// The operation's start and exit picks (#3339).
+    pub picks: PathPicks,
 }
 
 impl SinkerBurnOp {
@@ -77,6 +80,7 @@ impl SinkerBurnOp {
             && self.cavity_sane()
             && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
             && self.compensation_refusal().is_none()
+            && self.picks.refusal().is_none()
     }
 
     /// The layer step's and the measured wear's refusal, by name (#546) -

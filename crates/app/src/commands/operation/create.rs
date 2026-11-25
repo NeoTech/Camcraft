@@ -72,7 +72,19 @@ impl CreateOperation {
         src: SrcRef,
         params: OpParams,
     ) -> Result<Self, CommandError> {
-        Self::build(world, name, tool, src, params, false)
+        Self::with_named_entry(world, name, tool, src, params, false)
+    }
+
+    /// #3863: create door carrying whether the request explicitly named an entry.
+    pub fn with_named_entry(
+        world: &World,
+        name: &str,
+        tool: &str,
+        src: SrcRef,
+        params: OpParams,
+        named_entry: bool,
+    ) -> Result<Self, CommandError> {
+        Self::build(world, name, tool, src, params, false, named_entry)
     }
 
     /// Create a nominal inspection reference. Its empty condition refuses every machining generation.
@@ -94,7 +106,10 @@ impl CreateOperation {
             top_z: Height::of(HeightReference::TopOfStock, 0.0),
             bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),
             side: WireSide::Die,
-            start: Some(start),
+            picks: crate::path_picks::PathPicks {
+                start: vec![crate::path_picks::PathPick::xy(crate::geo2d::Point2::new(start[0], start[1]))],
+                exit: Vec::new(),
+            },
             tabs: None,
             capture: false,
             both_pieces_restrained: false,
@@ -106,7 +121,7 @@ impl CreateOperation {
             four_axis: None,
             sharp_corners: false,
         });
-        Self::build(world, name, tool, src, params, true)
+        Self::build(world, name, tool, src, params, true, false)
     }
 
     fn build(
@@ -116,6 +131,7 @@ impl CreateOperation {
         src: SrcRef,
         params: OpParams,
         inspection: bool,
+        named_entry: bool,
     ) -> Result<Self, CommandError> {
         if name.is_empty() {
             return Err(CommandError::Invalid("operation name must not be empty".into()));
@@ -135,6 +151,9 @@ impl CreateOperation {
             SrcRef::Selection(items) => crate::operation::slot_from_picks(world, setup.as_deref(), &params, items).unwrap_or(params),
             _ => params,
         };
+        // #3863: a 2D Offset created with Inside or Outside takes Arc unless named.
+        let seed = crate::operation::seed_params(params.kind().ordinal());
+        let params = params.with_start_side_entry(&seed, named_entry);
         infeed_plan_gate(world, &params, tool)?;
         if let Some(why) = params.named_refusal() {
             return Err(CommandError::Invalid(why));

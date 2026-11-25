@@ -90,7 +90,10 @@ fn unassigned_inspection_opening_survives_undo_redo_and_project_reopen() {
         panic!("wire contour")
     };
     assert!(w.condition.is_empty() && !w.capture);
-    assert_eq!(w.start, Some([0.0, -1.0]));
+    assert_eq!(
+        w.picks.first(camcraft_app::path_picks::PickRole::Start).map(|p| [p.xy.x, p.xy.y]),
+        Some([0.0, -1.0])
+    );
     let camcraft_app::operation::SrcRef::Selection(picks) = op.src else {
         panic!("selection")
     };

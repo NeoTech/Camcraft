@@ -176,7 +176,8 @@ fn agree(t: &Tool, what: &str) {
 fn the_named_law_gives_the_old_verdict_everywhere() {
     let values = [0.0, -1.0, 0.25, 1.0, 3.0, 6.0, 59.0, 61.0, 179.0, 180.0, 501.0, f64::NAN, f64::INFINITY];
     let mut n = 0usize;
-    for (name, base) in catalog() {
+    // #3368: a flat or ball tip is new; `taper_tests` pins its rules.
+    for (name, base) in catalog().into_iter().filter(|(_, t)| t.tip_form.is_sharp()) {
         for kind in KINDS {
             let tool = Tool { kind, ..base.clone() };
             agree(&tool, name);

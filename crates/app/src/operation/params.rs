@@ -45,7 +45,7 @@ impl OpParams {
                 climb,
                 blend_turns, blend_radius,
                 holes,
-                tilt,
+                tilt, picks: _
             } => {
                 w(h, *stepover);
                 wh(h, *clearance_z);
@@ -99,7 +99,7 @@ impl OpParams {
                 blend_turns, blend_radius,
                 links: _,
                 tilt,
-                chain_overrides,
+                chain_overrides, picks: _
             } => {
                 w(h, *stock_to_leave);
                 wh(h, *clearance_z);
@@ -197,7 +197,7 @@ impl OpParams {
                 optimal_load,
                 blend_turns,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -273,7 +273,7 @@ impl OpParams {
                 troch,
                 rest,
                 tilt,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -372,6 +372,7 @@ impl OpParams {
             | OpParams::PlasmaProfile { .. } | OpParams::WaterjetProfile { .. } => self.stamp_cutting(world, setup, src, h),
         }
         self.stamp_links(h);
+        self.stamp_picks(h);
     }
 }
 

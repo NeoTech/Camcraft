@@ -61,6 +61,7 @@ fn generate(tool: Tool, bottom: f64) -> Result<(Toolpath, Vec<camcraft_app::veri
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     };
     let mut operation = op(SrcRef::Entity("cavity".into()), params, AreaControls::default());
     operation.tool = NAME.into();

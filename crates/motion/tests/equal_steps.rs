@@ -251,6 +251,7 @@ fn a_contour_cuts_the_levels_of_its_mode() {
             blend_turns: false,
             blend_radius: None,
             links: links(Links::PLANAR, equal),
+            picks: Default::default(),
         };
         contour(&square(0.0, 0.0, 30.0), &p).expect("contour")
     });
