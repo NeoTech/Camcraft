@@ -192,6 +192,9 @@ pub struct StockDef {
 pub struct StockSourceOnly {
     pub source: String,
     pub print: GeomPrint,
+    /// Per-session acknowledgement to report unchanged deficits in
+    /// this incoming stock separately. Opening a project clears it.
+    pub incoming_stock_print: Option<GeomPrint>,
 }
 
 /// #2015: the workpiece material a setup's stock states. Rides the stock

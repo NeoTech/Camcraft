@@ -343,15 +343,27 @@ fn s_add_setup() -> Value {
 }
 
 fn s_raw_stock_only() -> Value {
-    obj(json!({ "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." } }), &["on"])
+    obj(json!({
+        "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." },
+        "report_inherited_deficits": { "type": "boolean", "description": "For a single upright setup on a model of previously cut stock, report unchanged deficits separately from gouges introduced by this program. Defaults to false and resets when the project is opened." }
+    }), &["on"])
 }
 
 /// #1094: the stock page's checkbox, through the same command.
 fn set_raw_stock_only(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let on = a.get("on").and_then(Value::as_bool).ok_or("\"on\" must be true or false")?;
-    let cmd = SetStockSourceOnly::new(&env.world, on).map_err(cmd_err)?;
+    let report_inherited_deficits = match a.get("report_inherited_deficits") {
+        Some(v) => v.as_bool().ok_or("\"report_inherited_deficits\" must be true or false")?,
+        None => false,
+    };
+    let cmd = SetStockSourceOnly::with_inherited_deficits(&env.world, on, report_inherited_deficits)
+        .map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
-    Ok(json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) }))
+    let mut reply = json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) });
+    if a.contains_key("report_inherited_deficits") {
+        reply["report_inherited_deficits"] = json!(report_inherited_deficits);
+    }
+    Ok(reply)
 }
 
 fn s_setup_name() -> Value {

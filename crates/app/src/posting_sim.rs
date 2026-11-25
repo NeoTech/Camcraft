@@ -51,7 +51,8 @@ pub const NOT_JUDGED: &str = "stock sim did not judge this program";
 
 /// The stock-sim clause's two possible outputs: a blocking problem
 /// (a located gouge, or a not-judged program with an op no generator
-/// verdict covers), and the visible-but-non-blocking not-judged line.
+/// verdict covers), and a visible, non-blocking note or reason a
+/// material verdict could not run.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SimClause {
     pub problem: Option<String>,
@@ -82,10 +83,10 @@ fn judge_clause(world: &World) -> SimClause {
     if let Some(why) = crate::stock_source::nothing_judged(world) {
         return SimClause { problem: Some(why), not_judged: None };
     }
-    match crate::stock_sim::simulate_document(world) {
-        Ok(sim) if sim.dev.gouge_cells > 0 => {
+    match crate::stock_sim::simulate_for_post(world) {
+        Ok((dev, inherited)) if dev.gouge_cells > 0 => {
             let u = crate::units::of(world);
-            let at = sim.dev.max_gouge_at.map_or_else(
+            let at = dev.max_gouge_at.map_or_else(
                 || "?".to_owned(),
                 |q| {
                     format!(
@@ -105,21 +106,21 @@ fn judge_clause(world: &World) -> SimClause {
             SimClause {
                 problem: Some(format!(
                     "gouge: program cuts below the model in {} cell(s), worst {} {}{at}{}{moved}",
-                    sim.dev.gouge_cells,
-                    crate::units::len(sim.dev.max_gouge, u, 2),
+                    dev.gouge_cells,
+                    crate::units::len(dev.max_gouge, u, 2),
                     u.suffix(),
-                    crate::stock_source::gouge_hint(world, sim.dev.max_gouge_at).unwrap_or_default() // #1094
+                    crate::stock_source::gouge_hint(world, dev.max_gouge_at).unwrap_or_default() // #1094
                 )),
-                not_judged: None,
+                not_judged: inherited,
             }
         }
         // #2308: a cut too shallow for the sim's lattice (a part added
         // after generation under a stock-source chamfer, by 0.05 mm) reads
         // clean, so the kept parts are judged again live here too - once
         // every op is covered, as in the not-judged arm.
-        Ok(_) => SimClause {
+        Ok((_, inherited)) => SimClause {
             problem: if uncovered(world).is_none() { kept_moved(world) } else { None },
-            not_judged: None,
+            not_judged: inherited,
         },
         Err(reason) => {
             let line = format!("{NOT_JUDGED}: {reason}");

@@ -833,7 +833,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     let print = dto.raw_stock_print.as_deref().and_then(crate::stock_print::from_text);
                     match print {
                         Some(print) if model_names.contains(source) => {
-                            entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone(), print });
+                            entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone(), print, incoming_stock_print: None });
                         }
                         Some(_) => notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name)),
                         None => notes.push(format!("'{}' was marked raw stock only without the fingerprint of '{source}' it was set on - read as unmarked; tick \"{}\" again if it is raw stock", dto.name, crate::stock_source::RAW_STOCK_ONLY)),
