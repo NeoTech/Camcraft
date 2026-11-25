@@ -84,6 +84,7 @@ mod lead_ext;
 mod lead_fit;
 mod lead_seam;
 mod ladder_links;
+mod level_blend;
 mod level_flanks;
 mod level_order;
 mod level_rings;
@@ -192,8 +193,8 @@ pub use pocket::{
     pocket, pocket_entered, pocket_entered_with_relief, pocket_started, pocket_started_on, PocketParams, PocketStrategy,
 };
 pub use pocket_avoid::{
-    pocket_avoid, pocket_avoid_entered_started, pocket_avoid_entered_with_relief, pocket_avoid_started,
-    pocket_avoid_started_on, pocket_avoid_with_relief,
+    pocket_avoid, pocket_avoid_entered_started, pocket_avoid_entered_started_on, pocket_avoid_entered_with_relief,
+    pocket_avoid_started, pocket_avoid_started_on, pocket_avoid_with_relief,
 };
 pub use predrilled::PreHole;
 pub use rest2d::{

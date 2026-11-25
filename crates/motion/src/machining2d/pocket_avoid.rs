@@ -95,6 +95,19 @@ pub fn pocket_avoid_entered_started(
     pocket_avoid_entered_on(region, p, holes, avoid, relief, &StartSide::from(start))
 }
 
+/// [`pocket_avoid_entered_started`] with the stock known (#3934): an
+/// Outside band follows the stock edge out and the selected edge in.
+pub fn pocket_avoid_entered_started_on(
+    region: &Region,
+    p: &PocketParams,
+    holes: &[PreHole],
+    avoid: &AvoidSpec,
+    relief: &CornerRelief,
+    side: &StartSide,
+) -> Result<Toolpath, GenError> {
+    pocket_avoid_entered_on(region, p, holes, avoid, relief, side)
+}
+
 fn pocket_avoid_entered_on(
     region: &Region,
     p: &PocketParams,

@@ -44,11 +44,20 @@ pub(super) struct Band<'a> {
     pub(super) climb: bool,
 }
 
-/// The fills of `band`, given the pieces of its two rings: none where
-/// each flank of each ring meets the other ring's swath (the common
-/// case, a stepover under 1.9 radii), a half ring where they leave stock
-/// between them, and two quarter rings where the half leaves some.
-pub(super) fn fills(band: &Band<'_>, inner: &[Vec<Point2>], outer: &[Vec<Point2>]) -> Result<Vec<Piece>, GenError> {
+/// The fills of `band`, given the pieces of its two rings and their
+/// levels `(inner, outer)`: none where each flank of each ring meets the
+/// other ring's swath (the common case, a stepover under 1.9 radii), a
+/// half ring where they leave stock between them, and two quarter rings
+/// where the half leaves some. The fill levels are the odd levels between
+/// `inner` and `outer` (one ring pitch, [`RING`]), whatever their values:
+/// #3934 walks the same part rings at levels that the stock side pushes
+/// up, and a fill still lies between its two rings.
+pub(super) fn fills(
+    band: &Band<'_>,
+    inner: &[Vec<Point2>],
+    outer: &[Vec<Point2>],
+    (inner_level, outer_level): (u32, u32),
+) -> Result<Vec<Piece>, GenError> {
     let mut out = Vec::new();
     let Band { c, hc, j, step, tool_r, .. } = *band;
     if j == 0 || inner.is_empty() || outer.is_empty() {
@@ -61,12 +70,13 @@ pub(super) fn fills(band: &Band<'_>, inner: &[Vec<Point2>], outer: &[Vec<Point2>
     if zone.offset(-0.01)?.area().abs() <= ZONE_MIN {
         return Ok(out);
     }
-    let half = level(band, d(0.5), &zone, RING * j - 2)?;
+    let base = inner_level.min(outer_level);
+    let half = level(band, d(0.5), &zone, base + 2)?;
     let left = zone.difference(&swath(&half, tool_r)?)?;
     out.extend(half);
     if left.offset(-0.01)?.area().abs() > ZONE_MIN {
-        out.extend(level(band, d(0.25), &left, RING * j - 3)?);
-        out.extend(level(band, d(0.75), &left, RING * j - 1)?);
+        out.extend(level(band, d(0.25), &left, base + 1)?);
+        out.extend(level(band, d(0.75), &left, base + 3)?);
     }
     Ok(out)
 }
@@ -150,11 +160,11 @@ mod tests {
         let c = region(vec![Point2::new(-30.0, -30.0), Point2::new(30.0, -30.0), Point2::new(30.0, 30.0), Point2::new(-30.0, 30.0)]);
         let band = Band { c: &c, hc: &hc, j: 1, step: 2.0, tool_r: 4.0, climb: true };
         let inner = vec![circle(10.0, 0.0, tau, 256)];
-        let whole = fills(&band, &inner, &[circle(12.0, 0.0, tau, 256)]).unwrap_or_else(|e| panic!("{e:?}"));
+        let whole = fills(&band, &inner, &[circle(12.0, 0.0, tau, 256)], (0, RING)).unwrap_or_else(|e| panic!("{e:?}"));
         assert!(whole.is_empty(), "a whole band: {} fill(s)", whole.len());
         // The wide band: step 8 (2 radii), the outer ring on one half only.
         let wide = Band { step: 8.0, ..band };
-        let half = fills(&wide, &inner, &[circle(18.0, 0.0, 0.5 * tau, 128)]).unwrap_or_else(|e| panic!("{e:?}"));
+        let half = fills(&wide, &inner, &[circle(18.0, 0.0, 0.5 * tau, 128)], (0, RING)).unwrap_or_else(|e| panic!("{e:?}"));
         assert!(!half.is_empty(), "the gap gets a fill");
         for f in &half {
             assert!(f.level > 0 && f.level < RING, "a fill lies between ring 0 and ring 1: {}", f.level);

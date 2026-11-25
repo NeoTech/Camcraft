@@ -5,7 +5,10 @@
 //! edge in ([`mirror`]), and Auto only picks one of the two ([`resolve`]).
 //! The start side changes the start point and the ring order, never the
 //! rings. The ring ends on the area's edge are shared with its walk
-//! ([`share_ends`]).
+//! ([`share_ends`]). #3934: Outside with the stock known does not use
+//! the mirror; it walks the blend family of `level_blend` (the stock
+//! edge out, the selected edge in). The mirror stays for the stock
+//! unknown, which is the only case where the stock edge cannot be read.
 //!
 //! Provenance: contour-parallel offset rings measured from the selected
 //! contour (Held, "On the Computational Geometry of Pocket Machining",

@@ -901,6 +901,18 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 None
             };
             let ahead_cols = ahead.as_ref().and_then(|p| p.grid.as_ref()).map(crate::stock_sim::Columns::of_grid);
+            // #3934: Outside on an area round a part reads the stock edge,
+            // so the first rings follow it and blend into the selected edge
+            // as they near the part (the 2D Offset already sends it). Auto
+            // and Inside keep their own order; a rest pass its own.
+            let outside_band = around_band && *pass_start == machining2d::PassStart::Outside && rest.is_none();
+            let side = machining2d::StartSide {
+                start: *pass_start,
+                stock: outside_band
+                    .then(|| super::pass_start_stock::footprint(stock_region.as_ref(), frame.as_ref(), stock_facets.as_deref(), &src, &params, &material))
+                    .flatten(),
+                around_part: outside_band,
+            };
             let pocket = |pp: &PocketParams| match (rest, &avoid_spec) {
                 (Some(r), Some(spec)) if from_ops => machining2d::rest_pocket_previous_avoid_with_relief(
                     &region,
@@ -912,13 +924,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 ),
                 (Some(r), Some(spec)) => machining2d::rest_pocket_avoid_with_relief(&region, pp, r, spec, corner_relief),
                 (None, Some(spec)) => {
-                    machining2d::pocket_avoid_entered_started(&region, pp, &holes, spec, corner_relief, *pass_start)
+                    machining2d::pocket_avoid_entered_started_on(&region, pp, &holes, spec, corner_relief, &side)
                 }
                 (Some(r), None) if from_ops => {
                     machining2d::rest_pocket_previous_with_relief(&region, pp, r, ahead_cols.as_ref(), corner_relief)
                 }
                 (Some(r), None) => machining2d::rest_pocket_with_relief(&region, pp, r, corner_relief),
-                (None, None) => machining2d::pocket_started(&region, pp, &holes, corner_relief, *pass_start),
+                (None, None) => machining2d::pocket_started_on(&region, pp, &holes, corner_relief, &side),
             };
             let mut path = pocket(&pp)?;
             if let Some(m) = carry_need!(&relieved_region, &path) {

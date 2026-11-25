@@ -9,7 +9,10 @@
 //! edge, ring j the outer edge (holes filled) eroded by `j` stepovers and
 //! clipped to the area, and the walls (the holes' and keep-outs' edges)
 //! come last. Inside is the mirror: ring 0 on the holes, ring j the holes
-//! grown by `j` stepovers, the outer wall last.
+//! grown by `j` stepovers, the outer wall last. Round a part with the
+//! stock known (#3934) Outside instead walks the blend family of
+//! `level_blend`: the stock edge out, the selected edge in, the part wall
+//! last.
 //!
 //! Provenance: contour-parallel pocketing as level sets of the distance
 //! to the boundary (Held, "On the Computational Geometry of Pocket
@@ -162,28 +165,37 @@ pub(super) fn level_pieces(
             // The distance from the holes: the holes' centre keep-out grown.
             // `off` 0: the area is its own outline (the 3-D level).
             let hc = if off == 0.0 { holes } else { holes.offset(off)? };
-            sides(&c, &hc.offset(SIDE_EPS)?, true, climb, &mut out)?;
-            let mut done = false;
-            let mut last = 0;
-            for j in 1..=cap {
-                let g = hc.offset(f64::from(j) * step)?;
-                // `g` lies on the left of its loops and is the cut side.
-                // Ring `j` is level `RING * j`: its fills (#3788) lie between.
-                curves(&c, &g, RING.saturating_mul(j), !climb, &mut out)?;
-                last = j;
-                if c.difference(&g)?.is_empty() {
-                    done = true;
-                    break;
+            if start == PassStart::Outside && side.around_part && side.stock.is_some() {
+                // #3934: round a part with the stock known, Outside follows
+                // the stock edge out and the part edge in, and blends the
+                // two where their fronts meet (`level_blend`). Without the
+                // stock the stock edge is unknown, so the one ring set
+                // stays (the mirror below).
+                super::level_blend::outside_blend(&c, &hc, step, tool_r, climb, cap, &mut out)?
+            } else {
+                sides(&c, &hc.offset(SIDE_EPS)?, true, climb, &mut out)?;
+                let mut done = false;
+                let mut last = 0;
+                for j in 1..=cap {
+                    let g = hc.offset(f64::from(j) * step)?;
+                    // `g` lies on the left of its loops and is the cut side.
+                    // Ring `j` is level `RING * j`: its fills (#3788) lie between.
+                    curves(&c, &g, RING.saturating_mul(j), !climb, &mut out)?;
+                    last = j;
+                    if c.difference(&g)?.is_empty() {
+                        done = true;
+                        break;
+                    }
                 }
+                if side.around_part {
+                    let fill = Band { c: &c, hc: &hc, j: 0, step, tool_r, climb };
+                    add_fills(&mut out, first, &fill, last)?;
+                }
+                if start == PassStart::Outside {
+                    mirror(out.get_mut(first..).unwrap_or_default());
+                }
+                done
             }
-            if side.around_part {
-                let fill = Band { c: &c, hc: &hc, j: 0, step, tool_r, climb };
-                add_fills(&mut out, first, &fill, last)?;
-            }
-            if start == PassStart::Outside {
-                mirror(out.get_mut(first..).unwrap_or_default());
-            }
-            done
         } else {
             started = true;
             // The distance from the outer edge: the filled part eroded.
@@ -220,7 +232,7 @@ fn add_fills(out: &mut Vec<Piece>, first: usize, band: &Band<'_>, last: u32) -> 
     let mut add = Vec::new();
     for j in 1..=last {
         let (inner, outer) = (walks(out, RING.saturating_mul(j - 1)), walks(out, RING.saturating_mul(j)));
-        add.extend(fills(&Band { j, ..*band }, &inner, &outer)?);
+        add.extend(fills(&Band { j, ..*band }, &inner, &outer, (RING.saturating_mul(j - 1), RING.saturating_mul(j)))?);
     }
     out.extend(add);
     Ok(())
