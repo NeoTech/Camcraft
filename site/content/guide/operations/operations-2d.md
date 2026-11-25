@@ -248,12 +248,14 @@ The three ring-like strategies cut in different ways:
 
 - **Waterline** cuts closed rings at the stepover. A straight step joins
   two rings. The step cuts at up to the full tool width.
-- **Offset rings** cuts the same offset rings, but at the optimal load,
-  as one spiral that goes out from the core. Each revolution moves from
-  one ring to the next ring, so the step stays at the load. The last
-  pass is one full ring on the wall. Where two rings cannot join as a
-  spiral, the step stays. The path notes name the worst load where it
-  is more than the optimal load, for example at a sharp corner.
+- **Offset rings** cuts offset rings of the wall shape as one spiral
+  that goes out from the core. The optimal load sets the step: the full
+  load width on a straight wall, a smaller step on a tight round
+  stretch, so the load stays constant. Each revolution moves from one
+  ring to the next ring. The last pass is one full ring on the wall.
+  Where two rings cannot join as a spiral, the step stays. The path
+  notes name the worst load where it is more than the optimal load (for
+  example at a sharp corner), and a long core ring that cuts a slot.
 - **Adaptive** plans each cut on the stock that is left. It holds the
   load in corners and narrow channels too.
 
