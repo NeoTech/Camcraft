@@ -7,6 +7,9 @@
 //! table and "Copy from tool" takes the rows of another tool. Both write
 //! the window's draft only: the editor's one Apply lands it as
 //! `ChangeTool`, one undo step. No command is new.
+//! #3930: the rest of Properties' old Cutting data group (the tool's own
+//! spindle rpm and feed, the lathe rows, centre cutting) follows the table
+//! (`tool_settings_grid::cutting_base`), so the summary page loses no edit.
 //! Provenance: our own tab over the tool draft and the handbook relations
 //! in `recipes_fill`; no HSMWorks material involved.
 
@@ -41,6 +44,13 @@ pub(crate) const COPY: &str = "Copy from tool";
 const FLUTES: [u32; 7] = [1, 2, 3, 4, 5, 6, 8];
 
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
+    rows(ui, state);
+    ui.separator();
+    super::super::tool_settings_grid::cutting_base(ui, state);
+}
+
+/// The per-material rows, with Suggest and Copy for a rotating tool.
+fn rows(ui: &mut Ui, state: &mut State) {
     let kind = state.tool_ui.tool_kind();
     if kind == ToolKind::Wire {
         note(ui, "An EDM wire has no cutting rows: its cut is the machine's EDM condition.");

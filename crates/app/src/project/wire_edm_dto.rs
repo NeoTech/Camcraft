@@ -82,6 +82,10 @@ pub struct WireContourDto {
     /// off, so every file written before it reads unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sharp_corners: bool,
+    /// The tangent arc lead's radius, mm (#3991); absent is the straight
+    /// lead, so every file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_arc_radius: Option<f64>,
 }
 
 /// One skim: its condition id (stated - no default) and whether it
@@ -202,6 +206,7 @@ impl WireContourDto {
             clearance: p.clearance,
             skims: p.skims.iter().map(|s| WireSkimDto { condition: s.condition.clone(), reverse: s.reverse }).collect(),
             sharp_corners: p.sharp_corners,
+            lead_arc_radius: p.lead_arc_radius,
         }
     }
 
@@ -244,6 +249,7 @@ impl WireContourDto {
             clearance: self.clearance,
             skims: self.skims.iter().map(|s| WireSkim { condition: s.condition.clone(), reverse: s.reverse }).collect(),
             sharp_corners: self.sharp_corners,
+            lead_arc_radius: self.lead_arc_radius,
         })
     }
 }
@@ -255,6 +261,7 @@ mod tests {
 
     fn op(tabs: Option<WireTabs>, capture: bool) -> WireContourOp {
         WireContourOp {
+            lead_arc_radius: None,
             top_z: Height::fixed(12.0),
             bottom_z: Height::fixed(0.0),
             condition: "C110".into(),
@@ -313,4 +320,18 @@ mod tests {
         assert_eq!(serde_json::from_str::<WireContourDto>(&saved).unwrap().to_params(), OpParams::WireContour(original));
     }
 
+    /// #3991: the straight lead writes no key (no existing file changes),
+    /// a file without the key reads the straight lead, and a stated arc
+    /// lead radius round-trips.
+    #[test]
+    fn the_arc_lead_radius_round_trips_and_is_absent_for_the_straight_lead() {
+        let straight = op(None, true);
+        let text = serde_json::to_string(&WireContourDto::from_op(&straight)).unwrap();
+        assert!(!text.contains("lead_arc_radius"), "{text}");
+        assert_eq!(serde_json::from_str::<WireContourDto>(&text).unwrap().to_params(), OpParams::WireContour(straight.clone()));
+        let arc = WireContourOp { lead_arc_radius: Some(0.75), ..straight };
+        let text = serde_json::to_string(&WireContourDto::from_op(&arc)).unwrap();
+        assert!(text.contains(r#""lead_arc_radius":0.75"#), "{text}");
+        assert_eq!(serde_json::from_str::<WireContourDto>(&text).unwrap().to_params(), OpParams::WireContour(arc));
+    }
 }

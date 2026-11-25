@@ -15,7 +15,7 @@
 use egui::{Align, Label, Layout, Margin, RichText, Ui};
 
 use camcraft_app::geo2d::Point2;
-use camcraft_app::operation::{OpType, PickCapability};
+use camcraft_app::operation::{OpParams, OpType, PickCapability};
 use camcraft_app::path_picks::{PathPick, PathPicks, PickRole};
 use camcraft_app::units::Unit;
 
@@ -68,6 +68,27 @@ const EXIT: PointRows = PointRows {
     says: "the lead-out leaves here; where it cannot fit, the operation is refused by name - the exit never moves",
 };
 
+// #3325: the Slot's words. A slot pick names one of the two ends.
+const SLOT_START: PointRows = PointRows {
+    pick_help: "click a face, edge or corner in the viewport to place the Slot start point",
+    help: "a point in model X and Y: the pass starts at the slot end nearest this point",
+    says: "the cutter goes down at that end; a point far from the slot or between its ends is refused by name - the start never moves",
+    ..START
+};
+
+const SLOT_EXIT: PointRows = PointRows {
+    pick_help: "click a face, edge or corner in the viewport to place the Slot exit point",
+    help: "a point in model X and Y: the pass stops at the slot end nearest this point",
+    says: "the row count decides where a pass can stop; an exit that the start point makes impossible is refused by name - the exit never moves",
+    ..EXIT
+};
+
+/// Both groups, for a kind whose pick is one of two ends (the Slot, #3325).
+pub(super) fn end_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
+    pick_list_group(ui, u, &SLOT_START, &mut picks.start);
+    pick_list_group(ui, u, &SLOT_EXIT, &mut picks.exit);
+}
+
 /// Both groups, for the closed 2D contour's lead tab.
 pub(super) fn start_exit_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
     pick_list_group(ui, u, &START, &mut picks.start);
@@ -100,6 +121,67 @@ pub(super) fn wire_start_group(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
             }
             (true, None) => picks.start.push(PathPick::xy(Point2::new(0.0, 0.0))),
             (false, _) => picks.start.clear(),
+        }
+    });
+}
+
+struct HoleRows {
+    title: &'static str,
+    stated: &'static str,
+    x: &'static str,
+    y: &'static str,
+    says: &'static str,
+}
+
+const FIRST_HOLE: HoleRows = HoleRows {
+    title: START_GROUP,
+    stated: "First hole stated",
+    x: "First hole X",
+    y: "First hole Y",
+    says: "the hole under this point is cut first; the other holes keep the list order from there. A point that is on no hole is refused by name",
+};
+
+const LAST_HOLE: HoleRows = HoleRows {
+    title: EXIT_GROUP,
+    stated: "Last hole stated",
+    x: "Last hole X",
+    y: "Last hole Y",
+    says: "the hole under this point is cut last. A point that is on no hole is refused by name",
+};
+
+/// #3328: the first hole and the last hole of a Drill, a Bore or a Thread
+/// (`PickCapability::HoleOrder`), typed in model X and Y. Switching a
+/// group on seeds the first (or the last) hole of the list, so the seed
+/// is a point that the generator takes. Other kinds draw nothing here.
+pub(super) fn hole_order_groups(ui: &mut Ui, u: Unit, params: &mut OpParams) {
+    if params.kind().info().pick() != PickCapability::HoleOrder {
+        return;
+    }
+    let (first, last) = match params {
+        OpParams::Drill { holes, .. } | OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => {
+            (holes.first().map(|h| h.xy), holes.last().map(|h| h.xy))
+        }
+        _ => (None, None),
+    };
+    let Some(picks) = params.path_picks_mut() else {
+        return;
+    };
+    hole_group(ui, u, &FIRST_HOLE, first, &mut picks.start);
+    hole_group(ui, u, &LAST_HOLE, last, &mut picks.exit);
+}
+
+fn hole_group(ui: &mut Ui, u: Unit, rows: &HoleRows, seed: Option<Point2>, list: &mut Vec<PathPick>) {
+    group(ui, rows.title, None, |ui| {
+        let mut stated = !list.is_empty();
+        check_row(ui, rows.stated, &mut stated);
+        match (stated, list.first_mut()) {
+            (true, Some(p)) => {
+                prop_row(ui, rows.x, |ui| num(ui, u, &mut p.xy.x));
+                prop_row(ui, rows.y, |ui| num(ui, u, &mut p.xy.y));
+                consequence(ui, rows.says);
+            }
+            (true, None) => list.push(PathPick::xy(seed.unwrap_or(Point2::new(0.0, 0.0)))),
+            (false, _) => list.clear(),
         }
     });
 }

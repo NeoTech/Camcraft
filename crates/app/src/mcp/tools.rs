@@ -395,7 +395,9 @@ fn s_add_op() -> Value {
 fn s_edit_op() -> Value {
     // #3324 / #3339: the start / exit picks, named, with the kinds that take them.
     let ring: Vec<&str> = crate::operation::KindInfo::ALL.iter().filter(|k| k.pick() == crate::operation::PickCapability::Ring).map(|k| k.label).collect();
-    let params = format!("Fields to change (see get_job for the current ones). Start / exit picks: picks {{ start: [[x, y, z?], ...], exit: [...] }} in model mm, null or {{}} clears; taken by {} (Wire Contour: start is the threading point; exit ends an open run at its nearest end, or leaves a closed profile there). Each kind's start_exit in list_operation_types says if it takes a pick.", ring.join(", "));
+    // #3331: the turning kinds whose pick is a point of the lathe (Z, X) plane.
+    let lathe: Vec<&str> = crate::operation::KindInfo::ALL.iter().filter(|k| k.pick() == crate::operation::PickCapability::Meridian).map(|k| k.label).collect();
+    let params = format!("Fields to change (see get_job for the current ones). Start / exit picks: picks {{ start: [[x, y, z?], ...], exit: [...] }} in model mm, null or {{}} clears; taken by {} (Wire Contour: start is the threading point; exit ends an open run at its nearest end, or leaves a closed profile there; Sinker Burn: the angles round the burn position at which its orbit starts and ends; Sinker Side Burn: the end of its side move, the burn position or the wall end, at which the move starts and ends; Drill, Bore and Thread: a point on a hole of the list makes it the first or the last hole) and by {} (a point in the lathe (Z, X) plane: z is required). Each kind's start_exit in list_operation_types says if it takes a pick.", ring.join(", "), lathe.join(", "));
     obj(
         json!({
             "name": { "type": "string", "description": "Operation name (key or label)." },

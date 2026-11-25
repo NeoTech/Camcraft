@@ -790,6 +790,40 @@ impl OpParams {
                         _ => true,
                     })
             }
+            // The flow band's door (#2826): the twins' shape minus the
+            // station window the picks replace - the same pose door,
+            // the same stated-direction law, the raster's derived
+            // stepover, and heights read as radii (their own guard
+            // lives in the kernel, against the work's true radius).
+            OpParams::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb: _,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => {
+                let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
+                pos(*tolerance)
+                    && stepover.is_none_or(pos)
+                    && clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && pos(*feed)
+                    && pos(*plunge_feed)
+                    && angle(lead_deg)
+                    && angle(lag_deg)
+                    && *max_tilt_deg > 0.0
+                    && *max_tilt_deg <= 180.0
+                    && direction(stated_axis)
+            }
             // The wrap ladder's door (M5.1 stage E2): the Pocket3D
             // door's numbers - plain stepover, radial stepdown, the
             // helix and engagement read by the entry law - crossed

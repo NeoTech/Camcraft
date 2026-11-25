@@ -474,8 +474,9 @@ pub(super) use super::fixtures_page::fixtures_section;
 // ----------------------------------------------------------------- tool shape window
 
 /// #2397: the tool shape editor - its own modal window for the body, the
-/// profile and the holder, with the settings left in Properties. The old
-/// combined tool editor is gone; every door that opened it opens this.
+/// profile and the holder. The old combined tool editor is gone; every
+/// door that opened it opens this. #3930: the holder pick and the tool's
+/// settings are the tool library window's; Properties shows a summary.
 pub(crate) fn tool_shape_editor_window(ctx: &egui::Context, state: &mut State) {
     let Some(_subject) = state.tool_shape_editor.clone() else {
         return;

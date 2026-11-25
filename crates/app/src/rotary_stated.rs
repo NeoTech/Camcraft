@@ -36,7 +36,8 @@ pub fn op_stated(params: &OpParams) -> Option<[f64; 3]> {
     match params {
         OpParams::RotaryContour { stated_axis, .. }
         | OpParams::RotaryParallel { stated_axis, .. }
-        | OpParams::RotaryOffset { stated_axis, .. } => *stated_axis,
+        | OpParams::RotaryOffset { stated_axis, .. }
+        | OpParams::RotaryFlow { stated_axis, .. } => *stated_axis,
         _ => None,
     }
 }

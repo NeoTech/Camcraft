@@ -13,6 +13,9 @@
 //! #3897 (U6): the preview stands right of the tabs, as the column of
 //! the #3663 mock-up, and two toggles show or hide the dimension lines
 //! and the holder. The caller gives the size.
+//! #3908: a third toggle, Flutes, shows or hides the helical flutes of
+//! the 3D model (display only; `model::ToolModel::shown`). The row may
+//! wrap in a narrow preview: the drawing takes the height that is left.
 //! Provenance: our own pane; no HSMWorks material involved.
 
 use std::cell::{Cell, RefCell};
@@ -30,7 +33,9 @@ use crate::state::{EditorFace, Orbit, PreviewMode, State};
 /// The labels of the two display toggles (#3897).
 pub(crate) const DIMS: &str = "Dimensions";
 pub(crate) const HOLDER: &str = "Holder";
-/// The height the toggles and the caption take above the drawing.
+/// #3908: the label of the flutes toggle.
+pub(crate) const FLUTES: &str = "Flutes";
+/// The least height the toggles and the caption take above the drawing.
 pub(super) const HEAD_H: f32 = 60.0;
 
 /// The caption under the toggle: where the 3D model comes from.
@@ -46,6 +51,7 @@ pub(super) fn caption(m: &ToolModel) -> String {
 pub(super) fn draw(ui: &mut Ui, state: &State, face: &mut EditorFace, size: Vec2) {
     let _s = crate::frame_cost::span("ui/tool_library.preview");
     let m = model::of(state);
+    let top = ui.cursor().top();
     ui.horizontal_wrapped(|ui| {
         ui.selectable_value(&mut face.preview, PreviewMode::Model, "3D")
             .on_hover_text("the tool as a model: drag to turn, scroll to zoom, double-click to fit");
@@ -54,22 +60,27 @@ pub(super) fn draw(ui: &mut Ui, state: &State, face: &mut EditorFace, size: Vec2
         ui.separator();
         ui.checkbox(&mut face.dims, DIMS).on_hover_text("show the dimension lines of the side view");
         ui.checkbox(&mut face.holder, HOLDER).on_hover_text("show the holder; off, the cutter and the shank only");
+        ui.checkbox(&mut face.flutes, FLUTES)
+            .on_hover_text("show the helical flutes on the 3D model; for display only, the checks use the plain tool");
     });
     ui.small(caption(&m));
-    let size = Vec2::new(size.x.max(160.0), (size.y - HEAD_H).max(100.0));
+    let head = (ui.cursor().top() - top).max(HEAD_H);
+    let size = Vec2::new(size.x.max(160.0), (size.y - head).max(100.0));
     match face.preview {
-        PreviewMode::Model => model_3d(ui, &m, &mut face.orbit, size, face.holder),
+        PreviewMode::Model => {
+            let (mesh, bounds) = m.shown(face.holder, face.flutes);
+            model_3d(ui, mesh, bounds, &mut face.orbit, size);
+        }
         PreviewMode::Side => {
             side_view::draw(ui, &m, state.units(), size, side_view::Show { dims: face.dims, holder: face.holder });
         }
     }
 }
 
-fn model_3d(ui: &mut Ui, m: &ToolModel, orbit: &mut Orbit, size: Vec2, holder: bool) {
+fn model_3d(ui: &mut Ui, mesh: &Arc<[Triangle]>, bounds: ([f64; 3], [f64; 3]), orbit: &mut Orbit, size: Vec2) {
     let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
     let rect = resp.rect;
     painter.rect_filled(rect, 4.0, tool_ground());
-    let (mesh, bounds) = if holder { (&m.mesh, m.bounds) } else { (&m.bare, m.bare_bounds) };
     let Some(view) = View::fit(bounds.0, bounds.1, rect, orbit) else {
         return;
     };

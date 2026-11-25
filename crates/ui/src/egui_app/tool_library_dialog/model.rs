@@ -14,6 +14,10 @@
 //! judges it; the draft numbers' own verdict is a separate draft note.
 //! #3897 (U6): the model also keeps the tool without its holder (`bare`)
 //! for the preview's Holder toggle, built with the rest.
+//! #3908: the model also keeps the steel with its helical flutes
+//! (`fluted`, `fluted_bare`) for the preview's Flutes toggle, built with
+//! the rest from the same steel meridian (`flutes`). Display only: the
+//! steel, the bands and the plain meshes do not change with the flutes.
 //! Frame cost (`crates/ui/AGENTS.md`): the model is built when its input
 //! changes - the draft tool value, the document's tool, the landed cutter
 //! and the landed body (its mesh by identity) - never on `doc_version`.
@@ -73,6 +77,11 @@ pub(crate) struct ToolModel {
     /// its box.
     pub bare: Arc<[Triangle]>,
     pub bare_bounds: ([f64; 3], [f64; 3]),
+    /// #3908: the whole tool and the bare tool with helical flutes cut
+    /// into the fluted length, when the tool shows flutes. Display only;
+    /// inside the plain meshes' envelope, so the plain boxes fit them.
+    pub fluted: Option<Arc<[Triangle]>>,
+    pub fluted_bare: Option<Arc<[Triangle]>>,
     /// The landed body's source, when the holder is a body.
     pub body: Option<String>,
     pub dims: Dims,
@@ -172,6 +181,25 @@ pub(crate) fn draft_body(t: &Tool, entry: &str, gauge: f64, projection: f64) -> 
     Ok(body)
 }
 
+/// A mesh's box: the low and the high corner.
+pub(crate) type Bounds = ([f64; 3], [f64; 3]);
+
+impl ToolModel {
+    /// #3908: the mesh the 3D view paints for the Holder and the Flutes
+    /// toggles, and the box it is fitted by. The box is the plain mesh's
+    /// box (the flutes only take radius away), so a toggle never jumps
+    /// the view.
+    pub(crate) fn shown(&self, holder: bool, flutes: bool) -> (&Arc<[Triangle]>, Bounds) {
+        let (plain, fluted, bounds) = if holder {
+            (&self.mesh, &self.fluted, self.bounds)
+        } else {
+            (&self.bare, &self.fluted_bare, self.bare_bounds)
+        };
+        let mesh = fluted.as_ref().filter(|_| flutes).unwrap_or(plain);
+        (mesh, bounds)
+    }
+}
+
 fn build(k: &Key) -> ToolModel {
     let t = &k.tool;
     let judge = |tool: &Tool| k.holder.as_ref().map(|(n, g, p)| draft_body(tool, n, *g, *p));
@@ -214,15 +242,27 @@ fn build(k: &Key) -> ToolModel {
     let mut mesh = revolve(&prof);
     let bare_bounds = crate::egui_app::tool_model_view::bounds(&mesh);
     let bare: Arc<[Triangle]> = Arc::from(mesh.clone());
+    let fluted_steel = super::flutes::fluted(t, &prof);
+    let mut holder_tris = Vec::new();
     let holder = match (&body, profile) {
         (Some(b), p) => {
-            mesh.extend(b.facets.iter().copied());
+            holder_tris.extend(b.facets.iter().copied());
             p.map(|p| (bands.iter().map(|q| q.2).fold(0.0, f64::max) * 2.0, (p.top() - p.bottom()).max(0.0)))
         }
         (None, _) => SpunProfile::holder_of(t).map(|h| {
-            mesh.extend(revolve(&h.outline()));
+            holder_tris.extend(revolve(&h.outline()));
             (t.holder_d, t.holder_len)
         }),
+    };
+    mesh.extend(holder_tris.iter().copied());
+    let (fluted, fluted_bare) = match fluted_steel {
+        Some(f) => {
+            let alone: Arc<[Triangle]> = Arc::from(f.clone());
+            let mut all = f;
+            all.extend(holder_tris);
+            (Some(Arc::from(all)), Some(alone))
+        }
+        None => (None, None),
     };
     let gauge = match (profile, holder) {
         (Some(p), _) => p.top().max(top),
@@ -248,6 +288,8 @@ fn build(k: &Key) -> ToolModel {
         mesh: Arc::from(mesh),
         bare,
         bare_bounds,
+        fluted,
+        fluted_bare,
         body: body.as_ref().map(|b| b.source.clone()),
         dims,
         holder_err,

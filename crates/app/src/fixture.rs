@@ -266,15 +266,27 @@ pub fn rotary_axis_of(
     op: &crate::schema::Operation,
 ) -> Option<camcraft_sim::verify::RotaryAxis> {
     use crate::operation::{OpParams, SrcRef};
+    let flow = matches!(op.params, OpParams::RotaryFlow { .. });
     if !matches!(
         op.params,
         OpParams::RotaryContour { .. } | OpParams::RotaryParallel { .. } | OpParams::RotaryOffset { .. }
-    ) {
+    ) && !flow
+    {
         return None;
     }
-    let SrcRef::Entity(name) = &op.src else { return None };
-    let e = model::find_by_name(world, name)?;
-    let facets = crate::setup_align::facets_in(world, &e, op.setup.as_deref())?;
+    // #2826: the flow band's source is its picked chains, so the
+    // facets the stated line is judged against are the selection's
+    // own union - exactly the material the generator stands in.
+    let facets = match &op.src {
+        SrcRef::Entity(name) => {
+            let e = model::find_by_name(world, name)?;
+            crate::setup_align::facets_in(world, &e, op.setup.as_deref())?
+        }
+        SrcRef::Selection(_) if flow => {
+            crate::operation::source_facets(world, op.setup.as_deref(), &op.src).ok()?
+        }
+        _ => return None,
+    };
     let of = |ax: crate::multiaxis::axis::Axis| {
         Some(camcraft_sim::verify::RotaryAxis { origin: ax.origin, dir: [ax.dir.x, ax.dir.y, ax.dir.z] })
     };

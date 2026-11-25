@@ -3,10 +3,12 @@
 //! step; the loopback listener that carries it; and the CLI's flag.
 //!
 //! Gate map (M4.4): covers app::mcp (live, listen, bridge, link,
-//! link_client) and app::cli_ui (the `--ui` lane, #3751).
+//! link_client, link_owner) and app::cli_ui (the `--ui` lane, #3751).
 
 #[path = "mcp_live/ui_link.rs"]
 mod ui_link;
+#[path = "mcp_live/ui_link_owner.rs"]
+mod ui_link_owner;
 
 use camcraft_app::commands::History;
 use camcraft_app::mcp::provider::{FallbackMode, parse_prompt};

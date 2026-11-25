@@ -34,6 +34,11 @@ use camcraft_app::world::new_world;
 /// A staged face over a `side` x `side` block (the `stock_play_precalc`
 /// fixture).
 fn faced_doc(side: f64, stepover: f64, stepdown: Option<f64>) -> World {
+    faced_doc_with(side, stepover, stepdown, false)
+}
+
+/// `faced_doc`; `blend` joins the passes with arcs (no f32 twin, #2628).
+fn faced_doc_with(side: f64, stepover: f64, stepdown: Option<f64>, blend: bool) -> World {
     let world = new_world();
     let mut history = History::default();
     let half = side / 2.0;
@@ -55,7 +60,7 @@ fn faced_doc(side: f64, stepover: f64, stepdown: Option<f64>) -> World {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
-        blend_turns: false, blend_radius: None,
+        blend_turns: blend, blend_radius: None,
         picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, params);
@@ -273,4 +278,46 @@ fn the_layer_mode_is_set_once_before_the_first_cut() {
     let mut fresh = FieldPlay::from_seed(seed()).expect("play");
     fresh.set_layer(base.meta.clone(), cpu_layer_cutter()).expect("the first time");
     assert!(fresh.set_layer(base.meta.clone(), cpu_layer_cutter()).is_err(), "a second time");
+}
+
+/// #3336 (S3c): the UI's start. The layer worker that calculates before
+/// playback ends its calculation ready and draws the field's picture.
+#[test]
+fn the_layer_playback_with_the_calculation_before_playback_draws_the_field_picture() {
+    let world = faced_doc(12.0, 1.5, Some(2.5));
+    let seed = || PlaySeed::gather(&world, false, 12.0 * 12.0 * 20.0).expect("seed");
+    let field = PlayWorker::spawn_precalc(seed(), PRECALC_BUDGET).expect("the field worker");
+    let layered = PlayWorker::spawn_layered_precalc(seed(), PRECALC_BUDGET, cpu_layer_cutter()).expect("the layer worker");
+    for w in [&field, &layered] {
+        assert!(matches!(wait_precalc(w), Precalc::Ready { .. }), "the calculation finishes: {:?}", w.precalc());
+    }
+    let total = field.index().total();
+    let (mut fres, mut lres) = (None, None);
+    for pos in [(total / 3, 0.5), (total, 0.0), (total / 5, 0.0)] {
+        play_through(&field, &[pos], &mut fres);
+        let landed = play_through(&layered, &[pos], &mut lres);
+        let packed = landed.last().and_then(|(_, f)| f.view.packed.clone()).expect("a packed layer frame");
+        assert!(matches!(packed.cut, CutLayer::Full(_)), "{pos:?}: a layer frame is always whole");
+        let (fc, lc) = (&fres.as_ref().expect("field").cut, &lres.as_ref().expect("layer").cut);
+        let (gap, over) = gaps(&packed.base.mesh, lc, fc, packed.base.meta.cap as f32);
+        assert!(over <= 1e-6 && gap <= TWIN_TOL, "{pos:?}: the layer picture is {gap} mm from the field picture, {over} mm over");
+        assert!(solid(&packed.base.mesh, lc) < solid(&packed.base.mesh, &vec![f32::MIN; lc.len()]), "{pos:?}: a removal shows");
+    }
+}
+
+/// #3336: a program with no op for the layer keeps the layer mode off.
+/// A layer frame is always the whole layer; the field's play frames are
+/// patches. An arc has no f32 twin until #2628.
+#[test]
+fn a_program_with_no_twin_op_keeps_the_layer_mode_off() {
+    let world = faced_doc_with(12.0, 1.5, Some(2.5), true);
+    let seed = PlaySeed::gather(&world, false, 12.0 * 12.0 * 20.0).expect("seed");
+    let mut play = FieldPlay::from_seed(seed).expect("play");
+    let (base, _) = PackedBase::of(&play.view().stock, None).expect("packs");
+    let kept = play.set_layer(base.meta.clone(), failing_after(0)).expect("the layer mode is asked");
+    assert_eq!(kept.len(), 1, "the blended face stays on the field: {kept:?}");
+    assert!(kept[0].contains("arc"), "the reason names the arc: {kept:?}");
+    assert!(!play.layer_on(), "no op for the layer: the mode is off");
+    play.seek_to(play.total() / 2, 0.0).expect("seek");
+    assert!(play.layer_frame().expect("no layer, no fault").is_none(), "the frame is the field's own");
 }

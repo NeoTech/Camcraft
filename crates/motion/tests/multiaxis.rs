@@ -11,6 +11,7 @@
 //!
 //! Gate map (M4.4): covers camcraft_motion::cl, camcraft_motion::finishing3d,
 //! camcraft_motion::geometry, camcraft_motion::machining2d, camcraft_motion::multiaxis.
+//! #3330: the start / exit picks of the ring ladder (finishing3d::ring_seam).
 //! Lane shape (M4.4): all tests here run in seconds; envelope
 //! verdicts over these paths ride the app's ignored lane.
 
@@ -282,3 +283,7 @@ fn an_empty_model_refuses_like_the_waterline() {
     let e = contour5d(&[], &finish(1.0, 0.0), &control(0.0, 0.0, None), None).err();
     assert!(matches!(e, Some(GenError::Empty(_))), "got {e:?}");
 }
+
+// #3330: the user's start and exit points on the 5-axis contour's rings.
+#[path = "multiaxis/seam.rs"]
+mod seam;

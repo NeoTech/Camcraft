@@ -39,7 +39,11 @@ fn assert_opens(case: &CatalogCase, path: &Path, label: &str) {
 
 fn committed(case: &CatalogCase, label: &str) -> String {
     let path = case.dir.join("refusal.txt");
-    fs::read_to_string(&path).unwrap_or_else(|e| panic!("{label}: read {}: {e}", path.display()))
+    // A Windows checkout with autocrlf hands the file back CRLF: the
+    // generated lines end \n, so the committed file is read as LF.
+    fs::read_to_string(&path)
+        .map(|s| s.replace("\r\n", "\n"))
+        .unwrap_or_else(|e| panic!("{label}: read {}: {e}", path.display()))
 }
 
 fn scratch(case: &CatalogCase, action: &str) -> std::path::PathBuf {

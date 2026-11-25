@@ -376,6 +376,42 @@ pub enum OpParams {
         tilt: Option<Tilt>,
         picks: crate::path_picks::PathPicks,
     },
+    /// Rotary Flow (#2826, the second slice of #2804): flow passes
+    /// between PICKED helical guide chains on a rotor, machined about
+    /// a STATED rotation axis - the op's own direction, else the
+    /// machine's stated rotary line, judged against the model's faces
+    /// (see [`crate::multiaxis::rotary_flow`] and
+    /// [`Self::RotaryContour`]'s `stated_axis`). There is no
+    /// `top_z`/`bottom_z` window: the picked chains bound the band,
+    /// and a 360-degree helical chain is never clipped by world Z.
+    /// The heights read as BALL-CENTER RADII about the stated axis -
+    /// never as world Z - aligned with #2774: the work offset sits on
+    /// the rotary centreline, so a stock-top reference reads its
+    /// radius above the stock's own max radius, and the kernel
+    /// refuses by name where the number does not clear the work's
+    /// radius plus the ball.
+    RotaryFlow {
+        tolerance: f64,
+        /// Developed stepover between flow passes, mm; `None`
+        /// follows the scallop law from the tolerance, the raster's
+        /// own derivation.
+        stepover: Option<f64>,
+        /// Ball-center radius of the clearance cylinder: the program
+        /// opens, hops bands and exits there.
+        clearance_z: Height,
+        /// Ball-center radius of the pass-link cylinder; `None` links
+        /// at clearance.
+        retract_z: Option<Height>,
+        feed: f64,
+        plunge_feed: f64,
+        climb: bool,
+        lead_deg: f64,
+        lag_deg: f64,
+        max_tilt_deg: f64,
+        /// #2772 parts 1-2: the op's own stated rotation axis - see
+        /// [`Self::RotaryContour`]'s `stated_axis`.
+        stated_axis: Option<[f64; 3]>,
+    },
     /// 2D chamfer (M2.4 B): one ride whose center line stands so the
     /// taper tool's CONE lies on the chamfer face the two authored
     /// numbers state - `width` along the top plane, `angle_deg` off it.
@@ -1581,6 +1617,7 @@ impl OpParams {
             OpParams::SinkerSideBurn(_) => OpType::SinkerSideBurn,
             OpParams::SlotUndercut(_) => OpType::SlotUndercut,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
+            OpParams::RotaryFlow { .. } => OpType::RotaryFlow,
         }
     }
 
@@ -1676,7 +1713,11 @@ impl OpParams {
             // in plain world XY - the drilling family's own answer
             // (M2.4 C): a tilted plane has no round hole to find.
             | OpParams::Bore { .. }
-            | OpParams::Thread { .. } => None,
+            | OpParams::Thread { .. }
+            // Rotary Flow is the stated-axis answer the same way
+            // (#2826): the kernel poses radially about the stated
+            // line, per move - an index would fight the pose law.
+            | OpParams::RotaryFlow { .. } => None,
         }
     }
 
@@ -1731,7 +1772,10 @@ impl OpParams {
             | OpParams::BoringTurning { clearance_z, .. }
             | OpParams::Bore { clearance_z, .. }
             | OpParams::Thread { clearance_z, .. }
-            | OpParams::Probe { clearance_z, .. } => *clearance_z,
+            | OpParams::Probe { clearance_z, .. }
+            // The radial reading's own number (#2826, #2774): the
+            // clearance cylinder's radius about the stated axis.
+            | OpParams::RotaryFlow { clearance_z, .. } => *clearance_z,
         }
     }
 
@@ -1808,6 +1852,10 @@ impl OpParams {
             // begins where the model's mouths stand (M2.4 C).
             | OpParams::Bore { top_z, .. }
             | OpParams::Thread { top_z, .. } => *top_z,
+            // The flow band's picks are its extent (#2826): no
+            // section plane exists, so the shadow draws at the
+            // clearance radius's plane - the probe's own answer.
+            OpParams::RotaryFlow { clearance_z, .. } => *clearance_z,
         }
     }
 
@@ -1991,6 +2039,13 @@ impl OpParams {
                 f(*clearance_z);
                 f(*top_z);
                 f(*bottom_z);
+            }
+            // The radial heights (#2826): the clearance and retract
+            // radii alone - the picks bound the band, no window pair
+            // exists to visit.
+            OpParams::RotaryFlow { clearance_z, retract_z, .. } => {
+                f(*clearance_z);
+                opt(retract_z, &mut f);
             }
         }
     }

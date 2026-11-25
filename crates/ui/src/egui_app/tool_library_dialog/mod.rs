@@ -32,6 +32,8 @@
 pub(crate) mod assembly_group;
 pub(crate) mod categories;
 mod details_tab;
+/// #3908: display only - private to this window, so no law can read it.
+mod flutes;
 pub(crate) mod holder_view;
 pub(crate) mod holders;
 pub(crate) mod list;

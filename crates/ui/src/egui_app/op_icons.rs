@@ -23,6 +23,9 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::Trace => Icon::Trace,
         OpType::Engrave => Icon::Engrave,
         OpType::VCarve => Icon::VCarve,
+        // #2826: the band's own drawing - the bar with its two
+        // diagonal flow lines crossing it.
+        OpType::RotaryFlow => Icon::RotaryFlow,
         OpType::Chamfer2D => Icon::Chamfer2D,
         OpType::Deburr => Icon::Deburr,
         // #1894: the break with the axis tilted onto it - its own glyph.

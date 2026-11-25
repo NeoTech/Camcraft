@@ -126,11 +126,20 @@ fn layout_window_tool_editor() {
     let group = rect(crate::egui_app::tool_library_dialog::assembly_group::HEADING);
     assert!(group.top() > rect("Diameter").top(), "the assembly group {group:?} stands under the geometry rows");
     assert!(group.left() >= win.left() - 1.0 && group.right() <= win.right() + 1.0, "the group {group:?} keeps to the window's width");
+    // #3930: the folded Body section follows the assembly group.
+    let body = rect(crate::egui_app::tool_library_dialog::assembly_group::BODY);
+    assert!(body.top() > group.top(), "the Body section {body:?} stands under the assembly group {group:?}");
+    assert!(node.query_all_by_label("Import body…").next().is_none(), "the Body section starts folded");
     let (view, dims, holder) = (rect("3D"), rect(preview::DIMS), rect(preview::HOLDER));
     assert!(view.top() > rect(&heading).top(), "the preview {view:?} stands under the heading");
     assert!(view.left() > rect("Diameter").right(), "the preview {view:?} stands right of the rows");
     assert!(dims.left() > view.left() && holder.left() > dims.left(), "3D, Dimensions, Holder on one row");
     assert!(win.expand(1.0).contains_rect(holder), "the toggles {holder:?} stay in the window {win:?}");
+    // #3908: Flutes follows Holder on its row, or wraps under it.
+    let flutes = rect(preview::FLUTES);
+    let beside = flutes.left() > holder.left() && (flutes.center().y - holder.center().y).abs() < 2.0;
+    assert!(beside || flutes.top() >= holder.bottom() - 1.0, "Flutes {flutes:?} follows Holder {holder:?}");
+    assert!(win.expand(1.0).contains_rect(flutes), "the Flutes toggle {flutes:?} stays in the window {win:?}");
     let rail = rect("All tools");
     let row = rect(&name);
     assert!(rail.right() < rect("Diameter").left() && row.right() < rect(&heading).left(), "the rail {rail:?} stands left of the editor");

@@ -1430,6 +1430,38 @@ pub enum ParamsDto {
     WaterjetProfile(WaterjetDto),
     /// The multi-axis deburr (#1894): appended the same way.
     MultiAxisDeburr(MultiAxisDeburrDto),
+    /// The Rotary Flow band (#2826, declared at v82): the picked
+    /// guide chains' kind - the parallel's shape minus the station
+    /// window the picks replace, plus the op's own stated rotation
+    /// axis (the twins' v79 key). The heights are the radii the
+    /// kernel guards (see the wire grammar's refusal); absent
+    /// `stated_axis` follows the machine, else the fit, exactly the
+    /// twins' law.
+    RotaryFlow {
+        tolerance: f64,
+        /// Absent follows the scallop law from the tolerance.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stepover: Option<f64>,
+        /// Ball-center radius of the clearance cylinder about the
+        /// stated axis, authored through the height references - a
+        /// stock-top reference reads its radius above the stock's
+        /// max radius on a centreline-anchored offset (#2774).
+        clearance_z: HeightDto,
+        /// Ball-center radius of the pass-link cylinder; absent links
+        /// at clearance.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retract_z: Option<HeightDto>,
+        feed: f64,
+        plunge_feed: f64,
+        climb: bool,
+        lead_deg: f64,
+        lag_deg: f64,
+        max_tilt_deg: f64,
+        /// #2772 parts 1-2 (v79): the op's own stated rotation axis -
+        /// see `RotaryContour`'s `stated_axis`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stated_axis: Option<[f64; 3]>,
+    },
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

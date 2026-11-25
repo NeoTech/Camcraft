@@ -5666,6 +5666,98 @@ fn a_project_save_into_a_folder_without_write_access_is_refused_and_kept() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+
+#[test]
+fn v82_file_and_the_rotary_flow_grammar_round_trips() {
+    // v82 (#2826): the `rotary_flow` tag arrives - the picked guide
+    // chains' kind, the parallel's shape minus the station window the
+    // picks replace. A literal document reads back whole; the absent
+    // optionals stay silent; write-parse-write is a fixed point; and
+    // an impossible cone is refused at the loader, by name.
+    const { assert!(project::PROJECT_VERSION >= 80, "the flow band needs project v80") };
+    let text = format!(
+        r#"{{
+        "version": {},
+        "entities": [
+            {{"name": "T1", "translation": [0.0, 0.0, 0.0], "kind": "tool",
+              "tool": {{"kind": "ball_nose", "diameter": 6.0, "corner_r": 3.0,
+                        "flute_len": 15.0, "shank_d": 6.0, "shank_len": 40.0,
+                        "holder_d": 44.0, "holder_len": 35.0,
+                        "material_group": "general", "rpm": 9000.0, "feed": 1500.0}}}},
+            {{"name": "RF1", "translation": [0.0, 0.0, 0.0], "kind": "operation",
+             "operation": {{"tool": "T1", "src": "stock", "params": {{"rotary_flow": {{
+                 "tolerance": 0.05,
+                 "stepover": 2.0,
+                 "clearance_z": {{"reference": "fixed", "offset": 25.0}},
+                 "retract_z": {{"reference": "fixed", "offset": 12.0}},
+                 "feed": 500.0, "plunge_feed": 120.0, "climb": true,
+                 "lead_deg": 0.0, "lag_deg": 0.0, "max_tilt_deg": 60.0,
+                 "stated_axis": [1.0, 0.0, 0.0]}}}}}}}},
+            {{"name": "RF2", "translation": [0.0, 0.0, 0.0], "kind": "operation",
+             "operation": {{"tool": "T1", "src": "stock", "params": {{"rotary_flow": {{
+                 "tolerance": 0.05,
+                 "clearance_z": {{"reference": "fixed", "offset": 25.0}},
+                 "feed": 500.0, "plunge_feed": 120.0, "climb": true,
+                 "lead_deg": 0.0, "lag_deg": 0.0, "max_tilt_deg": 60.0}}}}}}}}
+        ]
+    }}"#, project::PROJECT_VERSION);
+    let world = new_world();
+    project::open(&world, &text).expect("the v82 flow-band grammar must read");
+    let e = model::find_by_name(&world, "RF1").expect("op");
+    let o = model::operation_of(&world, &e).expect("operation");
+    let OpParams::RotaryFlow {
+        stepover,
+        retract_z,
+        stated_axis,
+        max_tilt_deg,
+        ..
+    } = &o.params
+    else {
+        panic!("rotary_flow params expected, got {:?}", o.params);
+    };
+    assert_eq!(*stepover, Some(2.0), "a stated spacing reads back stated");
+    assert!(retract_z.is_some(), "a stated link radius reads back stated");
+    assert_eq!(*stated_axis, Some([1.0, 0.0, 0.0]), "the stated axis rides");
+    assert_eq!(*max_tilt_deg, 60.0);
+    let e = model::find_by_name(&world, "RF2").expect("op");
+    let o = model::operation_of(&world, &e).expect("operation");
+    let OpParams::RotaryFlow { stepover, retract_z, stated_axis, .. } = &o.params else {
+        panic!("rotary_flow params expected, got {:?}", o.params);
+    };
+    assert_eq!(*stepover, None, "an absent spacing follows the scallop law");
+    assert!(retract_z.is_none(), "an absent link radius links at clearance");
+    assert_eq!(*stated_axis, None, "absent follows the machine, else the fit");
+
+    // Write-parse-write is a fixed point, and the optionals ride the
+    // file only where stated.
+    let p = tmp_path("v82");
+    project::save(&world, &p).expect("save");
+    let first = std::fs::read_to_string(&p).expect("read");
+    let world2 = new_world();
+    project::load(&world2, &p).expect("reload");
+    project::save(&world2, &p).expect("resave");
+    let second = std::fs::read_to_string(&p).expect("reread");
+    let _ = std::fs::remove_file(&p);
+    assert_eq!(first, second, "the flow-band shape round-trips byte-identically");
+    assert_eq!(first.matches("\"rotary_flow\"").count(), 2, "{first}");
+    assert_eq!(first.matches("\"stated_axis\"").count(), 1, "only the stated axis rides: {first}");
+    assert_eq!(first.matches("\"retract_z\"").count(), 1, "only the stated link radius rides: {first}");
+    assert!(
+        !first.contains("\"top_z\"") && !first.contains("\"bottom_z\""),
+        "the picks bound the band - no station window exists to write: {first}"
+    );
+
+    // The sane door at the loader: a 200-degree cone is past the
+    // hemisphere the stamp may open into - refused by name, the
+    // family's law read by the newest sibling.
+    let bad = text.replace("\"max_tilt_deg\": 60.0,\n                 \"stated_axis\"", "\"max_tilt_deg\": 200.0,\n                 \"stated_axis\"");
+    let world3 = new_world();
+    assert!(
+        matches!(project::open(&world3, &bad), Err(ProjectError::Corrupt(_))),
+        "a v82 file with a 200-degree cone must not load"
+    );
+}
+
 /// #3368: a flat or ball taper tip rides the project file, and only such a
 /// file stepped to `TIP_FORM_PROJECT_VERSION` while the tip-form rung led
 /// the ladder, so an older build refused it instead of reading the tip as

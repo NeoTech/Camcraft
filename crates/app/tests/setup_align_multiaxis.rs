@@ -432,6 +432,119 @@ fn turned_multiaxis_contour_routes_drive_chains_through_setup_frame() {
 }
 
 #[test]
+fn turned_rotary_flow_routes_its_band_chains_through_setup_frame() {
+    // #2826: the flow band's picked guide chains ride the setup frame
+    // exactly as the drive-curve contour's do - the turned and the
+    // baked part cut identically, and the unaligned as-modelled part
+    // differs or refuses. The posting is held out: the radial field
+    // law's 0.25 mm cell quantization reads the ball resting on the
+    // band's convex crease ring as a gouge past its 0.01 allowance
+    // (the finding is reported on the issue), and that warning blocks
+    // the post of a clean path.
+    let run = |deg: [f64; 3], raw: Vec<Triangle>| {
+        let stock = cyl_stock(12.4, 32.0, Point3::new(0.0, 0.0, -16.0), IDENTITY_Q);
+        let pick_rings = |w: &World| -> SrcRef {
+            let e = model::find_by_name(w, "part").expect("part");
+            let f = model::features_of(w, &e).expect("features");
+            // The stored entity's features are the same for every
+            // stance, but read in the stance's own frame: the rings are
+            // picked as PLANAR closed 16-point chains (the bar's four
+            // circular rims), and the two farthest apart - the end
+            // rims - are the band. The setup frame resolves the picks.
+            let mut rings: Vec<(f64, [f64; 3], GeoSel)> = feature::chains(&f)
+                .into_iter()
+                .filter_map(|c| {
+                    let pts = feature::chain_points(&f, &c);
+                    if !c.closed || pts.len() != 16 {
+                        return None;
+                    }
+                    // Coplanar: one normal fits every triple.
+                    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+                    let cross = |a: [f64; 3], b: [f64; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+                    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+                    let n = cross(sub(pts[1], pts[0]), sub(pts[2], pts[0]));
+                    let nn = dot(n, n).sqrt();
+                    let flat = nn > 1e-9 && pts.iter().all(|p| dot(sub(*p, pts[0]), n).abs() / nn < 1e-6);
+                    if !flat {
+                        return None;
+                    }
+                    let len = pts.len() as f64;
+                    let key = pts.iter().fold([0.0f64; 3], |a, p| [a[0] + p[0] / len, a[1] + p[1] / len, a[2] + p[2] / len]);
+                    Some((key[0] * len, key, GeoSel { entity: "part".into(), feature: FeatureSel::Chain(c.id) }))
+                })
+                .collect();
+            rings.sort_by(|a, b| a.0.total_cmp(&b.0));
+            assert!(rings.len() >= 2, "expected the bar's planar rims, got {}", rings.len());
+            // The band's two INTERIOR rings (the step wall's rims): the
+            // cap rims wind opposite the body's crease rings, and the
+            // kernel needs both picks running the same way along the
+            // band. The interior rings sit nearest the part's centre.
+            let mut by_center: Vec<(f64, GeoSel)> = rings
+                .iter()
+                .map(|(_, key, g)| (key[0] * key[0] + key[1] * key[1] + key[2] * key[2], g.clone()))
+                .collect();
+            by_center.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let a = by_center[0].1.clone();
+            let b = by_center[1].1.clone();
+            SrcRef::Selection(vec![a, b])
+        };        let params = OpParams::RotaryFlow {
+            tolerance: 0.05,
+            stepover: Some(2.0),
+            clearance_z: Height::fixed(25.0),
+            retract_z: None,
+            feed: 500.0,
+            plunge_feed: 120.0,
+            climb: true,
+            lead_deg: 0.0,
+            lag_deg: 0.0,
+            max_tilt_deg: 60.0,
+            stated_axis: None,
+        };
+        let generate = |w: &World, h: &mut History, src: SrcRef| -> Toolpath {
+            h.execute(w, ok(CreateOperation::new(w, "OP", BALL, src, params.clone()), "create"));
+            h.execute(w, GenerateOperation::new(w, "OP").expect("generate"));
+            let e = model::find_by_name(w, "OP").expect("op");
+            model::toolpath_of(w, &e).expect("a cached path").path
+        };
+        let (wt, mut ht) = document(raw.clone(), deg, Case::Turned, &stock, false);
+        let p_t = generate(&wt, &mut ht, pick_rings(&wt));
+        let (wb, mut hb) = document(raw.clone(), deg, Case::Baked, &stock, false);
+        let p_b = generate(&wb, &mut hb, pick_rings(&wb));
+        // Same band, same moves, in the two stances.
+        assert_eq!(p_t.moves.len(), p_b.moves.len(), "the turned and baked bands cut the same length");
+        for (i, (a, b)) in p_t.moves.iter().zip(&p_b.moves).enumerate() {
+            let d = (a.to.x - b.to.x).abs().max((a.to.y - b.to.y).abs()).max((a.to.z - b.to.z).abs());
+            assert!(d < 1e-5, "move {i} differs: {:?} vs {:?}", a.to, b.to);
+            assert!((a.axis.unwrap()[0] - b.axis.unwrap()[0]).abs() + (a.axis.unwrap()[1] - b.axis.unwrap()[1]).abs() + (a.axis.unwrap()[2] - b.axis.unwrap()[2]).abs() < 1e-5, "move {i} pose differs: {:?} vs {:?} at {:?} vs {:?}", a.axis, b.axis, a.to, b.to);
+        }
+        // The as-modelled stance cuts the same band: the picks are the
+        // part's own rings, and the kind rides the part's axis - the
+        // invariance under the setup's alignment is the law here.
+    };
+    // The step bar: wall r6, interior step wall r5 - its four planar
+    // rims give two interior crease rings for the band (the caps wind
+    // opposite the body's rings).
+    fn flow_bar_facets() -> Vec<Triangle> {
+        const MERIDIAN: [(f64, f64); 8] = [(0.0, -16.0), (6.0, -16.0), (6.0, -8.0), (5.0, -8.0), (5.0, 8.0), (6.0, 8.0), (6.0, 16.0), (0.0, 16.0)];
+        let pt = |rho: f64, s: f64, j: usize| {
+            let th = std::f64::consts::TAU * j as f64 / 16.0;
+            Point3::new(rho * th.cos(), rho * th.sin(), s)
+        };
+        let mut f = Vec::new();
+        for w in MERIDIAN.windows(2) {
+            for j in 0..16 {
+                let (a1, a2, b1, b2) = (pt(w[0].0, w[0].1, j), pt(w[0].0, w[0].1, (j + 1) % 16), pt(w[1].0, w[1].1, j), pt(w[1].0, w[1].1, (j + 1) % 16));
+                if w[0].0 <= 1e-12 { f.push(Triangle::new(a1, b2, b1)); }
+                else if w[1].0 <= 1e-12 { f.push(Triangle::new(a1, a2, b2)); }
+                else { f.push(Triangle::new(a1, a2, b2)); f.push(Triangle::new(a1, b2, b1)); }
+            }
+        }
+        unturn_xz(f)
+    }
+    run(TURN, flow_bar_facets());
+}
+
+#[test]
 fn all_ten_multiaxis_and_rotary_kinds_stay_refused_on_aligned_mill_turn() {
     let stock = box_stock(30.0, 30.0, 10.0, -5.0);
     let (w, mut h) = document(unturn_xz(cap_facets(true)), TURN, Case::Turned, &stock, false);

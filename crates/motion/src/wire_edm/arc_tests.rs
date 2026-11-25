@@ -206,6 +206,83 @@ fn an_off_lattice_centre_is_snapped_with_its_radius_kept() {
     assert!(!path.notes.iter().any(|n| n.contains("farther")), "under 1 nm needs no margin: {:?}", path.notes);
 }
 
+/// A four-centre oval of tangent arcs (#3959): big arcs of radius 10 about
+/// (0, -+sqrt 3), small arcs about (+-2 sqrt 2, 0). No centre is on the
+/// lattice, so the snapped ends of two neighbour arcs differ. `lift` moves
+/// the top arc up: a joint gap of that much at each of its ends.
+fn oval_lifted(lift: f64) -> ArcChain {
+    let (e, d, big) = (2.0 * 2f64.sqrt(), 3f64.sqrt(), 10.0);
+    let small = big - e.hypot(d);
+    let joint = |c: (f64, f64), to: (f64, f64)| {
+        let (ux, uy) = (to.0 - c.0, to.1 - c.1);
+        let l = ux.hypot(uy);
+        p(c.0 + big * ux / l, c.1 + big * uy / l)
+    };
+    let (rb, rt) = (joint((0.0, d), (e, 0.0)), joint((0.0, -d), (e, 0.0)));
+    let (lt, lb) = (joint((0.0, -d), (-e, 0.0)), joint((0.0, d), (-e, 0.0)));
+    let arc = |c: Point2, r: f64, a: Point2, b: Point2| {
+        let t = (b.y - c.y).atan2(b.x - c.x) - (a.y - c.y).atan2(a.x - c.x);
+        Span::Arc { c, r, a, b, ccw: true, sweep: t.rem_euclid(TAU) }
+    };
+    ArcChain::new(vec![
+        arc(p(e, 0.0), small, rb, rt),
+        arc(p(0.0, lift - d), big, p(rt.x, rt.y + lift), p(lt.x, lt.y + lift)),
+        arc(p(-e, 0.0), small, lt, lb),
+        arc(p(0.0, d), big, lb, rb),
+    ])
+    .unwrap()
+}
+
+fn oval() -> ArcChain {
+    oval_lifted(0.0)
+}
+
+#[test]
+fn tangent_arcs_join_arc_to_arc_with_no_connector_move() {
+    for side in [WireSide::Die, WireSide::Punch] {
+        let hole = if side == WireSide::Die { (0.0, 0.0) } else { (20.0, 0.0) };
+        let path = wire_contour_arcs(&oval(), &params(side, hole)).unwrap();
+        let m = &path.moves;
+        // The lead in, the arcs (the seam's arc in two parts), the lead out.
+        assert!(m[1..m.len() - 1].iter().all(|q| q.arc.is_some()), "{side:?}: a line between two arcs: {m:?}");
+        assert_eq!(path.arc_count(), 5, "{side:?}: {m:?}");
+        for q in m {
+            let len = (q.to.x - q.from.x).hypot(q.to.y - q.from.y);
+            assert!(len > 1e-6, "{side:?}: a move no longer than the lattice: {q:?}");
+        }
+        for w in m.windows(2) {
+            assert_eq!(w[0].to, w[1].from, "{side:?}: the moves chain");
+        }
+        assert!(arc_laws::kerf(&path, &oval(), K, -12.0).is_ok());
+        // The joints gap well under 1 nm: no margin, and no note of one.
+        assert!(!path.notes.iter().any(|n| n.contains("farther")), "{:?}", path.notes);
+        if side == WireSide::Die {
+            // One arc 2 um nearer the product: the kerf law still refuses it.
+            let mut bad = path.clone();
+            let m = &mut bad.moves[2];
+            let c = m.arc.unwrap().center;
+            for q in [&mut m.from, &mut m.to] {
+                let (dx, dy) = (q.x - c.x, q.y - c.y);
+                let f = 1.0 + 0.002 / dx.hypot(dy);
+                (q.x, q.y) = (c.x + dx * f, c.y + dy * f);
+            }
+            let why = arc_laws::kerf(&bad, &oval(), K, -12.0).unwrap_err().to_string();
+            assert!(why.contains("burn into the product"), "{why}");
+        }
+    }
+}
+
+#[test]
+fn tangent_arcs_across_a_joint_gap_meet_at_its_mean_and_the_margin_holds_it() {
+    let path = wire_contour_arcs(&oval_lifted(1e-4), &params(WireSide::Die, (0.0, 0.0))).unwrap();
+    let m = &path.moves;
+    assert!(m[1..m.len() - 1].iter().all(|q| q.arc.is_some()), "a line between two arcs: {m:?}");
+    // 100 nm of drawing gap, 50 nm of joint shift (half the gap) and the
+    // centres' snap (under 1 nm).
+    assert!(path.notes.iter().any(|n| n.contains("150.2 nm farther on the waste side")), "{:?}", path.notes);
+    assert!(path.notes.iter().any(|n| n.contains("meet at the mean of their written ends, up to 50.0 nm")), "{:?}", path.notes);
+}
+
 #[test]
 fn the_laws_catch_a_mutated_arc_path() {
     let chain = circle((0.0, 0.0), 5.0);

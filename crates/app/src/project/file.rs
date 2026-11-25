@@ -187,7 +187,16 @@ use super::*;
 /// off the model - so a v78, v79 and v80 file steps up unchanged. An
 /// old reader must refuse a v81 file rather than drop the statement
 /// and turn the part about an axis the user never named.
-pub const PROJECT_VERSION: u32 = 81;
+/// v82 (#2826): the Rotary Flow operation arrives (`rotary_flow`, the
+/// picked guide chains' kind, its heights read as ball-center radii
+/// about the stated axis). No older file names the arm, so a v81 file
+/// steps up unchanged. This step is a compatibility break: every file
+/// this build writes says v82, and a v81 reader refuses the new files
+/// (see the `BREAKING CHANGE` footer of the commit that stepped the
+/// ladder). An old reader must refuse a v82 file rather than drop the
+/// op it cannot read: the post would re-open a document whose flow
+/// band op vanished without a word.
+pub const PROJECT_VERSION: u32 = 82;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older
@@ -232,7 +241,6 @@ pub fn tip_form_read_version(version: u32) -> u32 {
         version
     }
 }
-
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
     #[error("I/O error: {0}")]

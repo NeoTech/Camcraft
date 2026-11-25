@@ -20,7 +20,7 @@ pub(super) fn tool_ground() -> Color32 {
 }
 /// Past this many facets the view paints every n-th one (picking still
 /// reads them all) - a vendor STEP can carry 10^5+.
-const MAX_PAINTED: usize = 30_000;
+pub(crate) const MAX_PAINTED: usize = 30_000;
 /// The default view: a three-quarter look from +X-Y, above.
 const YAW0: f32 = -0.9;
 const PITCH0: f32 = 0.45;

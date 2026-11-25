@@ -553,9 +553,8 @@ impl core::fmt::Display for Warning {
             // The raise is the same in each frame.
             Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, tilted: true } => write!(
                 f,
-                "the first rapid (move {at}) comes from an unknown position at the clearance height {height_mm:.3} mm, \
-                 under the {} top at {top_mm:.3} mm (both measured along the tilted tool axis) - raise the clearance \
-                 height by at least {:.3} mm",
+                "the first rapid (move {at}) comes from an unknown position at the clearance height {height_mm:.3} \
+                 mm, under the {} top at {top_mm:.3} mm (both measured along the tilted tool axis) - raise the clearance height by at least {:.3} mm",
                 if *fixture { "fixture" } else { "stock" },
                 top_mm - height_mm
             ),

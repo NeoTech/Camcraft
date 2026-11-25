@@ -125,6 +125,10 @@ icon_table! {
     RotaryContour => "op-rotary-contour", "icon-rotary-contour";
     RotaryParallel => "op-rotary-parallel", "icon-rotary-parallel";
     RotaryOffset => "op-rotary-offset", "icon-rotary-offset";
+    /// The Rotary Flow band (#2826): the bar with its two diagonal
+    /// flow lines crossing it - the helical band the picked chains
+    /// span.
+    RotaryFlow => "op-rotary-flow", "icon-rotary-flow";
     MultiAxisRough => "op-multiaxis-rough", "icon-multiaxis-rough";
     Flow5D => "op-flow5d", "icon-flow5d";
     MultiAxisContour => "op-multiaxis-contour", "icon-multiaxis-contour";

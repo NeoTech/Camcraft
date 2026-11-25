@@ -7521,6 +7521,72 @@ fn multiaxis_contour_refuses_a_flat_tool_and_nonsense_pose_by_name() {
     );
 }
 
+fn rotary_flow_params(clearance: f64) -> OpParams {
+    OpParams::RotaryFlow {
+        tolerance: 0.05,
+        stepover: None,
+        clearance_z: Height::fixed(clearance),
+        retract_z: None,
+        feed: 500.0,
+        plunge_feed: 100.0,
+        climb: true,
+        lead_deg: 0.0,
+        lag_deg: 0.0,
+        max_tilt_deg: 60.0,
+        stated_axis: None,
+    }
+}
+
+#[test]
+fn rotary_flow_refuses_a_flat_tool_and_nonsense_numbers_by_name() {
+    // The flow band's doors (#2826): a flat tool has no ball to ride
+    // the band's radial poses (generation), a zero tolerance is no
+    // verify budget, a lead past 90 degrees is no lean the pose law
+    // admits, and a zero cone allows no tilt at all (creation - the
+    // sane door, the twins' law minus the station window).
+    let (world, mut history) = box_part_world();
+    add_tool(&world, &mut history, "BN-0600");
+    let src = mac_top_edges(&world);
+    common::create_past_the_tool_law(
+        &world,
+        &mut history,
+        "RF1",
+        "EM-0600-4FL",
+        src.clone(),
+        rotary_flow_params(25.0),
+    );
+    let CommandError::Machining(msg) = common::generate_past_the_tool_law(&world, "RF1")
+        .expect_err("a flat tool cannot ride the band")
+    else {
+        panic!("expected a machining refusal");
+    };
+    assert!(msg.contains("ball-nose"), "{msg}");
+    assert_eq!(status(&world, "RF1"), OpStatus::Never);
+
+    let mk = |p: OpParams| CreateOperation::new(&world, "RF2", "BN-0600", src.clone(), p);
+    let mut zero_tol = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { tolerance, .. } = &mut zero_tol {
+        *tolerance = 0.0;
+    }
+    assert!(
+        matches!(mk(zero_tol), Err(CommandError::Invalid(_))),
+        "tol 0 is no budget"
+    );
+    let mut flat_lean = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { lead_deg, .. } = &mut flat_lean {
+        *lead_deg = 91.0;
+    }
+    assert!(matches!(mk(flat_lean), Err(CommandError::Invalid(_))));
+    let mut no_cone = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { max_tilt_deg, .. } = &mut no_cone {
+        *max_tilt_deg = 0.0;
+    }
+    assert!(
+        matches!(mk(no_cone), Err(CommandError::Invalid(_))),
+        "a 0 cone allows no lean at all"
+    );
+}
+
 #[test]
 fn multiaxis_contour_quiet_shank_moves_nothing() {
     // Opt-in means EXACTLY opt-in at the chain's seam too: the catalog

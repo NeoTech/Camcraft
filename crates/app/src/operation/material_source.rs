@@ -172,6 +172,9 @@ fn source_region(
         // solid; the chains it rides are resolved separately, in 3D,
         // at generation (M5.1 J).
         | OpParams::MultiAxisContour { .. }
+        // The flow band's guide chains ride the same way (#2826):
+        // the model's own skin between them is the ground.
+        | OpParams::RotaryFlow { .. }
         // Facing rides the same shadow for the panels: the station
         // limits are the meridian profile's own, computed in the
         // axis frame by the kernel (M5.2 A) - and so are the

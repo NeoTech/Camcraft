@@ -324,8 +324,9 @@ fn the_probe_appends_its_id_and_lists_in_drilling() {
     assert_eq!(KindInfo::ALL[45].ty, operation::OpType::VCarve);
     // #1883 appended the waterjet profile behind it (46).
     assert_eq!(KindInfo::ALL[46].ty, operation::OpType::WaterjetProfile);
-    // #1894 appended the multi-axis deburr behind it (47).
-    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::MultiAxisDeburr);
+    // #1894 appended the multi-axis deburr behind it (47); #2826 the
+    // Rotary Flow band behind that (48).
+    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::RotaryFlow);
     assert_eq!(KindInfo::ALL[13].ty, operation::OpType::Pocket3D, "Pocket3D keeps id 13");
     assert_eq!(KindInfo::ALL[37].ty, operation::OpType::BoringTurning, "the turning tail keeps 37");
     let drilling: Vec<operation::OpType> = Section::Drilling.kinds().into_iter().map(|i| KindInfo::ALL[i].ty).collect();
@@ -382,6 +383,8 @@ fn the_multiaxis_deburr_appends_its_id_and_lists_in_multiaxis() {
     assert_eq!(KindInfo::ALL[47].section, Section::MultiAxis);
     assert_eq!(KindInfo::ALL[15].ty, operation::OpType::Deburr, "the 3D Deburr keeps id 15");
     let multi: Vec<operation::OpType> = Section::MultiAxis.kinds().into_iter().map(|i| KindInfo::ALL[i].ty).collect();
-    assert_eq!(multi.last(), Some(&operation::OpType::MultiAxisDeburr), "{multi:?}");
+    // #2826: the Rotary Flow band appends behind the deburr.
+    assert_eq!(multi.last(), Some(&operation::OpType::RotaryFlow), "{multi:?}");
+    assert!(multi.contains(&operation::OpType::MultiAxisDeburr));
     assert!(multi.contains(&operation::OpType::MultiAxisContour));
 }

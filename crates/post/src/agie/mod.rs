@@ -1,4 +1,4 @@
-//! Native Classic Cut 2S job export, from the operator's Agie Processor native-import specification.
+//! Native Classic Cut 2S job export, from our own implementation of the native-import format.
 
 use std::path::{Path, PathBuf};
 

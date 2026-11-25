@@ -14,6 +14,9 @@
 //! its own draft too ([`ToolEditorView::holder`]), and a change of the
 //! stored tool's length re-seeds only that draft's projection (#808
 //! item 2). The stored `HolderRef` changes only through Apply holder.
+//! #3930 (U4b): the window's body import, placement and pieces are its
+//! own draft too ([`ToolEditorView::body`]), so the Body section of the
+//! window and the tool shape window never write into each other's draft.
 //! #3896 (U5): the editor's Recipes tab ([`ToolEditorTab::Recipes`]).
 //! #3897 (U6): the window's page ([`LibraryPage`]: the tool list or the
 //! holder list), the tool category of the list ([`ToolCategory`]), the
@@ -23,7 +26,7 @@
 //! Provenance: our own view state, after the tool shape window's
 //! `Option` pattern; no HSMWorks material involved.
 
-use super::{Orbit, State, ToolProfileUi, ToolUi, UiTarget};
+use super::{Orbit, State, ToolBodyUi, ToolProfileUi, ToolUi, UiTarget};
 use camcraft_app::model;
 
 /// Which tools the list shows.
@@ -61,7 +64,7 @@ pub enum PreviewMode {
 
 /// The editor's view state that stays when another tool opens: the tab,
 /// the preview view, the 3D view's orbit and (#3897) the preview's
-/// toggles. Both toggles start on.
+/// toggles. The toggles start on.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EditorFace {
     pub tab: ToolEditorTab,
@@ -71,6 +74,8 @@ pub struct EditorFace {
     pub dims: bool,
     /// #3897: the preview draws the holder (the 3D model and the side view).
     pub holder: bool,
+    /// #3908: the 3D model draws the helical flutes (display only).
+    pub flutes: bool,
 }
 
 impl Default for EditorFace {
@@ -81,6 +86,7 @@ impl Default for EditorFace {
             orbit: Orbit::default(),
             dims: true,
             holder: true,
+            flutes: true,
         }
     }
 }
@@ -134,6 +140,20 @@ pub struct ToolEditorView {
     pub face: EditorFace,
     /// #3895: the window's holder draft (pick, gauge length, projection).
     pub holder: ToolProfileUi,
+    /// #3930: the window's body draft (import, placement, pieces).
+    pub body: ToolBodyUi,
+}
+
+impl std::fmt::Debug for ToolBodyUi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolBodyUi")
+            .field("tool", &self.tool)
+            .field("source", &self.source)
+            .field("facets", &self.facets.len())
+            .field("axis", &self.axis)
+            .field("offset", &self.offset)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The open tool library window.
@@ -204,6 +224,7 @@ impl State {
             synced: (String::new(), self.doc_version),
             face,
             holder: ToolProfileUi::default(),
+            body: ToolBodyUi::default(),
         });
     }
 
@@ -233,7 +254,8 @@ impl State {
     }
 
     /// #3893: run `f` with the window's draft in `tool_ui` (and its sync
-    /// key in `tool_synced`; #3895: its holder draft in `tool_profile_ui`),
+    /// key in `tool_synced`; #3895: its holder draft in `tool_profile_ui`;
+    /// #3930: its body draft in `tool_body_ui`),
     /// then put Properties' drafts back. The shared
     /// row and Apply helpers read `tool_ui`; this lets them serve the
     /// window without a copy, while the two drafts stay apart. `f` also
@@ -247,11 +269,13 @@ impl State {
         std::mem::swap(&mut self.tool_ui, &mut editor.draft);
         std::mem::swap(&mut self.tool_synced, &mut editor.synced);
         std::mem::swap(&mut self.tool_profile_ui, &mut editor.holder);
+        std::mem::swap(&mut self.tool_body_ui, &mut editor.body);
         self.sync_tool_ui();
         let out = f(self, &mut editor.face);
         std::mem::swap(&mut self.tool_ui, &mut editor.draft);
         std::mem::swap(&mut self.tool_synced, &mut editor.synced);
         std::mem::swap(&mut self.tool_profile_ui, &mut editor.holder);
+        std::mem::swap(&mut self.tool_body_ui, &mut editor.body);
         if let Some(view) = self.tool_library.as_mut()
             && view.editor.is_none()
         {

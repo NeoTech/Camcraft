@@ -87,3 +87,52 @@ fn an_arc_on_a_leaning_wire_is_unreadable() {
     let v = run(&circle_path(R - K, Point2::new(0.0, 0.0), true), true);
     assert!(v.findings.iter().any(|f| matches!(f, WireFinding::Unreadable(w) if w.contains("an arc on a leaning wire"))), "{:?}", v.findings);
 }
+
+/// #3215: a die circle read back from a meshed hole (63 facet chords, a
+/// 5 um sagitta) passes between the chords and the true circle. With
+/// the model's chord stated it passes and says so; with no tolerance it
+/// is a gouge; no undercut law runs on the vertical cut.
+#[test]
+fn arcs_read_from_facets_pass_under_the_model_chord_on_a_vertical_cut() {
+    let r = 4.0;
+    let pts = (0..63)
+        .map(|j| {
+            let t = std::f64::consts::TAU * f64::from(j) / 63.0;
+            Point2::new(r * t.cos(), r * t.sin())
+        })
+        .collect();
+    let part = Region::new(vec![Loop::new(pts).expect("loop")]).expect("region");
+    let stock = Region::new(vec![Loop::new(vec![
+        Point2::new(-15.0, -15.0),
+        Point2::new(15.0, -15.0),
+        Point2::new(15.0, 15.0),
+        Point2::new(-15.0, 15.0),
+    ])
+    .expect("loop")])
+    .expect("stock");
+    let tp = circle_path(r - K, Point2::new(0.0, 0.0), false);
+    let judged = |tol: f64, chord: bool| {
+        let sections = [0.0, 12.0].iter().map(|&z| WireSection { z, part: part.clone(), stock: Some(stock.clone()) }).collect();
+        judge(&WireJob {
+            path: &tp,
+            kerf_offset: K,
+            skim_offsets: Vec::new(),
+            side: CutSide::Die,
+            start: Some(Point2::new(0.0, 0.0)),
+            sections,
+            burnout: false,
+            cutoff_from: None,
+            capture: true,
+            taper: false,
+            verify_tol: tol,
+            taper_chord: chord,
+        })
+    };
+    let bare = judged(0.0, false);
+    assert!(bare.findings.iter().any(|f| matches!(f, WireFinding::Gouge { .. })), "{:?}", bare.findings);
+    let v = judged(0.005, true);
+    assert!(v.findings.is_empty(), "{:?}", v.findings);
+    assert!(v.chord);
+    let said = v.tolerance_said().expect("the tolerance is said");
+    assert!(said.contains("the model's chord tolerance 0.0050"), "{said}");
+}

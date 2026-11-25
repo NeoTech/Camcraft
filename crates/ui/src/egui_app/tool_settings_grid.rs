@@ -2,7 +2,9 @@
 //! tool as a label-left row of `layout::form`, in four collapsible
 //! groups - Geometry, Holder, Cutting data and Catalog. Draft fields
 //! only: Apply / Add carry them through `ChangeTool` / `AddTool`, as
-//! before.
+//! before. #3930: Properties draws the grid for a new tool only; a saved
+//! tool's groups are drawn by the tool library window (the Tool tab, its
+//! Body section, the Recipes tab and the Details tab).
 //!
 //! Provenance: our own layout over the tool draft, on the form law in
 //! `layout/form.rs` (the generic pattern of desktop property inspectors).
@@ -60,6 +62,12 @@ pub(super) fn grid(ui: &mut Ui, state: &mut State) {
     group_open(ui, "Holder", None, true, |ui| holder(ui, state));
     group_open(ui, "Cutting data", None, true, |ui| cutting(ui, state));
     group_open(ui, "Catalog", None, true, |ui| catalog(ui, state));
+}
+
+/// #3930: the name of the tool kind at `index` (the draft's `kind`), for
+/// the Properties summary.
+pub(super) fn kind_name(index: usize) -> &'static str {
+    TOOL_KINDS.get(index).map_or("Tool", |k| k.1)
 }
 
 /// Type, the cutting shape and the tool body's lengths. #3893: the tool
@@ -229,11 +237,12 @@ fn form_length_row(ui: &mut Ui, state: &State, label: &str, v: f64) {
 }
 
 /// The holder's two cylinders. #2016: when the editor's holder is a
-/// library entry, the entry sizes itself - shown, never typed.
-fn holder(ui: &mut Ui, state: &mut State) {
+/// library entry, the entry sizes itself - shown, never typed. #3930: the
+/// tool library window's Body section draws these same rows.
+pub(super) fn holder(ui: &mut Ui, state: &mut State) {
     let u = state.units();
     if let Some((entry, d, len)) = state.editor_library_holder() {
-        let from = format!("from the library holder {entry} (tool shape editor)");
+        let from = format!("from the library holder {entry} (Holder and stick-out)");
         prop_row(ui, "Holder diameter", |ui| {
             ui.label(format!("{} {}", camcraft_app::units::len(d, u, 3), u.suffix()));
             ui.label(&from);
@@ -264,13 +273,36 @@ fn cutting(ui: &mut Ui, state: &mut State) {
     let kind = state.tool_ui.tool_kind();
     let torch = matches!(kind, tools::ToolKind::Torch | tools::ToolKind::Waterjet);
     let wire = kind == tools::ToolKind::Wire;
-    if !torch && kind != tools::ToolKind::Electrode && !wire {
-        prop_row(ui, "Spindle rpm", |ui| num_plain_row(ui, &mut state.tool_ui.rpm));
-    }
-    prop_row(ui, &format!("Feed ({})", u.feed_suffix()), |ui| num_feed(ui, u, &mut state.tool_ui.feed));
+    speeds(ui, state);
     if !wire {
         super::tool_cutting_rows::cutting_rows(ui, &mut state.tool_ui, u, torch);
     }
+    lathe_and_entry(ui, state);
+}
+
+/// The tool's own spindle rpm and feed (the rows' fallback).
+fn speeds(ui: &mut Ui, state: &mut State) {
+    let u = state.units();
+    let kind = state.tool_ui.tool_kind();
+    if !matches!(
+        kind,
+        tools::ToolKind::Torch | tools::ToolKind::Waterjet | tools::ToolKind::Electrode | tools::ToolKind::Wire
+    ) {
+        prop_row(ui, "Spindle rpm", |ui| num_plain_row(ui, &mut state.tool_ui.rpm));
+    }
+    prop_row(ui, &format!("Feed ({})", u.feed_suffix()), |ui| num_feed(ui, u, &mut state.tool_ui.feed));
+}
+
+/// #3930: the Cutting data rows that are not the per-material table - the
+/// tool's own rpm and feed, the lathe rows and centre cutting. The tool
+/// library window's Recipes tab draws them under its table.
+pub(super) fn cutting_base(ui: &mut Ui, state: &mut State) {
+    speeds(ui, state);
+    lathe_and_entry(ui, state);
+}
+
+/// The lathe steel's rows and the centre-cutting flag.
+fn lathe_and_entry(ui: &mut Ui, state: &mut State) {
     // #891: a lathe steel's surface speed, feed per rev, clamp.
     super::tool_turning_row::turning_rows(ui, state);
     // M11.3: an entry may plunge into solid only with a centre-cutting

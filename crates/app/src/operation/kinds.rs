@@ -138,7 +138,10 @@ fn feed_of(p: &OpParams) -> f64 {
         // every 2D ride (M2.4 C).
         | OpParams::Bore { feed, .. }
         | OpParams::Thread { feed, .. }
-        | OpParams::FormTurning { feed, .. } => *feed,
+        | OpParams::FormTurning { feed, .. }
+        // The flow passes feed along their lines like every ride
+        // (#2826).
+        | OpParams::RotaryFlow { feed, .. } => *feed,
         // The seek feed is the probe's travel pace (#108).
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
@@ -216,7 +219,9 @@ fn plunge_of(p: &OpParams) -> f64 {
         // stand on this number (M2.4 C).
         | OpParams::Bore { plunge_feed, .. }
         | OpParams::Thread { plunge_feed, .. }
-        | OpParams::FormTurning { plunge_feed, .. } => *plunge_feed,
+        | OpParams::FormTurning { plunge_feed, .. }
+        // The flow line's entry off the clearance cylinder (#2826).
+        | OpParams::RotaryFlow { plunge_feed, .. } => *plunge_feed,
         // The measuring re-probe is the slow number (#108).
         OpParams::Probe { slow_feed, .. } => *slow_feed,
         // The torch never plunges into solid: it pierces at the
@@ -305,6 +310,9 @@ fn climb_of(p: &OpParams) -> bool {
         OpParams::SlotUndercut(p) => p.climb,
         // #1443: the cone cuts the two walls at once; no side leads.
         OpParams::VCarve { .. } => true,
+        // The flow band walks as picked or reversed (#2826) - the
+        // drive-curve walk's own climb law.
+        OpParams::RotaryFlow { climb, .. } => *climb,
     }
 }
 
@@ -352,6 +360,9 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // has NO spacing at all - the picked chain is the path, one
         // pass over it (M5.1 J).
         | OpParams::Flow5D { .. }
+        // The flow band's spacing is derived the same way (#2826):
+        // the scallop law authors it until a number is typed.
+        | OpParams::RotaryFlow { .. }
         // The drive-curve contour has NO spacing at all, and facing
         // none either: one radial pass per station runs the profile's
         // whole width - the stepdown IS the spacing (M5.2 A). The
@@ -456,6 +467,9 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         | OpParams::FormTurning { .. }
         | OpParams::BoringTurning { .. }
         | OpParams::MultiAxisContour { .. }
+        // One ride per flow line is the whole band (#2826): the
+        // picks author the depth's extent, no infeed ladder exists.
+        | OpParams::RotaryFlow { .. }
         // The 2-D chamfer is one ride: between the shoulder and the
         // derived depth there is no infeed to step (M2.4 B). The
         // thread's descent is its PITCH - infeed is its own field,
@@ -536,6 +550,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Deburr { top_z, .. } | OpParams::MultiAxisDeburr { top_z, .. } => Some(*top_z),
         OpParams::Face { .. } => None,
         OpParams::Probe { .. } => None,
+        // The picks bound the flow band (#2826): no top plane exists.
+        OpParams::RotaryFlow { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
         OpParams::WaterjetProfile(p) => Some(p.top_z),
@@ -619,6 +635,9 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Chamfer2D { .. } => None,
         OpParams::Face { .. } => None,
         OpParams::Probe { .. } => None,
+        // The picks bound the flow band (#2826): no bottom plane
+        // exists either.
+        OpParams::RotaryFlow { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
         OpParams::WaterjetProfile(p) => Some(p.bottom_z),
@@ -665,7 +684,10 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         | OpParams::Flow5D { retract_z, .. }
         // The drive-curve contour hops between chains like the
         // raster hops between lines (M5.1 J).
-        | OpParams::MultiAxisContour { retract_z, .. } => *retract_z,
+        | OpParams::MultiAxisContour { retract_z, .. }
+        // The flow lines hop between passes on the retract cylinder,
+        // the radial reading's own hop (#2826).
+        | OpParams::RotaryFlow { retract_z, .. } => *retract_z,
         // No hop plane to carry: the kernel names its own rapids
         // plane (one infeed and a tool radius off the skin - the
         // facing ladder states it one infeed clear of the profile,
@@ -1642,6 +1664,29 @@ fn seed_rotary_parallel(c: &Carried) -> OpParams {
     }
 }
 
+/// The flow seed (#2826): the parallel's pose at rest and the twins'
+/// carried pace, with NO station window to carry - the picked guide
+/// chains bound the band, so the top/bottom folds stay home. The
+/// heights seed as the lying bar's own radial reading: the stock top
+/// plus the fold's hop, a radius above the stock's max radius on a
+/// centreline-anchored offset (#2774), and the kernel's own guard
+/// refuses the number that does not clear the work.
+fn seed_rotary_flow(c: &Carried) -> OpParams {
+    OpParams::RotaryFlow {
+        tolerance: 0.05,
+        stepover: None,
+        clearance_z: c.clearance,
+        retract_z: None,
+        feed: c.feed,
+        plunge_feed: c.plunge,
+        climb: c.climb,
+        lead_deg: 0.0,
+        lag_deg: 0.0,
+        max_tilt_deg: 90.0,
+        stated_axis: None,
+    }
+}
+
 /// The stage E3 seed: the pocket ladder's numbers verbatim - the
 /// stamp moves no position, so the draft rule reads the SAME carried
 /// stepover/stepdown/strategy the plain pocket does - crossed with
@@ -2595,6 +2640,22 @@ impl KindInfo {
             seed: super::multiaxis_deburr_op::seed_multiaxis_deburr,
             tool_kinds: tk::CONE,
         },
+        KindInfo {
+            ty: OpType::RotaryFlow,
+            label: "Rotary Flow",
+            caption: "Rotary Flow",
+            tag: 48,
+            // #2826: the picked chains ARE the pattern and the axis
+            // is a statement, so the sphere-envelope scan judges the
+            // ball's path wherever the band winds. Rotary (M13): the
+            // passes ride the retract cylinders about the stated axis -
+            // the radial field judges them, the vertical column never
+            // could.
+            mode: Mode::Rotary,
+            section: Section::MultiAxis,
+            seed: seed_rotary_flow,
+            tool_kinds: tk::BALL,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2676,6 +2737,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[45].label,
     KindInfo::ALL[46].label,
     KindInfo::ALL[47].label,
+    KindInfo::ALL[48].label,
 ];
 
 impl OpType {
@@ -2756,6 +2818,9 @@ impl OpType {
             // move); the menu lists it in the multi-axis section by
             // its row.
             OpType::MultiAxisDeburr => 47,
+            // #2826: the Rotary Flow appends (stored ids never move);
+            // the menu lists it in the Multi-axis section by its row.
+            OpType::RotaryFlow => 48,
         }
     }
 

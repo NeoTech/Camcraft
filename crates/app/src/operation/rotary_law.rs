@@ -27,7 +27,10 @@ pub(super) fn rotary_tolerance(params: &OpParams) -> Option<f64> {
     match params {
         OpParams::RotaryContour { tolerance, .. }
         | OpParams::RotaryParallel { tolerance, .. }
-        | OpParams::RotaryOffset { tolerance, .. } => Some(*tolerance),
+        | OpParams::RotaryOffset { tolerance, .. }
+        // The flow band's scallop budget (#2826): the same radial
+        // field judges its passes and cylinders.
+        | OpParams::RotaryFlow { tolerance, .. } => Some(*tolerance),
         _ => None,
     }
 }

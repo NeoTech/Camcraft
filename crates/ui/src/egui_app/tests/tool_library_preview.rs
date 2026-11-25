@@ -255,3 +255,85 @@ fn edit_tool_shape_in_the_window_opens_its_tool_while_properties_shows_another()
     assert_eq!(h.state().state.tool_shape_editor.as_deref(), Some(b.as_str()), "and stays there");
     assert_eq!(draft(&mut h).name, b, "the window keeps its tool");
 }
+
+/// #3908: open `TOOL` with `n` flutes and the helix `helix` in the
+/// window's draft; gives the model built from it.
+fn fluted_draft(h: &mut H, n: Option<u32>, helix: &str) -> std::rc::Rc<preview_model::ToolModel> {
+    let d = draft(h);
+    d.flutes = n;
+    d.helix_deg = helix.to_owned();
+    h.run_steps(2);
+    last()
+}
+
+/// #3908: the 3D view shows the helical flutes by default; the Flutes
+/// toggle (view state, no command) gives the plain revolved model back.
+#[test]
+fn the_flutes_toggle_shows_and_hides_the_helical_flutes() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    open(&mut h, TOOL);
+    let m = fluted_draft(&mut h, Some(4), "30");
+    assert!(face(&h).flutes, "the Flutes toggle starts on");
+    let (Some(all), Some(bare)) = (m.fluted.clone(), m.fluted_bare.clone()) else {
+        panic!("a 4-flute end mill has a fluted model");
+    };
+    assert!(std::sync::Arc::ptr_eq(m.shown(true, true).0, &all), "the 3D view paints the fluted model");
+    assert!(std::sync::Arc::ptr_eq(m.shown(false, true).0, &bare), "also without the holder");
+    assert_eq!(&all[all.len() - (m.mesh.len() - m.bare.len())..], &m.mesh[m.bare.len()..], "the holder is the same");
+    let r = |p: &camcraft_app::geometry::Point3| p.x.hypot(p.y);
+    let z = m.tool.flute_len * 0.5;
+    let deep = bare.iter().flat_map(|t| [t.a, t.b, t.c]).filter(|p| (p.z - z).abs() < m.tool.flute_len * 0.05).map(|p| r(&p));
+    assert!(deep.fold(f64::INFINITY, f64::min) < m.tool.diameter * 0.5 * 0.7, "grooves cut into the fluted length");
+    let (done, p) = (h.state().state.history.done_len(), preview::projects());
+    library_window(&h).get_by_label(preview::FLUTES).click();
+    h.run_steps(2);
+    assert!(!face(&h).flutes, "the Flutes toggle is off");
+    assert!(preview::projects() > p, "the toggle projects the plain model");
+    let p1 = preview::projects();
+    h.run_steps(3);
+    assert_eq!(preview::projects(), p1, "and then projects nothing");
+    assert!(std::sync::Arc::ptr_eq(m.shown(true, false).0, &m.mesh), "the plain revolved model");
+    let st = &h.state().state;
+    assert_eq!(st.history.done_len(), done, "a toggle lands no command");
+    assert!(st.pending.is_empty(), "and queues none");
+}
+
+/// #3908 safety rule: the flutes are display only. The steel outline,
+/// the holder bands the collision check sweeps, the plain mesh and the
+/// tool's envelope (`Tool::geom`, `Tool::profile`) are the same with
+/// and without flutes, whatever the count and the helix.
+#[test]
+fn the_flutes_do_not_change_what_the_checks_read() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    open(&mut h, TOOL);
+    let plain = fluted_draft(&mut h, None, "");
+    let fluted = fluted_draft(&mut h, Some(3), "45");
+    assert!(plain.fluted.is_none() && fluted.fluted.is_some(), "only the stated count draws flutes");
+    assert_eq!(fluted.steel, plain.steel, "the steel outline");
+    assert_eq!(fluted.bands, plain.bands, "the holder bands of the collision check");
+    assert_eq!(&fluted.mesh[..], &plain.mesh[..], "the plain mesh");
+    assert_eq!((fluted.bounds, fluted.dims), (plain.bounds, plain.dims), "the box and the dimensions");
+    assert_eq!(fluted.tool.geom(), plain.tool.geom(), "the envelope the laws read");
+    assert_eq!(fluted.tool.profile(), plain.tool.profile(), "the profile the laws read");
+}
+
+/// #3908 (Frame cost): a still frame with the flutes on builds and
+/// projects nothing; a changed helix builds the model once.
+#[test]
+fn a_changed_helix_rebuilds_the_fluted_model_once() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    open(&mut h, TOOL);
+    let m0 = fluted_draft(&mut h, Some(4), "30");
+    let (b, p) = (preview_model::builds(), preview::projects());
+    h.run_steps(3);
+    assert_eq!((preview_model::builds() - b, preview::projects() - p), (0, 0), "a still frame computes no mesh");
+    let m1 = fluted_draft(&mut h, Some(4), "0");
+    assert_eq!(preview_model::builds() - b, 1, "a changed helix builds the model once");
+    assert_ne!(m1.fluted, m0.fluted, "the grooves follow the helix");
+    let b1 = preview_model::builds();
+    h.run_steps(3);
+    assert_eq!(preview_model::builds(), b1, "and then holds");
+}

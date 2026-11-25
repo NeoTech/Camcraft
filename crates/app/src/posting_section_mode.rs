@@ -38,7 +38,10 @@ pub fn classify(params: &OpParams, path: &Toolpath) -> Option<SectionMode> {
         | OpParams::MultiAxisRough { .. }
         | OpParams::RotaryContour { .. }
         | OpParams::RotaryParallel { .. }
-        | OpParams::RotaryOffset { .. } => {
+        | OpParams::RotaryOffset { .. }
+        // The flow band turns the work about the stated axis on
+        // every pass (#2826): simultaneous, the twins' answer.
+        | OpParams::RotaryFlow { .. } => {
             if post::dialect::states_live_tool(path) {
                 None
             } else {

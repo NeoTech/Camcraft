@@ -6,6 +6,7 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+pub mod cli_skill;
 pub mod cli_ui;
 pub mod clock;
 pub mod commands;
@@ -92,6 +93,8 @@ pub use camcraft_motion::sinker_wear;
 pub use camcraft_motion::sinker_orbit;
 // #545: sinker EDM side burning.
 pub use camcraft_motion::sinker_side;
+// #3333: the start and exit picks of the sinker kinds.
+pub use camcraft_motion::sinker_picks;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;

@@ -1,7 +1,7 @@
 //! Rotary field parity on the app's own fixtures (M13.1, the rotary
 //! lift): each rotary kind's cached program - Contour and Offset on
-//! the standing d12.4 bar, Parallel on the laid one, the ball a
-//! BN-0600 (`common::rotary_bar`) - chorded through
+//! the standing d12.4 bar, Parallel and Flow on the laid one, the
+//! ball a BN-0600 (`common::rotary_bar`) - chorded through
 //! `Stock::simulate_rotary` about the axis `fixture::rotary_axis_of`
 //! fits, against the radial law written independently here: the
 //! union of the balls and flutes the controller's lerp places (tip on
@@ -22,7 +22,8 @@
 //! fixtures and engines; nothing from vendor binaries.
 //!
 //! Gate map (M4.4): covers app::stock_sim, sim::stock_sim (plan_program's rotary
-//! clause, stock_sim::rotary), app::stock_view, app::fixture, sim::fixture.
+//! clause, stock_sim::rotary), app::stock_view, app::fixture, sim::fixture, and
+//! app::operation's RotaryFlow arm (the Flow fixture's generate).
 
 mod common;
 
@@ -321,6 +322,16 @@ fn the_offset_kind_reads_the_radial_law() {
     parity(Kind::Offset);
 }
 
+/// #2828: the flow band's parity - the laid bar's shoulder band, its
+/// passes picked between the two edge rings, machined by the flow
+/// kernel and chorded through the same pre-pass the laid Parallel
+/// proved.
+#[test]
+#[ignore = "heavy lane (M13.1 rotary parity, #2828): Flow's band at the verdict class, the law marched per column - run at milestone close with --release -- --ignored"]
+fn the_flow_kind_reads_the_radial_law() {
+    parity(Kind::Flow);
+}
+
 /// #2772 parts 1-2: the same Parallel parity about the microARC 4's
 /// STATED A line ([1, 0, 0] through the work offset origin), judged
 /// against the same facets and chorded by the same consumers
@@ -353,6 +364,12 @@ fn the_offset_kinds_eye_cost_is_measured() {
     eye_cost(Kind::Offset);
 }
 
+#[test]
+#[ignore = "heavy lane (M13.1 rotary parity, #2828): Flow's eye chord-class cost, measured - run at milestone close with --release -- --ignored"]
+fn the_flow_kinds_eye_cost_is_measured() {
+    eye_cost(Kind::Flow);
+}
+
 /// The column verdict never judges a rotary program (M13.1): a lifted
 /// kind refuses with the verdict's own words, an unmeasured kind with
 /// the plan's - by name either way, never an un-chorded posed cut. The
@@ -360,7 +377,7 @@ fn the_offset_kinds_eye_cost_is_measured() {
 /// refuses the picture with the same words, never a silent chord.
 #[test]
 fn the_column_verdict_refuses_every_rotary_kind_by_name() {
-    for kind in [Kind::Parallel, Kind::Contour, Kind::Offset] {
+    for kind in [Kind::Parallel, Kind::Contour, Kind::Offset, Kind::Flow] {
         let world = world_for(kind);
         let err = simulate_document(&world).expect_err("the column verdict does not judge a rotary program");
         let lift = rotary_kind_lift(&params(kind)).unwrap_or_else(|| panic!("{kind:?} is rotary"));
@@ -374,6 +391,15 @@ fn the_column_verdict_refuses_every_rotary_kind_by_name() {
             assert!(eye.contains(why), "{kind:?}: {eye}");
         }
     }
+}
+
+/// #2828: the eye draws the lifted Flow kind - the chorded field cuts
+/// its band on the laid bar, the refusal the unmeasured lift answered
+/// before is gone, and the column verdict still refuses it by name.
+#[test]
+fn the_eye_draws_the_flow_kinds_band() {
+    let world = world_for(Kind::Flow);
+    field_view(&world).expect("the eye cuts the flow band");
 }
 
 /// The eye draws the laid bar from its placed stock mesh (#2758).

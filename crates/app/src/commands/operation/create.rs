@@ -120,6 +120,7 @@ impl CreateOperation {
             skims: Vec::new(),
             four_axis: None,
             sharp_corners: false,
+            lead_arc_radius: None,
         });
         Self::build(world, name, tool, src, params, true, false)
     }

@@ -196,6 +196,7 @@ pub fn current_stamp(
     if matches!(
         params,
         OpParams::RotaryContour { .. } | OpParams::RotaryParallel { .. } | OpParams::RotaryOffset { .. }
+            | OpParams::RotaryFlow { .. }
     ) {
         match crate::rotary_stated::axis_lines(world, setup, params) {
             Some(Ok(lines)) => {

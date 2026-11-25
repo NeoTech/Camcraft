@@ -1,5 +1,5 @@
-//! The zero-step SBL piece script for one group of native works, from Quintin Smits's MIT Agie
-//! Processor and our offline control checks (#2984 closed cycles, #2962 open cuts, #2961 groups).
+//! The zero-step SBL piece script for one group of native works, from our own implementation of the
+//! piece format and our offline control checks (#2984 closed cycles, #2962 open cuts, #2961 groups).
 
 /// The piece: its group name and the stock that all of its works share.
 pub(super) struct Piece<'a> {

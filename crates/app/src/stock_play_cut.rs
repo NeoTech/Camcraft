@@ -69,6 +69,11 @@ impl FieldPlay {
                 }
             }
         }
+        // #3336: with no op for the layer, the mode stays off. A layer frame
+        // is always a whole layer; the field's patch frames are far smaller.
+        if tools.iter().all(Option::is_none) {
+            return Ok(kept);
+        }
         let play = LayerPlay::new(meta, cutter, self.keys.stride()).map_err(|e| e.to_string())?;
         self.layer = Some(LayerMode { play, tools });
         Ok(kept)

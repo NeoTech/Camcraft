@@ -1,8 +1,10 @@
 //! A selected tool's Properties (#2002) and the blank new-tool form
-//! (#2397). The settings are a label-left property grid in collapsible
-//! groups (#2014, `tool_settings_grid`); these commands stay the one way
-//! an edit lands. The body, the profile and the holder are not here: they
-//! have their own window (#2397, `tool_profile_page::editor`).
+//! (#2397). The new-tool form is a label-left property grid in collapsible
+//! groups (#2014, `tool_settings_grid`); Add tool lands it. #3930: a saved
+//! tool's page is a read-only summary (`tool_summary`) with the door
+//! "Edit in tool library": the tool library window edits its geometry,
+//! holder, body, recipes and details. The drawn profile and the cutter
+//! keep their own window (#2397, `tool_profile_page::editor`).
 //! Provenance: our own tool editor extracted from pages.rs, retaining its
 //! commands. No vendor material involved.
 
@@ -35,6 +37,9 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
     }
     state.sync_tool_ui();
     let exists = state.tool_ui.exists;
+    // #3930: a saved tool shows its summary; the blank form (and a draft
+    // whose typed name matches a saved tool) keeps the grid and Add tool.
+    let summary = exists && !name.is_empty();
     let err_preview = state.error_for(ErrorScope::Tool).is_some();
     let block_preview = !exists && !block_reason(state, exists, &state.tool_ui.name).is_empty();
     let footer_h = if err_preview && block_preview {
@@ -50,40 +55,43 @@ pub(crate) fn page(ui: &mut Ui, state: &mut State, name: &str) {
         .auto_shrink([false, false])
         .max_height(scroll_h)
         .show(ui, |ui| {
-            if exists && !name.is_empty() {
+            if summary {
                 ui.heading(format!("Tool: {name}"));
-                if ui.button("Delete").clicked() {
-                    state
-                        .pending
-                        .push_back(CommandKind::DeleteTool(name.to_owned()));
-                }
-                // #2397: the body, the profile and the holder have their own
-                // window; Properties keeps the settings and the one preview.
-                if ui
-                    .button("Edit tool shape")
-                    .on_hover_text("open the body, profile and holder editor in its own window")
-                    .clicked()
-                {
-                    actions::open_tool_shape_editor(state, name);
-                }
+                ui.horizontal_wrapped(|ui| {
+                    super::tool_summary::edit_button(ui, state, name);
+                    // #2397: the drawn profile and the cutter have their own
+                    // window, which edits through this page's draft.
+                    if ui
+                        .button("Edit tool shape")
+                        .on_hover_text("open the drawn holder profile, the cutter and the body in their own window")
+                        .clicked()
+                    {
+                        actions::open_tool_shape_editor(state, name);
+                    }
+                    if ui.button("Delete").clicked() {
+                        state
+                            .pending
+                            .push_back(CommandKind::DeleteTool(name.to_owned()));
+                    }
+                });
+                super::tool_summary::rows(ui, state);
             } else {
                 ui.heading("New tool");
+                // The property grid takes the pane: the label on the left
+                // half, the input on the right half (#2014).
+                super::tool_settings_grid::grid(ui, state);
             }
-            contents(ui, state);
+            preview(ui, state);
         });
-    footer(ui, state);
+    footer(ui, state, summary);
 }
 
-fn contents(ui: &mut Ui, state: &mut State) {
+fn preview(ui: &mut Ui, state: &mut State) {
     let u = state.units();
     let exists = state.tool_ui.exists;
-    // One snapshot of the draft drives the picture, so fields and
-    // preview cannot disagree mid-frame; the grid still edits the live
-    // draft, and the next frame's snapshot follows.
+    // One snapshot of the draft drives the picture, so the rows and the
+    // preview cannot disagree mid-frame.
     let preview_tool = state.tool_ui.to_tool();
-    // The property grid takes the pane: the label on the left half, the
-    // input on the right half (#2014).
-    super::tool_settings_grid::grid(ui, state);
     // #371: the placed body's envelope rides the profile. #2007: the one
     // side preview, under the fields; it draws the profile tab's draft
     // through `preview_inputs`. #2397: the Body / Profile tabs and the
@@ -94,7 +102,9 @@ fn contents(ui: &mut Ui, state: &mut State) {
 
 /// Fixed bottom button row (#2007): Apply / Add tool beside Close,
 /// always visible without scrolling, with any block or refusal above it.
-fn footer(ui: &mut Ui, state: &mut State) {
+/// #3930: a saved tool's summary has no draft to Apply, so Close stands
+/// alone (the tool library window has the Apply).
+fn footer(ui: &mut Ui, state: &mut State, summary: bool) {
     let exists = state.tool_ui.exists;
     let name_now = state.tool_ui.name.clone();
     let block = block_reason(state, exists, &name_now);
@@ -110,7 +120,7 @@ fn footer(ui: &mut Ui, state: &mut State) {
         );
     }
     ui.horizontal(|ui| {
-        if exists {
+        if exists && !summary {
             let recipe_refusal = (state.tool_ui.tool_kind() == camcraft_app::tools::ToolKind::Waterjet)
                 .then(|| state.tool_ui.to_tool().torch_refusal())
                 .flatten();
@@ -124,7 +134,7 @@ fn footer(ui: &mut Ui, state: &mut State) {
                 state.pending.push_back(apply);
                 push_number_if_changed(state, &name_now);
             }
-        } else {
+        } else if !exists {
             let add = ui
                 .add_enabled(block.is_empty(), egui::Button::new("Add tool"))
                 .on_disabled_hover_text(&block);

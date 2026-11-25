@@ -559,6 +559,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // machine, else the fit, as every v80 file read its axis. No
         // rung between v80 and v81 rewrites an entity, so the step-up
         // is the stamp itself.
+        // v81 -> v82 (#2826): the Rotary Flow arm arrives; no v81
+        // file names it, so nothing seats or moves - pure step-up.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {

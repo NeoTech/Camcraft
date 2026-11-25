@@ -189,6 +189,49 @@ impl OpParams {
                     }
                 }
             }
+            // The flow band's digest (#2826, tag 48): the or-pattern
+            // above cannot take it - the picks replaced the station
+            // window - so its bytes stand alone, one tag apart. The
+            // stated axis rides only when one is stated (the twins'
+            // own law); the picked chains enter through op.src's own
+            // digest, the selection's law.
+            OpParams::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => {
+                w(h, *tolerance);
+                match stepover {
+                    Some(s) => {
+                        h.write_u8(1);
+                        w(h, *s);
+                    }
+                    None => h.write_u8(0),
+                }
+                wh(h, *clearance_z);
+                for v in [*feed, *plunge_feed] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(*climb));
+                wh_opt(h, *retract_z);
+                for v in [*lead_deg, *lag_deg, *max_tilt_deg] {
+                    w(h, v);
+                }
+                if let Some(v) = stated_axis {
+                    h.write(b"rotary-op-stated-axis");
+                    for c in v {
+                        w(h, *c);
+                    }
+                }
+            }
             // The wrap ladder (M5.1 stage E2, tag 14): the Pocket3D
             // door's bytes without the fields the kernel overrides or
             // never runs (retract, rest, feed-opt), the tolerance and

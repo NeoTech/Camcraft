@@ -1,4 +1,4 @@
-//! Inspection work setup from the MIT Agie Processor's closed contour attributes and zero-step import checks.
+//! Inspection work setup from our own implementation's closed contour attributes and zero-step import checks.
 
 use super::{Grid, SCALE};
 use crate::agie_setup::{attribute_call, checked};

@@ -235,6 +235,11 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         | OpType::MultiAxisContour => {
             format!("{kind} is mesh-driven with a moving tool axis - its area is the model's own shadow, not a boundary")
         }
+        // The flow band's picks ARE its pattern (#2826): the ground
+        // between the chains is the model's own skin.
+        OpType::RotaryFlow => {
+            format!("a {kind} machines the helical band its picked guide chains span - there is no boundary to edit")
+        }
         // The turning family: the limit is the turned silhouette.
         OpType::Facing
         | OpType::ProfileRough

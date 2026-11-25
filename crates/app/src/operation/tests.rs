@@ -236,8 +236,9 @@ fn stamp_follows_every_input() {
     // undercut, appended behind it, to 45 - #1443's V-carve,
     // appended behind that, to 46 - #1883's waterjet profile,
     // appended as the waterjet's own section, to 47 - #1894's multi-axis deburr,
-    // appended behind that, to 48.)
-    assert_eq!(KindInfo::ALL.len(), 48);
+    // appended behind that, to 48 - #2826's Rotary Flow, appended
+    // as the Multi-axis section's flow-line kind, to 49.)
+    assert_eq!(KindInfo::ALL.len(), 49);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");
