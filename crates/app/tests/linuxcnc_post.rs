@@ -211,3 +211,20 @@ fn tilted_moves_and_control_comp_are_refused_by_name() {
     let (_, warnings) = run(&m, comp, &Value::Null);
     assert!(warnings.iter().any(|w| w.contains("G41/G42")), "{warnings:?}");
 }
+
+#[test]
+fn mikron_wf3_dcm_posts_g33_1_rigid_tapping_and_refuses_mist_coolant() {
+    let text = builtin_machine_text("Mikron WF3 DCM (LinuxCNC)").expect("shipped Mikron machine");
+    let m = machine::mirror(&parse_mch(text).expect("Mikron parses"));
+    let nc = post(&m, &tap_stream("TAP"), &json!({ "retractMode": "g28" }));
+    assert!(nc.contains("S500 M3"), "{nc}");
+    assert!(nc.contains("M8"), "{nc}");
+    assert!(nc.contains("G0 X30 Y10 Z2\nG33.1 Z-12 K1.5\nG80\nG0 X30 Y10 Z5"), "{nc}");
+
+    let mist_stream = "PARAM ClearancePlane 15\nPARAM SpindleSpeed 2500\nPARAM Coolant mist\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n";
+    let (_, warnings) = run(&m, mist_stream, &json!({ "retractMode": "g28" }));
+    assert!(
+        warnings.iter().any(|w| w.contains("no mist coolant code")),
+        "{warnings:?}"
+    );
+}

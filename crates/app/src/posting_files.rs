@@ -119,6 +119,8 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #2303: a generic LinuxCNC mill; pairs with the "LinuxCNC" post. It states no
     // safe_retract and no rigid_tapping: the user states them for the real machine.
     ("LinuxCNC 3-axis", AssetFile("linuxcnc-3axis.mch")),
+    // #3244: Mikron WF3 DCM 3-axis mill (LinuxCNC EtherCAT retrofit; paulsvc/linuxcnc-mill2-config).
+    ("Mikron WF3 DCM (LinuxCNC)", AssetFile("mikron-wf3-dcm-linuxcnc.mch")),
     // #2481: a generic Grbl 1.1 router / mill; pairs with the "Grbl 1.1" post.
     ("Grbl 3-axis", AssetFile("grbl-3axis.mch")),
     // #620: the PathPilot routers, each from its own manual / spec sheet
@@ -392,6 +394,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "grblhal-3axis.mch") => Some(include_str!("../../../assets/machines/grblhal-3axis.mch")),
         ("machines", "tinyg-3axis.mch") => Some(include_str!("../../../assets/machines/tinyg-3axis.mch")),
         ("machines", "linuxcnc-3axis.mch") => Some(include_str!("../../../assets/machines/linuxcnc-3axis.mch")),
+        ("machines", "mikron-wf3-dcm-linuxcnc.mch") => Some(include_str!("../../../assets/machines/mikron-wf3-dcm-linuxcnc.mch")),
         ("machines", "grbl-3axis.mch") => Some(include_str!("../../../assets/machines/grbl-3axis.mch")),
         ("machines", "ooznest-workbee-1000x1500.mch") => Some(include_str!("../../../assets/machines/ooznest-workbee-1000x1500.mch")),
         ("machines", "tormach-24r.mch") => Some(include_str!("../../../assets/machines/tormach-24r.mch")),

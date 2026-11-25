@@ -253,7 +253,9 @@ unstated capability into existence.
     file by name; absent is "not limited" - a stated `false` makes the
     program gate refuse every tap cycle by name, whatever the post; the
     Tormach mills, routers and lathes state it - the lathes from their
-    G33.1 rigid-tap pages, #795); and
+    G33.1 rigid-tap pages, #795; `mikron-wf3-dcm-linuxcnc.mch` states
+    `rigid_tapping: true`, manual tool change and flood-only coolant for
+    the LinuxCNC post, #3244); and
     `tool_station { max_tool_length, max_tool_diameter, coolants }`.
     Separately from first-match, the checker also COUNTS (M5.3 C):
     `Machine.spindles` is how many head parts anywhere in the tree
