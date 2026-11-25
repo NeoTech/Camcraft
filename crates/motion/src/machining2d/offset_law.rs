@@ -43,18 +43,26 @@ const SLIVER_SHARE: f64 = 0.2;
 /// margin (`PLAN_TOL`), as the HSM plan's cuts do.
 const CURVED_AIM: f64 = 0.96;
 
-/// The deepest ring is the core only with at least this share of `ae^2`
-/// of area; a thinner sliver is left to the ring before it.
-const CORE_AREA_SHARE: f64 = 0.25;
+/// The core ring stands this far in from the area's deepest point: as
+/// far as the law's step out of it is this share of the load width, so
+/// the first revolutions do not crawl out of a point (at most
+/// [`CORE_MAX_PER_R`] of the tool radius, so the core lap still reaches
+/// over everything inside it).
+const CORE_STEP_SHARE: f64 = 0.5;
+const CORE_MAX_PER_R: f64 = 0.9;
+
+/// Bisection rounds for the core radius, and for the deepest point (each
+/// an offset of the area: 24 rounds put it within ae / 2^24).
+const BISECT: usize = 40;
+const DEPTH_BISECT: usize = 24;
 
 /// Rings are capped (the Prime Directive's "never hang").
 const MAX_RINGS: usize = 4000;
 
 /// The depths (mm in from `center`'s edge, ascending from 0) of the
 /// spiral's rings for the load width `ae` and tool radius `r`: the core
-/// is the deepest ring of the uniform tiling at `ae` (the ring plan's
-/// own), every ring out from it stepped by [`law_step`] on its tightest
-/// round stretch.
+/// stands [`core_radius`] in from the area's deepest point, every ring
+/// out from it stepped by [`law_step`] on its tightest round stretch.
 pub(super) fn law_depths(center: &Region, ae: f64, (r, rim): (f64, f64)) -> Result<Vec<f64>, GenError> {
     if !(ae.is_finite() && ae > 0.0 && r.is_finite() && r > 0.0 && ae <= r && rim.is_finite() && rim >= r) {
         return Err(GenError::Invalid("the ring step must be positive and at most the tool radius".into()));
@@ -62,25 +70,35 @@ pub(super) fn law_depths(center: &Region, ae: f64, (r, rim): (f64, f64)) -> Resu
     let Some((lo, hi)) = center.bounds() else {
         return Err(GenError::Empty("empty pocket region".into()));
     };
+    // The deepest point: the last depth of the `ae` tiling that stands,
+    // then bisected to the depth where the area vanishes.
     let cap = (dist(lo, hi) / ae + 10.0).max(16.0) as u32;
-    let mut core: Option<(f64, Region)> = None;
-    let mut converged = false;
+    let mut deep: Option<f64> = None;
     for k in 0..=cap {
         let d = f64::from(k) * ae;
         let ring = if k == 0 { center.clone() } else { center.offset(-d)? };
         if ring.is_empty() {
-            converged = true;
             break;
         }
-        // A sliver deeper than a real ring is no core: the ring before it
-        // reaches over it (the plan's completeness guard proves it).
-        if k == 0 || ring.area().abs() >= CORE_AREA_SHARE * ae * ae {
-            core = Some((d, ring));
-        }
+        deep = Some(d);
     }
-    let (Some((mut d, mut ring)), true) = (core, converged) else {
+    let Some(mut stands) = deep.filter(|d| center.offset(-(d + ae)).is_ok_and(|g| g.is_empty())) else {
         return Err(GenError::Invalid("offset rings did not converge; check the optimal load".into()));
     };
+    let mut gone = stands + ae;
+    for _ in 0..DEPTH_BISECT {
+        let mid = 0.5 * (stands + gone);
+        if center.offset(-mid)?.is_empty() {
+            gone = mid;
+        } else {
+            stands = mid;
+        }
+    }
+    let mut d = (stands - core_radius((r, rim), ae)).max(0.0);
+    let mut ring = if d <= 0.0 { center.clone() } else { center.offset(-d)? };
+    if ring.is_empty() {
+        (d, ring) = (0.0, center.clone());
+    }
     let mut out = vec![d];
     for _ in 0..MAX_RINGS {
         if d <= 0.0 {
@@ -99,6 +117,25 @@ pub(super) fn law_depths(center: &Region, ae: f64, (r, rim): (f64, f64)) -> Resu
         out.push(d);
     }
     Err(GenError::Invalid("offset rings did not converge; check the optimal load".into()))
+}
+
+/// How far in from the deepest point the core ring stands: the least
+/// path radius whose law step is [`CORE_STEP_SHARE`] of the width, at
+/// most [`CORE_MAX_PER_R`] of the tool radius.
+pub(super) fn core_radius((r, rim): (f64, f64), ae: f64) -> f64 {
+    let (mut lo, mut hi) = (0.0f64, CORE_MAX_PER_R * r);
+    if law_step(hi, (r, rim), ae) < CORE_STEP_SHARE * ae {
+        return hi;
+    }
+    for _ in 0..BISECT {
+        let mid = 0.5 * (lo + hi);
+        if law_step(mid, (r, rim), ae) >= CORE_STEP_SHARE * ae {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    hi
 }
 
 /// The step out from a path of radius `p` (mm; infinite for a straight

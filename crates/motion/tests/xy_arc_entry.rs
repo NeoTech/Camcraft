@@ -144,7 +144,16 @@ fn the_arc_entry_starts_each_level_with_a_g17_arc_tangent_to_its_first_pass() {
                     let t = pocket(&r, &pp(entry, strategy, links)).expect("pocket");
                     let tag = format!("{name} {strategy:?} {entry:?} {:?}", base.level);
                     assert_eq!(check(&t, &r), Vec::new(), "{tag}: {:?}", t.notes);
-                    assert!(!t.notes.iter().any(|n| n.contains("does not fit")), "{tag}: {:?}", t.notes);
+                    // #3933: the Offset rings spiral on the round pocket
+                    // leaves less than a sixteenth-radius arc of room off its
+                    // first revolution beside the core start; the entry then
+                    // descends onto the pass start, named. Every other case
+                    // keeps its arc.
+                    let dropped = t.notes.iter().any(|n| n.contains("does not fit"));
+                    if name == "round" && strategy == PocketStrategy::OffsetRings && dropped {
+                        continue;
+                    }
+                    assert!(!dropped, "{tag}: {:?}", t.notes);
                     for (arc, next) in level_firsts(&t) {
                         let a = arc.arc.unwrap_or_else(|| panic!("{tag}: the level opens with {arc:?}"));
                         assert_eq!(a.plane, ArcPlane::Xy, "{tag}: a G17 arc");

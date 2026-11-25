@@ -2428,9 +2428,10 @@ fn offset_rings_are_the_engagement_law_on_the_plane() {
     // Since M5.1 H the planar pocket's engagement rings (Adaptive until
     // M11.4 C, Offset rings since - Adaptive is the HSM plan) march at
     // the engagement step r (1 - cos theta), not at a free stepover -
-    // the alias is gone. The law's closed end is the equality check:
-    // 90 degrees gives step = r exactly, the tiling a Waterline run at
-    // stepover r produces, move for move.
+    // the alias is gone. #3933: the 2D Pocket's Offset rings are one
+    // outward spiral, so even at 90 degrees (step = r) they are no
+    // longer the one-radius Waterline move for move; the stepover field
+    // still changes nothing.
     let region = rect(0.0, 0.0, 30.0, 30.0);
     let mut w = pp();
     w.strategy = PocketStrategy::Waterline;
@@ -2440,10 +2441,11 @@ fn offset_rings_are_the_engagement_law_on_the_plane() {
     a.stepover = 9.0; // the ignored field, deliberately out of reach
     let tw = pocket(&region, &w).expect("waterline valid");
     let ta = pocket(&region, &a).expect("90 degrees is the one-radius step");
-    assert_eq!(
-        ta.moves, tw.moves,
-        "theta 90 must be exactly the one-radius waterline"
-    );
+    assert_ne!(ta.moves, tw.moves, "Offset rings are a spiral, not the waterline (#3933)");
+    let mut a3 = a.clone();
+    a3.stepover = 3.0;
+    let t3 = pocket(&region, &a3).expect("the field is ignored");
+    assert_eq!(t3.moves, ta.moves, "the stepover field never spaces Offset rings");
     // Below the closed end the angle, not the field, spaces the rings:
     // a 45 budget bites at r(1 - cos 45) ~ 1.46 and rings far denser.
     let mut s = pp();

@@ -230,10 +230,15 @@ fn the_crossing_law_keeps_the_arc_turns_and_crosses_nowhere() {
             assert!(lost.is_empty(), "{strategy:?} r={radius:?}: a pass gave its arcs up whole: {lost:?}");
             let arcs = |t: &Toolpath| t.moves.iter().filter(|m| m.arc.is_some()).count();
             assert!(arcs(&blended) > arcs(&sharp), "{strategy:?} r={radius:?}: no corner turned on an arc");
-            // At 1 mm no corner arc crosses: an arc that only touches the
-            // line of a feed at its tangent end is not a crossing.
+            // At 1 mm no corner arc of the Waterline rings crosses: an arc
+            // that only touches the line of a feed at its tangent end is
+            // not a crossing. #3933: the Offset rings spiral runs its
+            // revolutions and seam joins closer than one ring apart, so
+            // a few of its 1 mm arcs would cross a feed and stay sharp by
+            // name; the crossing check above still holds for it.
             let refused = blended.notes.iter().any(|n| n.contains("an arc there would cross another feed"));
-            assert!(radius.is_none() || !refused, "{strategy:?} r={radius:?}: a touch read as a crossing: {:?}", blended.notes);
+            let rings = strategy == PocketStrategy::Waterline;
+            assert!(radius.is_none() || !rings || !refused, "{strategy:?} r={radius:?}: a touch read as a crossing: {:?}", blended.notes);
         }
     }
     // #2013: merging the crossing fix must also keep the real first
