@@ -190,8 +190,7 @@ const FACET_VEIL_ALPHA: u8 = 90;
 /// `viewport_hover` must not darken twice (#3993 review).
 #[must_use]
 pub fn facet_veil(ink: Color32) -> Color32 {
-    let [r, g, b, _] = ink.to_srgba_unmultiplied();
-    Color32::from_rgba_unmultiplied(r, g, b, FACET_VEIL_ALPHA)
+    theme::with_alpha(ink, FACET_VEIL_ALPHA)
 }
 
 /// How much of its own colour an unselected path keeps on a light

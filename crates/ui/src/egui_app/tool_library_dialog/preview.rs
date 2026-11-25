@@ -24,7 +24,7 @@ use camcraft_app::geometry::Triangle;
 
 use super::model::{self, ToolModel};
 use super::side_view;
-use crate::egui_app::tool_model_view::{self as model_view, BG, View};
+use crate::egui_app::tool_model_view::{self as model_view, tool_ground, View};
 use crate::state::{EditorFace, Orbit, PreviewMode, State};
 
 /// The labels of the two display toggles (#3897).
@@ -68,7 +68,7 @@ pub(super) fn draw(ui: &mut Ui, state: &State, face: &mut EditorFace, size: Vec2
 fn model_3d(ui: &mut Ui, m: &ToolModel, orbit: &mut Orbit, size: Vec2, holder: bool) {
     let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
     let rect = resp.rect;
-    painter.rect_filled(rect, 4.0, BG);
+    painter.rect_filled(rect, 4.0, tool_ground());
     let (mesh, bounds) = if holder { (&m.mesh, m.bounds) } else { (&m.bare, m.bare_bounds) };
     let Some(view) = View::fit(bounds.0, bounds.1, rect, orbit) else {
         return;

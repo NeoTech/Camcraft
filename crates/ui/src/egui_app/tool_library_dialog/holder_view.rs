@@ -23,7 +23,7 @@ use camcraft_app::tool_body;
 use camcraft_app::units::{self, Unit};
 
 use super::holders::{self, READ_ONLY};
-use crate::egui_app::tool_model_view::BG;
+use crate::egui_app::tool_model_view::tool_ground;
 use crate::state::State;
 
 /// The button back to the holder list.
@@ -33,10 +33,18 @@ pub(crate) const USED_BY: &str = "Used by";
 /// The drawing's dimension toggle.
 pub(crate) const DIMS: &str = "Dimensions";
 const FACTS_W: f32 = 380.0;
-const BODY: Color32 = Color32::from_rgb(86, 92, 104);
-const EDGE: Color32 = Color32::from_rgb(214, 220, 228);
-const DIM: Color32 = Color32::from_rgb(0x7F, 0xB4, 0xD8);
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
+fn body_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_body
+}
+fn edge_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_edge
+}
+fn dim_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_dim
+}
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
 
 /// What the user asked for this frame.
 enum Ask {
@@ -194,7 +202,7 @@ pub(crate) fn builds() -> u64 {
 /// The holder to scale in a `size` area, nose down, gauge line up.
 fn outline(ui: &mut Ui, name: &str, e: &HolderEntry, size: Vec2, u: Unit, dims: bool) {
     let (resp, painter) = ui.allocate_painter(size, Sense::hover());
-    painter.rect_filled(resp.rect, 4.0, BG);
+    painter.rect_filled(resp.rect, 4.0, tool_ground());
     let key = Key { name: name.to_owned(), rect: resp.rect, unit: u, dims };
     let d = KEPT.with(|k| {
         let mut k = k.borrow_mut();
@@ -210,7 +218,7 @@ fn outline(ui: &mut Ui, name: &str, e: &HolderEntry, size: Vec2, u: Unit, dims: 
     });
     painter.extend(d.shapes.iter().cloned());
     for (at, align, text) in &d.labels {
-        painter.text(*at, *align, text, FontId::proportional(11.0), NOTE);
+        painter.text(*at, *align, text, FontId::proportional(11.0), note_ink());
     }
 }
 
@@ -230,19 +238,19 @@ fn build(e: &HolderEntry, rect: Rect, u: Unit, dims: bool) -> Drawing {
     let scale = (inner.width() / (2.0 * r_max as f32)).min(inner.height() / z_max as f32).max(f32::EPSILON);
     let (axis, base) = (inner.center().x, inner.bottom());
     let at = |z: f64, r: f64| Pos2::new(axis + r as f32 * scale, base - z as f32 * scale);
-    d.shapes.push(Shape::line_segment([Pos2::new(axis, rect.top() + 4.0), Pos2::new(axis, rect.bottom() - 4.0)], Stroke::new(1.0, Color32::from_rgb(70, 74, 84))));
+    d.shapes.push(Shape::line_segment([Pos2::new(axis, rect.top() + 4.0), Pos2::new(axis, rect.bottom() - 4.0)], Stroke::new(1.0, crate::egui_app::theme::current().tool_axis)));
     for w in pts.windows(2) {
         let ((z0, r0), (z1, r1)) = (w[0], w[1]);
         if z1 > z0 {
-            d.shapes.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], BODY, Stroke::NONE));
+            d.shapes.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], body_ink(), Stroke::NONE));
         }
     }
     let mut edge: Vec<Pos2> = pts.iter().map(|&(z, r)| at(z, r)).collect();
     edge.extend(pts.iter().filter(|p| p.1 > 0.0).rev().map(|&(z, r)| at(z, -r)));
-    d.shapes.push(Shape::closed_line(edge, Stroke::new(1.0, EDGE)));
+    d.shapes.push(Shape::closed_line(edge, Stroke::new(1.0, edge_ink())));
     if dims {
         let len = |v: f64| units::len(v, u, 2);
-        let stroke = Stroke::new(1.0, DIM);
+        let stroke = Stroke::new(1.0, dim_ink());
         // The gauge length on the right, the largest diameter over the top,
         // the nose diameter under the nose.
         let x = at(0.0, r_max).x + 14.0;

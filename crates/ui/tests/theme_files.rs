@@ -23,6 +23,8 @@ mod colour_literals;
 mod colour_scan;
 #[path = "theme_files/dropdown.rs"]
 mod dropdown;
+#[path = "theme_files/tool_inks.rs"]
+mod tool_inks;
 #[path = "theme_files/viewport_inks.rs"]
 mod viewport_inks;
 

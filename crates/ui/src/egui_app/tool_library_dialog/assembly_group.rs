@@ -19,8 +19,12 @@ use crate::state::{State, is_spun_kind};
 /// The group's heading, and its AccessKit name.
 pub(crate) const HEADING: &str = "Holder and stick-out";
 
-const WARN: Color32 = Color32::from_rgb(230, 170, 60);
-const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+fn warn_ink() -> Color32 {
+    crate::egui_app::theme::current().warn_ink
+}
+fn bad_ink() -> Color32 {
+    crate::egui_app::theme::current().bad_ink
+}
 
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     ui.add_space(6.0);
@@ -56,7 +60,7 @@ fn notes(ui: &mut Ui, state: &State, u: Unit) {
     );
     if reseeded {
         ui.colored_label(
-            WARN,
+            warn_ink(),
             format!("The tool length changed: the projection follows the new stick-out ({}). Apply holder to store it.", l(projection)),
         );
     }
@@ -66,7 +70,7 @@ fn notes(ui: &mut Ui, state: &State, u: Unit) {
         && let Some(mount) = camcraft_app::machine::document_of(&state.world).1.and_then(|m| m.spindle_mount)
         && !mount.eq_ignore_ascii_case(taper.name)
     {
-        ui.colored_label(WARN, format!("The machine's spindle takes {mount}: this holder has a {} taper.", taper.name));
+        ui.colored_label(warn_ink(), format!("The machine's spindle takes {mount}: this holder has a {} taper.", taper.name));
     }
     // The shank refusal stands in the picker; this names the rest of what
     // Apply holder would refuse (the lengths, the fit on the tool).
@@ -78,11 +82,11 @@ fn notes(ui: &mut Ui, state: &State, u: Unit) {
     // the draft note judges the unapplied tool numbers only.
     let m = super::model::of(state);
     if shank_ok && let Some(err) = m.holder_err.clone() {
-        ui.colored_label(BAD, format!("Apply holder refuses this: {err}"));
+        ui.colored_label(bad_ink(), format!("Apply holder refuses this: {err}"));
     }
     if let Some(note) = m.draft_err.clone() {
         ui.colored_label(
-            WARN,
+            warn_ink(),
             format!("Draft note: the unapplied tool numbers do not take this holder ({note}). Apply holder checks the stored tool."),
         );
     }

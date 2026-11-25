@@ -20,8 +20,12 @@ pub(crate) const CELL: Vec2 = Vec2::new(14.0, 30.0);
 /// More kept drawings than this clears the store (a long catalog scroll).
 const KEEP: usize = 512;
 
-const CUT: Color32 = Color32::from_rgb(200, 160, 80);
-const SHANK: Color32 = Color32::from_rgb(122, 130, 142);
+fn cut_ink() -> Color32 {
+    crate::egui_app::theme::current().thumb_flute
+}
+fn shank_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_shank
+}
 
 /// One kept drawing: the tool it was built from and its shapes, placed
 /// in a cell whose top-left corner is the origin.
@@ -80,7 +84,7 @@ fn build(t: &Tool) -> Vec<Shape> {
     let z_max = outline.iter().filter(|q| ok(q)).map(|q| q.0).fold(0.0f64, f64::max);
     let axis = CELL.x * 0.5;
     if r_max <= 0.0 || z_max <= 0.0 {
-        return vec![Shape::line_segment([Pos2::new(axis, 2.0), Pos2::new(axis, CELL.y - 2.0)], Stroke::new(1.0, SHANK))];
+        return vec![Shape::line_segment([Pos2::new(axis, 2.0), Pos2::new(axis, CELL.y - 2.0)], Stroke::new(1.0, shank_ink()))];
     }
     let scale = ((CELL.x - 2.0) / (2.0 * r_max as f32)).min((CELL.y - 2.0) / z_max as f32).max(f32::EPSILON);
     let base = CELL.y - 1.0;
@@ -93,7 +97,7 @@ fn build(t: &Tool) -> Vec<Shape> {
         if !(ok(&w[0]) && ok(&w[1])) || z1 <= z0 {
             continue;
         }
-        let fill = if (z0 + z1) * 0.5 < flute { CUT } else { SHANK };
+        let fill = if (z0 + z1) * 0.5 < flute { cut_ink() } else { shank_ink() };
         out.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], fill, Stroke::NONE));
     }
     out

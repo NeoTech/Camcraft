@@ -16,8 +16,12 @@ use camcraft_app::units::{self, Unit};
 
 use crate::state::State;
 
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
+fn bad_ink() -> Color32 {
+    crate::egui_app::theme::current().bad_ink
+}
 
 /// The holder library picker, the first thing the shape editor shows
 /// (#2397).
@@ -73,17 +77,17 @@ pub(super) fn holder_fields(ui: &mut Ui, state: &mut State, u: Unit) {
         match shank.map(|s| holder_library::resolve(n, s).and_then(|e| e.fits_shank(s).map(|()| e))) {
             // The resolved holder, bore and body as Apply lands them.
             Some(Ok(e)) => {
-                ui.colored_label(NOTE, describe(&e, u));
+                ui.colored_label(note_ink(), describe(&e, u));
             }
             Some(Err(err)) => {
                 if let Some(w) = what {
-                    ui.colored_label(NOTE, w);
+                    ui.colored_label(note_ink(), w);
                 }
-                ui.colored_label(BAD, err.to_string());
+                ui.colored_label(bad_ink(), err.to_string());
             }
             None => {
                 if let Some(w) = what {
-                    ui.colored_label(NOTE, w);
+                    ui.colored_label(note_ink(), w);
                 }
             }
         }
