@@ -6,6 +6,7 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+pub mod cli_skill;
 pub mod cli_ui;
 pub mod clock;
 pub mod commands;

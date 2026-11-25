@@ -34,7 +34,7 @@ fn face(stepover: f64) -> OpParams {
     }
 }
 
-fn faced_state() -> State {
+pub(crate) fn faced_state() -> State {
     let mut state = State::new();
     let w = &state.world;
     let loc = Location { pos: Point3::ZERO, rot: IDENTITY_Q };

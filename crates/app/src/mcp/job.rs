@@ -303,6 +303,11 @@ fn start_exit(k: &KindInfo) -> Value {
     let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
     match cap {
         operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
+        // #3331: a turning pick is [x, y, z] - the lathe (Z, X) plane needs the z.
+        operation::PickCapability::Meridian => {
+            out["field"] = json!("picks");
+            out["plane"] = json!("lathe (Z, X): each pick states its z; the radius is read about the turning axis");
+        }
         _ => out["field"] = json!("picks"),
     }
     out
