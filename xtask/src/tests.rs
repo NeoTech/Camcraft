@@ -195,7 +195,7 @@ fn batch_skips_slow_binaries_and_release_runs_everything() {
     assert!(b.contains(&"motion suites: waterline | test -j 6 -p camcraft-motion --no-fail-fast --test waterline -- --test-threads=6".to_string()));
     assert!(!b.iter().any(|s| s.starts_with("motion suites: finish3d") || s.starts_with("app suites: center_cut_multiaxis")), "{b:#?}");
     assert!(b.contains(&"[ui] ui suites: lib | test -j 6 -p camcraft-ui --no-fail-fast --lib -- --test-threads=6".to_string()), "{b:#?}");
-    assert!(b[b.len() - 1].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-cl"));
+    assert!(b[b.len() - 1].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-pathkernel -p camcraft-cl"));
     let r: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
     // Two prebuilds, then one step for each target (#1941): lib, bins and doc of ALL_CRATES plus the 5 fixture
     // binaries (3 app, 2 motion); clippy; heavy lib+bins+doc of kernel and motion, and of app with its ops

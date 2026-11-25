@@ -36,7 +36,11 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let _span = tracing::info_span!("generate", op = %job.op_name).entered();
     let started = crate::clock::Instant::now();
     tracing::debug!(kind = %kind, "generation started");
-    let (mut path, warns) = pocket_reach(&job).and_then(|()| run_job_arms(job))
+    // #4055: the one planner switch - the old planners unless
+    // CAMCRAFT_PLANNER=new, which refuses a phase-1 kind by name.
+    let (mut path, warns) = crate::operation::check_engine(kind, crate::operation::planner_engine())
+        .and_then(|()| pocket_reach(&job))
+        .and_then(|()| run_job_arms(job))
         .map_err(|e| match stock_band { Some(band) => band.name(e), None => e })
         .map_err(|e| name_outside_entry_refusal(e, outside_clearing))
         .map_err(|e| crate::operation::body_judged::name_enclosure(e, &judged_tool, body.as_ref()))

@@ -11,7 +11,7 @@
 //! file, and Auto is absent from both. The #3319 law rides along: no
 //! lateral rapid below the clearance plane.
 //!
-//! Gate map: covers app::operation (generate, params digest), app::mcp
+//! Gate map: covers app::operation (generate, params digest, planner_switch), app::mcp
 //! (edit_operation, undo), app::project (params, params_impl),
 //! motion::machining2d (pass_start, level_rings, level_order, air_entry,
 //! ring_set, ring_links, ring_entry),
@@ -27,6 +27,8 @@ mod entry_advice;
 mod flanks;
 #[path = "offset_pass_start/lifts.rs"]
 mod lifts;
+#[path = "offset_pass_start/planner_switch.rs"]
+mod planner_switch;
 #[path = "offset_pass_start/shared_planner.rs"]
 mod shared_planner;
 #[path = "offset_pass_start/start_side_entry.rs"]
