@@ -247,21 +247,13 @@ pub(super) fn pocket_avoid_over(
         let air = match &src {
             AvoidSource::Plain { side, .. } => {
                 let resolved = super::ring_side::resolve(&level_center, actual, p.tool_diameter * 0.5, side)?;
-                let room = super::air_entry::AirRoom::for_side(&resolved, actual, &level_center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
-                let room = room.and_then(|r| r.without(&ko.union(&ko_entry).ok()?));
-                // #3884: a selected Arc on an Outside ring pass with no air
-                // room is refused by name.
-                let rings = matches!(actual, PocketStrategy::Waterline | PocketStrategy::OffsetRings);
-                super::entry_warn::refuse_outside_arc(side.start, p.entry, rings, room.is_some())?;
-                // #3748: the user's Inside or Outside with a lead-in other
-                // than Arc: used as selected, named (not gated on the air).
-                if rings
-                    && p.strategy != PocketStrategy::Adaptive
-                    && let Some(n) = super::pass_start::entry_advice_note(side.start, p.entry)
-                {
-                    b.note_once(&n);
+                // The one ring entry rule (`ring_entry`): the air room less
+                // the level's keep-out, the #3884 refusal, the #3748 advice.
+                let entry = super::ring_entry::RingEntry::plan(side.start, &resolved, actual, &level_center, p, Some((&ko, &ko_entry)))?;
+                if let Some(n) = &entry.advice {
+                    b.note_once(n);
                 }
-                room
+                entry.air
             }
             AvoidSource::Rest(_) => None,
         };

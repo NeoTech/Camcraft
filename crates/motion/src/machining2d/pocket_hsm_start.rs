@@ -9,7 +9,7 @@ use crate::geo2d::Region;
 
 use super::face::GenError;
 use super::adaptive_method::AdaptiveMethod;
-use super::level_rings::ring_plan;
+use super::ring_set::ring_plan;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::{PocketParams, PocketStrategy};
 use super::pocket_hsm::{Planned, RINGS_FALLBACK, adaptive_ordered};
@@ -28,7 +28,7 @@ use super::pocket_hsm::{Planned, RINGS_FALLBACK, adaptive_ordered};
 ///   area with holes cannot start on a hole wall without a full-width
 ///   slot, so the Offset rings cut it from its holes out, said.
 ///
-/// Every ring fallback is `level_rings::ring_plan`'s (#3316), so it
+/// Every ring fallback is `ring_set::ring_plan`'s (#3316), so it
 /// takes that planner's order and its completeness guard. The trochoid
 /// fallback is tried only under Auto: its loops follow the medial line
 /// and have no ring order.

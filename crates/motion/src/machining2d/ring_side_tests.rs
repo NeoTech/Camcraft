@@ -6,6 +6,7 @@ use super::{mirror, normal, resolve, share_ends};
 use crate::geo2d::{Loop, Point2, Region};
 use crate::machining2d::level_order::{Piece, WALL};
 use crate::machining2d::level_rings::level_pieces;
+use crate::machining2d::ring_set::{RingRef, RingSet};
 use crate::machining2d::pass_start::{PassStart, StartSide};
 use crate::machining2d::pocket_strategy::PocketStrategy;
 use crate::machining2d::ring_fill::RING;
@@ -47,7 +48,7 @@ fn dog_bone() -> (Region, Region, Region) {
 
 fn pieces(start: PassStart) -> Vec<Piece> {
     let (_, band, center) = dog_bone();
-    match level_pieces(&band, &center, R, STEP, true, &StartSide { start, stock: None, around_part: true }, R) {
+    match level_pieces(&RingSet { region: &band, center: &center, reference: RingRef::Part, first: R, tool_r: R, step: STEP, climb: true }, start) {
         Ok(Some(p)) => p,
         other => panic!("{start:?}: {:?}", other.map(|o| o.map(|p| p.len()))),
     }

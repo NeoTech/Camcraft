@@ -14,7 +14,7 @@ use super::arc_cross::{CROSS_ROUNDS, crossing_arcs, own_keys, refuse};
 use super::arc_proof::ProofTally;
 use super::arcs::Seg;
 use super::corner_relief::{CornerRelief, ResolvedRelief, capsule_region, plan_corner_reliefs};
-use super::level_rings::ring_plan;
+use super::ring_set::ring_plan;
 use super::levels::{Cert, Motion, WalkState, walk_one_level};
 use super::pass_start::StartSide;
 use super::pocket::{PocketParams, PocketStrategy, non_sliver_center, pocket_over_with_relief};

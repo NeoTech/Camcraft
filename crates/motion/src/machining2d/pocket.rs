@@ -13,7 +13,7 @@ use super::corner_relief::{CornerRelief, ResolvedRelief, plan_corner_reliefs};
 use super::face::GenError;
 use super::arcs::ARC_FIT_TOL;
 use super::fillet_tally::corner_arc_radius;
-use super::level_rings::ring_plan;
+use super::ring_set::ring_plan;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket_emit::{PocketWalks, emit_pocket_passes};
 use super::pocket_hsm_start::adaptive_passes_from;
@@ -334,23 +334,14 @@ pub(super) fn pocket_over_with_relief(
         }
     }
     let hold_crossings = hold_crossings || zigzag;
-    // #3746: a start-side ring plan round a part enters from the air
-    // outside the stock box.
-    let air = super::air_entry::AirRoom::for_side(side, strategy, center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
-    // #3884: a selected Arc on an Outside ring pass with no air room is
-    // refused by name (no automatic ramp or helix).
-    // An Adaptive op on its ring fallback too (#3884 review).
-    let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings);
-    super::entry_warn::refuse_outside_arc(asked, p.entry, rings, air.is_some())?;
-    // #3748: the user's Inside or Outside with a lead-in other than Arc:
-    // used as selected, named. #3884: the air room is not the gate.
-    // Not for an Adaptive op on its ring fallback: its page has no advice.
-    if rings
-        && p.strategy != PocketStrategy::Adaptive
-        && let Some(n) = super::pass_start::entry_advice_note(asked, p.entry)
-    {
-        b.note_once(&n);
+    // #3746 / #3884 / #3748: the one ring entry rule (`ring_entry`): the
+    // air room outside the stock box, the refusal of an Outside Arc with
+    // no air room, and the lead-in advice.
+    let entry = super::ring_entry::RingEntry::plan(asked, side, strategy, center, p, None)?;
+    if let Some(n) = &entry.advice {
+        b.note_once(n);
     }
+    let air = entry.air;
     emit_pocket_passes(
         b,
         p,

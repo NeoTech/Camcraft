@@ -11,6 +11,10 @@
 //! come last. Inside is the mirror: ring 0 on the holes, ring j the holes
 //! grown by `j` stepovers, the outer wall last.
 //!
+//! The level curves of the one ring planner (`ring_set`, #3750): the
+//! planner gives the input ([`RingSet`]) and orders and guards the
+//! pieces that this module builds.
+//!
 //! Provenance: contour-parallel pocketing as level sets of the distance
 //! to the boundary (Held, "On the Computational Geometry of Pocket
 //! Machining", Springer LNCS 500, 1991), measured from one side; the
@@ -20,12 +24,10 @@
 use crate::geo2d::{Loop, Point2, Region, RingClip};
 
 use super::face::GenError;
-use super::level_order::{Piece, WALL, order};
-use super::pass_start::{PassStart, StartSide};
-use super::pocket::PocketParams;
-use super::pocket_plan::plan_passes;
-use super::pocket_strategy::PocketStrategy;
+use super::level_order::{Piece, WALL};
+use super::pass_start::PassStart;
 use super::ring_fill::{Band, RING, closed_walk, fills};
+use super::ring_set::{RingRef, RingSet};
 use super::ring_side::{mirror, share_ends};
 use super::ring::dist;
 
@@ -43,96 +45,21 @@ pub(super) const SIDE_EPS: f64 = 1e-2;
 /// the start side, which the neighbouring pieces' discs already cover.
 const MIN_PIECE: f64 = 1e-2;
 
-/// The ring plan of one area for `side`, with the warnings it owes the
-/// op page. Auto, a row strategy, and an Inside with no hole to start
-/// from keep the planner's old plan byte for byte. The completeness
-/// guard: a start-side plan whose passes leave part of the cutter-centre
-/// area unswept is never posted; the area takes the Auto plan, named.
-pub(super) fn ring_plan(
-    region: &Region,
-    center: &Region,
-    p: &PocketParams,
-    strategy: PocketStrategy,
-    side: &StartSide,
-) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    let off = p.tool_diameter * 0.5 + p.stock_to_leave;
-    side_plan(region, center, (off, p.tool_diameter * 0.5), (p.tiling_step(), p.climb), strategy, side)
-}
-
-/// The 3-D rough's level (#3361): [`ring_plan`] over a cutter-centre
-/// area that is its own outline (the level law erodes the target once,
-/// so the start side is read off `center`'s own edges). Auto, a row
-/// strategy and an Inside with no hole keep `plan_passes` byte for byte.
-pub fn level_ring_plan(
-    center: &Region,
-    tool_r: f64,
-    step: f64,
-    climb: bool,
-    strategy: PocketStrategy,
-    side: &StartSide,
-) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    side_plan(center, center, (0.0, tool_r), (step, climb), strategy, side)
-}
-
-fn side_plan(
-    region: &Region,
-    center: &Region,
-    (off, tool_r): (f64, f64),
-    (step, climb): (f64, bool),
-    strategy: PocketStrategy,
-    side: &StartSide,
-) -> Result<(Vec<Vec<Point2>>, Vec<String>), GenError> {
-    let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings | PocketStrategy::Adaptive);
-    if side.start != PassStart::Auto
-        && rings
-        && let Some(pieces) = level_pieces(region, center, off, step, climb, side, tool_r)?
-    {
-        let plan = order(pieces, center, tool_r, side)?;
-        let left = unswept(center, &plan.passes, tool_r)?;
-        if left <= LEFT_TOL {
-            return Ok((plan.passes, plan.notes));
-        }
-        let auto = plan_passes(center, step, climb, strategy)?;
-        return Ok((auto, vec![side.fallback_note(left)]));
-    }
-    Ok((plan_passes(center, step, climb, strategy)?, Vec::new()))
-}
-
-/// The most area (mm2) of the cutter-centre area that the passes may leave
-/// unswept before the plan counts as incomplete.
-const LEFT_TOL: f64 = 0.1;
-
-/// The area of `center` that no disc of radius `r` on `passes` reaches,
-/// read after a 50 um erosion: the arc-flat and ring-end slivers of a
-/// complete plan vanish, a standing column (any patch wider than 0.1 mm)
-/// stays. Zero for a complete plan.
-pub(super) fn unswept(center: &Region, passes: &[Vec<Point2>], r: f64) -> Result<f64, GenError> {
-    let swept = Region::sweep(passes, r * (1.0 - 1e-3))?;
-    Ok(center.difference(&swept)?.offset(-0.05)?.area().abs())
-}
-
-/// The pieces of every ring of `center` (the cutter-centre area of
-/// `region` eroded by `off`), each walked so that the uncut side is on
+/// The pieces of every ring of the set's `center` (the cutter-centre
+/// area of its `region` eroded by its `first` offset), each walked so that the uncut side is on
 /// the right for `climb` (the core-first planner's sense). Each part of
 /// the material (an outer loop with its own holes; material inside a
 /// hole is a part of its own) starts from its own edges. `None` when no
 /// part has the start side (Inside on an area with no hole).
 ///
-/// `around` (#3744): the area surrounds the part, so every start side
+/// [`RingRef::Part`] (#3744): the area surrounds the part, so every start side
 /// cuts ONE ring set, the distance from the part (its holes): Outside
 /// walks the Inside pieces mirrored (`ring_side::mirror`). A part with
 /// no hole keeps its own rings (core first for Inside, from its edge for
 /// Outside: offsets of the same edge).
-pub(super) fn level_pieces(
-    region: &Region,
-    center: &Region,
-    off: f64,
-    step: f64,
-    climb: bool,
-    side: &StartSide,
-    tool_r: f64,
-) -> Result<Option<Vec<Piece>>, GenError> {
-    let (start, around) = (side.start, side.around_part);
+pub(super) fn level_pieces(set: &RingSet<'_>, start: PassStart) -> Result<Option<Vec<Piece>>, GenError> {
+    let RingSet { region, center, first: off, tool_r, step, climb, .. } = *set;
+    let around = set.reference == RingRef::Part;
     let Some((lo, hi)) = center.bounds() else {
         return Err(GenError::Empty("empty pocket region".into()));
     };
@@ -176,7 +103,7 @@ pub(super) fn level_pieces(
                     break;
                 }
             }
-            if side.around_part {
+            if around {
                 let fill = Band { c: &c, hc: &hc, j: 0, step, tool_r, climb };
                 add_fills(&mut out, first, &fill, last)?;
             }
@@ -325,38 +252,5 @@ fn push(out: &mut Vec<Piece>, level: u32, ring: &[Point2], clip: RingClip) {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod guard_tests {
-    use super::{LEFT_TOL, unswept};
-    use crate::geo2d::{Loop, Point2, Region};
-
-    fn circle(r: f64) -> Vec<Point2> {
-        (0..128).map(|k| {
-            let a = f64::from(k) * std::f64::consts::TAU / 128.0;
-            Point2::new(r * a.cos(), r * a.sin())
-        })
-        .collect()
-    }
-
-    /// The completeness guard reads a standing column, never a sliver: a
-    /// lone ring on a disc of radius 10 leaves the core (radius 6) unswept;
-    /// rings 4 mm apart down to the middle leave nothing.
-    #[test]
-    fn the_guard_reads_a_standing_core_and_passes_a_whole_plan() {
-        let Ok(l) = Loop::new(circle(10.0)) else { panic!("loop") };
-        let Ok(disc) = Region::new(vec![l]) else { panic!("disc") };
-        let ring = |r: f64| {
-            let mut c = circle(r);
-            c.push(c[0]);
-            c
-        };
-        let Ok(lone) = unswept(&disc, &[ring(10.0)], 4.0) else { panic!("unswept") };
-        assert!(lone > 100.0 && lone < 114.0, "the core of radius 6 stands: {lone}");
-        let Ok(whole) = unswept(&disc, &[ring(10.0), ring(6.0), ring(2.0)], 4.0) else { panic!("unswept") };
-        assert!(whole <= LEFT_TOL, "a whole plan: {whole}");
-        assert!(unswept(&disc, &[vec![Point2::new(f64::NAN, 0.0)]], 4.0).is_err(), "NaN is refused");
     }
 }

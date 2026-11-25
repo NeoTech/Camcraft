@@ -16,7 +16,7 @@ use super::waterscan::waterline_passes;
 /// 2-D pocket and the 3-D pocket's per-level plan share (the strategies
 /// band/erode `center` identically; only the numbers come from the
 /// operation's params either way). The start side of #3316 is
-/// `level_rings::ring_plan`'s, over this plan.
+/// `ring_set::ring_plan`'s, over this plan.
 pub(crate) fn plan_passes(
     center: &Region,
     stepover: f64,

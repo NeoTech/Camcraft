@@ -91,8 +91,10 @@ mod level_rings;
 mod levels;
 mod microlift;
 mod pass_start;
+mod ring_entry;
 mod ring_fill;
 mod ring_links;
+mod ring_set;
 mod ring_side;
 mod pocket;
 mod pocket_plan;
@@ -184,7 +186,7 @@ pub use corner_relief::{
     InsideCorner, ResolvedRelief, TBoneDirection, capsule_region, inside_corners, plan_corner_reliefs,
 };
 pub use corner_relief_spur::pocket_relief_plan;
-pub use level_rings::level_ring_plan;
+pub use ring_set::level_ring_plan;
 pub use crate::approach::OUTSIDE_AIR_REFUSAL;
 pub use entry_warn::{ENTRY_STAND_IN_NOTE, PLUNGE_INTO_STOCK_NOTE, entry_stand_ins, entry_warnings, is_entry_stand_in};
 pub use pass_start::{

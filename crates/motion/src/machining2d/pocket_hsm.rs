@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 
 use super::adaptive::{AdaptiveSpec, Return, Travel, boundary_dist, central_point, corner_radius, first_crossing, plan, preferred_seed};
 use super::face::GenError;
-use super::level_rings::ring_plan;
+use super::ring_set::ring_plan;
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::{PocketParams, PocketStrategy, plan_passes};
 

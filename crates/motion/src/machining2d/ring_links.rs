@@ -3,7 +3,10 @@
 //! the next ring stays in the cut plane while it is clear of the part and
 //! the fixtures: a straight chord, or a walk along the edge of the area
 //! where that edge is in air. A lift is taken only where the in-plane link
-//! fails, and the tally names the reason on the path. Provenance: our own
+//! fails, and the tally names the reason on the path. This is the one
+//! linking rule of the ring planner of #3743 (`ring_set`, `ring_entry`,
+//! #3750): each ring op that moves onto the planner links its rings here.
+//! Provenance: our own
 //! law over the keep-down proof of `ladder_links` (the maintainer's rule
 //! in #3741, the shared design of #3743); no vendor material consulted.
 
