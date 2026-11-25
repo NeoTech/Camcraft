@@ -17,6 +17,14 @@
 - **Dropped:** a committed `.sc` file from a SolidCraft 0.44 release. No
   SolidCraft build is in this environment. The built fixture uses the same
   encoder (`solidcore_record::native::encode`) at the pinned commit.
+- **STEP comparison:** "Done means" asks for the same body as the design's
+  STEP export. The pinned solidcore has no STEP writer for a record, and no
+  SolidCraft build is here to export one. The test compares with the
+  modeller's own volume and box instead: a STEP export carries the same
+  body, so this is the ground truth that a STEP comparison would use.
+  The PR closes the issue (`Fixes #2578`): the user-visible refusal is
+  gone and pinned. Dropped: a `Refs` PR that leaves the issue open only for
+  a STEP file that no tool here can make.
 - **Noted:** the kernel's box of the filleted block is 2.8e-4 mm too large
   on one side (the blend's net). The test permits up to 1e-3 mm, as for
   trimmed cylinders (#939).
