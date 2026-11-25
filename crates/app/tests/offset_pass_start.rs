@@ -13,7 +13,8 @@
 //!
 //! Gate map: covers app::operation (generate, params digest), app::mcp
 //! (edit_operation, undo), app::project (params, params_impl),
-//! motion::machining2d (pass_start, level_rings, level_order, air_entry),
+//! motion::machining2d (pass_start, level_rings, level_order, air_entry,
+//! ring_set, ring_links, ring_entry),
 //! sim::verify (entry_advice).
 //! Provenance: our own regression of the maintainer's report; no vendor
 //! material consulted.
@@ -26,6 +27,8 @@ mod entry_advice;
 mod flanks;
 #[path = "offset_pass_start/lifts.rs"]
 mod lifts;
+#[path = "offset_pass_start/shared_planner.rs"]
+mod shared_planner;
 #[path = "offset_pass_start/start_side_entry.rs"]
 mod start_side_entry;
 
