@@ -390,6 +390,7 @@ mod frame {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         };
         state.pending.push_back(CommandKind::CreateOperation {
             name: "Face1".into(),

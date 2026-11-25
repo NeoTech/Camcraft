@@ -39,7 +39,7 @@ impl OpParams {
                 feed_opt,
                 shell,
                 method,
-                pass_start,
+                pass_start, picks: _
             } => {
                 w(h, *stepover);
                 w(h, *stock_to_leave);
@@ -112,7 +112,7 @@ impl OpParams {
                 fill_openings,
                 gap_link,
                 waterlines,
-                pass_start,
+                pass_start, picks: _
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -238,7 +238,7 @@ impl OpParams {
                 hole_min_diameter,
                 hole_max_diameter,
                 unreachable,
-                sizing,
+                sizing, picks: _
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -297,7 +297,7 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
-                shank_avoid,
+                shank_avoid, picks: _
             } => {
                 h.write_u8(0x5A);
                 wh(h, *clearance_z);

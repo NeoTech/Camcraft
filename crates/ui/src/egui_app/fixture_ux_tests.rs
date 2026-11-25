@@ -158,6 +158,7 @@ fn struck_world() -> State {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     state.history.execute(w, CreateOperation::new(w, "Face1", "EM-0400-2FL", SrcRef::Stock, params).expect("op"));
     state.history.execute(w, GenerateOperation::new(w, "Face1").expect("generate"));

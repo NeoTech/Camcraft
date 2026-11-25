@@ -26,7 +26,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             blend_turns, blend_radius,
             holes,
-            tilt,
+            tilt, picks: _,
         } => {
             if tab == SEC_HEIGHTS {
                 orientation_editor(ui, u, tilt);
@@ -122,6 +122,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             links,
             tilt,
             chain_overrides,
+            picks,
         } => {
             if tab == SEC_GEO {
                 let mut s_idx = match side {
@@ -212,7 +213,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 }
                 lead_page::leads_tab(ui, u, "c", Some((entry, helix_radius)), links);
                 hint(ui, "keep down between levels cuts each ring all the way down, descending on the ring itself");
-                super::approach_page::contour_leads_editor(ui, u, &mut links.approach);
+                super::approach_page::contour_leads_editor(ui, u, &mut links.approach, picks);
                 let mut tabs = f64::from(*tab_count);
                 prop_row(ui, "Tab count", |ui| num_plain(ui, &mut tabs));
                 *tab_count = tabs.clamp(0.0, 99.0).round().max(0.0) as u32;
@@ -245,7 +246,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             rest,
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "p", Some((&mut *entry, helix_radius)), links);
@@ -345,7 +346,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             rest: _, // #1446: no rows on this page yet; the draft keeps the value
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => roughing2d_pane(
             ui,
             world,
@@ -387,7 +388,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             helix_radius, blend_turns, blend_radius,
             corner_relief,
             tilt,
-            pass_start,
+            pass_start, picks: _,
         } => roughing2d_pane(
             ui,
             world,

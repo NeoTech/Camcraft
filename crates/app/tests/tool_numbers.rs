@@ -95,6 +95,7 @@ fn tool_job(order: [&str; 2]) -> (World, History) {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         };
         h.execute(
             &world,

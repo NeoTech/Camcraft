@@ -87,10 +87,19 @@ fn a_short_inner_offgrid_edge_or_folded_loop_publishes_nothing() {
             ROUNDED_DXF.replace(flat, &format!("{arc}0\n51\n180")),
             "convex loop",
         ),
+        // #3937: the lower half circle reaches Y-29 and encloses the hole
+        // X0 Y-21. The arc door of a selected chain refuses that hole first.
         (
-            script,
+            script.clone(),
             ROUNDED_DXF.replace(flat, &format!("{arc}180\n51\n360")),
-            "convex loop",
+            "lies inside the profile",
+        ),
+        // With the hole outside the half circle, the arc door refuses the
+        // sharp inside corner at X14 Y-14 before the native door can.
+        (
+            script.replace("[0, -21]", "[-19, -24]"),
+            ROUNDED_DXF.replace(flat, &format!("{arc}180\n51\n360")),
+            "an inside corner or slot of the profile near X14.000 Y-14.000",
         ),
     ] {
         let dir = tempfile::tempdir().unwrap();

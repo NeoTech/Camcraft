@@ -187,6 +187,7 @@ fn the_machine_vote_joins_the_deviate_clause() {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         },
     });
     state.pending.push_back(CommandKind::GenerateOperation("Face1".into()));
@@ -249,6 +250,7 @@ fn the_machine_gate_refuses_the_post_by_name() {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         },
     });
     state.pending.push_back(CommandKind::GenerateOperation("Face1".into()));

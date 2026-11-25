@@ -260,18 +260,6 @@ impl OpParams {
                 if a.compensation == crate::links::Compensation::Wear {
                     h.write_u8(0xC6);
                 }
-                // #1448: the user's start point - bytes only when set.
-                if let Some(q) = a.start_point {
-                    h.write_u8(0xC7);
-                    w(h, q.x);
-                    w(h, q.y);
-                }
-                // #1473: the exit point - bytes only when set.
-                if let Some(q) = a.exit_point {
-                    h.write_u8(0xC8);
-                    w(h, q.x);
-                    w(h, q.y);
-                }
                 // #2012: the equal-steps ladder moves every level - a
                 // byte only when on, so every earlier approach keeps
                 // its digest.
@@ -298,6 +286,41 @@ impl OpParams {
                         w(h, length);
                     }
                 }
+            }
+        }
+    }
+
+    /// The operation-level picks (#3339). `WireContour` writes its first 2D
+    /// start in `stamp_cutting`; extra picks, Z coordinates, and other ops
+    /// digest here (nothing when empty so earlier stamps stay unchanged).
+    pub(super) fn stamp_picks(&self, h: &mut std::hash::DefaultHasher) {
+        let picks = self.path_picks();
+        if picks.is_empty() {
+            return;
+        }
+        if matches!(self, OpParams::WireContour(_)) {
+            let has_z = picks.start.iter().chain(picks.exit.iter()).any(|p| p.z.is_some());
+            if !has_z && picks.start.len() <= 1 && picks.exit.is_empty() {
+                return;
+            }
+            h.write_u8(0xCA);
+        }
+        for p in &picks.start {
+            h.write_u8(0xC7);
+            w(h, p.xy.x);
+            w(h, p.xy.y);
+            if let Some(z) = p.z {
+                h.write_u8(1);
+                w(h, z);
+            }
+        }
+        for p in &picks.exit {
+            h.write_u8(0xC8);
+            w(h, p.xy.x);
+            w(h, p.xy.y);
+            if let Some(z) = p.z {
+                h.write_u8(1);
+                w(h, z);
             }
         }
     }

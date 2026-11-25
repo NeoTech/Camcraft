@@ -82,6 +82,7 @@ fn existing_named_cutting_job() -> World {
         holes: Default::default(), blend_turns: false, blend_radius: None, tilt: None, stepover: 3.0,
         clearance_z: Height::fixed(25.0), cut_z: Height::fixed(19.5), top_z: None,
         stepdown: None, feed: 1200.0, plunge_feed: 300.0, climb: true,
+        picks: Default::default(),
     }).expect("face"));
     history.execute(&world, GenerateOperation::new(&world, "Face").expect("generate"));
     mount(&world, &mut history, r#"[{"name":"PROBE","use":"probe"}]"#);

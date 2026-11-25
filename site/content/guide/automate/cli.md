@@ -39,10 +39,11 @@ already running window. On macOS, passing the path to the binary works;
 `camcraft-ui --read-only job.camproj` opens the project read-only. Use it
 for a shipped example, a released job or a reference copy on a shared
 folder. You can make changes. Save does not write over the opened file:
-it opens Save As, which writes your own copy. The title bar says
-read-only until you save to a different file. A model file is imported
-as usual, because an import makes a new project. An agent gets the same
-result with the MCP tool `open_project` and `read_only: true`.
+it opens Save As. Choose a different path to write your own copy and
+continue editing it. Choosing the opened file in Save As is refused.
+The title bar says **(read-only)** until you save to a different file.
+A model file is imported as usual, because an import makes a new
+project. An agent gets the same result with the MCP tool `open_project` and `read_only: true`.
 
 ## Help and version
 

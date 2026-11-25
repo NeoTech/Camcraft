@@ -72,6 +72,7 @@ fn generated(selected: bool, excluded: bool) -> (World, History) {
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     };
     h.execute(
         &world,

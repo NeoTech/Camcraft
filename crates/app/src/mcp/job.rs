@@ -242,7 +242,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                     &mut fields,
                     &[
                         ("condition", "string", json!("")),
-                        ("start", "array", Value::Null),
+                        ("picks", "object", json!({})),
                         ("tabs", "object", Value::Null),
                         ("capture", "boolean", json!(false)),
                         ("both_pieces_restrained", "boolean", json!(false)),
@@ -253,6 +253,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("skims", "array", json!([])),
                         ("four_axis", "object", Value::Null),
                         ("sharp_corners", "boolean", json!(false)),
+                        ("lead_arc_radius", "number", Value::Null),
                     ],
                 );
             }
@@ -271,6 +272,21 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 }
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
+            // The zero default is omitted by ParamsDto to preserve old
+            // project bytes, but it is still an authored operation
+            // parameter on the MCP surface (#3153).
+            if key == "chamfer2_d"
+                && !fields.iter().any(|f| f["name"] == "minimum_cone_radius")
+            {
+                fields.push(json!({
+                    "name": "minimum_cone_radius",
+                    "type": "number",
+                    "default": 0.0
+                }));
+                fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            }
+            // #3449: every accepted field, optional ones and enum values too.
+            let traced = super::kind_fields::complete(&key, &defaults, &mut fields);
             let mut kind = json!({
                 "label": k.label,
                 "key": key,
@@ -280,6 +296,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 "fields": fields,
                 "start_exit": start_exit(k),
             });
+            if !traced {
+                kind["fields_incomplete"] = json!(true);
+            }
             if !k.mounts_tool() {
                 kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind");
             }
@@ -290,7 +309,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
     let kinds = super::compact::filter_kinds(kinds, a)?;
     Ok(json!({
         "kinds": kinds,
-        "note": "Fields absent from the defaults are optional and off; set them in a params patch to turn them on.",
+        "note": "Each kind lists every field it accepts. \"optional\": true marks a field absent from the defaults: it is off until a params patch sets it. \"values\" lists the words of an enum field; \"shape\" spells an object or array field (key? is optional). Type \"any\" is a value that reads itself, such as a height: a number or {reference, offset}.",
     }))
 }
 
@@ -301,8 +320,12 @@ fn start_exit(k: &KindInfo) -> Value {
     let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
     match cap {
         operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
-        operation::PickCapability::Threading => out["field"] = json!("start"),
-        _ => out["field"] = json!("links.approach.start_point / exit_point"),
+        // #3331: a turning pick is [x, y, z] - the lathe (Z, X) plane needs the z.
+        operation::PickCapability::Meridian => {
+            out["field"] = json!("picks");
+            out["plane"] = json!("lathe (Z, X): each pick states its z; the radius is read about the turning axis");
+        }
+        _ => out["field"] = json!("picks"),
     }
     out
 }
@@ -342,6 +365,8 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::FluteShort { at, .. } => ("flute_short", *at),
         Warning::PlungeTooDeep { at, .. } => ("plunge_too_deep", *at),
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
+        Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
+        Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
     };
     json!({
         "op": op,

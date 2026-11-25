@@ -283,3 +283,121 @@ fn meridian_refuses_overflowing_lengths_and_circle_ranges() {
     let ball = mill(ToolKind::BallNose, 1e200, 0.0, 0.0, 1e199);
     assert_eq!(ball.meridian(), Err(MeridianError::OutOfRange(1)));
 }
+
+/// The sharp taper's profile before #3368, kept here as the pin: the
+/// apex, the cone to the full radius (or the flute top), the flute side,
+/// the shank and holder bands.
+fn sharp_profile_before_3368(t: &Tool) -> Vec<(f64, f64)> {
+    let r = t.diameter.max(0.0) * 0.5;
+    let zc = t.flute_len.max(0.0);
+    let zs = zc + t.shank_len.max(0.0);
+    let zh = zs + t.holder_len.max(0.0);
+    let mut p = vec![(0.0, 0.0)];
+    let tan_half = (t.tip_angle.to_radians() * 0.5).tan();
+    if tan_half > 0.0 && tan_half.is_finite() {
+        let zr = (r / tan_half).min(zc);
+        crate::tools::add_pt(&mut p, zr, (zr * tan_half).min(r));
+    }
+    crate::tools::add_pt(&mut p, zc, r);
+    let sr = t.shank_d.max(0.0) * 0.5;
+    if zs > zc {
+        crate::tools::add_pt(&mut p, zc, sr);
+        crate::tools::add_pt(&mut p, zs, sr);
+    }
+    let hr = t.holder_d.max(0.0) * 0.5;
+    if zh > zs {
+        crate::tools::add_pt(&mut p, zs, hr);
+        crate::tools::add_pt(&mut p, zh, hr);
+    }
+    crate::tools::add_pt(&mut p, zh, 0.0);
+    p
+}
+
+/// #3368 (safety floor): a sharp taper - every shipped one, and one that
+/// carries an inert corner radius - keeps its profile, its meridian and
+/// its shape identity bit for bit. Only a flat or ball tip draws anew.
+#[test]
+fn a_sharp_taper_keeps_its_profile_and_digest() {
+    let mut tapers: Vec<Tool> = crate::tools::catalog()
+        .into_iter()
+        .map(|(_, t)| t)
+        .filter(|t| t.kind == ToolKind::Taper && t.tip_form.is_sharp())
+        .collect();
+    assert!(tapers.len() >= 7, "the shipped sharp tapers");
+    tapers.push(mill(ToolKind::Taper, 10.0, 2.0, 90.0, 20.0));
+    tapers.push(mill(ToolKind::Taper, 10.0, 0.0, 30.0, 5.0));
+    for t in tapers {
+        assert_eq!(t.tip_diameter, 0.0);
+        assert_eq!(t.profile(), sharp_profile_before_3368(&t), "{t:?}");
+        let tan = (t.tip_angle.to_radians() * 0.5).tan();
+        let (r, fl) = (t.diameter * 0.5, t.flute_len);
+        let top = (r / tan).min(fl);
+        let mut want = vec![SpunPoint::line(0.0, 0.0), SpunPoint::line(top, top * tan)];
+        // #3938: a flute that ends on the cone adds the radial shoulder.
+        if fl > top || r - top * tan >= super::MIN_LEN {
+            want.push(SpunPoint::line(fl, r));
+        }
+        assert_eq!(t.meridian().map(|m| m.points().to_vec()), Ok(want), "{t:?}");
+        // A tip form edit is a new shape; the sharp tool is its own.
+        assert!(crate::cutter_fit::same_shape(&t, &t.clone()));
+        let flat = Tool { tip_form: crate::taper::TaperTip::Flat, tip_diameter: 1.0, ..t.clone() };
+        assert!(!crate::cutter_fit::same_shape(&t, &flat));
+    }
+}
+
+/// #3938 (safety floor): every mill kind whose profile closes its flute
+/// at the full radius ends its meridian there too - a flute shorter than
+/// the cone (sharp taper, drill) or the corner (ball, bull) steps out by
+/// the radial shoulder #3929 gave the flat and ball tips: a face, no atom.
+#[test]
+fn a_short_flute_meridian_has_the_profile_shoulder() {
+    let tools = [
+        mill(ToolKind::Taper, 10.0, 0.0, 30.0, 5.0), // cone reaches r 18.7 mm up
+        mill(ToolKind::Drill, 8.0, 0.0, 118.0, 1.5), // point reaches r 2.4 mm up
+        mill(ToolKind::BallNose, 10.0, 5.0, 0.0, 3.0),
+        mill(ToolKind::BullNose, 10.0, 3.0, 0.0, 2.0),
+        mill(ToolKind::EndMill, 10.0, 0.0, 0.0, 0.5),
+        cutter(ToolKind::TSlot, 20.0, 5.0, 10.0, 10.0, 0.0),
+    ];
+    for t in tools {
+        let (r, fl) = (t.diameter * 0.5, t.flute_len);
+        let prof = t.profile().into_iter().filter(|q| q.0 == fl).fold(0.0, |m: f64, q| m.max(q.1));
+        assert_eq!(prof, r, "{t:?}: the profile's flute top");
+        let m = t.meridian().unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let last = m.points().last().map(|p| (p.z, p.r));
+        assert_eq!(last, Some((fl, prof)), "{t:?}: the meridian ends at {last:?}, the profile at r {prof}");
+        if matches!(t.kind, ToolKind::Drill | ToolKind::Taper) {
+            let tan = (t.tip_angle.to_radians() * 0.5).tan();
+            let cone = m.points().iter().rev().nth(1).map(|p| (p.z, p.r));
+            assert_eq!(cone, Some((fl, fl * tan)), "{t:?}: the cone still ends at the flute top");
+        }
+        let atoms = m.atoms(Bound::Outer, 1e-3).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(atoms.iter().all(|a| a.z1 - a.z0 > 0.0), "{t:?}: a face is no atom");
+    }
+}
+
+/// #3368: the flat and ball tips' meridian agrees with the drawn profile
+/// on the cutting band, as every other mill's does.
+#[test]
+fn a_flat_and_a_ball_taper_meridian_agrees_with_the_profile() {
+    use crate::taper::TaperTip;
+    let tools = [
+        Tool { tip_form: TaperTip::Flat, tip_diameter: 1.0, ..mill(ToolKind::Taper, 6.0, 0.0, 90.0, 6.0) },
+        Tool { tip_form: TaperTip::Flat, tip_diameter: 4.0, ..mill(ToolKind::Taper, 10.0, 0.5, 60.0, 15.0) },
+        Tool { tip_form: TaperTip::Ball, ..mill(ToolKind::Taper, 1.7, 0.5, 2.0, 20.0) },
+        Tool { tip_form: TaperTip::Ball, ..mill(ToolKind::Taper, 6.0, 1.0, 90.0, 8.0) },
+        // Short flutes that end on the cone (#3929 review): the radial shoulder.
+        Tool { tip_form: TaperTip::Flat, tip_diameter: 1.0, ..mill(ToolKind::Taper, 6.0, 0.0, 90.0, 1.0) },
+        Tool { tip_form: TaperTip::Ball, ..mill(ToolKind::Taper, 6.0, 0.5, 90.0, 1.0) },
+    ];
+    for t in tools {
+        let m = t.meridian().unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let atoms = m.atoms(Bound::Outer, 1e-3).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let prof = t.profile();
+        for &(z, _) in prof.iter().filter(|p| p.0 > 0.0 && p.0 <= t.flute_len) {
+            let want = union_rho(&atoms, z);
+            let hit = prof.iter().any(|q| (q.0 - z).abs() <= 1e-12 && (q.1 - want).abs() <= 1e-9);
+            assert!(hit, "{t:?}: the meridian reads {want} at z {z}, the profile does not");
+        }
+    }
+}

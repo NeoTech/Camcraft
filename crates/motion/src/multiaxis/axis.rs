@@ -227,19 +227,26 @@ pub(super) fn try_axis(data: &[Datum], u0: Point3, a_total: f64) -> Option<(f64,
     judge(data, ax, rho, a_total).map(|r| (r, ax))
 }
 
+/// A direction read canonically: unit, and determinately signed - the
+/// axis points up, or (for a flat-lying fit) along +x, or +y - the
+/// generators read stations along the direction, so its sign is part
+/// of the answer. `None` when `u0` is zero or not finite. The stated
+/// axis of #2772 (`axis_stated.rs`) signs its lines by the same law,
+/// so a stated line and the line the fit would read agree bit for bit.
+pub(super) fn signed(u0: Point3) -> Option<Point3> {
+    let u = unit(u0)?;
+    Some(if u.z < 0.0 || (u.z == 0.0 && (u.x < 0.0 || (u.x == 0.0 && u.y < 0.0))) {
+        Point3::new(-u.x, -u.y, -u.z)
+    } else {
+        u
+    })
+}
+
 /// The least-squares axis LINE about direction `u0` (signed
 /// determinately) over `data`, with the area-weighted mean radius
 /// about it; `None` when the rows cannot place a line.
 pub(super) fn line(data: &[Datum], u0: Point3, a_total: f64) -> Option<(Axis, f64)> {
-    let u = unit(u0)?;
-    // Determinately signed: the axis points up, or (for a flat-lying
-    // fit) along +x, or +y - the generators read stations along the
-    // direction, so its sign is part of the answer.
-    let u = if u.z < 0.0 || (u.z == 0.0 && (u.x < 0.0 || (u.x == 0.0 && u.y < 0.0))) {
-        Point3::new(-u.x, -u.y, -u.z)
-    } else {
-        u
-    };
+    let u = signed(u0)?;
     let mut m = [[0.0f64; 3]; 3];
     let mut b = [0.0f64; 3];
     let mut rows = 0usize;

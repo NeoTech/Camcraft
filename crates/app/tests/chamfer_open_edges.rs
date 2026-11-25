@@ -53,6 +53,7 @@ fn params() -> OpParams {
     OpParams::Chamfer2D {
         width: 1.0,
         angle_deg: 45.0,
+        minimum_cone_radius: 0.0,
         clearance_z: Height::fixed(25.0),
         retract_z: Some(Height::fixed(12.0)),
         top_z: Height::fixed(10.0),
@@ -62,6 +63,7 @@ fn params() -> OpParams {
         side: Side::Outside,
         tolerance: 0.01,
         tilt: None,
+        picks: Default::default(),
     }
 }
 
@@ -86,11 +88,11 @@ fn south(w: &World) -> GeoSel {
     }
 }
 
-fn generate(w: &World, picks: Vec<GeoSel>) -> Toolpath {
+fn generate_params(w: &World, picks: Vec<GeoSel>, params: OpParams) -> Toolpath {
     let mut h = History::default();
     h.execute(
         w,
-        CreateOperation::new(w, "CHM", CONE, SrcRef::Selection(picks), params()).expect("create"),
+        CreateOperation::new(w, "CHM", CONE, SrcRef::Selection(picks), params).expect("create"),
     );
     h.execute(w, GenerateOperation::new(w, "CHM").expect("generate"));
     let e = model::find_by_name(w, "CHM").expect("operation");
@@ -98,6 +100,10 @@ fn generate(w: &World, picks: Vec<GeoSel>) -> Toolpath {
         .expect("cached chamfer")
         .path
         .clone()
+}
+
+fn generate(w: &World, picks: Vec<GeoSel>) -> Toolpath {
+    generate_params(w, picks, params())
 }
 
 fn corner_feeds(path: &Toolpath) -> Vec<Point3> {
@@ -137,6 +143,49 @@ fn a_selected_edge_generates_and_verifies_one_open_chamfer() {
     assert!(
         posting::post_setup_unwritten(&w).is_ok(),
         "the selected chamfer verifies and posts"
+    );
+}
+
+#[test]
+fn a_selected_open_edge_offsets_by_the_minimum_radius() {
+    let w = world();
+    let mut p = params();
+    if let OpParams::Chamfer2D {
+        minimum_cone_radius,
+        side,
+        ..
+    } = &mut p
+    {
+        *minimum_cone_radius = 2.0;
+        *side = Side::Outside;
+    }
+    let path = generate_params(&w, vec![north(&w)], p);
+    let tip: Vec<_> = path
+        .moves
+        .iter()
+        .filter(|m| m.kind == MoveKind::Feed && (m.to.z - 7.0).abs() < 1e-9)
+        .collect();
+    assert!(
+        tip.iter()
+            .any(|m| (m.to.y - 22.0).abs() < 1e-9),
+        "the axis is 2 mm beyond the selected north wall: {tip:?}"
+    );
+    assert!(
+        path.breaks[0]
+            .edge
+            .iter()
+            .all(|q| (q.y - 20.0).abs() < 1e-9 && q.z == 10.0),
+        "the offset cone still credits the original edge: {:?}",
+        path.breaks[0]
+    );
+    assert!((path.breaks[0].depth - 1.0).abs() < 1e-9);
+    let e = model::find_by_name(&w, "CHM").expect("operation");
+    assert!(
+        model::toolpath_of(&w, &e)
+            .expect("cached")
+            .warnings
+            .is_empty(),
+        "the selected 2-to-3 mm cone band is clean"
     );
 }
 

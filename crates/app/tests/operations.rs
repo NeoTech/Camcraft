@@ -58,6 +58,7 @@ fn face_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -84,6 +85,7 @@ fn contour_params() -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -111,6 +113,7 @@ fn slot_params() -> OpParams {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -356,6 +359,7 @@ fn create_operation_validates_every_reference() {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         ),
         Err(CommandError::Invalid(_))
@@ -427,6 +431,7 @@ fn edit_params_clears_the_stamp_not_the_cache() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -873,6 +878,7 @@ fn face_params_5() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -1144,6 +1150,7 @@ fn stale_reason_names_a_height_whose_source_is_gone() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(
         &world,
@@ -1650,6 +1657,7 @@ fn region_of_is_the_preview_of_what_generate_would_cut() {
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -1691,6 +1699,7 @@ fn region_of_is_the_preview_of_what_generate_would_cut() {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -1806,6 +1815,7 @@ fn face_sel_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -2018,6 +2028,7 @@ fn pocket_refuses_an_open_run() {
             optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
             blend_turns: false,
             corner_relief: Default::default(),
+            picks: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -2519,6 +2530,7 @@ fn a_closed_chain_routes_the_boundary_path_not_a_centerline() {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -3278,6 +3290,7 @@ fn straight_runs_face_their_material_and_trace_refuses_by_name() {
                 feed: 500.0,
                 plunge_feed: 100.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("create"),
@@ -3340,6 +3353,7 @@ fn selection_notes_report_stitching_and_extension() {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     let notes = operation::selection_notes(&world, None, &items, &contour);
     assert!(
@@ -3388,6 +3402,7 @@ fn contour_at(side: Side, z: f64) -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -3843,6 +3858,7 @@ fn drill_params(holes: Vec<Hole>, top_z: f64, clearance_z: f64) -> OpParams {
         plunge_feed: 100.0,
         holes,
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -4093,6 +4109,7 @@ fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
         pencil_reference: None,
         fill_openings: None,
         waterlines: true,
+        picks: Default::default(),
     }
 }
 
@@ -4929,13 +4946,17 @@ fn pose_law(name: &str, path: &camcraft_app::cl::Toolpath) {
 
 /// The pivot law's rapid contract: a rapid travels under the pose it
 /// inherits (the post keeps the tilt modal), so it may STATE a pose,
-/// but a NEW one only as the swarf link's swing - a turn IN AIR about
-/// the ball centre, which the sphere's rotation invariance keeps
-/// where it was: `from + r·held == to + r·new`. Nothing leaned before
-/// the first lean, the held pose after it, and never a pose turn that
+/// but a NEW one only two ways. One, the swarf link's swing - a turn
+/// IN AIR about the ball centre, which the sphere's rotation
+/// invariance keeps where it was: `from + r·held == to + r·new`.
+/// Two, the approach's standstill index (#3414): a ZERO-TRAVEL rapid
+/// swings about the fixed tip on the clearance plane, in air, to the
+/// pose the first descend cuts under - the ball moves in air, well
+/// off the part, and the tip never drags. Nothing leaned before the
+/// first lean, the held pose after it, and never a pose turn that
 /// drags the ball.
 fn rapid_pose_contract(name: &str, m: &camcraft_app::cl::Move, held: Option<[f64; 3]>, r: f64) {
-    if m.kind != MoveKind::Rapid || m.axis == held {
+    if m.kind != MoveKind::Rapid || m.axis == held || m.from == m.to {
         return;
     }
     let up = [0.0, 0.0, 1.0];
@@ -4978,6 +4999,7 @@ fn flow5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -4995,6 +5017,7 @@ fn contour5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -5059,6 +5082,7 @@ fn parallel5d_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -5358,6 +5382,7 @@ fn swarf_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 15.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        picks: Default::default(),
     }
 }
 
@@ -5378,6 +5403,7 @@ fn advanced_swarf_params(top_z: f64, bottom_z: f64, passes: u32) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         passes,
+        picks: Default::default(),
     }
 }
 
@@ -5763,6 +5789,8 @@ fn rotary_contour_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
+        picks: Default::default(),
     }
 }
 
@@ -5780,6 +5808,8 @@ fn rotary_parallel_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
+        picks: Default::default(),
     }
 }
 
@@ -5810,6 +5840,8 @@ fn rotary_offset_params(top_z: f64, bottom_z: f64) -> OpParams {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
+        picks: Default::default(),
     }
 }
 
@@ -6443,6 +6475,7 @@ fn multiaxis_rough_params() -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 90.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -6468,6 +6501,7 @@ fn multiaxis_rough_pocket_twin() -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 
@@ -6536,7 +6570,10 @@ fn multiaxis_rough_clears_the_far_stock_the_pocket_clears() {
     let (_fw, _fh, plain) = ladder_job_on("P3F", false, 70.0);
     let (_rw, _rh, rough) = ladder_job_on("MARF", true, 70.0);
     assert!(plain.moves.len() > near.moves.len(), "the far stock adds cuts: {} vs {}", plain.moves.len(), near.moves.len());
-    assert_eq!(plain.moves.len(), rough.moves.len(), "one ladder, two readings, on the far stock too");
+    // #3414: the posed twin adds a zero-travel rotary index per stamp,
+    // so the count that must agree is the cutting ladder's.
+    let cuts = |t: &camcraft_app::cl::Toolpath| t.moves.iter().filter(|m| m.kind != MoveKind::Rapid).count();
+    assert_eq!(cuts(&plain), cuts(&rough), "one ladder, two readings, on the far stock too");
     let reach = |t: &camcraft_app::cl::Toolpath| {
         t.moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| m.to.x.abs().max(m.to.y.abs())).fold(0.0, f64::max)
     };
@@ -6550,9 +6587,12 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
     // own world, the budget the vertical kind always met.
     let (_pw, _ph, plain) = ladder_job("P3R", false);
     let (_rw, _rh, rough) = ladder_job("MAR1", true);
+    // #3414: the posed twin adds a zero-travel rotary index per stamp,
+    // so the count that must agree is the cutting ladder's.
+    let cuts = |t: &camcraft_app::cl::Toolpath| t.moves.iter().filter(|m| m.kind != MoveKind::Rapid).count();
     assert_eq!(
-        plain.moves.len(),
-        rough.moves.len(),
+        cuts(&plain),
+        cuts(&rough),
         "one ladder, two readings"
     );
     let mut posed = 0usize;
@@ -6561,7 +6601,10 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
     // the lean), and rapids state no new pose.
     same_balls(&plain, &rough, 3.0);
     rapids_inherit(&rough, 3.0);
-    for (a, b) in plain.moves.iter().zip(&rough.moves) {
+    // #3414: skip the posed ladder's zero-travel rotary indices (the
+    // swings - zero-travel RAPIDS only), so the two ladders pair move
+    // for move as before.
+    for (a, b) in plain.moves.iter().zip(no_swings(&rough)) {
         assert!(a.axis.is_none(), "the plain ladder speaks an angle");
         if b.kind == MoveKind::Rapid {
             continue;
@@ -6710,14 +6753,39 @@ fn multiaxis_rough_refuses_nonsense_at_creation() {
 /// machine holds there (the last stated - the post keeps it modal;
 /// upright before any). The pivot law's invariant reads on these.
 fn balls_of(path: &camcraft_app::cl::Toolpath, r: f64) -> Vec<camcraft_app::geometry::Point3> {
-    let mut held = [0.0, 0.0, 1.0];
-    path.moves
+    // #3414: skip only the rotary indices - the zero-travel RAPIDS
+    // whose axis changes off the pose held (see `no_swings`); a
+    // zero-travel rapid that states no new pose stays.
+    let mut held: Option<[f64; 3]> = None;
+    no_swings(path)
         .iter()
         .map(|m| {
             if let Some(a) = m.axis {
-                held = a;
+                held = Some(a);
             }
-            camcraft_app::geometry::Point3::new(m.to.x + r * held[0], m.to.y + r * held[1], m.to.z + r * held[2])
+            let h = held.unwrap_or([0.0, 0.0, 1.0]);
+            camcraft_app::geometry::Point3::new(m.to.x + r * h[0], m.to.y + r * h[1], m.to.z + r * h[2])
+        })
+        .collect()
+}
+
+/// #3414: the path's moves without the rotary indices - the
+/// standstill swings the stamp inserts: zero-travel RAPIDS whose axis
+/// CHANGES off the pose held. A zero-travel rapid that states no new
+/// pose (the ladder's own) stays, and so does an opening upright
+/// statement from no held pose (#3300): the home the path inherits,
+/// commanded as zero angles - no rotation happens.
+fn no_swings(t: &camcraft_app::cl::Toolpath) -> Vec<&camcraft_app::cl::Move> {
+    let mut held: Option<[f64; 3]> = None;
+    t.moves
+        .iter()
+        .filter(|m| {
+            let swing = m.kind == MoveKind::Rapid && m.from == m.to && m.axis != held
+                && !(held.is_none() && m.axis.is_some_and(|a| camcraft_app::cl::is_vertical(&a)));
+            if !swing {
+                held = m.axis.or(held);
+            }
+            !swing
         })
         .collect()
 }
@@ -6770,6 +6838,9 @@ fn stub_tool() -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 
@@ -6808,7 +6879,10 @@ fn avoid_job(tag: &str, dodging: bool) -> camcraft_app::cl::Toolpath {
 fn multiaxis_rough_poses_around_the_shank_and_moves_nothing() {
     let off = avoid_job("MAQ", false);
     let on = avoid_job("MAR", true);
-    assert_eq!(off.moves.len(), on.moves.len(), "the dodge added a move");
+    // #3414: the posed twin adds a zero-travel rotary index per stamp;
+    // the dodge must add no CUT move.
+    let cuts = |t: &camcraft_app::cl::Toolpath| t.moves.iter().filter(|m| m.kind != MoveKind::Rapid).count();
+    assert_eq!(cuts(&off), cuts(&on), "the dodge added a move");
     let mut escaped = 0usize;
     let mut plus: Vec<[f64; 3]> = Vec::new();
     // The pivot law: F spends the free axis and nothing else - the
@@ -6817,7 +6891,10 @@ fn multiaxis_rough_poses_around_the_shank_and_moves_nothing() {
     // whose floors stand upright (tip = plan).
     same_balls(&off, &on, 4.0);
     rapids_inherit(&on, 4.0);
-    for (i, (a, b)) in off.moves.iter().zip(&on.moves).enumerate() {
+    // #3414: skip the zero-travel rotary indices (the swings -
+    // zero-travel RAPIDS only), so the two paths pair move for move
+    // as before.
+    for (i, (a, b)) in no_swings(&off).into_iter().zip(no_swings(&on)).enumerate() {
         if leans(a.axis) && b.axis != a.axis {
             // F re-answered a wall lean: only where the real tip's
             // shank touched (the stub's 5-radius shank under a lean
@@ -7159,6 +7236,7 @@ fn multiaxis_contour_params(top_z: f64, bottom_z: f64) -> OpParams {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     }
 }
 
@@ -7443,6 +7521,72 @@ fn multiaxis_contour_refuses_a_flat_tool_and_nonsense_pose_by_name() {
     );
 }
 
+fn rotary_flow_params(clearance: f64) -> OpParams {
+    OpParams::RotaryFlow {
+        tolerance: 0.05,
+        stepover: None,
+        clearance_z: Height::fixed(clearance),
+        retract_z: None,
+        feed: 500.0,
+        plunge_feed: 100.0,
+        climb: true,
+        lead_deg: 0.0,
+        lag_deg: 0.0,
+        max_tilt_deg: 60.0,
+        stated_axis: None,
+    }
+}
+
+#[test]
+fn rotary_flow_refuses_a_flat_tool_and_nonsense_numbers_by_name() {
+    // The flow band's doors (#2826): a flat tool has no ball to ride
+    // the band's radial poses (generation), a zero tolerance is no
+    // verify budget, a lead past 90 degrees is no lean the pose law
+    // admits, and a zero cone allows no tilt at all (creation - the
+    // sane door, the twins' law minus the station window).
+    let (world, mut history) = box_part_world();
+    add_tool(&world, &mut history, "BN-0600");
+    let src = mac_top_edges(&world);
+    common::create_past_the_tool_law(
+        &world,
+        &mut history,
+        "RF1",
+        "EM-0600-4FL",
+        src.clone(),
+        rotary_flow_params(25.0),
+    );
+    let CommandError::Machining(msg) = common::generate_past_the_tool_law(&world, "RF1")
+        .expect_err("a flat tool cannot ride the band")
+    else {
+        panic!("expected a machining refusal");
+    };
+    assert!(msg.contains("ball-nose"), "{msg}");
+    assert_eq!(status(&world, "RF1"), OpStatus::Never);
+
+    let mk = |p: OpParams| CreateOperation::new(&world, "RF2", "BN-0600", src.clone(), p);
+    let mut zero_tol = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { tolerance, .. } = &mut zero_tol {
+        *tolerance = 0.0;
+    }
+    assert!(
+        matches!(mk(zero_tol), Err(CommandError::Invalid(_))),
+        "tol 0 is no budget"
+    );
+    let mut flat_lean = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { lead_deg, .. } = &mut flat_lean {
+        *lead_deg = 91.0;
+    }
+    assert!(matches!(mk(flat_lean), Err(CommandError::Invalid(_))));
+    let mut no_cone = rotary_flow_params(25.0);
+    if let OpParams::RotaryFlow { max_tilt_deg, .. } = &mut no_cone {
+        *max_tilt_deg = 0.0;
+    }
+    assert!(
+        matches!(mk(no_cone), Err(CommandError::Invalid(_))),
+        "a 0 cone allows no lean at all"
+    );
+}
+
 #[test]
 fn multiaxis_contour_quiet_shank_moves_nothing() {
     // Opt-in means EXACTLY opt-in at the chain's seam too: the catalog
@@ -7617,6 +7761,7 @@ fn deburr_params(setback: f64, top_z: f64, bottom_z: f64) -> OpParams {
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     }
 }
 

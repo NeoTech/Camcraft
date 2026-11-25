@@ -1,4 +1,4 @@
-//! Zero-step die inspection on the Classic 2S, from the MIT Agie Processor and CamCraft's sketch predicates.
+//! Zero-step die inspection on the Classic 2S: our own implementation over CamCraft's sketch predicates.
 
 mod piece;
 

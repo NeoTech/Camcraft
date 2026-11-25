@@ -113,6 +113,7 @@ fn contour_disc_hole_matches_golden() {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&region, &p).unwrap();
     assert!(t.has_arcs(), "a fine polygon bore rim must fit to arcs");
@@ -150,6 +151,7 @@ fn contour_tangential_lead_matches_golden() {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&region, &p).unwrap();
     assert!(t.has_arcs());
@@ -258,6 +260,7 @@ fn contour_plate_with_hole_matches_golden() {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&plate_with_hole(), &p).unwrap();
     write_golden("contour_plate_with_hole.cl", &gen_to_cltext(&t));
@@ -320,6 +323,7 @@ fn contour_plate_with_hole_blended_matches_golden() {
         helix_radius: 1.0,
         blend_turns: true, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     let t = contour(&plate_with_hole(), &p).unwrap();
     let sharp = contour(&plate_with_hole(), &ContourParams { blend_turns: false, ..p }).unwrap();
@@ -488,6 +492,9 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 

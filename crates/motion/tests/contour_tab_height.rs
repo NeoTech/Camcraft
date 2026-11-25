@@ -44,6 +44,7 @@ fn params(bottom_z: f64, stepdown: f64, tab_height: f64) -> ContourParams {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: Links::PLANAR,
+        picks: Default::default(),
     }
 }
 

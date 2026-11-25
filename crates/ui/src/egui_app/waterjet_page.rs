@@ -37,7 +37,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         feed,
         pierce_time,
         abrasive_delay,
-        linearize,
+        linearize, picks: _,
     } = p;
     if tab == SEC_GEO {
         auto_opt(ui, "Kerf width", "Nozzle", kerf, "the nozzle's diameter", 0.8, |ui, v| num(ui, u, v));

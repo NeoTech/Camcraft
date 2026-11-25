@@ -100,6 +100,7 @@ fn side(direction: SinkerSideDirection, amount: f64, undersize: f64, condition: 
             layer: None,
             wear_lost: None,
             wear_over: None,
+            picks: Default::default(),
         },
         direction,
         amount,

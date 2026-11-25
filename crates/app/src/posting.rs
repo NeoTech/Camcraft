@@ -1570,6 +1570,17 @@ impl HeightRefs for OpParams {
                 v.extend(retract_z.iter());
                 v
             }
+            // The flow band's two radii (#2826): the same walk, minus
+            // the window the picks replaced.
+            OpParams::RotaryFlow {
+                clearance_z,
+                retract_z,
+                ..
+            } => {
+                let mut v = vec![clearance_z];
+                v.extend(retract_z.iter());
+                v
+            }
             // The chamfer ride resolves three: its floor is DERIVED
             // from width and angle, so there is no bottom plane to
             // reference - the top plane is the only height the ride

@@ -63,6 +63,7 @@ fn bore(strategy: BoreStrategy) -> OpParams {
         climb: true,
         tolerance: 0.01,
         holes: vec![Hole { xy: Point2::new(15.0, 15.0), radius: 5.5, entry_z: TOP, floor_z: FLOOR, through: false, stepped: false }],
+        picks: Default::default(),
     }
 }
 

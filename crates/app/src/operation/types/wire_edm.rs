@@ -10,6 +10,7 @@
 //! `motion::wire_edm`); no vendor material consulted.
 
 use super::height::Height;
+use crate::path_picks::PathPicks;
 
 pub use crate::wire_edm::{WireSide, WireWidening};
 
@@ -17,6 +18,11 @@ pub use crate::wire_edm::{WireSide, WireWidening};
 /// open run is threaded and run out this far clear of the stock's edge,
 /// past the kerf. A closed profile never reads it.
 pub const DEFAULT_CLEARANCE: f64 = 1.0;
+
+/// The tangent arc lead radius (mm) the UI seeds when the arc lead is
+/// turned on (#3991): over any common kerf offset, small enough for a
+/// start hole a little more than 1 mm off the path.
+pub const DEFAULT_LEAD_ARC_RADIUS: f64 = 0.5;
 
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
@@ -58,9 +64,9 @@ pub struct WireContourOp {
     /// closed profile, the kerf's left / right of travel for an open
     /// run (#1109).
     pub side: WireSide,
-    /// The start hole / threading point, world XY mm; `None` is not
-    /// stated, and a closed profile is refused at generation without it.
-    pub start: Option<[f64; 2]>,
+    /// The start / threading pick (#532, #3339): empty is not stated,
+    /// and a closed profile is refused at generation without it.
+    pub picks: PathPicks,
     /// The tabs (#539); `None` is off, the default (#290 D6).
     pub tabs: Option<WireTabs>,
     /// The operator states the freed piece is caught (a slug catcher, a
@@ -99,6 +105,11 @@ pub struct WireContourOp {
     /// `false` - the default - refuses it by name. A 4-axis cut reads
     /// its heal tolerance instead.
     pub sharp_corners: bool,
+    /// The lead (#3991): `None` - the default - is the straight lead from
+    /// the start hole to the path's nearest point; `Some(r)` is a tangent
+    /// arc lead-in and lead-out of radius `r` mm (more than the kerf
+    /// offset), cut on a selected DXF profile's vertical single pass.
+    pub lead_arc_radius: Option<f64>,
 }
 
 /// How the two profiles of a 4-axis cut are paired (#537) - stated,
@@ -208,11 +219,12 @@ impl WireContourOp {
     pub fn is_sane(&self) -> bool {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
-            && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.picks.refusal().is_none()
             && self.taper_deg.is_finite()
             && self.taper_deg.abs() < 90.0
             && self.four_axis.as_ref().is_none_or(WireFourAxis::is_sane)
             && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
+            && self.lead_arc_radius.is_none_or(|r| r.is_finite() && r > 0.0 && r < 1e6)
             && self.clearance.is_finite()
             && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && sane_id(&self.condition)

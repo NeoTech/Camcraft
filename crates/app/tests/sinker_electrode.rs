@@ -122,6 +122,7 @@ fn burn(e: &ElectrodeBox, pass: SinkerPass, condition: &str) -> OpParams {
         layer: None,
         wear_lost: None,
         wear_over: None,
+        picks: Default::default(),
     })
 }
 

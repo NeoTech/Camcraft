@@ -172,6 +172,14 @@ Protected items stay highlighted while the operation is selected.
 | Passes | Steep stepover (Steep and shallow only) | Auto |
 | Passes | Reference ball (Pencil only) | None: every concave corner |
 
+For patterns that add wall rings after the shallow passes, **Passes >
+Steep flanks** defaults to **Waterlines**. Select **Leave uncut**
+(`waterlines: false`) to skip the rings on flanks steeper than 45°.
+The operation warns that the steep flanks remain uncut. Check the
+remaining stock before the next operation. Generation refuses the
+operation if there is no shallow cut. Waterline, Blend and Morph
+require the rings.
+
 **Gap link** (`gap_link`) chooses how 3D Finish crosses a gap between
 surface runs. **Jump**, the default, keeps the retract hop. **Straight**
 tries a feed link at the runs' tip heights and checks the swept ball

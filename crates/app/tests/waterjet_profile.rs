@@ -80,6 +80,7 @@ fn waterjet_op() -> WaterjetOp {
         pierce_time: 1.5,
         abrasive_delay: 0.5,
         linearize: None,
+        picks: Default::default(),
     }
 }
 

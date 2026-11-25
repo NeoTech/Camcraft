@@ -214,6 +214,11 @@ pub(super) fn pass_link(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: O
         st.level.extend(push(b, &d, &l, z, plane, m));
         return;
     }
+    // #3884: a start-side pass start in material that the feed below
+    // plunges into is named, never silent.
+    if cc && m.solid_restart && m.cleared_links && plunge_law::into_solid(b, e, z, mat_top, m.tool_r()) {
+        super::entry_warn::plunge_into_stock(b, m, e, z);
+    }
     // #1665: a pass that starts where the last one ended (the bore's ring
     // after its radial sweep) is entered by a plunge back down the column
     // the tool just cut. Where the user asked for a ramp or helix entry,

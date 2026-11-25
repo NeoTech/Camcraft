@@ -113,6 +113,7 @@ fn pocket(strategy: PocketStrategy, bottom: f64, stepdown: f64) -> OpParams {
         blend_turns: false,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

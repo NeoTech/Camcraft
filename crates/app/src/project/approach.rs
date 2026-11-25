@@ -76,13 +76,11 @@ pub struct ApproachDto {
     /// wear, every earlier file. `control_comp` wins if both are set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wear_comp: Option<bool>,
-    /// The user's start point (#1448), `[x, y]` in mm: written only when
-    /// set; absent is the automatic seam, every earlier file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Legacy pre-#3339 start point, read on load and migrated to op `picks`.
+    #[serde(default, skip_serializing)]
     pub start_point: Option<[f64; 2]>,
-    /// The user's exit point (#1473), `[x, y]` in mm: written only when
-    /// set; absent leaves at the seam, every earlier file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Legacy pre-#3339 exit point, read on load and migrated to op `picks`.
+    #[serde(default, skip_serializing)]
     pub exit_point: Option<[f64; 2]>,
     /// The equal-steps depth ladder (#2012): written only when on;
     /// absent is the remainder ladder, every earlier file.
@@ -143,8 +141,8 @@ pub fn approach_to_dto(a: &Approach) -> Option<ApproachDto> {
         predrilled: flag(a.predrilled, d.predrilled),
         control_comp: (a.compensation == Compensation::Control).then_some(true),
         wear_comp: (a.compensation == Compensation::Wear).then_some(true),
-        start_point: a.start_point.map(|q| [q.x, q.y]),
-        exit_point: a.exit_point.map(|q| [q.x, q.y]),
+        start_point: None,
+        exit_point: None,
         equal_steps: flag(a.equal_steps, d.equal_steps),
     };
     (dto != ApproachDto::default()).then_some(dto)
@@ -190,8 +188,6 @@ pub fn approach_from_dto(d: Option<&ApproachDto>) -> Approach {
         } else {
             Compensation::Computer
         },
-        start_point: d.start_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
-        exit_point: d.exit_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
         equal_steps: d.equal_steps.unwrap_or(a.equal_steps),
         center_cutting: true,
         // #2004: runtime only - the generation lays the stock top over it.

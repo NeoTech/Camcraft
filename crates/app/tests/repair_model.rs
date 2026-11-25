@@ -112,6 +112,7 @@ fn tools_and_operations_are_refused_as_not_models_not_setup_parts() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,

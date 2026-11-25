@@ -447,6 +447,9 @@ fn verified_multiaxis(params: &crate::operation::OpParams) -> bool {
             | OpParams::AdvancedSwarf { .. } | OpParams::RotaryContour { .. } | OpParams::RotaryParallel { .. }
             | OpParams::RotaryOffset { .. } | OpParams::MultiAxisRough { .. } | OpParams::Flow5D { .. }
             | OpParams::MultiAxisContour { .. } | OpParams::MultiAxisDeburr { .. }
+            // The flow band verifies under the same radial law
+            // (#2826).
+            | OpParams::RotaryFlow { .. }
     )
 }
 

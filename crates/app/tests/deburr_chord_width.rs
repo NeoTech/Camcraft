@@ -44,6 +44,7 @@ fn deburr(width: f64) -> OpParams {
         exclude_holes: false,
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
+        picks: Default::default(),
     }
 }
 

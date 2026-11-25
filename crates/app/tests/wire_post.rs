@@ -27,6 +27,12 @@
 
 #[path = "edm/sinker_fixture.rs"]
 mod sinker_fixture;
+// #3332: the exit pick of a Wire Contour, over this suite's documents.
+#[path = "wire_post/exit_pick.rs"]
+mod exit_pick;
+// #3215: a meshed model's circles and fillets posted as arcs.
+#[path = "wire_post/model_arcs.rs"]
+mod model_arcs;
 
 use flecs_ecs::prelude::World;
 
@@ -104,11 +110,12 @@ fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
     );
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
         both_pieces_restrained: false,
@@ -142,11 +149,12 @@ fn gouging_die() -> World {
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Location::default()).expect("stock");
     h.execute(&world, stock);
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Die,
-        start: Some([0.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(0.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
         both_pieces_restrained: false,
@@ -449,11 +457,12 @@ fn cutoff_doc(wrong: bool) -> World {
     // Travelling +Y the offcut (x > 60) is on the right.
     let side = if up != wrong { WireSide::Right } else { WireSide::Left };
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side,
-        start: None,
+        picks: Default::default(),
         tabs: None,
         capture: false,
         both_pieces_restrained: false,

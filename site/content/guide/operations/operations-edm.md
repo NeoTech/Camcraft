@@ -316,6 +316,19 @@ preselects `estbca25nsn060b035020`. Check the five offsets in order:
 for its rough clearance checks. Stop if the technology or offsets differ.
 Ra 0.35 µm is a requested surface finish.
 
+### Classic Cut 2S nominal inspection
+
+Use **Setup → Post → Agie nominal inspection** to create an inspection
+setup from one closed DXF opening. Use a 10 mm reference stock with work
+Z zero at its top and a 0.25 mm wire tool. Specify the centre of a 3 mm
+threading hole that fits entirely inside the opening. Select the saved
+operation and use **Export Agie inspection setup**.
+
+The native export carries the nominal geometry and zero working steps.
+Use it to inspect the geometry on the control. See the
+[inspection export procedure](@/guide/automate/mcp.md#agie-nominal-inspection)
+for the CLI and MCP commands and the control's check messages.
+
 ## Wire Contour refusals
 
 At **Apply** or creation, about the condition:

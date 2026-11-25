@@ -52,6 +52,7 @@ fn slot_world(center_cutting: bool) -> World {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "SLT", "EM", SrcRef::Stock, slot).expect("create"));
     world

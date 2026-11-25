@@ -164,7 +164,7 @@ pub(crate) fn program_breaks(
             tracing::warn!(
                 op = %p.name,
                 dropped = p.breaks.len() - kept.len(),
-                "2D Chamfer break whose cone tip stands inside the part, not on a wall - credit dropped, judged against the model (#2435)"
+                "2D Chamfer break lies inside the part, not on a wall - credit dropped, judged against the model (#2435)"
             );
         }
         out.extend(kept);

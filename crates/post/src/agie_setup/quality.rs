@@ -1,5 +1,5 @@
-//! The work qualities that a zero-step piece can request, from the MIT Agie Processor quality
-//! presets and our offline Agie Control checks (#2954, #2984, #2966).
+//! The work qualities that a zero-step piece can request, from the quality presets of our
+//! own implementation and our offline Agie Control checks (#2954, #2984, #2966).
 
 use super::QN2_OFFSETS_UM;
 

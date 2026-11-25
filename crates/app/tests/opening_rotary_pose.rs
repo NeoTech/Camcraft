@@ -161,6 +161,7 @@ fn contour5d_opening_states_rotaries_before_the_fanuc_tilted_feed() {
     let params = OpParams::Contour5D {
         tolerance: 0.1, clearance_z: Height::fixed(20.0), retract_z: None, top_z, bottom_z,
         feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+        picks: Default::default(),
     };
     let (world, mut h) = document(cap_facets(), box_stock());
     let path = generate(&world, &mut h, BALL, params);
@@ -173,6 +174,7 @@ fn flow5d_opening_states_rotaries_before_the_fanuc_tilted_feed() {
     let params = OpParams::Flow5D {
         tolerance: 0.1, stepover: Some(3.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z, bottom_z,
         feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0, shank_avoid: false,
+        picks: Default::default(),
     };
     let (world, mut h) = document(cap_facets(), box_stock());
     let path = generate(&world, &mut h, BALL, params);
@@ -189,6 +191,7 @@ fn swarf_opening_states_rotaries_before_the_fanuc_tilted_feed() {
         tolerance: 0.1, stepover: Some(2.0), clearance_z: Height::fixed(25.0), retract_z: None,
         top_z: Height::fixed(11.0), bottom_z: Height::fixed(5.0), feed: 500.0, plunge_feed: 100.0,
         climb: true, lead_deg: 15.0, lag_deg: 0.0, max_tilt_deg: 60.0,
+        picks: Default::default(),
     };
     let (world, mut h) = document(blade_facets(), stock);
     let path = generate(&world, &mut h, SWARF_BALL, params);

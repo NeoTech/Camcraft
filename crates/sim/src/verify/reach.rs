@@ -102,10 +102,16 @@ pub(super) fn band_reach_counted(
             let mut zs: Vec<u64> = rest.cut().iter().map(|c| c.2.to_bits()).collect();
             zs.sort_unstable();
             zs.dedup();
+            // #3831: geometric slab sections may share their point set,
+            // but their vertices and vertex means depend on the plane.
+            // Neither spaced wall samples nor a band-width threshold
+            // proves coverage of their nudged boundary samples. Keep
+            // every plane's original samples, including narrow annuli
+            // and near-tangent contacts with uncut stock.
             for k in zs {
                 stats.slices += 1;
-                if let Some(s) = rest.islands_at(f, f64::from_bits(k)) {
-                    samples.extend(boundary_samples(&s));
+                if let Some(s) = rest.reach_slice(f, f64::from_bits(k)) {
+                    samples.extend(boundary_samples(s.region()));
                 }
             }
         }

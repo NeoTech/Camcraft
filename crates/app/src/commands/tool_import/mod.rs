@@ -5,6 +5,7 @@
 //!
 //! Provenance: our own command model (`AddTool` / `ChangeTool` /
 //! `DeleteTool`, batched into one undo unit); no vendor material consulted.
+//! #3904: a library tool's drawn cutter lands with it and undoes with it.
 
 use flecs_ecs::prelude::World;
 
@@ -13,7 +14,9 @@ use crate::commands::{Command, CommandError, DeleteTool};
 use crate::model;
 use crate::project::ToolBodyDto;
 use crate::schema::{ToolBody, ToolDef};
+use crate::spun::SpunProfile;
 use crate::tool_body;
+use crate::tool_cutter;
 use crate::tool_library::LibraryTool;
 use crate::tools::Tool;
 
@@ -22,8 +25,9 @@ mod report;
 
 /// One planned change of an import, applied in order, inverted in reverse.
 enum Step {
-    /// A new tool, its body (#889), and its assigned T/H number (#2442, #2566).
-    Add(String, Tool, Option<ToolBody>, u32),
+    /// A new tool, its body (#889), its assigned T/H number (#2442,
+    /// #2566) and its drawn cutter (#3904).
+    Add(String, Tool, Option<ToolBody>, u32, Option<SpunProfile>),
     /// Same entity, new definition and optional number change.
     Change {
         name: String,
@@ -32,6 +36,8 @@ enum Step {
         prev_number: Option<u32>,
         next_number: Option<u32>,
         body: Option<Box<(Option<ToolBody>, ToolBody)>>,
+        /// #3904: (the cutter before, the library's cutter).
+        cutter: Option<Box<(Option<SpunProfile>, SpunProfile)>>,
     },
     Remove(DeleteTool),
 }
@@ -52,6 +58,7 @@ fn change_refusal(
     prev: &Tool,
     next: &Tool,
     landing: Option<&ToolBody>,
+    landing_cutter: Option<&SpunProfile>,
 ) -> Option<String> {
     if let Some(why) = next.torch_refusal() {
         return Some(format!("tool '{name}': {why}"));
@@ -65,7 +72,7 @@ fn change_refusal(
     {
         return Some(format!("tool '{name}': {e}"));
     }
-    if let Some(c) = crate::tool_cutter::cutter_of(world, &entity)
+    if let Some(c) = landing_cutter.cloned().or_else(|| tool_cutter::cutter_of(world, &entity))
         && let Err(e) = camcraft_tools::cutter_profile::agrees(next, &c)
     {
         return Some(format!("tool '{name}': the drawn cutter profile no longer fits: {e}"));
@@ -199,12 +206,17 @@ impl ImportTools {
         let mut added: Vec<(String, Tool)> = Vec::new();
         let mut report = ImportReport::default();
 
-        for LibraryTool { name, tool, body, number: explicit_num } in library {
+        for LibraryTool { name, tool, body, number: explicit_num, cutter } in library {
             if let Some(err) = reserved(world, &name) {
                 return Err(err);
             }
             if let Some(why) = tool.why_not_sane() {
                 return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
+            }
+            if let Some(c) = &cutter
+                && let Err(e) = camcraft_tools::cutter_profile::agrees(&tool, c)
+            {
+                return Err(CommandError::Invalid(format!("tool '{name}': the drawn cutter profile does not fit: {e}")));
             }
             if steps.iter().any(|s| matches!(s, Step::Add(n, ..) if *n == name)) || report_has(&report, &name) {
                 return Err(CommandError::Invalid(format!("tool '{name}' appears twice in the library")));
@@ -233,21 +245,23 @@ impl ImportTools {
             let doc_body = existing.as_ref().and_then(|e| tool_body::body_of(world, e));
             let body_same = body.is_none() || body_key(doc_body.as_ref()) == body_key(body.as_ref());
             let num_same = explicit_num.is_none() || explicit_num == prev_number;
+            let doc_cutter = existing.as_ref().and_then(|e| tool_cutter::cutter_of(world, e));
+            let cutter_same = cutter.is_none() || doc_cutter == cutter;
             match (existing, current) {
                 (None, _) => {
                     let assigned = claim_number(world, tool.kind, &mut number_owners, &name, explicit_num)?;
                     report.added.push(name.clone());
                     added.push((name.clone(), tool.clone()));
-                    steps.push(Step::Add(name, tool, body, assigned));
+                    steps.push(Step::Add(name, tool, body, assigned, cutter));
                 }
-                (Some(_), Some(prev)) if prev == tool && body_same && num_same => {
+                (Some(_), Some(prev)) if prev == tool && body_same && num_same && cutter_same => {
                     if body.is_some() {
                         report.holders = report.holders.saturating_sub(1);
                     }
                     report.skipped.push(name);
                 }
                 (Some(_), Some(prev)) if mode != ImportMode::Add => {
-                    if let Some(why) = change_refusal(world, &name, &prev, &tool, body.as_ref()) {
+                    if let Some(why) = change_refusal(world, &name, &prev, &tool, body.as_ref(), cutter.as_ref()) {
                         return Err(CommandError::Invalid(why));
                     }
                     let next_number = match explicit_num {
@@ -259,7 +273,8 @@ impl ImportTools {
                         _ => report.updated.push(name.clone()),
                     }
                     let body = body.map(|b| Box::new((doc_body, b)));
-                    steps.push(Step::Change { name, prev, next: tool, prev_number, next_number, body });
+                    let cutter = cutter.map(|c| Box::new((doc_cutter, c)));
+                    steps.push(Step::Change { name, prev, next: tool, prev_number, next_number, body, cutter });
                 }
                 (Some(_), None) if mode != ImportMode::Add => {
                     return Err(CommandError::Invalid(format!(
@@ -273,7 +288,7 @@ impl ImportTools {
                     let assigned = claim_number(world, tool.kind, &mut number_owners, &free, explicit_num)?;
                     report.renamed.push((name, free.clone()));
                     added.push((free.clone(), tool.clone()));
-                    steps.push(Step::Add(free, tool, body, assigned));
+                    steps.push(Step::Add(free, tool, body, assigned, cutter));
                 }
             }
         }
@@ -315,11 +330,17 @@ fn put_body(world: &World, name: &str, body: Option<&ToolBody>) {
     }
 }
 
+fn put_cutter(world: &World, name: &str, cutter: Option<&SpunProfile>) {
+    if let Some(entity) = model::find_by_name(world, name) {
+        tool_cutter::set_cutter(world, &entity, cutter);
+    }
+}
+
 impl Command for ImportTools {
     fn apply(&self, world: &World) {
         for step in &self.steps {
             match step {
-                Step::Add(name, tool, body, number) => {
+                Step::Add(name, tool, body, number, cutter) => {
                     let entity = match model::find_by_name(world, name) {
                         Some(entity) => entity,
                         None => model::spawn(world, name),
@@ -328,11 +349,15 @@ impl Command for ImportTools {
                         .entity_view(world)
                         .set(ToolDef { tool: tool.clone(), number: Some(*number) });
                     tool_body::set_body(world, &entity, body.as_ref());
+                    tool_cutter::set_cutter(world, &entity, cutter.as_ref());
                 }
-                Step::Change { name, next, next_number, body, .. } => {
+                Step::Change { name, next, next_number, body, cutter, .. } => {
                     put(world, name, next, *next_number);
                     if let Some((_, b)) = body.as_deref() {
                         put_body(world, name, Some(b));
+                    }
+                    if let Some((_, c)) = cutter.as_deref() {
+                        put_cutter(world, name, Some(c));
                     }
                 }
                 Step::Remove(del) => del.apply(world),
@@ -348,10 +373,13 @@ impl Command for ImportTools {
                         model::remove(world, &entity);
                     }
                 }
-                Step::Change { name, prev, prev_number, body, .. } => {
+                Step::Change { name, prev, prev_number, body, cutter, .. } => {
                     put(world, name, prev, *prev_number);
                     if let Some((before, _)) = body.as_deref() {
                         put_body(world, name, before.as_ref());
+                    }
+                    if let Some((before, _)) = cutter.as_deref() {
+                        put_cutter(world, name, before.as_ref());
                     }
                 }
                 Step::Remove(del) => del.invert(world),

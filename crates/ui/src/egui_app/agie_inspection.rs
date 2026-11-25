@@ -5,6 +5,7 @@ use crate::state::{CommandKind, State};
 use camcraft_app::geometry::sketch_chains::ChainId;
 use camcraft_app::{operation::wire_op, setup, sketch};
 use egui::{ComboBox, Ui};
+use flecs_ecs::prelude::World;
 
 #[derive(Default, Clone)]
 struct Draft {
@@ -15,16 +16,26 @@ struct Draft {
     y: String,
 }
 
-fn agie_mounted(state: &State, ctx: Option<&str>) -> bool {
-    camcraft_app::setup_mount::machine_of(&state.world, ctx)
-        .1
-        .is_some_and(|m| m.model == "AGIECUT CLASSIC 2S")
+/// The setup context mounts the Agie wire machine: the test that the
+/// inspection export applies to the operation's setup.
+pub(super) fn agie_mounted(world: &World, ctx: Option<&str>) -> bool {
+    camcraft_app::setup_mount::machine_of(world, ctx).1.is_some_and(|m| {
+        m.model == "AGIECUT CLASSIC 2S"
+            && camcraft_app::machine::kind(Some(&m)) == camcraft_app::machine::Kind::WireEdm
+    })
+}
+
+/// The setup context is an Agie job: it mounts the Agie machine, or it
+/// posts through the native Agie post. Only then do Agie-only rows show.
+pub(super) fn agie_job(world: &World, ctx: Option<&str>) -> bool {
+    agie_mounted(world, ctx)
+        || camcraft_app::posting::agie::is_native(&camcraft_app::setup_mount::post_of(world, ctx))
 }
 
 pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    // A document without setups and without the Agie machine has nothing to
-    // offer here: draw no header, so the Post page keeps its layout.
-    if ctx.is_none() && !agie_mounted(state, ctx) {
+    // Agie-only: a setup without the Agie machine draws no header, so the
+    // Post page of every other job keeps its layout.
+    if !agie_mounted(&state.world, ctx) {
         return;
     }
     egui::CollapsingHeader::new("Agie nominal inspection")
@@ -33,13 +44,6 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
 }
 
 fn fields(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    if !agie_mounted(state, ctx) {
-        hint(
-            ui,
-            "Mount the AGIECUT CLASSIC 2S machine on this setup to create an inspection opening.",
-        );
-        return;
-    }
     hint(
         ui,
         "Choose one closed opening and the centre of a 3 mm start hole. The nominal piece has zero working steps. Physical stock XY is unknown.",

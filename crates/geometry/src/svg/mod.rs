@@ -103,5 +103,6 @@ pub fn parse_with_limits(data: &[u8], unit: Option<Unit>, limits: Limits) -> Res
         annotations: Vec::new(),
         elevation: None,
         summary: walk.summary,
+        curve_tolerance: None,
     })
 }

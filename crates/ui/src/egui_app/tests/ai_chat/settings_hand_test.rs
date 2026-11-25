@@ -135,6 +135,16 @@ fn failed_test_names_the_cause_the_model_and_what_to_try() {
             "Set API key",
         ),
         (
+            "generativelanguage.googleapis.com answered HTTP 400: API key not valid. Please pass a valid API key. [status: INVALID_ARGUMENT]",
+            "rejected the key",
+            "Set API key",
+        ),
+        (
+            "generativelanguage.googleapis.com answered HTTP 403: Method doesn't allow unregistered callers. [status: PERMISSION_DENIED]",
+            "rejected the key",
+            "Set API key",
+        ),
+        (
             "api.anthropic.com answered HTTP 404: model: nope",
             "does not know this model",
             "Model name",
@@ -179,6 +189,73 @@ fn failed_test_names_the_cause_the_model_and_what_to_try() {
         assert!(text.contains(&format!("Details: {error}")), "{text}");
     }
     assert!(test_failure("h answered HTTP 404: x", "m", "h").contains("(HTTP 404)"));
+}
+
+#[test]
+fn model_not_found_is_not_a_rejected_key() {
+    let text = test_failure(
+        "api.openai.com answered HTTP 404: The model `invalid_api_key` does not exist (endpoint: POST https://api.openai.com/v1/models/invalid_api_key)",
+        "invalid_api_key",
+        "https://api.openai.com/v1",
+    );
+    assert!(
+        !text.contains("rejected the key"),
+        "must not say key rejected: {text}"
+    );
+    assert!(
+        text.contains("the provider does not know this model (HTTP 404)"),
+        "{text}"
+    );
+    assert!(text.contains("Model tried: invalid_api_key"), "{text}");
+}
+
+#[test]
+fn service_failure_is_not_a_rejected_key() {
+    let text = test_failure(
+        "api.anthropic.com answered HTTP 503: upstream service is unauthenticated (endpoint: POST https://api.anthropic.com/v1/messages)",
+        "claude-sonnet",
+        "https://api.anthropic.com/v1",
+    );
+    assert!(
+        !text.contains("rejected the key"),
+        "must not say key rejected: {text}"
+    );
+    assert!(
+        text.contains("the provider is not available now (HTTP 503)"),
+        "{text}"
+    );
+}
+
+#[test]
+fn bad_request_model_is_not_authentication_evidence() {
+    for (model, error) in [
+        (
+            "authentication_error",
+            "host answered HTTP 400: Invalid model name: authentication_error [status: INVALID_ARGUMENT] (endpoint: POST https://host/models/authentication_error:generateContent)",
+        ),
+        (
+            "api_key_invalid",
+            "host answered HTTP 400: Invalid model name: api_key_invalid [status: INVALID_ARGUMENT] (endpoint: POST https://host/models/api_key_invalid:generateContent)",
+        ),
+        (
+            "api key not valid",
+            "host answered HTTP 400: Invalid model name: 'api key not valid' [status: INVALID_ARGUMENT] (endpoint: POST https://host/models/api-key:generateContent)",
+        ),
+        (
+            "api key expired",
+            "host answered HTTP 400: The model `api key expired` is not found [status: INVALID_ARGUMENT] (endpoint: POST https://host/models/expired:generateContent)",
+        ),
+    ] {
+        let text = test_failure(error, model, "https://host");
+        assert!(
+            !text.contains("rejected the key"),
+            "must not treat echoed model '{model}' as key rejection: {text}"
+        );
+        assert!(
+            text.contains("the provider refused the request or the model name (HTTP 400)"),
+            "must show model refusal for '{model}': {text}"
+        );
+    }
 }
 
 /// Fails the first check like a stopped server, then answers like a started one.

@@ -225,6 +225,10 @@ mod reach_reference;
 mod reach_tests;
 mod sample_grid;
 mod rest;
+// #3831: the prismatic Z slabs a ramped path sections once.
+mod slab;
+#[cfg(test)]
+mod slab_tests;
 // #3615: the exact Y-slab point-location index over a cached slice.
 mod slice_index;
 mod rotary;

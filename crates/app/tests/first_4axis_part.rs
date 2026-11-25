@@ -107,6 +107,7 @@ fn slot(a: (f64, f64), b: (f64, f64), width: f64, depth: f64, stepdown: f64, fee
         tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 

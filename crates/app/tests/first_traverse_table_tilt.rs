@@ -114,6 +114,7 @@ fn face_posted(rig: Rig, a_deg: f64, b_deg: f64, over: f64, post: Option<PostRef
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, p).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate"));

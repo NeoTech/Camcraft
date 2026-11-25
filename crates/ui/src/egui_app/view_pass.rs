@@ -128,6 +128,9 @@ pub(crate) fn encode(
     // has a frame; the field view is walked once per Deviate arming.
     let mut traced = false;
     if let Some(se) = stock_eye.as_mut().filter(|_| !state.active_stock_hidden()) {
+        // #3336: a playback that starts now may cut on the GPU layer only
+        // for an eye that draws the packed frame (`play_layer`).
+        state.layer_play.eye = se.traces_on_gpu();
         if !state.display.is_wireframe() {
             crate::actions::ensure_field_view(state);
         }
@@ -140,6 +143,13 @@ pub(crate) fn encode(
             Err(err) => {
                 state.say_once(&format!("the cut stock cannot be drawn, the uncut stock shows: {err}"));
             }
+        }
+        // #3336: the eye took the layer frame but marches it on the CPU,
+        // from a stock that lacks the layer's cut: the CPU playback runs.
+        let held = state.field_view.as_ref().and_then(|r| r.as_ref().ok()).and_then(|fv| se.holds_on_gpu(fv));
+        if state.layer_play.must_end(held.is_some(), held == Some(true)) {
+            crate::play_layer::end(state);
+            traced = false;
         }
     }
     // M13.4: both verdict painters wear the viewer's palette.

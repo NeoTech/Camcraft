@@ -97,6 +97,7 @@ fn contour_op(stepdown: f64, leave: f64) -> OpParams {
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -186,6 +187,7 @@ fn direct_params(stepdown: f64, leave: f64) -> ContourParams {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 
@@ -351,6 +353,7 @@ fn drill_op(bottom: Option<f64>) -> OpParams {
             stepped: false,
         }],
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -404,6 +407,7 @@ fn a_face_cut_into_the_part_is_a_gouge() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let (world, mut h) = world_with(block_with_hole(Some(10.0)), "EM-0800-4FL");
     let (_, w) = run(&world, &mut h, "F1", "EM-0800-4FL", face(20.0));

@@ -43,6 +43,7 @@ fn params(side: Side, lead: Lead, climb: bool, comp: Compensation) -> ContourPar
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
+        picks: Default::default(),
     }
 }
 
@@ -268,11 +269,11 @@ fn a_neck_narrower_than_the_tool_is_refused_by_name() {
 #[test]
 fn tabs_blends_overlap_and_keep_down_links_are_refused_by_name() {
     let base = params(Side::Auto, Lead::Perpendicular { length: 8.0 }, true, Compensation::Control);
-    let tabs = refusal(&ContourParams { tab_count: 2, tab_width: 4.0, tab_height: 1.0, ..base });
+    let tabs = refusal(&ContourParams { tab_count: 2, tab_width: 4.0, tab_height: 1.0, ..base.clone() });
     assert!(tabs.contains("does not ride tabs"), "{tabs}");
-    let blend = refusal(&ContourParams { blend_turns: true, ..base });
+    let blend = refusal(&ContourParams { blend_turns: true, ..base.clone() });
     assert!(blend.contains("corner blends"), "{blend}");
-    let mut ov = base;
+    let mut ov = base.clone();
     ov.links.approach.overlap = 2.0;
     let ov = refusal(&ov);
     assert!(ov.contains("overlap"), "{ov}");

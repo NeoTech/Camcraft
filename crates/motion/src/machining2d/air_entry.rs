@@ -92,6 +92,12 @@ impl AirRoom {
         Some(self)
     }
 
+    /// Whether the pass starts at Outside (#3884: its Arc entry is in air
+    /// or refused).
+    pub(super) fn outside(&self) -> bool {
+        self.side == "Outside"
+    }
+
     /// The XY distance of `p` from the stock box (0 inside it).
     fn off_box(&self, p: Point2) -> f64 {
         let dx = (self.lo.x - p.x).max(p.x - self.hi.x).max(0.0);
@@ -231,13 +237,18 @@ fn plunge_point(air: &AirRoom, x: &XyArc) -> Option<Point2> {
     (air.off_box(p) >= air.grow).then_some(p)
 }
 
-/// The named stand-in when no air entry fits: a helix, else the ramp along
-/// the first cut - or the refusal. Never the axial dive that the Arc entry
+/// The named stand-in of an Inside pass when no air entry fits: a helix,
+/// else the ramp along the first cut - or the refusal. An Outside pass is
+/// refused by name (#3884). Never the axial dive that the Arc entry
 /// gave before (#3746), and never the vertical arc ramp: its first chords
 /// come down within 30 degrees of the axis, which the plunge law reads as
 /// a plunge into material.
 #[allow(clippy::too_many_arguments)]
 fn stand_in(air: &AirRoom, why: &str, l: &Lvl, leg: Point2, z: f64, prev_z: f64, m: &Motion) -> Descent {
+    // #3884: an Outside pass has no stand-in: in air, or refused by name.
+    if let Err(r) = super::entry_warn::outside_air_check(air.outside(), Entry3D::Arc, false, why) {
+        return Descent::Refused(r);
+    }
     let head = format!("entry: {} pass - no air entry outside the stock box fits ({why})", air.side);
     let h = plan_arm(Entry3D::Helix, false, l, leg, z, prev_z, m);
     if matches!(h, Descent::Helix(..)) {

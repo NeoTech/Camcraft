@@ -296,6 +296,7 @@ fn a_document_posts_its_setup_operation_kind_and_tool_kind() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(
         &world,

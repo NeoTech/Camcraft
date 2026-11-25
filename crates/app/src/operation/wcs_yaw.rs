@@ -349,7 +349,15 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
                 ov.at = r.p2(ov.at);
             }
         }
-        OpParams::Slot { a, b, .. } | OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::Slot { a, b, picks, .. } => {
+            *a = r.p2(*a);
+            *b = r.p2(*b);
+            // Compare temporary generation-frame points; stored picks stay in model coordinates.
+            for pick in picks.start.iter_mut().chain(picks.exit.iter_mut()) {
+                pick.xy = r.p2(pick.xy);
+            }
+        }
+        OpParams::TrochoidalSlot { a, b, .. } => {
             *a = r.p2(*a);
             *b = r.p2(*b);
         }

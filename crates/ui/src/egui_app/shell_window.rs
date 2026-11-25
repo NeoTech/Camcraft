@@ -297,6 +297,8 @@ impl Shell {
         // #2958: the anti-aliasing the Display menu offers on this device.
         self.state.samples_offered = crate::viewport::offered_samples(&adapter, device.features(), VIEW3D_FORMAT);
         diag_info!("viewport: sample counts offered {:?}", self.state.samples_offered);
+        // #3336: the playback's GPU cut runs on this render device, or not at all.
+        self.state.layer_play.cutter = crate::play_layer::shell_cutter(&adapter, &device, &queue);
 
         let mut renderer = Renderer::new(&device, config.format, RendererOptions::default());
         let scene = world::collect(&self.state);

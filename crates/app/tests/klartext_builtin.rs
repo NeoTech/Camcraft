@@ -57,6 +57,7 @@ fn generated_contour_and_face() -> flecs_ecs::prelude::World {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -92,6 +93,7 @@ fn generated_contour_and_face() -> flecs_ecs::prelude::World {
         blend_turns: false,
         blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
+        picks: Default::default(),
     };
     history.execute(
         &world,

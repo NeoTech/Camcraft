@@ -458,9 +458,9 @@ LICENSE (verbatim):
 
 The logotype is the project's own artwork, made by the maintainer; the sizes under `assets/logo/icons/` are generated from it by `cargo xtask logo`.
 
-## Agie Processor (native Wire EDM export)
+## Native Wire EDM export (our own earlier implementation)
 
-The Agie Classic Cut 2S writer uses the JEScript job attributes and Fine Ra0.30 settings documented by Agie Processor.
+The Agie Classic Cut 2S writer uses the JEScript job attributes and Fine Ra0.30 settings of our own earlier implementation, under this licence.
 
 ```text
 MIT License

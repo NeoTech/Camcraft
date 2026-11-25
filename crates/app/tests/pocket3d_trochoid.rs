@@ -62,6 +62,7 @@ fn rough(strategy: PocketStrategy, method: AdaptiveMethod) -> OpParams {
         feed_opt: false,
         shell: false,
         method,
+        picks: Default::default(),
     }
 }
 

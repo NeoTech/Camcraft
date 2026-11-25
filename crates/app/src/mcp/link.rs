@@ -12,8 +12,10 @@
 //!   the discovery file, which only the user can read; any other first
 //!   line closes the connection before a byte of it reaches the app.
 //! - **One file per window.** `<pid>.json` in the link folder; a window
-//!   removes its file when it closes. A file left by a crash is stale:
-//!   its socket does not answer, and the client skips it.
+//!   removes its file when it closes. While it runs it holds the OS lock
+//!   of `<pid>.lock` (link_owner.rs, #3995). A file left by a crash is
+//!   stale: its lock is free, so the client removes it and never dials
+//!   its address, which a false server can hold.
 //!
 //! Provenance: our own design (docs/decisions/3751-cli-ui-link.md) over
 //! std; the per-user folders are the platforms' published locations
@@ -109,23 +111,104 @@ fn new_token() -> String {
         .collect()
 }
 
-/// The first line a client sends.
+/// The window's answer to a good hello line with its token proof (#3874).
 #[must_use]
-pub fn hello_line(token: &str) -> String {
-    json!({ "camcraft_link": FORMAT, "token": token }).to_string()
+pub fn hello_ok(proof: &str) -> String {
+    json!({ "camcraft_link": FORMAT, "ok": true, "proof": proof }).to_string()
 }
 
-/// Whether a first line is the hello with this token. The compare takes
-/// the same time for every token of the same length.
+/// Constant-time comparison of two byte slices.
 #[must_use]
-pub fn hello_matches(line: &[u8], token: &str) -> bool {
-    let Ok(v) = serde_json::from_slice::<Value>(line) else { return false };
-    if v.get("camcraft_link").and_then(Value::as_u64) != Some(u64::from(FORMAT)) {
-        return false;
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).fold(0_u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Keyed proof that proves knowledge of the token without revealing it (#3874).
+#[must_use]
+pub fn token_proof(token: &str, nonce: &str, role: &str) -> String {
+    let k0 = token.get(..16).and_then(|s| u64::from_str_radix(s, 16).ok()).unwrap_or(0);
+    let k1 = token.get(16..32).and_then(|s| u64::from_str_radix(s, 16).ok()).unwrap_or(0);
+    let msg = format!("{role}:{nonce}");
+    format!("{:016x}", siphash24(k0, k1, msg.as_bytes()))
+}
+
+/// A random 64-bit nonce for the hello handshake.
+#[must_use]
+pub fn new_nonce() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("{:016x}", nanos ^ (u128::from(std::process::id()) << 32))
+}
+
+/// Pure deterministic SipHash-2-4 for token proof (#3874).
+fn siphash24(k0: u64, k1: u64, msg: &[u8]) -> u64 {
+    let mut v0 = k0 ^ 0x736f_6d65_7073_6575;
+    let mut v1 = k1 ^ 0x646f_7261_6e64_6f6d;
+    let mut v2 = k0 ^ 0x6c79_6765_6e65_7261;
+    let mut v3 = k1 ^ 0x7465_6462_7974_6573;
+    let mut b = (msg.len() as u64) << 56;
+    let (chunks, rem) = msg.as_chunks::<8>();
+    for chunk in chunks {
+        let m = u64::from_le_bytes(*chunk);
+        v3 ^= m;
+        for _ in 0..2 {
+            v0 = v0.wrapping_add(v1); v1 = v1.rotate_left(13); v1 ^= v0; v0 = v0.rotate_left(32);
+            v2 = v2.wrapping_add(v3); v3 = v3.rotate_left(16); v3 ^= v2;
+            v0 = v0.wrapping_add(v3); v3 = v3.rotate_left(21); v3 ^= v0;
+            v2 = v2.wrapping_add(v1); v1 = v1.rotate_left(17); v1 ^= v2; v2 = v2.rotate_left(32);
+        }
+        v0 ^= m;
     }
-    let Some(got) = v.get("token").and_then(Value::as_str) else { return false };
-    got.len() == token.len()
-        && got.bytes().zip(token.bytes()).fold(0_u8, |acc, (a, b)| acc | (a ^ b)) == 0
+    for (i, &byte) in rem.iter().enumerate() {
+        b |= (byte as u64) << (8 * i);
+    }
+    v3 ^= b;
+    for _ in 0..2 {
+        v0 = v0.wrapping_add(v1); v1 = v1.rotate_left(13); v1 ^= v0; v0 = v0.rotate_left(32);
+        v2 = v2.wrapping_add(v3); v3 = v3.rotate_left(16); v3 ^= v2;
+        v0 = v0.wrapping_add(v3); v3 = v3.rotate_left(21); v3 ^= v0;
+        v2 = v2.wrapping_add(v1); v1 = v1.rotate_left(17); v1 ^= v2; v2 = v2.rotate_left(32);
+    }
+    v0 ^= b;
+    v2 ^= 0xff;
+    for _ in 0..4 {
+        v0 = v0.wrapping_add(v1); v1 = v1.rotate_left(13); v1 ^= v0; v0 = v0.rotate_left(32);
+        v2 = v2.wrapping_add(v3); v3 = v3.rotate_left(16); v3 ^= v2;
+        v0 = v0.wrapping_add(v3); v3 = v3.rotate_left(21); v3 ^= v0;
+        v2 = v2.wrapping_add(v1); v1 = v1.rotate_left(17); v1 ^= v2; v2 = v2.rotate_left(32);
+    }
+    v0 ^ v1 ^ v2 ^ v3
+}
+
+/// The first line a client sends with mutual token proof (#3874).
+#[must_use]
+pub fn hello_line(token: &str, nonce: &str) -> String {
+    json!({
+        "camcraft_link": FORMAT,
+        "token_proof": token_proof(token, nonce, "client"),
+        "nonce": nonce
+    }).to_string()
+}
+
+/// Whether a first line is the hello with this token. Returns the server proof if valid.
+#[must_use]
+pub fn hello_matches(line: &[u8], token: &str) -> Option<String> {
+    let Ok(v) = serde_json::from_slice::<Value>(line) else { return None };
+    if v.get("camcraft_link").and_then(Value::as_u64) != Some(u64::from(FORMAT)) {
+        return None;
+    }
+    let nonce = v.get("nonce").and_then(Value::as_str).unwrap_or("");
+    if let Some(proof) = v.get("token_proof").and_then(Value::as_str)
+        && constant_time_eq(proof.as_bytes(), token_proof(token, nonce, "client").as_bytes())
+    {
+        return Some(token_proof(token, nonce, "server"));
+    } else if let Some(got) = v.get("token").and_then(Value::as_str)
+        && constant_time_eq(got.as_bytes(), token.as_bytes())
+    {
+        return Some(token_proof(token, nonce, "server"));
+    }
+    None
 }
 
 /// A window's registration: its discovery file (and socket file), removed
@@ -135,6 +218,10 @@ pub struct Registration {
     file: PathBuf,
     socket: Option<PathBuf>,
     entry: Entry,
+    lock_file: PathBuf,
+    /// Held for the life of the window: the proof that it runs (#3995).
+    /// Released by `Drop::drop` after it removed the files.
+    lock: std::fs::File,
 }
 
 impl Registration {
@@ -158,12 +245,20 @@ impl Registration {
 
 impl Drop for Registration {
     fn drop(&mut self) {
-        for path in std::iter::once(&self.file).chain(self.socket.as_ref()) {
+        let files = std::iter::once(&self.file).chain(self.socket.as_ref());
+        for path in files.chain(std::iter::once(&self.lock_file)) {
             if let Err(e) = std::fs::remove_file(path)
                 && e.kind() != std::io::ErrorKind::NotFound
             {
                 tracing::warn!("ui link: cannot remove {}: {e}", path.display());
             }
+        }
+        // Release the lock now, not at the close of the file (#4041): on
+        // Unix a child that another thread is starting holds a copy of the
+        // descriptor until its exec, and the close alone leaves the lock
+        // held while that copy lives.
+        if let Err(e) = self.lock.unlock() {
+            tracing::warn!("ui link: cannot release {}: {e}", self.lock_file.display());
         }
     }
 }
@@ -177,7 +272,18 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
     prepare_dir(dir)?;
     let pid = std::process::id();
     let token = new_token();
-    let (listener, transport, address, socket) = bind(dir, pid)?;
+    // The lock comes first, so no link file of this window is ever unproved.
+    let lock = super::link_owner::hold(dir, pid)?;
+    let lock_file = super::link_owner::lock_path(dir, pid);
+    let (listener, transport, address, socket) = match bind(dir, pid) {
+        Ok(bound) => bound,
+        Err(e) => {
+            let _ = lock.unlock();
+            drop(lock);
+            let _ = std::fs::remove_file(&lock_file);
+            return Err(e);
+        }
+    };
     let entry = Entry {
         format: FORMAT,
         pid,
@@ -188,7 +294,8 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
     };
     // Built before the write, so a failed write still removes the socket.
-    let registration = Registration { file: dir.join(format!("{pid}.json")), socket, entry };
+    let file = dir.join(format!("{pid}.json"));
+    let registration = Registration { file, socket, entry, lock_file, lock };
     write_entry(&registration.file, &registration.entry)?;
     Ok((listener, registration, token))
 }

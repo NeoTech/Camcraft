@@ -30,7 +30,11 @@ use super::KindInfo;
 /// "drill, tap or boring bar".
 #[must_use]
 pub fn kinds_phrase(kinds: &[ToolKind]) -> String {
-    let words: Vec<String> = kinds.iter().map(ToString::to_string).collect();
+    // #3369: a form mill cuts no operation yet, so no refusal offers it
+    // beside a kind that does.
+    let read: Vec<&ToolKind> = kinds.iter().filter(|k| **k != ToolKind::FormMill).collect();
+    let shown = if read.is_empty() { kinds.iter().collect() } else { read };
+    let words: Vec<String> = shown.iter().map(ToString::to_string).collect();
     match words.split_last() {
         None => String::from("tool"),
         Some((last, [])) => last.clone(),
@@ -48,11 +52,15 @@ fn setup_words(world: &World) -> String {
     }
 }
 
-/// The tool library, name-sorted, with each tool's kind.
+/// The tool library, name-sorted, with each tool's kind. #3368: a flat
+/// or ball taper tip fits no operation yet, so it is not offered; nor
+/// is a form mill (#3369).
 fn library(world: &World) -> Vec<(String, ToolKind)> {
     model::named_entities(world)
         .into_iter()
-        .filter_map(|(name, e)| model::tool_of(world, &e).map(|t| (name, t.kind)))
+        .filter_map(|(name, e)| model::tool_of(world, &e).map(|t| (name, t)))
+        .filter(|(_, t)| !camcraft_tools::taper::is_unread_tip(t) && t.kind != ToolKind::FormMill)
+        .map(|(name, t)| (name, t.kind))
         .collect()
 }
 
@@ -115,7 +123,8 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
     let (name, tool) = kinds.iter().find_map(|kind| {
         catalog
             .iter()
-            .filter(|(_, t)| t.kind == *kind && bought_size(t).is_finite())
+            // #3368: never a flat or ball tip the operations refuse.
+            .filter(|(_, t)| t.kind == *kind && bought_size(t).is_finite() && t.tip_form.is_sharp())
             .min_by(|(na, a), (nb, b)| {
                 let (sa, sb) = (bought_size(a), bought_size(b));
                 (sa - SUGGEST_SIZE_MM)
@@ -138,9 +147,10 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
 /// setup-level sentence answers instead (it names the real fix).
 #[must_use]
 pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String> {
-    let kind = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))?.kind;
+    let def = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))?;
+    let kind = def.kind;
     if info.accepts(kind) {
-        return None;
+        return unread_tip_refusal(&def, tool, info);
     }
     if let Some(none_fit) = create_refusal(world, info) {
         return Some(none_fit);
@@ -150,6 +160,35 @@ pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String
         info.label,
         kinds_phrase(info.tool_kinds)
     ))
+}
+
+/// #3368: a chamfer mill with a flat or ball tip, refused by name for
+/// every operation until its generator, simulation and collision laws
+/// read the tip (the consumer sub-issues of #3351). Read as a sharp cone,
+/// it is a smaller tool than the real one, and its toolpath can gouge.
+/// The creation door ([`tool_refusal`]) and the generation and post door
+/// ([`tool_problem`]) both say it, so a tool edited to such a tip after
+/// its operations exist is refused too.
+fn unread_tip_refusal(def: &Tool, tool: &str, info: &KindInfo) -> Option<String> {
+    // #3369: no generator reads a form mill's outline yet. The 2D
+    // Chamfer names the edge form work that opens it (#896).
+    if def.kind == ToolKind::FormMill {
+        let opens = if info.ty == super::OpType::Chamfer2D {
+            " - the edge form work (#896) opens the 2D Chamfer to it"
+        } else {
+            ""
+        };
+        return Some(format!(
+            "'{tool}' is a form mill: a {} operation does not read its form outline yet{opens}",
+            info.label
+        ));
+    }
+    camcraft_tools::taper::is_unread_tip(def).then(|| {
+        format!(
+            "'{tool}' has a {} tip: the tip form is not read by a {} operation yet - use a chamfer mill with a sharp tip",
+            def.tip_form, info.label
+        )
+    })
 }
 
 /// Why a tool's definition cannot change kind from `prev` to `next`:
@@ -253,7 +292,7 @@ pub fn tool_problem(world: &World, op_name: &str, op: &Operation) -> Option<Stri
         return Some(format!("{op_name}'s tool '{tool}' is no longer a tool; {wants}"));
     };
     if info.accepts(def.kind) {
-        return None;
+        return unread_tip_refusal(&def, tool, info).map(|why| format!("{op_name}'s tool {why}"));
     }
     Some(format!("{op_name}'s tool '{tool}' is a {}; {wants}", def.kind))
 }

@@ -288,6 +288,7 @@ fn render_all_guide_images() {
             feed, plunge_feed, climb, side, lead, tolerance, tab_count, tab_width,
             tab_height, entry, helix_radius, blend_turns, blend_radius, links, tilt,
             chain_overrides: Vec::new(),
+            picks: Default::default(),
         };
         edit_and_generate(&mut h, "2D Contour1", contour_with_lead(Lead::Arc { radius: 6.0 }));
         let lead_target = first_arc_cut_target(&h, "2D Contour1", false)
@@ -386,6 +387,7 @@ fn pocket_variant(base: &OpParams, strategy: PocketStrategy, stepover: f64,
         blend_radius, tilt, rest, ref corner_relief, .. } = *base else { panic!("expected guide pocket"); };
     OpParams::Pocket { pass_start: Default::default(), stock_to_leave, clearance_z, retract_z, top_z, bottom_z,
         stepdown, feed, plunge_feed, climb, optimal_load, blend_turns,
+            picks: Default::default(),
         blend_radius, tilt, rest, corner_relief: corner_relief.clone(), strategy, stepover, entry, helix_radius, links }
 }
 

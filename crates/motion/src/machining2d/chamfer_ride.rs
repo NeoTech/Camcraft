@@ -2,14 +2,14 @@
 //! depth, matched to the edge at the top plane.
 //!
 //! Provenance: the chamfer mill's cut law (machine-tool handbook
-//! geometry, [`super::chamfer`]): the cone's tip stands ON the wall at
-//! the corner depth `top - width * tan(angle)`, its generatrix on the
-//! face. Where the wall is vertical the section at the top plane and
+//! geometry, [`super::chamfer`]): the selected cone band's inner
+//! radius reaches the wall at `top - width * tan(angle)`, with its
+//! generatrix on the face. Where the wall is vertical the section at the top plane and
 //! the section at the corner depth are one outline. Where the model
 //! already carries a bevel (a modelled chamfer or round), the top
 //! plane's outline is the bevel's TOP edge, standing inside the wall
-//! by the bevel's width - a tip on it sits inside the part. The wall
-//! the cone must touch is the section at the corner depth. Our own law
+//! by the bevel's width - a zero-radius tip on it sits inside the part.
+//! The wall the cone band must touch is the section at the corner depth. Our own law
 //! over this repo's sections; no vendor material consulted.
 
 use crate::cl::TiltedFrame;
@@ -22,7 +22,7 @@ use super::face::GenError;
 /// chord sag two tessellated sections of one rounded corner can
 /// disagree by. A loose match only picks which outline to ride; the
 /// ride itself is always the wall section, and the program sim holds
-/// a 2D chamfer's tip to its wall (#2435) whatever was matched.
+/// a 2D chamfer's selected cone band to that wall (#2435) whatever was matched.
 const MATCH_SLACK: f64 = 0.05;
 
 /// Below this plan gap the wall IS the top edge (a vertical wall): the
@@ -32,8 +32,9 @@ const SAME_EDGE: f64 = 1e-6;
 
 /// The loops a no-pick 2D chamfer of `width` rides: for each loop of
 /// `top` (the section at the top plane - the edges to break), the loop
-/// of `corner` (the section at the corner depth - the wall the tip
-/// touches) that every vertex of the top loop stands within `width` of,
+/// of `corner` (the section at the authored corner depth - the wall the
+/// selected cone band touches) that every vertex of the top loop stands
+/// within `width` of,
 /// in plan (one way only: a wall loop's mitred corner stands farther
 /// than `width` from a bevel's top corner).
 /// A vertical wall rides the top loop itself. A `corner` loop matched

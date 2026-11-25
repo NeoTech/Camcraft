@@ -18,8 +18,12 @@ use crate::headless_gpu::{gpu_holders, test_gpu};
 /// The lib tests that make a wgpu instance. Each must take [`gpu_guard`]
 /// (or the shared device, [`test_gpu`], which takes it);
 /// `every_gpu_test_takes_the_lock` reads their source to pin it.
-const GPU_TESTS: [(&str, &str); 12] = [
+const GPU_TESTS: [(&str, &str); 15] = [
     ("tests.rs", "fn headless_run_succeeds()"),
+    // #3379: the pixel snapshots; `snapshot` makes the kittest renderer.
+    ("tests.rs", "fn egui_shell_snapshot()"),
+    ("tests.rs", "fn egui_shell_snapshot_light()"),
+    ("tests.rs", "fn tool_editor_snapshot()"),
     ("gpu.rs", "fn adapter_probe_names_the_gpu()"),
     ("report_tests.rs", "fn the_door_opens_the_window_and_a_kind_button_files_the_url()"),
     ("report_tests.rs", "fn the_title_field_travels_into_the_url()"),
@@ -41,6 +45,48 @@ const SHARED_DEVICE_BINARIES: [(&str, &str); 2] = [
     ("tests/trace_parity.rs", include_str!("../../tests/trace_parity.rs")),
 ];
 
+/// #3379: the tests of `tests/egui_app.rs` whose run refuses or fails
+/// before it asks for a device. Each other test there must take [`gpu_guard`].
+const EGUI_APP_NO_GPU: [&str; 5] = [
+    "selecting_the_retired_imgui_shell_refuses_with_rc_2",
+    "ui_flag_without_a_value_refuses_with_rc_2",
+    "ui_equals_form_refuses_like_the_space_form",
+    "a_headless_start_refuses_a_file_it_cannot_open_by_name",
+    "a_headless_start_with_a_broken_model_fails_by_name",
+];
+
+/// The first line of code in the body of the first function in `src`.
+fn first_statement(src: &str) -> &str {
+    let body = src.find('{').map_or("", |open| &src[open + 1..]);
+    body.trim_start().lines().find(|l| !l.trim_start().starts_with("//")).unwrap_or("").trim_start()
+}
+
+fn takes_the_guard(statement: &str) -> bool {
+    statement.starts_with("let _gpu = ") && statement.contains("gpu_guard()")
+}
+
+/// #3379: parallel headless runs made and dropped devices at the same time.
+#[test]
+fn every_headless_run_of_the_egui_app_binary_takes_the_lock() {
+    let src = include_str!("../../tests/egui_app.rs");
+    let mut no_gpu: Vec<&str> = EGUI_APP_NO_GPU.to_vec();
+    let mut unlocked = Vec::new();
+    for test in src.split("#[test]").skip(1) {
+        let Some((_, rest)) = test.split_once("fn ") else { continue };
+        let Some((name, rest)) = rest.split_once('(') else { continue };
+        if let Some(at) = no_gpu.iter().position(|n| *n == name) {
+            no_gpu.remove(at);
+        } else if !takes_the_guard(first_statement(rest)) {
+            unlocked.push(name);
+        }
+    }
+    assert!(
+        unlocked.is_empty(),
+        "tests/egui_app.rs: start with `let _gpu = ...gpu_guard();`, or list a test that makes no device: {unlocked:?}"
+    );
+    assert!(no_gpu.is_empty(), "no such test in tests/egui_app.rs: {no_gpu:?}");
+}
+
 fn source_of(file: &str) -> &'static str {
     match file {
         "tests.rs" => include_str!("tests.rs"),
@@ -59,15 +105,11 @@ fn every_gpu_test_takes_the_lock() {
     for (file, sig) in GPU_TESTS {
         let src = source_of(file);
         let start = src.find(sig).unwrap_or_else(|| panic!("{file}: {sig} not found"));
-        let body = &src[start..];
-        let open = body.find('{').unwrap_or_else(|| panic!("{file}: {sig} has no body"));
         // The guard is the first statement, before any harness or instance.
-        let first = body[open + 1..].trim_start();
-        let first = first.lines().find(|l| !l.trim_start().starts_with("//")).unwrap_or("");
-        let guard = first.trim_start().starts_with("let _gpu = ") && first.contains("gpu_guard()");
+        let first = first_statement(&src[start..]);
         let shared = first.contains("headless_gpu::test_gpu(");
         assert!(
-            guard || shared,
+            takes_the_guard(first) || shared,
             "{file}: {sig} must start with `let _gpu = gpu_guard();` or take `test_gpu`, found {first:?}"
         );
     }

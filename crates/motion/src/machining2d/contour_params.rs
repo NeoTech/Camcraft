@@ -6,6 +6,7 @@
 
 use crate::entry::Entry3D;
 use crate::links::Links;
+use crate::path_picks::PathPicks;
 
 use super::face::GenError;
 
@@ -70,7 +71,7 @@ pub enum Side {
 const TAB_LEVEL_TOL: f64 = 1e-6;
 
 /// 2D contouring: trim a material region's boundary at successive depths.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContourParams {
     pub tool_diameter: f64,
     /// Thickness of material deliberately left on the finished faces for
@@ -137,6 +138,8 @@ pub struct ContourParams {
     /// every file before the option (the old `level_link` stay-down ramp
     /// is level Keep down with a Ramp transition).
     pub links: Links,
+    /// The user's start and exit picks (#1448, #3339).
+    pub picks: PathPicks,
 }
 
 impl ContourParams {
@@ -197,6 +200,9 @@ impl ContourParams {
             return Err(GenError::Invalid("tabs need positive width".into()));
         }
         self.links.validate().map_err(|e| GenError::Invalid(e.into()))?;
+        if let Some(why) = self.picks.refusal() {
+            return Err(GenError::Invalid(why));
+        }
         if self.blend_turns {
             super::fillet_tally::corner_arc_radius(self.blend_radius, self.tool_diameter).map_err(GenError::Invalid)?;
         }

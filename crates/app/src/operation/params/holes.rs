@@ -32,7 +32,7 @@ impl OpParams {
                 holes,
                 cross,
                 break_through,
-                break_through_from,
+                break_through_from, picks: _
             } => {
                 // #1557: the break-through, written only when stated,
                 // so every older op keeps the digest it was cached under.
@@ -108,6 +108,7 @@ impl OpParams {
                 break_through,
                 strategy,
                 pass_start,
+                picks: _,
             } => {
                 // #1557: the break-through, written only when stated,
                 // so every older op keeps the digest it was cached under.
@@ -187,7 +188,7 @@ impl OpParams {
                 hand,
                 external,
                 passes,
-                break_through,
+                break_through, picks: _
             } => {
                 // #1557: the break-through, written only when stated,
                 // so every older op keeps the digest it was cached under.

@@ -33,7 +33,7 @@ impl OpParams {
                 bottom_z,
                 stepdown,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -55,7 +55,7 @@ impl OpParams {
                 stepdown,
                 stock_to_leave,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -71,7 +71,7 @@ impl OpParams {
                 top_z,
                 bottom_z,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -95,7 +95,7 @@ impl OpParams {
                 stepdown,
                 stock_to_leave,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -111,7 +111,7 @@ impl OpParams {
                 top_z,
                 bottom_z,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -134,7 +134,7 @@ impl OpParams {
                 bar_unload,
                 bar_transfer,
                 inspect_tol,
-                kerf,
+                kerf, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -181,7 +181,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 infeed_plan,
-                hand,
+                hand, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -239,7 +239,7 @@ impl OpParams {
                 bottom_z,
                 angle_deg,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -257,7 +257,7 @@ impl OpParams {
                 bottom_dia,
                 top_dia,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -276,7 +276,7 @@ impl OpParams {
                 stock_to_leave,
                 passes,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -301,7 +301,7 @@ impl OpParams {
                 top_z,
                 bottom_z,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -323,7 +323,7 @@ impl OpParams {
                 top_z,
                 bottom_z,
                 feed,
-                plunge_feed,
+                plunge_feed, picks: _
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);

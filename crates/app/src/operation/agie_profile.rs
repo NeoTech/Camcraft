@@ -52,7 +52,10 @@ pub(crate) fn agie_job(
     Ok(agie::AgieJob {
         side,
         contour: points.iter().map(|p| [p.x - ox, p.y - oy]).collect(),
-        start: wire.start.map(|p| [p[0] - ox, p[1] - oy]),
+        start: wire
+            .picks
+            .first(crate::path_picks::PickRole::Start)
+            .map(|p| [p.xy.x - ox, p.xy.y - oy]),
         stock_min: [lo.x - ox, lo.y - oy, lo.z - oz],
         stock_max: [hi.x - ox, hi.y - oy, hi.z - oz],
     })
@@ -73,7 +76,11 @@ pub(crate) fn agie_sketch_job(
     let (OpParams::WireContour(wire), Some(chain)) = (&op.params, job.wire_sketch.as_ref()) else {
         return Err("Select one closed DXF chain for the native wire EDM punch".into());
     };
-    let start = wire.start.ok_or("The DXF punch requires a predrilled 2 mm threading hole")?;
+    let start = wire
+        .picks
+        .first(crate::path_picks::PickRole::Start)
+        .ok_or("The DXF punch requires a predrilled 2 mm threading hole")?;
+    let start = [start.xy.x, start.xy.y];
     let mut shape = chain.wire_profile()?;
     // The rest of the drawing must clear the whole native work: the arc
     // extrema with the rough pass and wire (as the post bounds them), and the
@@ -139,10 +146,10 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         if !wire.both_pieces_restrained || !wire.stock_centered_in_xy_travel {
             return Err("The open cutoff requires both pieces clamped through all passes and the stock centered in the installed XY travel".into());
         }
-        if wire.start.is_some() || !(0.0..=3.6).contains(&wire.clearance) {
+        if wire.picks.first(crate::path_picks::PickRole::Start).is_some() || !(0.0..=3.6).contains(&wire.clearance) {
             return Err("The open cutoff requires air threading and at most 3.6 mm run-out clearance for its 4 mm tails".into());
         }
-    } else if !wire.capture || wire.start.is_none() {
+    } else if !wire.capture || wire.picks.first(crate::path_picks::PickRole::Start).is_none() {
         return Err("The native wire EDM job requires a captured closed contour and a predrilled 2 mm start hole on the waste side".into());
     }
     let on_source = match (&op.src, source) {

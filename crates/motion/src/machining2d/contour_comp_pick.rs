@@ -129,6 +129,7 @@ mod tests {
                 approach: Approach { compensation: Compensation::Control, ..Approach::DEFAULT },
                 ..Links::PLANAR
             },
+            picks: crate::path_picks::PathPicks::default(),
         }
     }
 

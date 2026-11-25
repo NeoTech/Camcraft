@@ -26,6 +26,10 @@
 //! missing or misplaced start hole, an inside corner or a neck the wire
 //! cannot cut - each is refused by name, never trimmed or rounded.
 //!
+//! A drawn line-and-arc profile (#3937, `arc_cut`) is cut on its own
+//! lines and arcs: the parallel is the analytic offset (`arc_offset`),
+//! the moves are true arcs, and the laws read the drawing itself.
+//!
 //! An OPEN run (#1109) - a cut-off line, a slot or a relief entered
 //! from the stock's edge - is cut by `open`: the kerf on the stated
 //! left or right of the run's travel, threaded outside the stock (no
@@ -39,8 +43,18 @@
 //! burnout of a pocket (#540) is `burnout`; the 4-axis cut between two
 //! profiles (#537) is `ruled`.
 
+mod arc_chain;
+mod arc_cut;
+mod arc_dist;
+mod arc_laws;
+mod arc_lead;
+mod arc_offset;
+mod arc_span;
 mod burnout;
+mod exit;
 mod laws;
+mod model_arcs;
+mod model_tangent;
 mod pairing;
 mod preimage;
 mod open;
@@ -52,6 +66,11 @@ mod skims;
 mod tabs;
 mod taper;
 
+pub use arc_chain::{ArcChain, JOINT_TOL};
+pub use arc_cut::{wire_contour_arcs, wire_contour_arcs_led};
+pub use arc_lead::WireLead;
+pub use arc_span::Span as ArcSpan;
+pub use model_arcs::{model_arcs, wire_contour_facets, wire_contour_model_arcs, ModelArcs, FIT_TOL as MODEL_ARC_FIT_TOL, MODEL_ARCS_NOTE};
 pub use skims::{check_passes, wire_passes, WirePass};
 
 pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, WireWidening, SYNC_TOL};
@@ -60,6 +79,7 @@ pub use tabs::{cutoff_split, TabParams, MAX_TABS};
 pub use taper::{wire_contour_tapered, WireCorner, WireTaper};
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
+pub use exit::{wire_contour_exit, END_TIE};
 pub use open::{CLEARANCE_MAX, EDGE_TOL};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
@@ -360,7 +380,11 @@ fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<St
 }
 
 #[cfg(test)]
+mod arc_tests;
+#[cfg(test)]
 mod facet_tests;
+#[cfg(test)]
+mod model_arcs_tests;
 #[cfg(test)]
 mod open_tests;
 #[cfg(test)]

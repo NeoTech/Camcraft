@@ -46,6 +46,7 @@ fn face_params(cut_z: f64, feed: f64) -> OpParams {
         feed,
         plunge_feed: feed / 4.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 

@@ -370,6 +370,7 @@ pub(super) fn rotary_editor(
     lead_deg: &mut f64,
     lag_deg: &mut f64,
     max_tilt_deg: &mut f64,
+    stated_axis: &mut Option<[f64; 3]>,
 ) {
     if tab == SEC_HEIGHTS {
         height_editor(ui, "Clearance Z", world, setup, clearance_z, "rotary.clearance");
@@ -381,6 +382,9 @@ pub(super) fn rotary_editor(
         });
     }
     if tab == SEC_PASSES {
+        // #2772: the op's own stated rotation axis, above the pose
+        // trio it stands in for.
+        rotary_stated_axis_editor(ui, stated_axis);
         if let Some(stepover) = stepover {
             auto_opt(ui, "Stepover", "Auto", stepover, "scallop law", (24.0 * tolerance.max(1e-9)).sqrt(), |ui, s| {
                 num(ui, u, s)
@@ -409,4 +413,28 @@ pub(super) fn rotary_axis_editor(ui: &mut Ui, lead_deg: &mut f64, lag_deg: &mut 
     hint(ui, "lean across the feed (side tilt), off the radial - clears the wall the tool has just cut");
     prop_row(ui, "Max tilt", |ui| num_unit(ui, max_tilt_deg, "°"));
     hint(ui, "the cone the spindle may open from the radial; where the stance demands more, the lean folds onto the cone's edge");
+}
+
+/// The stated rotation axis (#2772): a group armed by a checkbox and
+/// three direction numbers - a RATIO, never unit-scaled (the machine
+/// file's own law for its `axis` vector), through the setup's work
+/// offset origin. It writes the draft, so the existing
+/// EditOperationParams commit path makes the edit undoable. Absent
+/// follows the machine's stated rotary line; only when nothing is
+/// stated does the model's fit run - the resolver's own order
+/// (`rotary_stated::lines_of`). The panel never judges; the
+/// resolver's disagreement refusal owns the door.
+pub(super) fn rotary_stated_axis_editor(ui: &mut Ui, v: &mut Option<[f64; 3]>) {
+    let mut armed = v.is_some();
+    let g = group(ui, "Stated rotation axis", Some(&mut armed), |ui| {
+        if let Some(a) = v.as_mut() {
+            prop_row(ui, "Direction X", |ui| num_unit(ui, &mut a[0], ""));
+            prop_row(ui, "Direction Y", |ui| num_unit(ui, &mut a[1], ""));
+            prop_row(ui, "Direction Z", |ui| num_unit(ui, &mut a[2], ""));
+        }
+    });
+    if g.toggled {
+        *v = armed.then_some([1.0, 0.0, 0.0]);
+    }
+    hint(ui, "a direction through the work offset origin; absent: the machine's stated rotary line, else fitted from the model - a line the model's faces disagree with refuses by name");
 }

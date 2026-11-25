@@ -180,6 +180,7 @@ fn cp(side: Side, blend: bool, radius: Option<f64>) -> ContourParams {
         blend_turns: blend,
         blend_radius: radius,
         links: camcraft_motion::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 

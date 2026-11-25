@@ -30,6 +30,7 @@ USAGE:
     camcraft-cli version
     camcraft-cli <command> --help    the flags of one command
     camcraft-cli --ui [--window <pid|project>] <call <tool> [<json>] | mcp | windows>
+    camcraft-cli --skill <folder|claude|copilot> install [--dir <path>] [--user] [--force]
 
 COMMANDS:
     script    run a job script through the cam verbs (assets/scripts/
@@ -46,6 +47,10 @@ LIVE WINDOW:
     --ui      send MCP tool calls to a running CamCraft window, on its
               own undo history (camcraft-cli --ui --help); exit 3 when no
               window runs - it never falls back to a headless document
+
+AI SKILL:
+    --skill   install a skill that teaches an AI agent this CLI, for Claude
+              Code, GitHub Copilot or a folder (camcraft-cli --skill --help)
 
 A clean run prints its logs, then the last verb's JSON answer on
 stdout; refusals print on stderr. Exit: 0 stood, 1 refused, 2 usage.
@@ -120,12 +125,13 @@ OPTIONS:
 /// text. The one list `command_usage` reads and the help test walks,
 /// so a lane added here is checked and a lane added elsewhere is
 /// caught by the test's cross-check against the top-level COMMANDS.
-pub const HELP_LANES: [(&str, &str); 5] = [
+pub const HELP_LANES: [(&str, &str); 6] = [
     ("script", SCRIPT_USAGE),
     ("process", PROCESS_USAGE),
     ("mcp", MCP_USAGE),
     ("export-agie-inspection", AGIE_INSPECTION_USAGE),
     ("--ui", crate::cli_ui::UI_USAGE),
+    ("--skill", crate::cli_skill::SKILL_USAGE),
 ];
 
 /// The top-level usage text (`camcraft-cli help`).
@@ -210,6 +216,8 @@ pub fn run(args: &[String]) -> i32 {
         }
         // #3751: the live window lane, before any headless lane parses.
         "--ui" => crate::cli_ui::run(&args[1..]),
+        // #3751 part 2: write the AI agent skill for this CLI.
+        "--skill" => crate::cli_skill::run(&args[1..]),
         // Any position: `process x.camproj --help` answers too. Checked
         // before the lane parses, so no lane starts (or reads stdin).
         lane => match command_usage(lane) {

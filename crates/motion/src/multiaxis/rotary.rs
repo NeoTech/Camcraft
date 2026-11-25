@@ -84,6 +84,31 @@ pub fn rotary_contour(
     c: &AxisControl,
 ) -> Result<Toolpath, GenError> {
     let ax = axis::fit(facets)?;
+    rotary_contour_about(facets, ax, p, c)
+}
+
+/// [`rotary_contour`] about an axis the caller STATES and has judged
+/// (#2772 parts 1-2, `axis_stated::judged_any`): the machine's rotary
+/// line or the operation's own direction, anchored through the work
+/// offset's origin - never a line the model's faces were not read
+/// against. The fit stays inside the plain entry, so turning and
+/// drilling and every golden path keep their own axis.
+pub fn rotary_contour_stated(
+    facets: &[Triangle],
+    ax: Axis,
+    p: &Finish3DParams,
+    c: &AxisControl,
+) -> Result<Toolpath, GenError> {
+    rotary_contour_about(facets, ax, p, c)
+}
+
+/// The contour ladder about `ax`, the plain entry's own body.
+fn rotary_contour_about(
+    facets: &[Triangle],
+    ax: Axis,
+    p: &Finish3DParams,
+    c: &AxisControl,
+) -> Result<Toolpath, GenError> {
     let lean = ax.dir.dot(UP).abs();
     if lean < LEAN_MIN {
         let f = frame(&ax)?;
@@ -139,6 +164,34 @@ pub fn rotary_parallel_over(
     c: &AxisControl,
 ) -> Result<Toolpath, GenError> {
     let ax = axis::fit(facets)?;
+    rotary_parallel_about(facets, stock, picked, ax, p, c)
+}
+
+/// [`rotary_parallel_over`] about an axis the caller STATES and has
+/// judged (#2772 parts 1-2, `axis_stated::judged_any`) - the machine's
+/// rotary line or the operation's own direction, anchored through the
+/// work offset's origin. The same body the plain entry runs about its
+/// fit; the fit stays inside the plain entry.
+pub fn rotary_parallel_over_stated(
+    facets: &[Triangle],
+    stock: Option<&[Triangle]>,
+    picked: Option<&[Triangle]>,
+    ax: Axis,
+    p: &Finish3DParams,
+    c: &AxisControl,
+) -> Result<Toolpath, GenError> {
+    rotary_parallel_about(facets, stock, picked, ax, p, c)
+}
+
+/// The raster ladder about `ax`, the plain entry's own body.
+fn rotary_parallel_about(
+    facets: &[Triangle],
+    stock: Option<&[Triangle]>,
+    picked: Option<&[Triangle]>,
+    ax: Axis,
+    p: &Finish3DParams,
+    c: &AxisControl,
+) -> Result<Toolpath, GenError> {
     let flat = 1.0 - ax.dir.dot(UP) * ax.dir.dot(UP);
     if flat < LEAN_MIN * LEAN_MIN {
         return Err(GenError::Invalid(

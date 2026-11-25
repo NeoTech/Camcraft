@@ -121,6 +121,7 @@ fn pocket(tilt: Option<Tilt>, top_z: f64) -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -151,6 +152,7 @@ fn pocket_parked() -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -393,6 +395,7 @@ fn tilt_on_a_picked_selection_refuses_by_name() {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     // The prismatic control: the same pick on the same part is legal.
     history.execute(
@@ -464,6 +467,7 @@ fn an_insane_tilt_refuses_at_the_command_door() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     for bad in [
         Tilt {
@@ -569,6 +573,7 @@ fn a_tilt_edit_marks_the_operation_stale_and_undo_restores() {
             feed: 1200.0,
             plunge_feed: 300.0,
             climb: true,
+            picks: Default::default(),
         })
         .expect("create"),
     );
@@ -594,6 +599,7 @@ fn a_tilt_edit_marks_the_operation_stale_and_undo_restores() {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("edit"),

@@ -76,6 +76,7 @@ fn run_face(world: &World, h: &mut History, cut_z: f64) -> camcraft_app::schema:
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(
         world,

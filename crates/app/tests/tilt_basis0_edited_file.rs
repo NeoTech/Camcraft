@@ -53,6 +53,7 @@ fn slot(a: (f64, f64), b: (f64, f64), tilt: Option<Tilt>) -> OpParams {
         tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 

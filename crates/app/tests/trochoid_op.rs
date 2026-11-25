@@ -46,6 +46,7 @@ fn trochoid(width: f64) -> OpParams {
         return_feed: 2000.0,
         plunge_feed: 200.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 

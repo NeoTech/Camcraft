@@ -2,8 +2,8 @@
 //! holder as a spun (revolved) half-outline - Parametric (the cylinder its
 //! numbers state) or Custom (a table of points with optional arcs), the
 //! live refusal by name, and Apply profile, which queues the one command.
-//! The holder library stands above the tabs (`tool_holder_picker`), so a
-//! holder is the first thing the user sees. #2007: the tool has one
+//! #3930: the holder library left this window: the tool library window's
+//! assembly group picks the holder (`tool_holder_picker`). #2007: the tool has one
 //! preview - the to-scale one beside the fields (`tool_preview`), which
 //! draws the draft of this tab through `tool_preview_inputs`. The shape
 //! window draws the flat side view itself (`profile_view`). #93 slice 2:
@@ -31,16 +31,13 @@ pub(super) const BAD: Color32 = Color32::from_rgb(230, 90, 80);
 /// table low on a scrolled page does not shrink to a few rows.
 const TABLE_H: f32 = 150.0;
 
-/// #2397: the tool shape editor's body - the holder library first (a
-/// holder is the first thing the user looks for, not a row under the
-/// profile table), then the Body / Profile tabs for a milling tool, the
-/// Body section alone for a turning tool.
+/// #2397: the tool shape editor's body - the Body / Profile tabs for a
+/// milling tool, the Body section alone for a turning tool. #3930: the
+/// holder pick is the tool library window's (its assembly group).
 pub(super) fn editor(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     let milling = is_spun_kind(state.tool_ui.tool_kind());
     if milling {
         state.sync_tool_profile_ui();
-        super::tool_holder_picker::holder_picker(ui, state, u);
-        ui.separator();
         // #2007: the tab row wraps in a narrow pane.
         ui.horizontal_wrapped(|ui| {
             let c = state.tool_profile_ui.column;

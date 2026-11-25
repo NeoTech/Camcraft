@@ -18,6 +18,8 @@ use crate::state::{State, is_spun_kind};
 
 /// The group's heading, and its AccessKit name.
 pub(crate) const HEADING: &str = "Holder and stick-out";
+/// #3930: the folded body section's heading, and its AccessKit name.
+pub(crate) const BODY: &str = "Body";
 
 const WARN: Color32 = Color32::from_rgb(230, 170, 60);
 const BAD: Color32 = Color32::from_rgb(230, 90, 80);
@@ -26,18 +28,30 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     ui.add_space(6.0);
     ui.separator();
     ui.strong(HEADING);
-    if !is_spun_kind(state.tool_ui.tool_kind()) {
-        ui.label("A turning tool's holder is placed in the tool shape window.");
-        return;
-    }
     if !state.tool_ui.exists {
         ui.label("Add the tool first, then choose its holder.");
         return;
     }
     let u = state.units();
-    super::super::tool_holder_picker::holder_fields(ui, state, u);
-    notes(ui, state, u);
-    super::super::tool_holder_picker::apply_holder_button(ui, state);
+    if is_spun_kind(state.tool_ui.tool_kind()) {
+        super::super::tool_holder_picker::holder_fields(ui, state, u);
+        notes(ui, state, u);
+        super::super::tool_holder_picker::apply_holder_button(ui, state);
+    } else {
+        ui.label("A turning tool takes no library holder: import its holder in the Body section.");
+    }
+    body(ui, state, u);
+}
+
+/// #3930: the folded Body section - the stand-in holder cylinder, then
+/// the body import, its placement and its pieces. Each landing is the
+/// command it was in the tool shape window (`SetToolBody`, its piece
+/// commands), or the window's Apply for the two stand-in numbers.
+fn body(ui: &mut Ui, state: &mut State, u: Unit) {
+    super::super::layout::group_open(ui, BODY, None, false, |ui| {
+        super::super::tool_settings_grid::holder(ui, state);
+        super::super::tool_body_page::body_section(ui, state, true, u);
+    });
 }
 
 /// The total, the re-seed note, the mount warning and the refusal.

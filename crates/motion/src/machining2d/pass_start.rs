@@ -43,8 +43,8 @@ pub const PASS_START_REST_NOTE: &str =
 /// #3748: the advice note of a start-side pass whose user selected a
 /// lead-in other than Arc - the selected type, the recommended Arc and the
 /// reason, in one sentence ([`crate::verify::entry_advice`]).
-/// `None` for Arc and for Auto. The ladder writes it only where the Arc
-/// entry from the air applies (`air_entry::AirRoom`); the operation turns
+/// `None` for Arc and for Auto. The ladder writes it on each ring pass
+/// with Inside or Outside, with or without an air room (#3884); the operation turns
 /// it into one `Warning::EntryNotRecommended`, and the Lead in page shows
 /// the same text next to the selector.
 #[must_use]

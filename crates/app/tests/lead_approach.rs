@@ -51,6 +51,7 @@ fn contour_op(lead: Lead, links: Links) -> OpParams {
         tilt: None,
         links,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -78,6 +79,7 @@ fn pocket_op(links: Links) -> OpParams {
         tilt: None,
         links,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

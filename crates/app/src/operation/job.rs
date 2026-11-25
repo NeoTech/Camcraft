@@ -343,6 +343,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     };
     let drive_chains = match &op.params {
         OpParams::MultiAxisContour { .. } => Some(drive_chains_of(world, op)),
+        // #2826: the flow band's guide chains ride the same slot -
+        // the WCS yaw turns them with the facets they lie on.
+        OpParams::RotaryFlow { .. } => Some(drive_chains_of(world, op)),
         // #1888: the deburr's picked chains ride the same slot - the
         // WCS yaw turns them with the facets they lie on.
         OpParams::Deburr { exclude_edges, .. } | OpParams::MultiAxisDeburr { exclude_edges, .. } => Some(super::deburr_picks::chains_of(world, op, exclude_edges)),

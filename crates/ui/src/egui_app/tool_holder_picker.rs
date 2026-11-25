@@ -7,7 +7,8 @@
 //! entry; the Profile table above shows its outline, and an edited
 //! point makes it a drawn profile of its own. Provenance: our own
 //! pane over `app::holder_library`; no vendor material consulted. #3895:
-//! the tool library window's assembly group draws the same fields.
+//! the tool library window's assembly group draws the same fields; #3930:
+//! the tool shape window no longer does.
 
 use egui::{Color32, Ui};
 
@@ -19,16 +20,10 @@ use crate::state::State;
 const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
 const BAD: Color32 = Color32::from_rgb(230, 90, 80);
 
-/// The holder library picker, the first thing the shape editor shows
-/// (#2397).
-pub(super) fn holder_picker(ui: &mut Ui, state: &mut State, u: Unit) {
-    holder_fields(ui, state, u);
-    apply_holder_button(ui, state);
-}
-
 /// #3895: the picker without its Apply holder button - the pick, the
 /// gauge length, the projection and what the pick is. The tool library
-/// window's assembly group adds its own rows before the button.
+/// window's assembly group adds its own rows before the button. #3930:
+/// that group is the one place that draws the picker.
 pub(super) fn holder_fields(ui: &mut Ui, state: &mut State, u: Unit) {
     ui.separator();
     ui.strong("Holder library");

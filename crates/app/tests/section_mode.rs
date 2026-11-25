@@ -106,6 +106,7 @@ fn make_face_world() -> World {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let op = CreateOperation::new(&world, "Face3X", "EM-0400-2FL", SrcRef::Stock, params)
         .expect("create face");
@@ -142,6 +143,7 @@ fn make_tilted_pocket_world() -> World {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     };
     let op = CreateOperation::new(&world, "Tilt32", "EM-0600-4FL", SrcRef::Entity("part".into()), params)
         .expect("create tilted pocket");
@@ -176,6 +178,7 @@ fn make_parallel5d_world() -> World {
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
         shank_avoid: false,
+        picks: Default::default(),
     };
     let op = CreateOperation::new(&world, "Sim5X", "BN-0600", SrcRef::Entity("hill".into()), params)
         .expect("create contour5d");

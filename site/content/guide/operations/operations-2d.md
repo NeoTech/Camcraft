@@ -606,6 +606,12 @@ so any mill or a taper tool may be used.
 Stepdown 5 on Heights, feeds on Feeds. It has no Passes tab. **Common refusal:** "empty trace
 region" when nothing usable is picked.
 
+To mark stock without a 3D part, place a sketch on the stock and pick the
+profile, individual chains or a layer. Trace and Engrave follow open and
+closed chains and keep circular arcs. The tool lifts between separate
+strokes. Verification checks the mark against the stock and can block
+posting if the cut is unsafe.
+
 **Do not touch** on **Geometry > Boundary > Boundaries** protects model
 faces or edge chains. Choose **Pick protected**, finish picking, and
 **Apply**. Trace splits the cutting runs around protected items and
@@ -701,6 +707,12 @@ stated width on 2D edges.
 
 **Picks:** the edges or faces whose top edge gets the chamfer. Needs a
 taper (chamfer) tool whose cone matches the angle.
+
+To chamfer only part of an edge loop, pick one or more open chains.
+Connected picks make one run. Separate chains get separate runs.
+The cutter enters and leaves each run on the air side. Each run needs
+a model wall at the chamfer depth. Leave area-shaping **Boundary**
+settings off for open chains.
 
 | Tab | Setting | Default |
 |---|---|---|

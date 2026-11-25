@@ -166,7 +166,12 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         // by name, on the tab where the contour's rows sit (else Geometry).
         let picks_tab = if super::op_tabs::has_section(kind, SEC_LEADS) { SEC_LEADS } else { SEC_GEO };
         if tab == picks_tab {
+            // #3328: the hole kinds type their first and last hole here.
+            let u = state.units();
+            super::start_exit_rows::hole_order_groups(ui, u, &mut state.op_ui.params);
             super::start_exit_rows::not_taken_groups(ui, kind);
+            // #3331: a turning kind's picks, typed in the lathe (Z, X) plane.
+            super::turning_start_exit_rows::meridian_groups(ui, state.units(), &mut state.op_ui.params);
         }
         if tab == SEC_FEEDS {
             // M13.2: material, edge, flutes and the suggestion.
@@ -301,14 +306,16 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         // Enabled, but the door will refuse: a safety line, not help.
         ui.colored_label(inks.warn, why);
     }
-    if live.is_some_and(|op| operation::has_agie_inspection_source(op)
-        && matches!(&op.params, operation::OpParams::WireContour(w) if w.condition.is_empty())) {
+    // Agie-only: an inspection source on a setup that mounts the Agie machine.
+    let live_inspection = live.filter(|op| operation::has_agie_inspection_source(op)
+        && super::agie_inspection::agie_mounted(&state.world, op.setup.as_deref()));
+    if live_inspection.is_some_and(|op| matches!(&op.params, operation::OpParams::WireContour(w) if w.condition.is_empty())) {
         super::layout::hint(ui, "Nominal inspection only. No machining condition is assigned.");
     }
     let commit_hint = format!("Commit the edited parameters ({} undoes)", chord("Z"));
     let clear_hint = format!("Remove the generated path and keep the operation ({} restores it)", chord("Z"));
     let delete_hint = format!("Delete the operation and its toolpath ({} restores both)", chord("Z"));
-    let inspect = live.filter(|op| operation::has_agie_inspection_source(op))
+    let inspect = live_inspection
         .map(|_| CommandKind::ExportAgieInspection(target.to_owned()));
     let inspection_refusal = inspect.as_ref().and_then(|cmd| state.browser_refusal_of(cmd)).or_else(|| {
         (!unchanged || (inspect.is_some() && live.is_some_and(|op| op.src != state.op_ui.src())))

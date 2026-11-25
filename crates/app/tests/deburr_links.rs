@@ -77,6 +77,7 @@ fn a_deburr_on_a_finished_brick_links_its_runs_without_a_rapid_in_stock() {
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
         sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     };
     history.execute(
         &world,

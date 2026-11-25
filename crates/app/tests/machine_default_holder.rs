@@ -312,6 +312,7 @@ fn face_on(machine: &str, pick: HolderPick, off: f64, above: f64) -> (World, His
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     history.execute(&world, CreateOperation::new(&world, "Face1", TOOL, SrcRef::Stock, params).expect("face op"));
     history.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate"));

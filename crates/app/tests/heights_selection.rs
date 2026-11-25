@@ -106,6 +106,7 @@ fn pocket_from_selection() -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -122,6 +123,7 @@ fn face_on_selection() -> OpParams {
         plunge_feed: 300.0,
         climb: true,
         blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     }
 }
 
@@ -257,6 +259,7 @@ fn creation_and_edits_refuse_a_selection_that_yields_no_height() {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     };
     history.execute(
         &world,
@@ -315,6 +318,7 @@ fn an_edit_to_selection_rides_edit_params_and_undoes() {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     };
     history.execute(
         &world,

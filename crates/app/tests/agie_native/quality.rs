@@ -94,7 +94,9 @@ fn the_saved_condition_selects_the_exact_requested_quality() {
 fn ra035_refuses_unmeasured_heights_without_a_directory() {
     for height in ["15", "40", "80"] {
         let temp = tempfile::tempdir().unwrap();
-        let obj = PUNCH_OBJ.replace(" 20\n", &format!(" {height}\n"));
+        let obj = PUNCH_OBJ
+            .replace(" 20\r\n", &format!(" {height}\r\n"))
+            .replace(" 20\n", &format!(" {height}\n"));
         let script = FINE
             .replace("dz: 20", &format!("dz: {height}"))
             .replace("origin: [0, 0, 20]", &format!("origin: [0, 0, {height}]"))
@@ -201,5 +203,44 @@ fn ra035_refuses_a_group_an_arc_punch_a_die_and_a_cutoff() {
             "{name}: {stderr}"
         );
         assert!(!temp.path().join(job).exists(), "{name}");
+    }
+}
+
+/// The punch pair with both machine conditions and `first` / `second` on its two works.
+fn mixed_pair(first: &str, second: &str) -> String {
+    let script = include_str!("../../../../examples/agie/punch-pair.camscript");
+    let rows = "conditions: [{\n  id: \"AGIE_QN2\", role: \"rough\", gap: 0.005, wire_diameter: 0.25\n}, {\n  id: \"AGIE_BERCO_RA035\", role: \"rough\", gap: 0.005, wire_diameter: 0.25\n}]";
+    let script = script.replacen(
+        "conditions: [{\n  id: \"AGIE_QN2\", role: \"rough\", gap: 0.005, wire_diameter: 0.25\n}]",
+        rows,
+        1,
+    );
+    assert!(script.contains("AGIE_BERCO_RA035"), "the machine rows of punch-pair.camscript changed");
+    let mut works = script.split("condition: \"AGIE_QN2\"");
+    let (head, middle, tail) = (works.next().unwrap(), works.next().unwrap(), works.next().unwrap());
+    assert!(works.next().is_none());
+    format!("{head}condition: \"{first}\"{middle}condition: \"{second}\"{tail}")
+}
+
+/// #2984: the piece registers one quality for all works. A group that mixes the two
+/// conditions names them in either work order and writes no job directory.
+#[test]
+fn a_group_with_mixed_wire_conditions_is_refused_in_either_order() {
+    let assets: &[(&str, &str)] = &[
+        ("pair-left.obj", include_str!("../../../../examples/agie/pair-left.obj")),
+        ("pair-right.obj", include_str!("../../../../examples/agie/pair-right.obj")),
+    ];
+    for (first, second) in [("AGIE_QN2", "AGIE_BERCO_RA035"), ("AGIE_BERCO_RA035", "AGIE_QN2")] {
+        let temp = tempfile::tempdir().unwrap();
+        let output = run(temp.path(), "punch-pair.camscript", &mixed_pair(first, second), assets);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success()
+                && stderr.contains(
+                    "The works of a group must use the same wire condition. This group mixes AGIE_BERCO_RA035 and AGIE_QN2"
+                ),
+            "{first} then {second}: {stderr}"
+        );
+        assert!(!temp.path().join("PAIR20").exists(), "{first} then {second}");
     }
 }

@@ -12,6 +12,7 @@ fn params(ty: OpType) -> OpParams {
         clearance_z: Height::of(HeightReference::TopOfStock, 25.0),
         cut_z: Height::of(HeightReference::TopOfStock, 0.0), top_z: None, stepdown: None,
         feed: 1200.0, plunge_feed: 300.0, climb: true, blend_turns: false, blend_radius: None,
+        picks: Default::default(),
     };
     operation::retype_params(&base, ty.ordinal())
 }

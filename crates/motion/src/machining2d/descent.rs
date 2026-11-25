@@ -399,9 +399,13 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
             push_arc_lead(b, lead, tz, *zf, fd, a.plunge(m.plunge_feed));
             Vec::new()
         }
-        Descent::Sub(why) => link(substituted_dive(b, l, e, z, m, why, tz)),
+        Descent::Sub(why) => {
+            super::entry_warn::mark_stand_in(b, m, None);
+            link(substituted_dive(b, l, e, z, m, why, tz))
+        }
         Descent::Named(inner, note) => {
             b.note_once(note);
+            super::entry_warn::mark_stand_in(b, m, Some(note));
             push(b, inner, l, z, tz, m)
         }
         Descent::Refused(why) => {

@@ -70,6 +70,7 @@ fn contour_params() -> OpParams {
         blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -88,6 +89,7 @@ fn drill_params(hole: camcraft_app::drilling::Hole, top_z: f64, clearance_z: f64
         plunge_feed: 100.0,
         holes: vec![hole],
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -245,6 +247,7 @@ fn face_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -581,6 +584,7 @@ fn a_non_g54_slot_is_what_the_script_writes() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, params);
     history.execute(&world, cmd.expect("create"));

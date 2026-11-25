@@ -9,7 +9,7 @@ use flecs_ecs::prelude::World;
 
 use camcraft_geometry::wire_round_profile::WireProfile;
 
-use super::{FeatureSel, OpParams, ResolvedHeights, SrcRef, WireContourOp, WireSide};
+use super::{FeatureSel, OpParams, ResolvedHeights, SrcRef, WireContourOp};
 use crate::cl::Toolpath;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::sketch_chains::{ClosedChain, SketchChainRef};
@@ -57,6 +57,9 @@ pub(crate) struct SelectedWireChain {
     pub(crate) pose: Location,
     pub(crate) data: Arc<SketchData>,
     pub(crate) stock: Aabb,
+    /// TEXT, MTEXT and DIMENSION entities the import skipped (#3937): not
+    /// cut, and not geometry the wire can hit; said on the path.
+    pub(crate) ignored: usize,
 }
 
 fn axis_aligned(rot: [f64; 4]) -> bool {
@@ -146,21 +149,17 @@ pub(super) fn resolve_geometry(
     {
         return Err("set the wire top and bottom to the top and bottom of the stock for a selected DXF through cut".into());
     }
-    if sk.data.skipped_total() != 0 {
-        return Err(
-            "the DXF import skipped entities whose clearance from the wire cannot be checked"
-                .into(),
-        );
-    }
+    let ignored = super::wire_sketch_arcs::annotations(&sk.data)?;
     Ok(SelectedWireChain {
         chain,
         pose,
         data: sk.data,
         stock,
+        ignored,
     })
 }
 
-fn single_pass(w: &WireContourOp) -> Result<(), String> {
+pub(super) fn single_pass(w: &WireContourOp) -> Result<(), String> {
     if !w.capture
         || w.tabs.is_some()
         || w.burnout.is_some()
@@ -211,45 +210,27 @@ pub(super) fn stamp(
 }
 
 impl SelectedWireChain {
-    fn world_xy(&self, p: Point2) -> Point2 {
+    pub(super) fn world_xy(&self, p: Point2) -> Point2 {
         let q = transform_point(Point3::new(p.x, p.y, 0.0), self.pose.pos, self.pose.rot);
         Point2::new(q.x, q.y)
     }
 
-    fn straight(&self) -> bool {
-        self.chain
-            .segments
-            .iter()
-            .all(|s| matches!(s.curve, Primitive::Line { .. }))
+    /// Every span a line, joined exactly: the polygon path of #3180, kept
+    /// byte for byte. Any other chain is cut on its own lines and arcs
+    /// (#3937, `wire_sketch_arcs`).
+    pub(super) fn exact_polygon(&self) -> bool {
+        self.chain.max_gap == 0.0
+            && self
+                .chain
+                .segments
+                .iter()
+                .all(|s| matches!(s.curve, Primitive::Line { .. }))
     }
 
-    /// The nominal ring of the generic wire path: the exact straight chain, or
-    /// for a punch the circumscribed preview of a circle, racetrack (#2022) or
-    /// convex tangent loop (#2983).
+    /// The nominal ring of the polygon path: the exact straight chain.
     pub(super) fn nominal_ring(&self, w: &WireContourOp) -> Result<Loop, String> {
-        if self.straight() || w.side != WireSide::Punch {
-            return self.straight_ring(w);
-        }
-        single_pass(w)?;
-        self.wire_profile()?.preview()
-    }
-
-    /// The selected circle, racetrack or convex tangent loop, in world XY.
-    pub(crate) fn wire_profile(&self) -> Result<WireProfile, String> {
-        let mut shape = WireProfile::from_chain(&self.chain)?;
-        shape.place(|p| self.world_xy(p));
-        Ok(shape)
-    }
-
-    /// Convert only exact, already connected line segments. No joining or sampling.
-    fn straight_ring(&self, w: &WireContourOp) -> Result<Loop, String> {
-        if !self.straight() {
-            return Err("the selected DXF chain contains an arc or circle; the generic wire path requires straight segments".into());
-        }
-        if self.chain.max_gap != 0.0 {
-            return Err(
-                "the selected DXF wire chain has a joint gap; exact endpoints are required".into(),
-            );
+        if !self.exact_polygon() {
+            return Err("the selected DXF chain holds an arc or a joint gap; it is cut on its own lines and arcs".into());
         }
         single_pass(w)?;
         Loop::new(
@@ -260,6 +241,14 @@ impl SelectedWireChain {
                 .collect(),
         )
         .map_err(|e| e.to_string())
+    }
+
+    /// The selected circle, racetrack or convex tangent loop, in world XY
+    /// (the native Agie punch, #2022 / #2983).
+    pub(crate) fn wire_profile(&self) -> Result<WireProfile, String> {
+        let mut shape = WireProfile::from_chain(&self.chain)?;
+        shape.place(|p| self.world_xy(p));
+        Ok(shape)
     }
 
     /// Prove the entire swept kerf and the freed piece fit inside the raw stock
@@ -311,19 +300,21 @@ impl SelectedWireChain {
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
         for m in &path.moves {
-            if m.arc.is_some()
+            if m.arc.is_some_and(|a| !a.plane.is_xy())
                 || m.rotary.is_some()
                 || m.axis.is_some()
                 || m.kind != crate::cl::MoveKind::Feed
             {
                 return Err(
-                    "the selected DXF wire cut requires straight vertical-wire feed moves".into(),
+                    "the selected DXF wire cut requires vertical-wire feed moves (lines and XY arcs)".into(),
                 );
             }
             for p in [m.from, m.to] {
                 if !p.is_finite() || p.z != self.stock.min.z {
                     return Err("the wire path leaves the programmed stock bottom plane".into());
                 }
+            }
+            for p in super::wire_sketch_arcs::extremes(m) {
                 lo.x = lo.x.min(p.x - kerf_radius);
                 lo.y = lo.y.min(p.y - kerf_radius);
                 hi.x = hi.x.max(p.x + kerf_radius);

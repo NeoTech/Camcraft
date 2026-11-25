@@ -103,6 +103,7 @@ fn burn(layer: Option<f64>, measured: Option<(f64, f64)>) -> OpParams {
         layer,
         wear_lost: measured.map(|m| m.0),
         wear_over: measured.map(|m| m.1),
+        picks: Default::default(),
     })
 }
 

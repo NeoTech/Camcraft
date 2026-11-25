@@ -144,6 +144,7 @@ fn contour_side(side: Side) -> ContourParams {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: crate::links::Links::PLANAR,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 

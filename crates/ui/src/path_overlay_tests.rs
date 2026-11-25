@@ -49,6 +49,7 @@ fn state_with_large_path() -> State {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         )
         .expect("operation"),

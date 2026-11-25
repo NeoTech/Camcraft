@@ -184,7 +184,7 @@ pub(super) fn helix_cross_fallback(b: &mut PathBuilder, l: &Lvl, e: Point2, z: f
         .unwrap_or_default()
 }
 
-fn moves_clear(b: &PathBuilder, d: &Descent, l: &Lvl, z: f64, plane: f64, m: &Motion) -> bool {
+pub(super) fn moves_clear(b: &PathBuilder, d: &Descent, l: &Lvl, z: f64, plane: f64, m: &Motion) -> bool {
     let mut trial = b.clone();
     super::descent::push(&mut trial, d, l, z, plane, m);
     trial
@@ -209,6 +209,9 @@ fn find_clear_helix_for(prior: &[Move], l: &Lvl, from: f64, z: f64, m: &Motion, 
 /// or refused by name. Never a plunge.
 pub(super) fn restart(b: &PathBuilder, l: &Lvl, leg: Point2, z: f64, from: f64, plane: f64, m: &Motion) -> Descent {
     let e = l.pass.first().copied().unwrap_or(leg);
+    if let Some(d) = super::entry_warn::outside_arc_restart(b, l, leg, e, z, plane, m) {
+        return d;
+    }
     let site = format!("the pass start ({:.3}, {:.3})", e.x, e.y);
     if let h @ Descent::Helix(..) = plan_arm(Entry3D::Helix, false, l, leg, z, from, m)
         && helix_is_clear(b.moves(), l, &h, z, m)
@@ -236,6 +239,9 @@ pub(super) fn restart(b: &PathBuilder, l: &Lvl, leg: Point2, z: f64, from: f64, 
 /// is never silent.
 pub(super) fn entry_restart(b: &PathBuilder, l: &Lvl, leg: Point2, z: f64, from: f64, plane: f64, m: &Motion) -> Descent {
     let e = l.pass.first().copied().unwrap_or(leg);
+    if let Some(d) = super::entry_warn::outside_arc_restart(b, l, leg, e, z, plane, m) {
+        return d;
+    }
     let d = plan_arm(m.entry, false, l, leg, z, from, m);
     let why = match &d {
         Descent::Helix(h) => {

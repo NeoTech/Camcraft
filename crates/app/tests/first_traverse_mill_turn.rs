@@ -61,6 +61,7 @@ fn face(clear: f64, tilt: Option<Tilt>, cut: f64) -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 

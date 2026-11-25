@@ -51,6 +51,7 @@ fn contour_op(links: Links) -> OpParams {
         tilt: None,
         links,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -80,6 +81,7 @@ fn pocket_op(entry: Entry3D, links: Links) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 

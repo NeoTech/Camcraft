@@ -231,6 +231,7 @@ fn clean_contour_verifies_silent() {
             helix_radius: 1.0,
             blend_turns: false, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
+            picks: Default::default(),
         },
     )
     .unwrap();

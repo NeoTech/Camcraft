@@ -520,6 +520,7 @@ mod path_tests {
                     feed: 1200.0,
                     plunge_feed: 300.0,
                     climb: true,
+                    picks: Default::default(),
                 },
             )
             .expect("operation"),
@@ -700,6 +701,7 @@ mod path_tests {
                     blend_turns: false, blend_radius: None,
                     links: camcraft_app::links::Links::PLANAR,
                     chain_overrides: Vec::new(),
+                    picks: Default::default(),
                 },
             )
             .expect("operation"),
@@ -863,6 +865,7 @@ mod preview_tests {
                     feed: 1200.0,
                     plunge_feed: 300.0,
                     climb: true,
+                    picks: Default::default(),
                 },
             },
         ]);
@@ -901,6 +904,7 @@ mod preview_tests {
                 feed: 1200.0,
                 plunge_feed: 300.0,
                 climb: true,
+                picks: Default::default(),
             },
         });
         state.drain_actions();
@@ -1203,6 +1207,7 @@ mod feature_pick_tests {
                     feed: 1200.0,
                     plunge_feed: 300.0,
                     climb: true,
+                    picks: Default::default(),
                 },
             )
             .expect("operation"),
@@ -1447,6 +1452,7 @@ mod height_plane_tests {
             blend_turns: false, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             chain_overrides: Vec::new(),
+            picks: Default::default(),
         }
     }
 
@@ -1469,6 +1475,7 @@ mod height_plane_tests {
             optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
             blend_turns: false,
             corner_relief: Default::default(),
+            picks: Default::default(),
         }
     }
 
@@ -1569,6 +1576,7 @@ mod height_plane_tests {
                 feed: 1200.0,
                 plunge_feed: 400.0,
                 climb: false,
+                picks: Default::default(),
             },
         );
         let lines = height_plane_lines(&staged);
@@ -1594,6 +1602,7 @@ mod height_plane_tests {
                 feed: 1200.0,
                 plunge_feed: 400.0,
                 climb: false,
+                picks: Default::default(),
             },
         );
         let lines = height_plane_lines(&flat);
@@ -1737,6 +1746,7 @@ mod height_plane_tests {
             feed: 800.0,
             plunge_feed: 200.0,
             climb: true,
+            picks: Default::default(),
         };
         let plain = state_with("F1", face_at(None));
         let names: Vec<&str> = height_planes(&plain).iter().map(|p| p.name).collect();
@@ -1798,6 +1808,7 @@ mod height_plane_tests {
             blend_turns: false, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             chain_overrides: Vec::new(),
+            picks: Default::default(),
         };
         let mut state = state_with("C1", params);
         // G54 at z 3.0: stock top (20) + 5 = 25, G54 - 1 = 2.
@@ -1864,6 +1875,7 @@ mod height_plane_tests {
             blend_turns: false, blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             chain_overrides: Vec::new(),
+            picks: Default::default(),
         };
         let state = state_with("C1", params);
         assert!(

@@ -10,6 +10,12 @@
 //! and its orbit are view state, and nothing here queues a command.
 //! Frame cost: the model and the projected screen mesh are cached on
 //! their inputs; a still frame builds and projects nothing.
+//! #3897 (U6): the preview stands right of the tabs, as the column of
+//! the #3663 mock-up, and two toggles show or hide the dimension lines
+//! and the holder. The caller gives the size.
+//! #3908: a third toggle, Flutes, shows or hides the helical flutes of
+//! the 3D model (display only; `model::ToolModel::shown`). The row may
+//! wrap in a narrow preview: the drawing takes the height that is left.
 //! Provenance: our own pane; no HSMWorks material involved.
 
 use std::cell::{Cell, RefCell};
@@ -24,11 +30,13 @@ use super::side_view;
 use crate::egui_app::tool_model_view::{self as model_view, BG, View};
 use crate::state::{EditorFace, Orbit, PreviewMode, State};
 
-/// The preview's share of the editor's height, and its bounds, logical px
-/// (the width is the editor's). The tabs' rows keep the rest.
-const SHARE: f32 = 0.4;
-const MIN_H: f32 = 140.0;
-const MAX_H: f32 = 320.0;
+/// The labels of the two display toggles (#3897).
+pub(crate) const DIMS: &str = "Dimensions";
+pub(crate) const HOLDER: &str = "Holder";
+/// #3908: the label of the flutes toggle.
+pub(crate) const FLUTES: &str = "Flutes";
+/// The least height the toggles and the caption take above the drawing.
+pub(super) const HEAD_H: f32 = 60.0;
 
 /// The caption under the toggle: where the 3D model comes from.
 pub(super) fn caption(m: &ToolModel) -> String {
@@ -38,33 +46,45 @@ pub(super) fn caption(m: &ToolModel) -> String {
     }
 }
 
-/// The toggle, the caption and the chosen view.
-pub(super) fn draw(ui: &mut Ui, state: &State, face: &mut EditorFace) {
+/// The view toggle, the display toggles, the caption and the chosen view
+/// in a `size` area (the drawing takes the size less [`HEAD_H`]).
+pub(super) fn draw(ui: &mut Ui, state: &State, face: &mut EditorFace, size: Vec2) {
     let _s = crate::frame_cost::span("ui/tool_library.preview");
     let m = model::of(state);
-    ui.horizontal(|ui| {
+    let top = ui.cursor().top();
+    ui.horizontal_wrapped(|ui| {
         ui.selectable_value(&mut face.preview, PreviewMode::Model, "3D")
             .on_hover_text("the tool as a model: drag to turn, scroll to zoom, double-click to fit");
         ui.selectable_value(&mut face.preview, PreviewMode::Side, "Side")
             .on_hover_text("the tool to scale from the side, with its dimensions");
         ui.separator();
-        ui.small(caption(&m));
+        ui.checkbox(&mut face.dims, DIMS).on_hover_text("show the dimension lines of the side view");
+        ui.checkbox(&mut face.holder, HOLDER).on_hover_text("show the holder; off, the cutter and the shank only");
+        ui.checkbox(&mut face.flutes, FLUTES)
+            .on_hover_text("show the helical flutes on the 3D model; for display only, the checks use the plain tool");
     });
-    let size = Vec2::new(ui.available_width().max(160.0), (ui.available_height() * SHARE).clamp(MIN_H, MAX_H));
+    ui.small(caption(&m));
+    let head = (ui.cursor().top() - top).max(HEAD_H);
+    let size = Vec2::new(size.x.max(160.0), (size.y - head).max(100.0));
     match face.preview {
-        PreviewMode::Model => model_3d(ui, &m, &mut face.orbit, size),
-        PreviewMode::Side => side_view::draw(ui, &m, state.units(), size),
+        PreviewMode::Model => {
+            let (mesh, bounds) = m.shown(face.holder, face.flutes);
+            model_3d(ui, mesh, bounds, &mut face.orbit, size);
+        }
+        PreviewMode::Side => {
+            side_view::draw(ui, &m, state.units(), size, side_view::Show { dims: face.dims, holder: face.holder });
+        }
     }
 }
 
-fn model_3d(ui: &mut Ui, m: &ToolModel, orbit: &mut Orbit, size: Vec2) {
+fn model_3d(ui: &mut Ui, mesh: &Arc<[Triangle]>, bounds: ([f64; 3], [f64; 3]), orbit: &mut Orbit, size: Vec2) {
     let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
     let rect = resp.rect;
     painter.rect_filled(rect, 4.0, BG);
-    let Some(view) = View::fit(m.bounds.0, m.bounds.1, rect, orbit) else {
+    let Some(view) = View::fit(bounds.0, bounds.1, rect, orbit) else {
         return;
     };
-    painter.add(Shape::Mesh(projected(&view, &m.mesh, rect, orbit)));
+    painter.add(Shape::Mesh(projected(&view, mesh, rect, orbit)));
     let g = model_view::gesture(ui, &resp, &view);
     model_view::apply(orbit, &g);
 }

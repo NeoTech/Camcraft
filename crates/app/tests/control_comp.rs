@@ -65,6 +65,7 @@ fn contour_params_of(comp: Compensation, entry: camcraft_app::machining3d::Entry
         blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

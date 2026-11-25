@@ -48,8 +48,8 @@ fn assert_modal_layout(h: &H, id: &str, who: &str, anchors: &[&str], dismiss: &s
     assert!(modal.expand(1.0).contains_rect(button), "{who}: {dismiss} {button:?} leaves {modal:?}");
 }
 
-// #2397: the tool shape editor window - the holder library first, then
-// the Body / Profile tabs, then Close.
+// #2397: the tool shape editor window - the Body / Profile tabs, then
+// Close. #3930: the holder library left it for the tool library window.
 #[test]
 fn layout_window_tool_shape() {
     let _g = snapshot_guard();
@@ -65,8 +65,9 @@ fn layout_window_tool_shape() {
     assert_window_layout(
         &h,
         "Tool shape: EM-0600-4FL",
-        &["Holder library", "Library holder", "Body", "Holder profile", "Parametric", "Apply profile"],
+        &["Body", "Holder profile", "Parametric", "Apply profile"],
     );
+    assert!(h.query_by_label("Holder library").is_none(), "the shape window has no holder library");
     // Close is the window's fixed footer, under the shape.
     let win = h
         .query_all_by_role(egui::accesskit::Role::Window)

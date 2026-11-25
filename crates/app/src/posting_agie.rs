@@ -37,6 +37,14 @@ pub(crate) fn quality_of(condition: &str) -> Option<Quality> {
     }
 }
 
+/// The machine condition that requests `quality`: the inverse of [`quality_of`].
+fn condition_name(quality: Quality) -> &'static str {
+    match quality {
+        Quality::Ccb030 => "AGIE_QN2",
+        Quality::Ccb035 => "AGIE_BERCO_RA035",
+    }
+}
+
 /// The registry name that `name` selects: [`POST`] for its hidden alias, else `name`.
 #[must_use]
 pub fn current_name(name: &str) -> &str {
@@ -157,6 +165,17 @@ pub(super) fn post(
         .iter()
         .map(|(_, op)| crate::operation::agie_quality(world, op))
         .collect::<Result<Vec<_>, _>>()?;
+    // The piece registers one quality for all its works (#2984). Name a mixed
+    // group in either work order before the single-punch limit of CCB035.
+    let mut conditions: Vec<_> = qualities.iter().map(|q| condition_name(*q)).collect();
+    conditions.sort_unstable();
+    conditions.dedup();
+    if conditions.len() > 1 {
+        return Err(format!(
+            "The works of a group must use the same wire condition. This group mixes {}",
+            conditions.join(" and ")
+        ));
+    }
     let quality = match qualities.as_slice() {
         [quality] if round.is_none() => *quality,
         _ if qualities.iter().all(|q| *q == Quality::Ccb030) => Quality::Ccb030,

@@ -172,6 +172,9 @@ fn source_region(
         // solid; the chains it rides are resolved separately, in 3D,
         // at generation (M5.1 J).
         | OpParams::MultiAxisContour { .. }
+        // The flow band's guide chains ride the same way (#2826):
+        // the model's own skin between them is the ground.
+        | OpParams::RotaryFlow { .. }
         // Facing rides the same shadow for the panels: the station
         // limits are the meridian profile's own, computed in the
         // axis frame by the kernel (M5.2 A) - and so are the
@@ -216,7 +219,7 @@ fn source_region(
         }
         // The chamfer ride's machine area is the edge the cone lies
         // along - a boundary ride the contour's way (M2.4 B). #2435: the
-        // tip touches the WALL at the corner depth, not the top plane's
+        // inner cone radius touches the WALL at the corner depth, not the top plane's
         // outline - on a model whose edge is already bevelled that
         // outline is the bevel's top edge, inside the wall. Each top
         // edge rides the wall section under it (a vertical wall: the

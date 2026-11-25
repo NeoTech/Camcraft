@@ -6,7 +6,9 @@
 //! before the click and refused by name on it; a change of the stored
 //! tool's length re-seeds the projection draft only (#808 item 2), never
 //! the stored `HolderRef`; the window's holder draft and the shape
-//! window's stay apart.
+//! window's stay apart. #3930: the folded Body section imports and places
+//! a body from the window's own body draft; Apply body is one
+//! `SetToolBody`, and the shape window's body draft is not touched.
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::egui_app::tool_holder_picker, ui::state.
 //! Provenance: our own structural tests over the AccessKit tree and the
 //! command history; no HSMWorks material involved.
@@ -15,22 +17,45 @@ use camcraft_app::holder_library::HolderRef;
 
 use super::tool_library_editor::{H, click_window_button, draft, library_window, open_in_window, tool, two_tools};
 use super::*;
-use crate::egui_app::tool_library_dialog::assembly_group::HEADING;
+use crate::egui_app::tool_library_dialog::assembly_group::{BODY, HEADING};
 use crate::egui_app::tool_library_dialog::model as preview_model;
 use crate::state::{ErrorScope, ToolProfileUi};
 
 /// A 6 mm end mill on an 8 mm shank (flutes 15, shank 40: stickout 55).
 const TOOL: &str = "EM-0600-4FL";
 
-fn window() -> H {
+pub(super) fn window() -> H {
     let mut h = shell_harness();
     h.run_steps(2);
     open_in_window(&mut h, TOOL);
     h
 }
 
+/// #3930: a tall shell with `name` open in the window, so the whole Tool
+/// tab (the assembly group and the Body section) is in view.
+pub(super) fn tall_window(name: &str) -> H {
+    let mut h = Harness::builder().with_size(egui::vec2(1280.0, 1400.0)).build_ui_state(super::frame, ShellUi::seeded());
+    h.run_steps(2);
+    open_in_window(&mut h, name);
+    h
+}
+
+/// #3930: unfold the window's Body section.
+pub(super) fn open_body(h: &mut H) {
+    library_window(h).get_by_label(BODY).click();
+    h.run_steps(2);
+}
+
+/// #3930: the window's body draft (the editor must be open).
+pub(super) fn body(h: &mut H) -> &mut crate::state::ToolBodyUi {
+    match h.state_mut().state.tool_library.as_mut().and_then(|v| v.editor.as_mut()) {
+        Some(e) => &mut e.body,
+        None => panic!("no tool is open in the tool library window"),
+    }
+}
+
 /// The window's holder draft (the editor must be open).
-fn holder(h: &mut H) -> &mut ToolProfileUi {
+pub(super) fn holder(h: &mut H) -> &mut ToolProfileUi {
     match h.state_mut().state.tool_library.as_mut().and_then(|v| v.editor.as_mut()) {
         Some(e) => &mut e.holder,
         None => panic!("no tool is open in the tool library window"),
@@ -38,25 +63,25 @@ fn holder(h: &mut H) -> &mut ToolProfileUi {
 }
 
 /// Pick `entry` in the window's holder draft, as its picker does.
-fn pick(h: &mut H, entry: &str) {
+pub(super) fn pick(h: &mut H, entry: &str) {
     h.state_mut().state.with_library_draft(|st, _| st.pick_library_holder(entry));
     h.run_steps(2);
 }
 
 /// "Apply holder" of the window (its own draft and tool).
-fn apply_holder(h: &mut H) {
+pub(super) fn apply_holder(h: &mut H) {
     h.state_mut().state.with_library_draft(|st, _| st.queue_apply_tool_holder());
     h.run_steps(3);
 }
 
-fn reference(h: &H, name: &str) -> Option<HolderRef> {
+pub(super) fn reference(h: &H, name: &str) -> Option<HolderRef> {
     let st = &h.state().state;
     model::find_by_name(&st.world, name)
         .and_then(|e| camcraft_app::tool_body::body_of(&st.world, &e))
         .and_then(|b| b.library)
 }
 
-fn shows(h: &H, text: &str) -> bool {
+pub(super) fn shows(h: &H, text: &str) -> bool {
     library_window(h).query_all_by_label_contains(text).next().is_some()
 }
 
@@ -208,4 +233,62 @@ fn the_window_holder_draft_and_the_shape_window_do_not_mix() {
     let props = h.state().state.tool_profile_ui.clone();
     assert_eq!((props.tool.as_str(), props.library.as_deref()), (a.as_str(), Some("BT30 ER20")), "the shape window keeps its pick");
     assert_eq!(holder(&mut h).library.as_deref(), Some("ER20 chuck"), "the window keeps its pick");
+}
+
+/// #3930: the Body section imports into the window's own body draft. The
+/// draft stores nothing; Apply body lands it as one `SetToolBody`, one
+/// undo takes it off, and the shape window's body draft is not touched.
+#[test]
+fn the_body_section_imports_into_the_window_draft_only() {
+    let mut h = tall_window(TOOL);
+    assert!(!shows(&h, "Import body…"), "the Body section is folded");
+    open_body(&mut h);
+    for label in ["Holder diameter", "Holder length", "Import body…", "Clear body"] {
+        assert!(shows(&h, label), "the Body section shows {label:?}");
+    }
+    let path = super::tool_body::temp_stl("window");
+    super::tool_body::prism_stl(&path, 15.0, 0.0, 30.0, 24);
+    let top = super::tool_body::shank_top(&h.state().state);
+    h.state_mut().state.with_library_draft(|st, _| {
+        st.import_tool_body_from(&path);
+        st.tool_body_ui.offset = top;
+    });
+    h.run_steps(2);
+    assert_eq!(body(&mut h).source, "holder.stl", "the window's draft holds the import");
+    assert!(h.state().state.tool_body_ui.facets.is_empty(), "the shape window's body draft is not touched");
+    let body_of = |h: &H| {
+        let st = &h.state().state;
+        model::find_by_name(&st.world, TOOL)
+            .and_then(|e| camcraft_app::tool_body::body_of(&st.world, &e))
+            .map(|b| b.source)
+    };
+    assert_eq!(body_of(&h), None, "a draft stores nothing");
+    assert!(shows(&h, "Pick tip") && shows(&h, "Pick axis"), "the placement picks stand in the window");
+    let done = h.state().state.history.done_len();
+    click_window_button(&mut h, "Apply body");
+    assert_eq!(body_of(&h).as_deref(), Some("holder.stl"), "status: {}", h.state().state.status);
+    assert_eq!(h.state().state.history.done_len(), done + 1, "Apply body is one undo step");
+    crate::actions::undo(&mut h.state_mut().state);
+    h.run_steps(2);
+    assert_eq!(body_of(&h), None, "one undo takes the body off");
+    let _ = std::fs::remove_dir_all(path.parent().unwrap_or(std::path::Path::new(".")));
+}
+
+/// #3930: a turning tool takes no library holder, so the window shows no
+/// picker; its Body section is where the holder is imported and placed
+/// (the lathe frame), as in the tool shape window.
+#[test]
+fn a_turning_tool_has_the_body_section_and_no_holder_pick() {
+    const INSERT: &str = "TN-1600-0R8";
+    let mut h = Harness::builder().with_size(egui::vec2(1280.0, 1400.0)).build_ui_state(super::frame, ShellUi::seeded());
+    h.run_steps(2);
+    super::rack(&mut h.state_mut().state, &[INSERT]);
+    h.run_steps(2);
+    open_in_window(&mut h, INSERT);
+    assert!(shows(&h, HEADING), "the group heading stands");
+    assert!(!shows(&h, "Library holder"), "a turning tool has no holder pick");
+    assert!(shows(&h, "import its holder in the Body section"), "the group says where the holder goes");
+    open_body(&mut h);
+    assert!(shows(&h, "Import body…"), "Import body… stands in the window's Body section");
+    assert!(shows(&h, "the holder is not checked for collisions"), "a bare turning tool says so");
 }

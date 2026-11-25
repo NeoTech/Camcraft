@@ -84,6 +84,7 @@ pub fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
         layer: None,
         wear_lost: None,
         wear_over: None,
+        picks: Default::default(),
     })
 }
 

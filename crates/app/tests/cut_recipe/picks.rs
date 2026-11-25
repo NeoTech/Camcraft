@@ -15,18 +15,19 @@ enum Pick {
 impl Pick {
     fn key(self) -> &'static str {
         match self {
-            Pick::Start => "start_point",
-            Pick::Exit => "exit_point",
+            Pick::Start => "start",
+            Pick::Exit => "exit",
         }
     }
 }
 
 fn contour_with(pick: Option<(Pick, Point2)>) -> OpParams {
     let mut params = seed_params(OpType::Contour.ordinal());
-    if let (OpParams::Contour { links, .. }, Some((which, at))) = (&mut params, pick) {
+    if let (Some(picks), Some((which, at))) = (params.path_picks_mut(), pick) {
+        let p = camcraft_app::path_picks::PathPick::xy(at);
         match which {
-            Pick::Start => links.approach.start_point = Some(at),
-            Pick::Exit => links.approach.exit_point = Some(at),
+            Pick::Start => picks.start = vec![p],
+            Pick::Exit => picks.exit = vec![p],
         }
     }
     params
@@ -79,7 +80,7 @@ fn refuses_mcp(which: Pick, at: [f64; 2]) {
     ok(&mut server, "set_stock", json!({"box": {"dx": 60.0, "dy": 40.0, "dz": 20.0}}));
     ok(&mut server, "add_tool", json!({"catalog": TOOL}));
     ok(&mut server, "add_operation", json!({"kind": "Contour", "tool": TOOL, "name": "C"}));
-    let patch = json!({"name": "C", "params": {"links": {"approach": {which.key(): at}}}});
+    let patch = json!({"name": "C", "params": {"picks": {which.key(): [at]}}});
     ok(&mut server, "edit_operation", patch);
     ok(
         &mut server,

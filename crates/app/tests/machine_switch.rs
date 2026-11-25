@@ -117,6 +117,7 @@ fn faced_on(via: Via, a: Machine) -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, face).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate on A"));
@@ -160,6 +161,7 @@ fn tilted_on(via: Via) -> (World, History) {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         corner_relief: Default::default(),
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "P", "EM-0600-4FL", SrcRef::Stock, params).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "P").expect("generate on the tilt-head"));

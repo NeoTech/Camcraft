@@ -170,6 +170,7 @@ fn bore_state(cells: &[Cell]) -> State {
         climb: true,
         tolerance: 0.01,
         holes: Vec::new(),
+        picks: Default::default(),
     };
     let src = SrcRef::Entity("Plate".into());
     state.history.execute(
@@ -268,6 +269,7 @@ fn drill_state(cells: &[Cell]) -> State {
         cross: Vec::new(),
         break_through: None,
         break_through_from: camcraft_app::drilling::BreakThroughFrom::FullDiameter,
+        picks: Default::default(),
     };
     let src = SrcRef::Entity("Plate".into());
     state.history.execute(&state.world, CreateOperation::new(&state.world, "DRL", "DR-0600", src, params).expect("create"));

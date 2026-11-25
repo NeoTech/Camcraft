@@ -1,13 +1,12 @@
 //! Split from `finishing3d.rs` by M5.0.1; structure only.
 
-use crate::cl::{lattice, MoveKind, PathBuilder, Toolpath};
+use crate::cl::{lattice, MoveKind, PathBuilder};
 use crate::geo2d::{Loop, Point2};
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::{fit_arcs, GenError};
 
 use super::gaplink::straight_ok;
-use super::ladder::levels;
-use super::params::{BLEND_MZ, Finish3DParams, FinishPattern, SPLIT_MZ, TOUCH_EPS, dirs, validate};
+use super::params::{BLEND_MZ, Finish3DParams, FinishPattern, SPLIT_MZ, TOUCH_EPS};
 use super::scan::{level_region, push_walk};
 use super::grid::SupSet;
 use super::support::{build_sups, closest_pt_tri, column_clear, dist2_pt_tri};
@@ -228,6 +227,22 @@ pub(super) fn emit_rings_with_trim(
     last: &mut Option<f64>,
     trim_columns: bool,
 ) -> Result<bool, GenError> {
+    emit_rings_seamed(b, p, facets, zs, ds, last, trim_columns, None)
+}
+
+/// [`emit_rings_with_trim`] with the user's start and exit points
+/// (#3330, `ring_seam`): `None` walks every ring exactly as before.
+#[allow(clippy::too_many_arguments)] // the ladder's flat inputs plus the seam
+pub(super) fn emit_rings_seamed(
+    b: &mut PathBuilder,
+    p: &Finish3DParams,
+    facets: &[Triangle],
+    zs: &[f64],
+    ds: &[(f64, f64)],
+    last: &mut Option<f64>,
+    trim_columns: bool,
+    mut seam: Option<&mut super::ring_seam::SeamRun<'_>>,
+) -> Result<bool, GenError> {
     let r = p.tool_diameter * 0.5;
     let hop = p.retract_z.unwrap_or(p.clearance_z).min(p.clearance_z);
     // The partition's eyes (M2.5 A): SteepShallow is the one pattern
@@ -382,11 +397,20 @@ pub(super) fn emit_rings_with_trim(
             // partition gave it. The question asked of the candidates
             // is the refusal's own, spent identically: never a softer
             // currency than the column law's r - tol.
+            // #3330: a picked start seats the ring there; its column is
+            // judged below and refused by name, never moved.
+            if closed && seam.as_deref_mut().is_some_and(|s| s.seat(&mut poly)) {
+                entry = poly[0];
+                walk = fit_arcs(&poly, p.tolerance * 0.25);
+            }
             if closed && !p.entry_ramp {
                 let blocked = |q: &Point2| {
                     !column_clear(q.x, q.y, z_tip + r, approach_z_at(q.x, q.y) + r, r - p.tolerance, &sups)
                 };
                 if blocked(&entry) {
+                    if let Some(s) = seam.as_deref().filter(|s| s.start().is_some()) {
+                        return Err(s.blocked_start(z_tip));
+                    }
                     let n = poly.len() - 1; // poly[n] == poly[0]
                     let stride = (n / 256).max(1);
                     for i in (stride..n).step_by(stride) {
@@ -525,6 +549,16 @@ pub(super) fn emit_rings_with_trim(
                         Some(p.plunge_feed),
                     );
                 }
+                // #3330: a picked exit runs the lap on to the pick; the
+                // retract column there is judged up to the clearance plane.
+                if let (true, Some(s)) = (closed, seam.as_deref_mut())
+                    && let Some(f) = s.run_on(&mut poly)
+                {
+                    if !column_clear(f.x, f.y, z_tip + r, p.clearance_z.max(z_tip) + r, r - p.tolerance, &sups) {
+                        return Err(s.blocked_exit(z_tip));
+                    }
+                    walk = fit_arcs(&poly, p.tolerance * 0.25);
+                }
                 push_walk(b, &walk, z_tip, p.feed);
                 *last = Some(z_tip);
                 any = true;
@@ -537,34 +571,4 @@ pub(super) fn emit_rings_with_trim(
         ));
     }
     Ok(any)
-}
-
-/// The waterline: the ring ladder alone. One closed cut at each level
-/// of the scallop stepdown ladder, wherever a ball of radius `r`
-/// resting tip-deep at that Z touches the surface.
-pub fn waterline(facets: &[Triangle], p: &Finish3DParams) -> Result<Toolpath, GenError> {
-    validate(p, facets)?;
-    if !p.waterlines {
-        return Err(GenError::Invalid(
-            "Waterline 3D finish is the waterline ring pass - enable waterlines or pick a shallow-first pattern".into(),
-        ));
-    }
-    let r = p.tool_diameter * 0.5;
-    let zs = levels(p, r, facets)?;
-    let ds = dirs(r, p.tolerance);
-    let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
-    let mut last: Option<f64> = None;
-    // #1015: a level refused part-way hands back the rings above it.
-    if !emit_rings(&mut b, p, r, facets, &zs, &ds, &mut last).map_err(|e| e.with_ghost_moves(b.moves()))? {
-        return Err(GenError::Empty(
-            "no surface reaches within one ball radius of the requested depths".into(),
-        ));
-    }
-    let cur = b.at();
-    b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
-    let path = b.finish();
-    if !path.all_finite() {
-        return Err(GenError::Invalid("waterline path left the finite horizon".into()));
-    }
-    Ok(path)
 }

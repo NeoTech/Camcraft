@@ -337,10 +337,15 @@ pub(super) fn pocket_over_with_relief(
     // #3746: a start-side ring plan round a part enters from the air
     // outside the stock box.
     let air = super::air_entry::AirRoom::for_side(side, strategy, center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
-    // #3748: the user's Inside or Outside with a lead-in other than Arc,
-    // where the Arc entry from the air applies: used as selected, named.
+    // #3884: a selected Arc on an Outside ring pass with no air room is
+    // refused by name (no automatic ramp or helix).
+    // An Adaptive op on its ring fallback too (#3884 review).
+    let rings = matches!(strategy, PocketStrategy::Waterline | PocketStrategy::OffsetRings);
+    super::entry_warn::refuse_outside_arc(asked, p.entry, rings, air.is_some())?;
+    // #3748: the user's Inside or Outside with a lead-in other than Arc:
+    // used as selected, named. #3884: the air room is not the gate.
     // Not for an Adaptive op on its ring fallback: its page has no advice.
-    if air.is_some()
+    if rings
         && p.strategy != PocketStrategy::Adaptive
         && let Some(n) = super::pass_start::entry_advice_note(asked, p.entry)
     {

@@ -101,6 +101,7 @@ fn params(kind: OpType, climb: bool, depth: f64, stepdown: f64) -> OpParams {
             plunge_feed,
             climb,
             tilt,
+            picks: Default::default(),
         },
         OpType::Trace => OpParams::Trace {
             clearance_z,
@@ -112,6 +113,7 @@ fn params(kind: OpType, climb: bool, depth: f64, stepdown: f64) -> OpParams {
             plunge_feed,
             climb,
             tilt,
+            picks: Default::default(),
         },
         _ => panic!("expected one of the mark kinds"),
     }

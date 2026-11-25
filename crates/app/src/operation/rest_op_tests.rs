@@ -36,6 +36,7 @@ fn pocket(rest: Option<RestParams>) -> OpParams {
         blend_turns: false,
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -90,6 +91,7 @@ fn adaptive(rest: Option<RestParams>) -> OpParams {
         troch: crate::machining2d::AdaptiveTrochParams::default(),
         corner_relief: Default::default(),
         pass_start: Default::default(),
+        picks: Default::default(),
     }
 }
 

@@ -30,7 +30,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             holes,
             cross,
             break_through,
-            break_through_from,
+            break_through_from, picks: _,
         } => {
             if tab == SEC_GEO {
                 field(ui, "Holes");
@@ -128,6 +128,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             break_through,
             strategy,
             pass_start,
+            picks: _,
         } => {
             let helical = *strategy != BoreStrategy::Rings;
             if tab == SEC_LEADS {
@@ -211,7 +212,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             hand,
             external,
             passes,
-            break_through,
+            break_through, picks: _,
         } => {
             if tab == SEC_GEO {
                 // #985: holes, or bosses for an external thread.

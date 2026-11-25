@@ -249,9 +249,13 @@ pub(super) fn pocket_avoid_over(
                 let resolved = super::ring_side::resolve(&level_center, actual, p.tool_diameter * 0.5, side)?;
                 let room = super::air_entry::AirRoom::for_side(&resolved, actual, &level_center, p.tool_diameter * 0.5, p.links.approach.approach_distance);
                 let room = room.and_then(|r| r.without(&ko.union(&ko_entry).ok()?));
+                // #3884: a selected Arc on an Outside ring pass with no air
+                // room is refused by name.
+                let rings = matches!(actual, PocketStrategy::Waterline | PocketStrategy::OffsetRings);
+                super::entry_warn::refuse_outside_arc(side.start, p.entry, rings, room.is_some())?;
                 // #3748: the user's Inside or Outside with a lead-in other
-                // than Arc, where the Arc entry from the air applies.
-                if room.is_some()
+                // than Arc: used as selected, named (not gated on the air).
+                if rings
                     && p.strategy != PocketStrategy::Adaptive
                     && let Some(n) = super::pass_start::entry_advice_note(side.start, p.entry)
                 {

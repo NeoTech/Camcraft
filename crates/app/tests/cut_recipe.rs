@@ -46,6 +46,7 @@ fn face_params() -> OpParams {
         feed: 900.0,
         plunge_feed: 250.0,
         climb: false,
+        picks: Default::default(),
     }
 }
 

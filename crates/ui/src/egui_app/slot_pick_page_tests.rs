@@ -58,6 +58,7 @@ pub(super) fn opened() -> State {
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     };
     state.history.execute(
         &state.world,

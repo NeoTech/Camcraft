@@ -72,6 +72,7 @@ fn cp(side: Side, climb: bool, lead: Lead, comp: Compensation) -> ContourParams 
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
+        picks: Default::default(),
     }
 }
 
@@ -242,6 +243,7 @@ fn chamfer_climb_keeps_the_material_right() {
     let p = |climb, inside| ChamferParams {
         width: 1.0,
         angle_deg: 45.0,
+        minimum_cone_radius: 0.0,
         clearance_z: 5.0,
         retract_z: Some(2.0),
         top_z: 0.0,

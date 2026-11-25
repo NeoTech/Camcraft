@@ -53,6 +53,7 @@ fn pocket(rest: Option<RestParams>) -> OpParams {
         pass_start: Default::default(),
         rest,
         tilt: None,
+        picks: Default::default(),
     }
 }
 

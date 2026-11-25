@@ -59,6 +59,7 @@ fn contour_params(comp: Compensation) -> OpParams {
         blend_turns: false, blend_radius: None,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 

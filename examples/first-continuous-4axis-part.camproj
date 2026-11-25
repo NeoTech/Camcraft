@@ -1,5 +1,5 @@
 {
-  "version": 78,
+  "version": 82,
   "units": "in",
   "machine": {
     "path": "built-in: Tormach 770MX + microARC 4",
@@ -174,7 +174,7 @@
             "max_tilt_deg": 60.0
           }
         },
-        "stamp": 9057664075614831553,
+        "stamp": 3586270586299363872,
         "cache": {
           "moves": [
             {

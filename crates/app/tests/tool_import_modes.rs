@@ -68,6 +68,7 @@ fn world_with_op() -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&w, CreateOperation::new(&w, "Face1", "T1", SrcRef::Stock, params).expect("op"));
     h.execute(&w, GenerateOperation::new(&w, "Face1").expect("generate"));

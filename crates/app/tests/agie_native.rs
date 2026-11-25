@@ -97,11 +97,15 @@ fn punch_setup(
         .unwrap(),
     );
     let wire = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(height),
         bottom_z: Height::fixed(0.0),
         condition: "AGIE_QN2".into(),
         side: WireSide::Punch,
-        start: Some(start),
+        picks: camcraft_app::path_picks::PathPicks {
+            start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(start[0], start[1]))],
+            exit: Vec::new(),
+        },
         capture: true,
         both_pieces_restrained: false,
         stock_centered_in_xy_travel: false,

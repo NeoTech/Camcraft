@@ -472,6 +472,7 @@ fn a_face_job_on_the_built_in_770mx_passes_the_gate_and_posts_inch() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(
         &world,

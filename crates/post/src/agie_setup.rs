@@ -1,4 +1,4 @@
-//! Setup-only native Classic Cut 2S records, from Quintin Smits's MIT Agie Processor and our offline control checks.
+//! Setup-only native Classic Cut 2S records, from our own implementation and our offline control checks.
 //!
 //! This encoder references an existing ISO geometry file for one closed punch
 //! ([`PunchSetup20::encode`]) or one convex die opening on a 20 mm plate

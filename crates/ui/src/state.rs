@@ -59,7 +59,9 @@ mod program_info;
 mod tool_library_io;
 #[path = "state_tool_library_dialog.rs"]
 mod tool_library_dialog;
-pub use tool_library_dialog::{EditorFace, PreviewMode, ToolEditorTab, ToolLibraryView, ToolSource};
+pub use tool_library_dialog::{
+    EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
+};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -1053,6 +1055,7 @@ impl Default for OpUi {
                 climb: true,
                 // Opt-in, like `seed_face` (M11.1 A).
                 blend_turns: false, blend_radius: None,
+                picks: Default::default(),
             },
         }
     }
@@ -1255,6 +1258,11 @@ pub struct ToolUi {
     /// #1152: a sinker body electrode's section - carried so an Apply
     /// never turns the body into the rectangle of its two sizes.
     pub outline: Vec<[f64; 2]>,
+    /// #3368: a chamfer mill's tip form and flat-tip diameter.
+    pub tip_form: camcraft_app::tools::TaperTip,
+    pub tip_diameter: f64,
+    /// #3369: a form mill's outline, pilot and preset numbers.
+    pub form: Option<camcraft_app::tools::FormSpec>,
 }
 
 impl Default for ToolUi {
@@ -1296,6 +1304,7 @@ impl ToolUi {
                 ToolKind::Keyseat => 19,
                 ToolKind::Dovetail => 20,
                 ToolKind::Lollipop => 21,
+                ToolKind::FormMill => 22,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1325,6 +1334,9 @@ impl ToolUi {
             cutting: t.cutting.clone(),
             turning: t.turning,
             outline: t.outline.clone(),
+            tip_form: t.tip_form,
+            tip_diameter: t.tip_diameter,
+            form: t.form.clone(),
         }
     }
 
@@ -1354,6 +1366,7 @@ impl ToolUi {
             19 => ToolKind::Keyseat,
             20 => ToolKind::Dovetail,
             21 => ToolKind::Lollipop,
+            22 => ToolKind::FormMill,
             _ => ToolKind::EndMill,
         }
     }
@@ -1407,8 +1420,14 @@ impl ToolUi {
             cutting: self.cutting.clone(),
             turning: self.turning,
             outline: self.outline.clone(),
+            tip_form: self.tip_form,
+            tip_diameter: self.tip_diameter,
+            form: self.form.clone(),
         };
         tool.corner_r = tool.tip_corner_r();
+        // #3369: a form mill's preset writes its outline, diameter and
+        // flute length.
+        tool.settle_form();
         // #2015: the shown Unknown row, untouched, stays derived.
         camcraft_app::tool_cutting_rows::canonical(&mut tool);
         tool
@@ -1888,6 +1907,9 @@ pub struct State {
     /// cut to the playhead on a worker thread, its newest picture
     /// feeding `field_view` (dropping it stops and joins the worker).
     pub field_play: Option<camcraft_app::stock_play_worker::PlayWorker>,
+    /// #3336: the layer playback of `field_play` (the GPU cutter on the
+    /// render device, and whether the eye can show its frames).
+    pub layer_play: crate::play_layer::LayerPlayback,
     /// The transport's timeline, built once per `doc_version` (never
     /// per frame: it walks every op's path) - see `shell::cached_script`.
     pub sim_script_cache: Option<(u64, std::sync::Arc<camcraft_app::sim::Script>)>,
@@ -2431,6 +2453,7 @@ impl State {
             program_sim: None,
             field_view: None,
             field_play: None,
+            layer_play: crate::play_layer::LayerPlayback::default(),
             sim_script_cache: None,
             sim_op_starts: None,
             sim_tool_cache: std::sync::Mutex::default(),

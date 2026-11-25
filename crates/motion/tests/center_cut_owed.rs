@@ -243,6 +243,9 @@ fn tool(kind: ToolKind, center_cutting: bool) -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 

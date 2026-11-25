@@ -360,6 +360,7 @@ fn cp() -> ContourParams {
         helix_radius: 1.0,
         blend_turns: false, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 
@@ -1022,6 +1023,61 @@ fn a_wall_side_ramp_too_short_for_its_angle_grazes_and_says_why() {
     let t = contour(&rect(0.0, 0.0, 4.0, 4.0), &outside_ramped(Entry3D::Ramp, 0.005)).expect("graze");
     assert_eq!(t.notes.iter().filter(|n| n.contains("too short for the ramp angle")).count(), 1, "{:?}", t.notes);
     assert!(t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "the graze dive stands in: {:?}", t.moves);
+}
+
+/// #3917: `n` separate 16 mm square parts, 40 mm apart along X.
+fn separate_parts(n: usize) -> Region {
+    let sq = |i: usize| {
+        let x0 = 40.0 * i as f64;
+        Loop::new(vec![Point2::new(x0, 0.0), Point2::new(x0 + 16.0, 0.0), Point2::new(x0 + 16.0, 16.0), Point2::new(x0, 16.0)]).unwrap()
+    };
+    Region::new((0..n).map(sq).collect()).unwrap()
+}
+
+/// #3917: every outside ring after the first at a level is entered by the
+/// wall-side ramp, not by the pass link's axial plunge; and the traverse
+/// between the parts rides the pass link's plane (clearance for pass
+/// Clearance, the retract plane for pass Retract).
+#[test]
+fn every_outside_ring_of_several_parts_is_entered_by_the_wall_side_ramp() {
+    let part = |x: f64| ((x - 8.0) / 40.0).round() as i64;
+    for n in [2, 3] {
+        let base = contour(&separate_parts(n), &outside_ramped(Entry3D::Plunge, 5.0)).expect("plunge parts");
+        assert_eq!(steepest_descent(&base).1, 3 * n, "the plunge entry dives at each ring of each level");
+        for (pass, plane) in [(camcraft_motion::links::Link::Clearance, 5.0), (camcraft_motion::links::Link::Retract, 3.0)] {
+            for entry in [Entry3D::Ramp, Entry3D::Helix] {
+                let mut p = outside_ramped(entry, 5.0);
+                p.links.pass = pass;
+                let t = contour(&separate_parts(n), &p).expect("ramped parts");
+                let what = format!("{n} parts, {entry:?}, pass {pass:?}");
+                let (worst, axial) = steepest_descent(&t);
+                assert!(worst > 1.0 && worst <= 5.0 + 1e-3, "{what}: every ring ramps within 5 deg: {worst}");
+                assert_eq!(axial, 0, "{what}: no ring dives: {:?}", t.notes);
+                assert!(!t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "{what}: no plunge move");
+                assert!(t.is_chained() && t.all_finite());
+                // A ring-to-ring crossing: a rapid to another part, with the
+                // cut level before it (the last feed's Z) equal to the level
+                // after it (the lowest Z before the next crossing). The
+                // others are the approach and the level links.
+                let at: Vec<usize> = (0..t.moves.len())
+                    .filter(|&i| t.moves[i].kind == MoveKind::Rapid && part(t.moves[i].to.x) != part(t.moves[i].from.x))
+                    .collect();
+                let crossings: Vec<f64> = at
+                    .iter()
+                    .enumerate()
+                    .filter(|&(k, &i)| {
+                        let before = t.moves[..i].iter().rev().find(|m| m.kind != MoveKind::Rapid).map(|m| m.to.z);
+                        let end = at.get(k + 1).copied().unwrap_or(t.moves.len());
+                        let after = t.moves[i..end].iter().map(|m| m.to.z).fold(f64::INFINITY, f64::min);
+                        before.is_some_and(|z| (z - after).abs() < 1e-9)
+                    })
+                    .map(|(_, &i)| t.moves[i].to.z)
+                    .collect();
+                assert_eq!(crossings.len(), 3 * (n - 1), "{what}: one crossing to the next part per level: {crossings:?}");
+                assert!(crossings.iter().all(|z| (z - plane).abs() < 1e-9), "{what}: the crossing rides the pass plane {plane}: {crossings:?}");
+            }
+        }
+    }
 }
 
 /// #3888: the outside ramp's params under one compensation, with the

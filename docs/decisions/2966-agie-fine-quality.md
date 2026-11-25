@@ -1,6 +1,6 @@
 ## #2966 — Request a Ra 0.35 µm work quality for one 20 mm punch
 
-Use the existing Wire Contour condition field for both qualities. The condition `AGIE_QN2` requests quality CCB030 (Ra 0.30 µm), as before. The new condition `AGIE_BERCO_RA035` requests the Fine+ values of the MIT Agie Processor quality presets: Ra 0.35, Te 1.50 and Tkm 1.00 µm, three options disabled. Both conditions require the existing preview gap and the 0.25 mm wire. The project file keeps the selected condition.
+Use the existing Wire Contour condition field for both qualities. The condition `AGIE_QN2` requests quality CCB030 (Ra 0.30 µm), as before. The new condition `AGIE_BERCO_RA035` requests the Fine+ values of the quality presets of our own implementation: Ra 0.35, Te 1.50 and Tkm 1.00 µm, three options disabled. Both conditions require the existing preview gap and the 0.25 mm wire. The project file keeps the selected condition.
 
 Qualify the new request for one closed polygon punch on 20 mm cold die steel with Berco Cut 0.25 mm wire. Refuse other thicknesses, a die opening, an open cutoff, a punch group and a DXF arc punch. No control check covers them. Pin each refusal and pin that no directory is written.
 

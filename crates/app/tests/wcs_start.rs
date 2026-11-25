@@ -87,6 +87,7 @@ fn face() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -113,6 +114,7 @@ fn finish() -> OpParams {
         pencil_reference: None,
         fill_openings: None,
         waterlines: true,
+        picks: Default::default(),
     }
 }
 
@@ -132,6 +134,7 @@ fn drill() -> OpParams {
         cross: Vec::new(),
         break_through: None,
         break_through_from: Default::default(),
+        picks: Default::default(),
     }
 }
 

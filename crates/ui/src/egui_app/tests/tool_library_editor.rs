@@ -154,3 +154,123 @@ fn details_tab_shows_the_catalog_facts() {
     }
     assert!(win.query_all_by_label("Diameter").next().is_none(), "the geometry stays on the Tool tab");
 }
+
+/// #3368: a chamfer mill's Tool tab shows the Tip form row (enabled, Sharp
+/// for a catalog V-bit) and, for a flat tip, the Tip diameter row; another
+/// kind shows neither. A form edit lands as one `ChangeTool` on Apply.
+#[test]
+fn the_tip_form_row_shows_for_a_taper() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    let (end_mill, _) = two_tools(&mut h);
+    let name = "CM-0600-90";
+    let Some((_, cone)) = camcraft_app::tools::catalog().into_iter().find(|(n, _)| *n == name) else {
+        panic!("the catalog has {name}");
+    };
+    h.state_mut().state.pending.push_back(crate::state::CommandKind::AddTool { name: name.into(), tool: cone });
+    h.run_steps(2);
+    open_in_window(&mut h, name);
+    {
+        let win = library_window(&h);
+        assert!(win.query_all_by_label("Tip form").next().is_some(), "a chamfer mill has the Tip form row");
+        let Some(combo) = win.query_all_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some("Sharp")).next() else {
+            panic!("the Tip form combo shows Sharp for a catalog chamfer mill");
+        };
+        assert!(!combo.accesskit_node().is_disabled(), "the tip form can be chosen");
+        assert!(win.query_all_by_label("Tip diameter").next().is_none(), "a sharp tip states no diameter");
+    }
+    let before = tool(&h, name);
+    let done = h.state().state.history.done_len();
+    draft(&mut h).tip_form = camcraft_app::tools::TaperTip::Flat;
+    draft(&mut h).tip_diameter = 1.0;
+    h.run_steps(2);
+    assert!(library_window(&h).query_all_by_label("Tip diameter").next().is_some(), "a flat tip shows its diameter");
+    click_window_button(&mut h, "Apply");
+    let after = tool(&h, name);
+    assert_eq!((after.tip_form, after.tip_diameter), (camcraft_app::tools::TaperTip::Flat, 1.0), "{}", h.state().state.status);
+    assert_eq!(h.state().state.history.done_len(), done + 1, "one Apply is one undo step");
+    crate::actions::undo(&mut h.state_mut().state);
+    h.run_steps(2);
+    assert_eq!(tool(&h, name), before, "one undo gives the sharp tip back");
+    h.state_mut().state.open_tool_in_library(&end_mill);
+    h.run_steps(3);
+    assert_eq!(draft(&mut h).name, end_mill);
+    assert!(library_window(&h).query_all_by_label("Tip form").next().is_none(), "only a chamfer mill has a tip form");
+}
+
+/// #3369: a form mill's Tool tab shows the kind, the Form preset list
+/// (Roundover for the catalogue bit) with its number rows and the pilot
+/// length; a preset number edit lands as one `ChangeTool` on Apply and
+/// the diameter follows the form. Another kind shows no preset row.
+#[test]
+fn the_form_mill_presets_show() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    let (end_mill, _) = two_tools(&mut h);
+    let name = "FM-RO-R6";
+    rack(&mut h.state_mut().state, &[name]);
+    h.run_steps(2);
+    open_in_window(&mut h, name);
+    {
+        let win = library_window(&h);
+        let combo = |v: &str| win.query_all_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(v)).next().is_some();
+        assert!(combo("Form mill"), "the Type list shows the form mill");
+        assert!(combo("Roundover"), "the Form preset list shows the catalogue bit's preset");
+        for label in ["Form preset", "Radius", "Pilot radius", "Cutting height", "Pilot length"] {
+            assert!(win.query_all_by_label(label).next().is_some(), "a form mill has the {label} row");
+        }
+    }
+    let before = tool(&h, name);
+    let done = h.state().state.history.done_len();
+    match draft(&mut h).form.as_mut().and_then(|f| f.preset.as_mut()) {
+        Some(camcraft_app::tools::FormPreset::Roundover { radius, .. }) => *radius = 8.0,
+        other => panic!("the catalogue bit is a roundover, not {other:?}"),
+    }
+    h.run_steps(2);
+    click_window_button(&mut h, "Apply");
+    let after = tool(&h, name);
+    assert_eq!((after.diameter, after.flute_len), (29.0, 18.0), "{}", h.state().state.status);
+    assert_eq!(h.state().state.history.done_len(), done + 1, "one Apply is one undo step");
+    crate::actions::undo(&mut h.state_mut().state);
+    h.run_steps(2);
+    assert_eq!(tool(&h, name), before, "one undo gives the old form back");
+    h.state_mut().state.open_tool_in_library(&end_mill);
+    h.run_steps(3);
+    assert!(library_window(&h).query_all_by_label("Form preset").next().is_none(), "only a form mill has a preset");
+}
+
+/// #3369: the shape window's Profile tab (Draw cutter) draws a form mill
+/// and names its form in place of a tip number.
+#[test]
+fn a_form_mill_profile_tab_names_its_form() {
+    let mut h = Harness::builder().with_size(egui::vec2(1280.0, 1400.0)).build_ui_state(super::frame, ShellUi::seeded());
+    h.run();
+    let name = "FM-CV-R6";
+    rack(&mut h.state_mut().state, &[name]);
+    h.run();
+    h.state_mut().state.ui_target = UiTarget::Tool(name.into());
+    crate::actions::open_tool_shape_editor(&mut h.state_mut().state, name);
+    h.run();
+    h.run();
+    h.get_by_label("Profile").click();
+    h.run();
+    h.get_by_label("Draw cutter").click();
+    h.run();
+    h.run();
+    assert!(h.query_all_by_label("form").next().is_some(), "the cutter view names the form");
+    assert!(h.query_all_by_label("Cove").next().is_some(), "and its preset");
+    assert!(h.query_all_by_label("cone angle °").next().is_none(), "a form mill has no tip number");
+    // Review of #3946: the form outline sets the diameter and the flute
+    // length, so the cutter view shows them and takes no typing there; the
+    // shank numbers stay editable.
+    // The cell of a row sits between its label and the "form" column (the
+    // points table to the right shares the rows' heights).
+    let right = h.get_by_label("form").rect().min.x;
+    let typed = |label: &str| {
+        let at = h.get_by_label(label).rect();
+        let cell = |r: egui::Rect| (r.center().y - at.center().y).abs() < 3.0 && r.min.x > at.min.x && r.max.x < right;
+        h.query_all_by_role(Role::SpinButton).filter(|n| cell(n.rect())).count()
+    };
+    assert_eq!((typed("cutter Ø"), typed("flutes")), (0, 0), "a form mill's diameter and flute length are not typed");
+    assert_eq!(typed("shank Ø"), 1, "the shank diameter stays editable");
+}

@@ -72,6 +72,7 @@ fn pocket3d(strategy: PocketStrategy, entry: Entry3D) -> OpParams {
         feed_opt: false,
         shell: false,
         method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
+        picks: Default::default(),
     }
 }
 

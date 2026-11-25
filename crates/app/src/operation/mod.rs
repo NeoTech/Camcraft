@@ -90,6 +90,8 @@ mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
 pub(crate) use stamp_stock::write_setup_stock;
 mod material;
+// #3544: Detect holes on a stock source names the stock and the models.
+mod detect_source;
 // #2496: a drill makes its own size; a wider hole is named.
 mod drill_size;
 // #3525: a cut deeper than the flute length is named first.
@@ -132,6 +134,7 @@ mod agie_die;
 pub(crate) use agie_profile::{agie_job, agie_quality, agie_sketch_job};
 mod wire_ruled;
 pub(crate) mod wire_sketch;
+pub(crate) mod wire_sketch_arcs;
 mod agie_inspection;
 pub(crate) use agie_inspection::prepare_inspection;
 pub use agie_inspection::{AgieInspectionReceipt, export_agie_inspection, has_agie_inspection_source};
