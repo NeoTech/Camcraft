@@ -156,3 +156,55 @@ fn chamfer_lead_shapes_apply_and_undo_without_entry_controls() {
         }
     ));
 }
+
+#[test]
+fn typing_a_chamfer_lead_size_stays_in_the_draft() {
+    let kind = camcraft_app::operation::KindInfo::ALL
+        .iter()
+        .position(|row| row.label == "2D Chamfer")
+        .expect("Chamfer kind");
+    let mut params = crate::operations::retype(&pocket(Entry3D::Plunge), kind);
+    if let OpParams::Chamfer2D { lead, lead_out, .. } = &mut params {
+        *lead = Some(Lead::Arc { radius: 3.0 });
+        *lead_out = None;
+    }
+    let mut state = opened_chamfer(params);
+    state.op_tab = super::super::op_tabs::SEC_LEADS;
+    let mut harness = page(state);
+    harness.run();
+
+    let label = harness.get_by_label("Lead arc radius").rect();
+    let spin = harness
+        .query_all_by(|node| node.role() == Role::SpinButton)
+        .find(|node| (node.rect().center().y - label.center().y).abs() < 2.0)
+        .map(|node| node.rect())
+        .expect("lead radius on its label row");
+    harness
+        .query_all_by(|node| node.role() == Role::SpinButton)
+        .find(|node| node.rect() == spin)
+        .expect("lead radius")
+        .click();
+    harness.run();
+    harness
+        .query_all_by(|node| node.role() == Role::SpinButton)
+        .find(|node| (node.rect().top() - spin.top()).abs() < 1.0)
+        .expect("editing lead radius")
+        .type_text("7.25");
+    harness.run();
+    harness.run();
+
+    assert!(matches!(
+        &harness.state().op_ui.params,
+        OpParams::Chamfer2D {
+            lead: Some(Lead::Arc { radius }),
+            ..
+        } if (*radius - 7.25).abs() < 1e-9
+    ));
+    assert!(matches!(
+        live(harness.state()),
+        OpParams::Chamfer2D {
+            lead: Some(Lead::Arc { radius: 3.0 }),
+            ..
+        }
+    ), "the number stays staged until Apply");
+}

@@ -217,9 +217,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             if tab == SEC_LEADS {
                 group(ui, "Lead in", None, |ui| {
                     let mut shape = lead.unwrap_or(Lead::None);
-                    if lead_editor(ui, u, "ch_lead_in", "Lead-in type", &mut shape) {
+                    let before = shape;
+                    let selected = lead_editor(ui, u, "ch_lead_in", "Lead-in type", &mut shape);
+                    if selected || shape != before {
                         // Only an explicit choice replaces the legacy
-                        // marker. Opening or painting the tab is inert.
+                        // marker. A typed size or a selected shape does;
+                        // opening or painting the tab remains inert.
                         *lead = Some(shape);
                     }
                 });
