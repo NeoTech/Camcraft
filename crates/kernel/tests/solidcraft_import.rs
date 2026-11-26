@@ -11,6 +11,8 @@
 
 #[path = "solidcraft_import/blend.rs"]
 mod blend;
+#[path = "solidcraft_import/release_fixture.rs"]
+mod release_fixture;
 mod sc_util;
 mod step_util;
 
