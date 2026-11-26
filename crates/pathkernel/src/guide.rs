@@ -1,6 +1,7 @@
 //! Stage 2, Guide curves (K2): the guide choice, the curve type and the
-//! canonical guide set. This step holds the types and their checked
-//! constructors; K2 adds the ring, row, medial, trace and helix planners.
+//! canonical guide set with its named stretches. The planners are in the
+//! files of `guide/`: rings and rows (#4176, first part); the medial line,
+//! the trace and the helix follow.
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 2: Guide curves"; contour-parallel and direction-parallel paths as
 //! in Held (1991).
@@ -11,6 +12,18 @@ use crate::frame::{PlanePoint, Positive, Spot};
 use crate::region::KernelRegion;
 use crate::verdict::{Refusal, Stage, Verdict};
 use crate::{KERNEL_TOL, finite};
+
+mod all;
+mod cover;
+pub mod mark;
+pub mod rings;
+pub mod rows;
+
+pub use all::{FAMILY_NOT_YET, Guides};
+pub use cover::{BAD_TOL, GUIDE_GEOMETRY, NOT_PLANAR, STEP_ABOVE_DIAMETER};
+pub use mark::{Mark, MarkKind, Span};
+pub use rings::RingPlanner;
+pub use rows::RowPlanner;
 
 /// What the rings are offset from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -297,12 +310,14 @@ impl Curve {
     }
 }
 
-/// A set of guide curves: no order and no start point (they are stage 4).
-/// The constructor makes the set canonical with a total order: the same
-/// curves in any input order and from any start give the same set (law 1).
+/// A set of guide curves: no order and no start point (they are stage 4),
+/// and the stretches that the planner names ([`Mark`]). The constructors
+/// make the set canonical with a total order: the same curves in any input
+/// order and from any start give the same set (law 1).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GuideSet {
     curves: Vec<Curve>,
+    marks: Vec<Mark>,
 }
 
 impl GuideSet {
@@ -310,11 +325,38 @@ impl GuideSet {
     pub fn new(curves: Vec<Curve>) -> Self {
         let mut curves: Vec<Curve> = curves.into_iter().map(Curve::canonical).collect();
         curves.sort_by(Curve::cmp_set);
-        Self { curves }
+        Self { curves, marks: Vec::new() }
+    }
+
+    /// The canonical set with its marks. Each mark names a curve by its
+    /// index in `curves`; the set moves it to the canonical index. Refused
+    /// for a mark on a curve that is not in `curves`, or a marked stretch
+    /// with a point off its curve.
+    pub fn with_marks(curves: Vec<Curve>, marks: Vec<Mark>) -> Result<Self, Refusal> {
+        let mut tagged: Vec<(usize, Curve)> = curves.into_iter().map(Curve::canonical).enumerate().collect();
+        tagged.sort_by(|a, b| a.1.cmp_set(&b.1));
+        let mut at = vec![0usize; tagged.len()];
+        for (new, (old, _)) in tagged.iter().enumerate() {
+            at[*old] = new;
+        }
+        let curves: Vec<Curve> = tagged.into_iter().map(|(_, c)| c).collect();
+        let mut out = Vec::with_capacity(marks.len());
+        for m in marks {
+            let i = at.get(m.curve()).copied().ok_or(Refusal::new(Stage::Guide, mark::MARK_NO_CURVE))?;
+            let c = curves.get(i).ok_or(Refusal::new(Stage::Guide, mark::MARK_NO_CURVE))?;
+            out.push(m.onto(i, c)?);
+        }
+        out.sort_by(Mark::cmp_set);
+        Ok(Self { curves, marks: out })
     }
     #[must_use]
     pub fn curves(&self) -> &[Curve] {
         &self.curves
+    }
+    /// The named stretches, in the canonical order of the set.
+    #[must_use]
+    pub fn marks(&self) -> &[Mark] {
+        &self.marks
     }
 }
 
