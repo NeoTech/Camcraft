@@ -99,8 +99,33 @@ with the default switch the output is identical.
    level blend of #3934 (35 lifts on the disc, 24 crossing feeds on the dog
    bone): not ported; the pins show 0 crossings.
 
-**Readings** (motion `kernel_laws`, the #4154 measures, tool radius 4,
-step 2): see the PR. The record's target is 0 lifts on the disc.
+**Readings.** Motion `kernel_laws` (the #4154 measures; tool radius 4,
+step 2, the 80 x 50 stock box), the kernel plan made into a toolpath in
+the test, against the old planners' tables:
+
+| Fixture | Kernel lifts / crossings | Old 2D Pocket | Old 2D Offset |
+|---|---|---|---|
+| disc, Inside | 0 / 0 | 18 (none named) / 0 | 0 / 0 |
+| disc, Outside | 0 / 0 | 18 (none named) / 0 | 0 / 0 |
+| dog bone, Inside | 0 / 0 | 26 (none named) / 0 | 0 / 0 |
+| dog bone, Outside | 0 / 0 | 26 (none named) / 0 | 0 / 0 |
+
+The held level blend of #3934 had 35 lifts on the disc and 24 crossing
+feeds on the dog bone (Outside). The law suite pins the same 0 lifts on
+the disc pocket, the disc band and the dog-bone band (Auto, Inside,
+Outside), and the lifts of the pocket with an island: 7 Inside (and
+Auto), 5 Outside, each with its reason. Inside, the four corners of that
+pocket are four separate deepest areas: the walk starts in each, and the
+link between two corners runs over a strip that is not cut yet
+(`UNCUT_STOCK`) or across a ring still planned (`CROSSES_CUT`). Outside,
+the walk must go from the wall rings to the island rings across the rings
+still planned between them (`CROSSES_CUT`). No in-plane link is proved
+there, so each lift is correct and named.
+
+The engagement readings of the kernel plan are higher than the old ones
+(for example `over 3504` on the disc Inside: the rings run outward from
+the part wall, and each move of the dense rings counts). Load control is
+K3: this step does not change the load.
 
 **Cost of a change later.** The full-width rule is one function
 (`order/stage.rs`, `started` and the level pick). The sense rule and the
