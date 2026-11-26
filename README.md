@@ -157,6 +157,8 @@ Actions runs only on a pushed release tag (`release.yml`).
   what was dropped.
 - [Machine onboarding](docs/MACHINE-ONBOARDING.md): source facts, registration,
   software-test seams, and current limitations for machine definitions/posts.
+- [SolidCraft and CamCraft over MCP](docs/user-guide/solidcraft-camcraft-mcp.md):
+  one external agent, a local CAD-to-CAM walkthrough, and cross-app safety limits.
 - `AGENTS.md`: engineering rules (clean-room protocol, the never-crash /
   never-gouge directive, layering, testing).
 - `RELEASE_NOTES.md`, `TESTING.md`: the current release.

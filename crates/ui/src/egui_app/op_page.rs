@@ -166,6 +166,11 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         // by name, on the tab where the contour's rows sit (else Geometry).
         let picks_tab = if super::op_tabs::has_section(kind, SEC_LEADS) { SEC_LEADS } else { SEC_GEO };
         if tab == picks_tab {
+            let u = state.units();
+            // #3333: the sinker kinds type their start and exit points here.
+            super::sinker_pick_rows::sinker_pick_groups(ui, u, &mut state.op_ui.params);
+            // #3328: the hole kinds type their first and last hole here.
+            super::start_exit_rows::hole_order_groups(ui, u, &mut state.op_ui.params);
             super::start_exit_rows::not_taken_groups(ui, kind);
             // #3331: a turning kind's picks, typed in the lathe (Z, X) plane.
             super::turning_start_exit_rows::meridian_groups(ui, state.units(), &mut state.op_ui.params);

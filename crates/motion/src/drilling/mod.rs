@@ -39,6 +39,8 @@ mod fine_bore;
 mod hole;
 mod merge;
 mod mouth;
+// #3328: the hole order under the start and exit picks.
+mod order;
 mod recognize;
 
 #[cfg(test)]
@@ -64,6 +66,7 @@ pub use hole::{
     auto_kind, drill_point_length, through_tip_run, BreakThroughFrom, CrossHole, CycleChoice,
     CycleParams, Hole, CHIP_BREAK, SPOT_DEPTH, THROUGH_CLEAR,
 };
+pub use order::{hole_order, in_order, HOLE_PICK_TOL};
 pub use recognize::{recognize, recognize_cross};
 
 #[cfg(test)]

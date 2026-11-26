@@ -244,9 +244,39 @@ fn bore_path_matches(got: (usize, usize, usize)) -> bool {
         got == BORE_PIN
     } else {
         // Not measured here yet. Measure this platform and add its exact
-        // triple above. Until then use the existing fallback band.
-        let (moves, planar, arcs) = got;
-        (4706..=4736).contains(&moves) && (4678..=4708).contains(&planar) && (539..=559).contains(&arcs)
+        // triple above. Until then use the fallback band.
+        unmeasured_bore_path_matches(got)
+    }
+}
+
+// Issue #3085: center the unmeasured-platform band on the PR #3802 mesh
+// reading documented above, not the old truck mesh. Keep the previous
+// half-widths (15 moves/planar feeds, 10 arcs); this is not a measurement.
+fn unmeasured_bore_path_matches(got: (usize, usize, usize)) -> bool {
+    let (moves, planar, arcs) = got;
+    (4673..=4703).contains(&moves) && (4645..=4675).contains(&planar) && (1970..=1990).contains(&arcs)
+}
+
+#[test]
+fn the_unmeasured_bore_band_accepts_the_current_pin() {
+    assert!(unmeasured_bore_path_matches(BORE_PIN));
+}
+
+#[test]
+fn the_unmeasured_bore_band_checks_each_boundary() {
+    let (m, p, a) = BORE_PIN;
+    for got in [(4673, p, a), (4703, p, a), (m, 4645, a), (m, 4675, a), (m, p, 1970), (m, p, 1990)] {
+        assert!(unmeasured_bore_path_matches(got), "the band must include {got:?}");
+    }
+    for got in [(4672, p, a), (4704, p, a), (m, 4644, a), (m, 4676, a), (m, p, 1969), (m, p, 1991)] {
+        assert!(!unmeasured_bore_path_matches(got), "the band must reject {got:?}");
+    }
+}
+
+#[test]
+fn the_unmeasured_bore_band_rejects_the_old_mesh_readings() {
+    for got in [(4716, 4688, 549), (4726, 4698, 549), (3158, 3130, 1141)] {
+        assert!(!unmeasured_bore_path_matches(got), "the band must reject the old mesh reading {got:?}");
     }
 }
 

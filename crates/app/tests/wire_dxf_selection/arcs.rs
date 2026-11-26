@@ -9,14 +9,14 @@
 
 use super::*;
 
-const ISO: &str = "Generic ISO Wire EDM";
-const SODICK: &str = "Sodick Wire EDM (Mark 21)";
-const GEDM: &str = "G-EDM Wire EDM";
-const GEDM_FIXTURE: &str = include_str!("../edm/g-edm-fixture.mch");
+pub(super) const ISO: &str = "Generic ISO Wire EDM";
+pub(super) const SODICK: &str = "Sodick Wire EDM (Mark 21)";
+pub(super) const GEDM: &str = "G-EDM Wire EDM";
+pub(super) const GEDM_FIXTURE: &str = include_str!("../edm/g-edm-fixture.mch");
 
 /// A radius 5 circle about the drawing's origin, with a TEXT and a
 /// DIMENSION entity beside it.
-const DIE: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n\
+pub(super) const DIE: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n\
     0\nCIRCLE\n8\noutline\n10\n0\n20\n0\n40\n5\n\
     0\nTEXT\n8\nnotes\n10\n20\n20\n20\n40\n2\n1\nDIE 10\n\
     0\nDIMENSION\n8\nnotes\n10\n-5\n20\n-8\n0\nENDSEC\n0\nEOF\n";
@@ -24,7 +24,7 @@ const DIE: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSEC
 /// A 20 x 20 L about the origin: its corner at (10, -10) rounded by a
 /// radius 3 fillet (bulge tan(22.5 degrees)), a sharp inside corner at
 /// (0, 0).
-const PUNCH: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n\
+pub(super) const PUNCH: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n\
     0\nLWPOLYLINE\n8\noutline\n90\n7\n70\n1\n10\n-10\n20\n-10\n10\n7\n20\n-10\n42\n0.41421356237309503\n\
     10\n10\n20\n-7\n10\n10\n20\n0\n10\n0\n20\n0\n10\n0\n20\n10\n10\n-10\n20\n10\n0\nENDSEC\n0\nEOF\n";
 
@@ -38,7 +38,7 @@ const OVAL: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSE
     10\n-8.528028654224\n20\n-3.490278871102\n42\n0.560231504260063\n0\nENDSEC\n0\nEOF\n";
 
 /// A start pick at a world point (#3339 moved `start` into `picks`).
-fn start_at(p: [f64; 2]) -> camcraft_app::path_picks::PathPicks {
+pub(super) fn start_at(p: [f64; 2]) -> camcraft_app::path_picks::PathPicks {
     camcraft_app::path_picks::PathPicks {
         start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(p[0], p[1]))],
         exit: Vec::new(),
@@ -46,7 +46,7 @@ fn start_at(p: [f64; 2]) -> camcraft_app::path_picks::PathPicks {
 }
 
 /// The drawing point (`x`, `y`) in world XY.
-fn to_world(world: &World, x: f64, y: f64) -> [f64; 2] {
+pub(super) fn to_world(world: &World, x: f64, y: f64) -> [f64; 2] {
     let (e, _) = sketch::find(world, "drawing").expect("drawing");
     let pose = sketch::world_pose(world, &e).expect("placed");
     let q = camcraft_app::geometry::transform_point(Point3::new(x, y, 0.0), pose.pos, pose.rot);
@@ -55,7 +55,7 @@ fn to_world(world: &World, x: f64, y: f64) -> [f64; 2] {
 
 /// `dxf` placed and picked as `document` does, on `machine`, cut on
 /// `side` from the drawing point `hole` under `condition`.
-fn doc(dxf: &str, machine: &str, condition: &str, side: WireSide, hole: (f64, f64), sharp: bool) -> World {
+pub(super) fn doc(dxf: &str, machine: &str, condition: &str, side: WireSide, hole: (f64, f64), sharp: bool) -> World {
     let (world, mut h) = document(dxf);
     if machine != FIXTURE {
         let m = machine::parse_mch(machine).expect("machine");
@@ -93,7 +93,7 @@ fn posted(world: &World, post: &str, tag: &str) -> String {
 }
 
 /// Post through `post` and hold the program to `golden`.
-fn golden(world: &World, post: &str, golden: &str) -> String {
+pub(super) fn golden(world: &World, post: &str, golden: &str) -> String {
     let nc = posted(world, post, golden);
     let path = format!("tests/golden/nc/{golden}");
     if std::env::var_os("WRITE_GOLDEN").is_some() {
@@ -104,7 +104,7 @@ fn golden(world: &World, post: &str, golden: &str) -> String {
     nc
 }
 
-fn arc_blocks(nc: &str) -> Vec<&str> {
+pub(super) fn arc_blocks(nc: &str) -> Vec<&str> {
     nc.lines().filter(|l| l.starts_with("G2 ") || l.starts_with("G3 ") || l.starts_with("G02") || l.starts_with("G03")).collect()
 }
 

@@ -213,6 +213,8 @@ mod waterjet_page;
 mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;
+// #3333: the sinker kinds' Start point / Exit point groups.
+mod sinker_pick_rows;
 mod trochoid_page;
 // #1444: the Slot Undercut kind's fields.
 mod undercut_page;

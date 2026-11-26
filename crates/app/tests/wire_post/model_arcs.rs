@@ -55,6 +55,7 @@ fn die_of(mesh: Mesh) -> World {
         clearance: operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
         sharp_corners: false,
+        lead_arc_radius: None,
     };
     let c = CreateOperation::new(&world, "Die1", "EDM-W025", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

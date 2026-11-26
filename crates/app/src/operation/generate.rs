@@ -470,6 +470,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             climb,
             blend_turns, blend_radius,
             holes,
+            picks,
             ..
         } => {
             let region = region_for_job(
@@ -542,7 +543,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let keep = avoid_spec
                 .as_ref()
                 .map(|spec| machining2d::FaceKeep { names: spec.names_list(), at: &keep_at });
-            let path = boundary_turn::face_over_back(&laid, &fparams, 0.0, solid.as_ref(), turn, keep.as_ref())?;
+            let path = boundary_turn::face_over_back(&laid, &fparams, 0.0, solid.as_ref(), turn, keep.as_ref(), picks)?;
             // M11.3 owed: the facer enters a radius off the footprint -
             // from air over the stock's edge; over the stock (an inner
             // patch) the entry runs on along its row out to air, or the
@@ -554,7 +555,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     path,
                     (stock_facets.as_deref(), m_gen, frame.as_ref()),
                     band.as_deref().unwrap_or(&[]),
-                    |lead| boundary_turn::face_over_back(&laid, &fparams, lead, solid.as_ref(), turn, keep.as_ref()),
+                    |lead| boundary_turn::face_over_back(&laid, &fparams, lead, solid.as_ref(), turn, keep.as_ref(), picks),
                     d * 0.5,
                 )?
             };
@@ -2875,6 +2876,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     "a Break-through is a mill drill's setting - a lathe's axial and cross holes keep their own exit; clear it".into(),
                 ));
             }
+            // #3328: the picked first and last hole. A lathe's axial holes
+            // share the spindle axis, so no XY pick names one of them.
+            if lathe_axial && !params.path_picks().is_empty() {
+                return Err(GenError::Invalid(format!(
+                    "Drill: a start or exit point is not taken on a lathe's axial hole - {}; clear it on this operation",
+                    super::pick_kinds::PICK_TURRET
+                )));
+            }
+            let ordered = params.holes_in_pick_order(holes).map_err(GenError::Invalid)?;
+            let holes = ordered.as_slice();
             // No region feeds the generator - the hole list is the
             // geometry - but the verify pass below needs one, and it is
             // built the same shared way as every other kind's.
@@ -3073,6 +3084,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #3328: the picked first and last hole.
+            let holes = params.holes_in_pick_order(holes).map_err(GenError::Invalid)?;
             // #3360: the shared ring order; Auto is the old ladder.
             let path = machining2d::bore_started(&machining2d::BoreParams {
                 links: lk,
@@ -3110,7 +3123,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // judged at the door, by name. Every move posted is plain
         // 3-axis interpolation (G2/G3 with Z) - no spindle sync.
         OpParams::Thread { holes, external, .. } => {
-            let plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
+            let mut plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
+            // #3328: the picked first and last hole.
+            plan.holes = params.holes_in_pick_order(&plan.holes).map_err(GenError::Invalid)?;
             // The crest law's wall: the tangency verdict reads the
             // furthest the teeth may reach. #1071: a hole's MAJOR circle,
             // grown from the model's own rim where that stands nearer;

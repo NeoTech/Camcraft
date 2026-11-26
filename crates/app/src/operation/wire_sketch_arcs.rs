@@ -13,7 +13,7 @@ use crate::cl::{Move, Toolpath};
 use crate::geo2d::{Loop, Point2};
 use crate::machining2d::GenError;
 use crate::sketch_data::SketchData;
-use crate::wire_edm::{wire_contour_arcs, ArcChain};
+use crate::wire_edm::{wire_contour_arcs_led, ArcChain, WireLead};
 
 use super::wire_op::{wire_params, WireCondition};
 use super::wire_sketch::{single_pass, SelectedWireChain};
@@ -65,6 +65,54 @@ pub(super) fn extremes(m: &Move) -> Vec<Point2> {
     out
 }
 
+/// The tangent arc lead beside what it is not cut with (#3991): the arc
+/// lead is cut on a vertical, single-pass closed profile whose wire
+/// returns to the start hole. Each other cut is refused by name at the
+/// command door and at generation, never cut with a straight lead
+/// silently. `None` when the op states no arc lead or none of those.
+#[must_use]
+pub fn lead_arc_refusal(w: &WireContourOp) -> Option<String> {
+    w.lead_arc_radius?;
+    let with = if matches!(w.side, WireSide::Left | WireSide::Right) {
+        "an open run - it is threaded outside the stock, with no start hole to lead from".to_owned()
+    } else if w.four_axis.is_some() {
+        "a 4-axis cut".to_owned()
+    } else if w.burnout.is_some() {
+        "a no-core burnout".to_owned()
+    } else if w.tabs.is_some() {
+        "tabs".to_owned()
+    } else if !w.skims.is_empty() {
+        format!("{} skim pass(es)", w.skims.len())
+    } else if w.taper_deg != 0.0 {
+        format!("a {:.3} degree taper", w.taper_deg)
+    } else if w.picks.first(crate::path_picks::PickRole::Exit).is_some() {
+        "an exit point - the arc lead-out returns to the start hole; the exit point keeps the straight lead-out".to_owned()
+    } else {
+        return None;
+    };
+    Some(format!(
+        "Wire Contour: a tangent arc lead is stated with {with}; the arc lead is cut on a vertical single-pass closed profile - set the straight lead or clear that setting"
+    ))
+}
+
+/// The tangent arc lead radius against the resolved condition's kerf
+/// offset (#3991, Validate early): the radius must be larger than the wire
+/// radius plus the spark gap, or the lead arc is no smoother than a
+/// corner. The command door reads this after the condition resolves; the
+/// generator keeps its own check for a loaded file or a changed
+/// condition. `None` when the op states no arc lead or a larger radius.
+#[must_use]
+pub fn lead_arc_radius_refusal(w: &WireContourOp, cond: &WireCondition) -> Option<String> {
+    let radius = w.lead_arc_radius?;
+    let k = cond.wire_diameter * 0.5 + cond.gap;
+    (!(radius.is_finite() && radius > k)).then(|| {
+        format!(
+            "Wire Contour: the tangent lead arc radius ({radius} mm) must be larger than the kerf offset ({k:.4} mm) of condition {} (wire {} mm, gap {} mm) - set a larger radius or the straight lead",
+            cond.id, cond.wire_diameter, cond.gap
+        )
+    })
+}
+
 impl SelectedWireChain {
     /// The chain as lines and arcs in world XY.
     fn arc_chain(&self) -> Result<ArcChain, GenError> {
@@ -91,7 +139,9 @@ impl SelectedWireChain {
         cond: &WireCondition,
         hs: &ResolvedHeights,
     ) -> Result<Option<Toolpath>, GenError> {
-        if self.exact_polygon() {
+        // #3991: an exact polygon keeps the polygon path, byte for byte,
+        // unless a tangent arc lead is stated - that lead is cut here.
+        if self.exact_polygon() && op.lead_arc_radius.is_none() {
             return Ok(None);
         }
         single_pass(op).map_err(GenError::Invalid)?;
@@ -109,7 +159,8 @@ impl SelectedWireChain {
         }
         let chain = self.arc_chain()?;
         let p = wire_params(op, cond, None, hs, None)?;
-        wire_contour_arcs(&chain, &p).map(Some)
+        let lead = op.lead_arc_radius.map_or(WireLead::Straight, |radius| WireLead::Arc { radius });
+        wire_contour_arcs_led(&chain, &p, lead).map(Some)
     }
 
     /// Say on the path how many annotation entities were not cut.
