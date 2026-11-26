@@ -1,0 +1,34 @@
+; HSMW-CL v1 scale=0.001mm moves=30
+START 0 0 5000
+Rapid -23000 -7000 5000
+Plunge -23000 -7000 -2000 F100000
+Feed 23000 -7000 -2000 F500000
+Feed 23000 -4000 -2000 F500000
+Feed 6824 -4000 -2000 F500000
+Rapid 6824 -4000 5000
+Rapid -6827 -4000 5000
+Plunge -6827 -4000 -2000 F100000
+Feed -23000 -4000 -2000 F500000
+Feed -23000 -1000 -2000 F500000
+Feed -7000 -1000 -2000 F500000
+Rapid -7000 -1000 5000
+Rapid 7000 -1000 5000
+Plunge 7000 -1000 -2000 F100000
+Feed 23000 -1000 -2000 F500000
+Feed 23000 2000 -2000 F500000
+Feed 7000 2000 -2000 F500000
+Rapid 7000 2000 5000
+Rapid -7000 2000 5000
+Plunge -7000 2000 -2000 F100000
+Feed -23000 2000 -2000 F500000
+Feed -23000 5000 -2000 F500000
+Feed -6231 5000 -2000 F500000
+Rapid -6231 5000 5000
+Rapid 6230 5000 5000
+Plunge 6230 5000 -2000 F100000
+Feed 23000 5000 -2000 F500000
+Feed 23000 7000 -2000 F500000
+Feed -23000 7000 -2000 F500000
+Rapid -23000 7000 5000
+; note: the rows leave 16.47 mm^2 beside the bridged holes unfaced - no row runs tangent to them; a smaller stepover, or cutting through the holes, reaches it
+; note: facing rows lifted over the region's holes at the clearance plane
