@@ -82,6 +82,8 @@ clamped to the range.
 | `mount_tip` | Tool tip dot of the tool body page |
 | `mount_origin` | Model origin ring of the tool body page |
 | `mount_hint` | Pick hint text of the tool body page |
+| `close_hover` | Hover fill of a floating window's close button |
+| `close_ink` | The cross on a hovered close button |
 
 A theme does not set the colours that carry a meaning: the verdict
 colours of a simulation (clean, rest, gouge, not judged), the move kinds

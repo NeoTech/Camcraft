@@ -38,6 +38,7 @@ pub(super) fn apply_overlay(
         menu_width, recent_width, menu_gap, menu_pad_x,
         overlay_panel, overlay_edge, overlay_text, overlay_track, drop_veil, empty_hint, pick_halo, plate_hole, plate_dowel, gcode_line,
         tool_ground, tool_axis, tool_grid, tool_flute, tool_shank, tool_body, tool_edge, tool_holder, tool_note, tool_dim, thumb_flute, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
+        close_hover, close_ink,
         // The viewport furniture reads `ground` below, not `base`.
         cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
     } = base;
@@ -123,6 +124,8 @@ pub(super) fn apply_overlay(
         mount_tip: c(names::MOUNT_TIP, mount_tip),
         mount_origin: c(names::MOUNT_ORIGIN, mount_origin),
         mount_hint: c(names::MOUNT_HINT, mount_hint),
+        close_hover: c(names::CLOSE_HOVER, close_hover),
+        close_ink: c(names::CLOSE_INK, close_ink),
         radius_widget: rad(names::RADIUS_WIDGET, radius_widget, clamp::RADIUS as f32),
         radius_window: rad(names::RADIUS_WINDOW, radius_window, f32::from(clamp::RADIUS_WINDOW)),
         radius_menu: rad(names::RADIUS_MENU, radius_menu, f32::from(clamp::RADIUS_WINDOW)),
