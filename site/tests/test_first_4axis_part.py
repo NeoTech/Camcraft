@@ -52,7 +52,7 @@ UI_STRINGS = {
     "X origin": UI + "wcs_page.rs",
     "Y origin": UI + "wcs_page.rs",
     "Z origin": UI + "wcs_page.rs",
-    "New tool…": UI + "tool_library.rs",
+    "New tool…": UI + "tool_library_dialog/list.rs",
     "Name": UI + "tool_settings_grid.rs",
     "Diameter": UI + "tool_settings_grid.rs",
     "Flute length": UI + "tool_settings_grid.rs",
