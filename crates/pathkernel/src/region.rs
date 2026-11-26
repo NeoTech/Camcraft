@@ -8,6 +8,7 @@
 //! Held, "On the Computational Geometry of Pocket Machining" (1991).
 
 use crate::frame::{ToolShape, WorkPlane};
+pub use crate::region_chain::{ChainRegion, KEEP_OUT_NOT_FINITE, chain_region};
 use crate::region_check::{oriented, partition};
 use crate::verdict::{Refusal, Stage};
 use crate::{Loop, Region, finite, region_finite};
@@ -68,20 +69,39 @@ impl Bounds {
     }
 }
 
-/// The output of stage 1. Phase 1 has only a planar area; a later phase
-/// adds a region that is not a planar area as a new variant.
+/// The output of stage 1: a planar area, or the picked chains of a trace
+/// (#4176). A later phase adds a region that is not planar as a new variant.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum KernelRegion {
     Planar(PlanarRegion),
+    /// The chains of a trace (`region_chain.rs`): no area, no material side.
+    Chains(ChainRegion),
 }
 
 impl KernelRegion {
-    /// The planar region, if this is one.
+    /// The planar area, if this is one.
     #[must_use]
     pub fn planar(&self) -> Option<&PlanarRegion> {
         match self {
             Self::Planar(p) => Some(p),
+            Self::Chains(_) => None,
+        }
+    }
+    /// The chains of a trace, if this is one.
+    #[must_use]
+    pub fn chains(&self) -> Option<&ChainRegion> {
+        match self {
+            Self::Chains(c) => Some(c),
+            Self::Planar(_) => None,
+        }
+    }
+    /// The tool of the region.
+    #[must_use]
+    pub fn tool(&self) -> ToolShape {
+        match self {
+            Self::Planar(p) => p.tool(),
+            Self::Chains(c) => c.tool(),
         }
     }
 }

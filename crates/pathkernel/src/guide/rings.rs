@@ -1,7 +1,8 @@
 //! The ring guide (#4176, K2): contour-parallel rings as the level sets of
 //! the distance to the walls of the cutter-centre area, spaced by the
 //! choice's stepover, with clean-up rings where the regular rings leave an
-//! area uncut, and each full-width stretch named (#3788).
+//! area uncut, and each full-width stretch named (#3788). A choice with an
+//! exact circle goes to the circle rings of `helix.rs`.
 //! Provenance: contour-parallel pocketing as level sets of the distance to
 //! the boundary, Held, "On the Computational Geometry of Pocket Machining"
 //! (1991), computed by the polygon offset of `camcraft-geometry`; our own
@@ -23,8 +24,6 @@ use crate::{KERNEL_TOL, Loop, Point2, Region, in_area};
 
 /// Refusal reason: the ring planner was given another guide choice.
 pub const NOT_RINGS: &str = "the ring planner plans only a rings choice";
-/// Refusal reason: exact circle rings (Circular, Bore) are not planned yet.
-pub const CIRCLE_NOT_YET: &str = "exact circle rings are not planned yet: they come with the helix guide (#4176, second part)";
 /// Refusal reason: the band reference is not planned yet.
 pub const BAND_NOT_YET: &str = "the band ring reference is not planned yet: it comes with the order stage (K4, #3934)";
 /// Refusal reason: a first ring offset below zero.
@@ -38,7 +37,7 @@ pub const NO_RING: &str = "the first ring offset leaves no area: there is no rin
 pub const TOO_MANY_RINGS: &str = "the area needs more rings than the planner makes (10000)";
 
 /// The most regular rings of one plan.
-const MAX_RINGS: u32 = 10_000;
+pub(super) const MAX_RINGS: u32 = 10_000;
 /// The most rounds of clean-up rings.
 const MAX_FILL_ROUNDS: u32 = 6;
 /// The area (mm2) from which an uncovered piece gets a clean-up ring: a
@@ -105,11 +104,12 @@ impl Field {
 }
 
 fn plan(p: &PlanarRegion, c: &RingsChoice, tol: f64) -> Result<Verdict<GuideSet>, Refusal> {
-    if c.circle().is_some() {
-        return Err(Refusal::new(Stage::Guide, CIRCLE_NOT_YET));
-    }
     if c.reference() == RingRef::Band {
         return Err(Refusal::new(Stage::Guide, BAND_NOT_YET));
+    }
+    if let Some(circle) = c.circle() {
+        // Exact circle rings of a hole (Circular, Bore): `helix.rs`.
+        return super::helix::circle_rings(p, c, circle, tol);
     }
     let rad = p.tool().radius();
     let step = check_step(c.stepover(), rad)?;
@@ -207,7 +207,7 @@ fn fill_index(l: &Loop, levels: &[Region]) -> u32 {
 /// stock edge. When the deeper curves are cut first, the tool cuts there
 /// at full width (#3788: the strands of a ring through the neck between two
 /// lobes). A crumb of `tol` or less where the test is tangent is no stretch.
-fn full_width(p: &PlanarRegion, raws: &[Raw], marks: &mut Vec<(usize, Mark)>, rad: f64, (margin, tol): (f64, f64)) -> Result<(), Refusal> {
+pub(super) fn full_width(p: &PlanarRegion, raws: &[Raw], marks: &mut Vec<(usize, Mark)>, rad: f64, (margin, tol): (f64, f64)) -> Result<(), Refusal> {
     let air = if p.stock_edge().is_empty() { Region::empty() } else { geo(Region::sweep(&loop_walks(p.stock_edge()), rad))? };
     let Some(top) = raws.iter().map(|r| r.k).max() else {
         return Ok(());

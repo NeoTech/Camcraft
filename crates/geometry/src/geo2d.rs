@@ -19,9 +19,15 @@ mod arc;
 mod clip_line;
 mod slivers;
 mod sweep;
+// #4176: the medial axis and the one-sided offset of an open polyline.
+mod delaunay;
+mod medial;
+mod side_offset;
 
 pub use arc::{MAX_ARC_CHORDS, arc_points};
 pub use clip_line::RingClip;
+pub use medial::{MEDIAL_MAX_SAMPLES, MEDIAL_REF, MedialAxis, MedialCurve};
+pub use side_offset::{SidePiece, offset_side};
 
 use clipper2_rust::{
     EndType, FillRule, JoinType, Path64, Paths64, Point64, inflate_paths_64, intersect_64,

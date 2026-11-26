@@ -6,7 +6,7 @@
 //! "Stage 2: Guide curves"; the swept area of a disc as the Minkowski sum of
 //! a path and the disc (the published polygon-offsetting literature).
 
-use super::{Curve, Family, GuideSet};
+use super::{Circle, Curve, Family, GuideSet};
 use crate::frame::PlanePoint;
 use crate::guide::mark::Mark;
 use crate::region::{KernelRegion, PlanarRegion};
@@ -18,6 +18,8 @@ use crate::{KERNEL_TOL, Loop, Point2, Region};
 pub const BAD_TOL: &str = "the guide tolerance must be a finite number at or above the kernel tolerance";
 /// Refusal reason: a region that is not a planar area.
 pub const NOT_PLANAR: &str = "this guide planner plans only a planar region";
+/// Refusal reason: an area planner given the chains of a trace.
+pub const NOT_AN_AREA: &str = "this guide planner plans an area: the chains of a trace have no area";
 /// Refusal reason: a polygon operation that cannot be computed.
 pub const GUIDE_GEOMETRY: &str = "the guide geometry cannot be computed: a value is out of range";
 /// Refusal reason: a stepover larger than the tool diameter.
@@ -58,7 +60,10 @@ impl Raw {
 
 /// The planar region of `r`, or the refusal.
 pub(crate) fn planar(r: &KernelRegion) -> Result<&PlanarRegion, Refusal> {
-    r.planar().ok_or(Refusal::new(Stage::Guide, NOT_PLANAR))
+    match r {
+        KernelRegion::Planar(p) => Ok(p),
+        KernelRegion::Chains(_) => Err(Refusal::new(Stage::Guide, NOT_AN_AREA)),
+    }
 }
 
 /// The guide tolerance, checked.
@@ -124,12 +129,18 @@ pub(crate) type Finished = (Vec<Curve>, Vec<Mark>, Vec<Note>);
 /// of its curve. A raw curve that the curve checks refuse (a piece below the
 /// kernel tolerance) is named in a note, never dropped silently.
 pub(crate) fn finish(raws: &[Raw], marks: Vec<(usize, Mark)>, family: impl Fn(&Raw) -> Family) -> Result<Finished, Refusal> {
+    finish_arcs(raws, &[], marks, family)
+}
+
+/// [`finish`] with the exact circle of raw curve `i` at `arcs[i]` (none
+/// where `arcs` is shorter).
+pub(crate) fn finish_arcs(raws: &[Raw], arcs: &[Option<Circle>], marks: Vec<(usize, Mark)>, family: impl Fn(&Raw) -> Family) -> Result<Finished, Refusal> {
     let mut curves = Vec::with_capacity(raws.len());
     let mut index = vec![None; raws.len()];
     let mut notes = Vec::new();
     for (i, raw) in raws.iter().enumerate() {
         let pts: Result<Vec<PlanePoint>, Refusal> = raw.pts.iter().map(|p| PlanePoint::flat(*p)).collect();
-        match Curve::new(pts?, None, raw.closed, raw.k, family(raw)) {
+        match Curve::new(pts?, arcs.get(i).copied().flatten(), raw.closed, raw.k, family(raw)) {
             Ok(c) => {
                 index[i] = Some(curves.len());
                 curves.push(c);
@@ -156,6 +167,9 @@ pub(crate) enum Ask {
     Clear,
     /// A fixed count of rings (Contour): the uncut area is named in a note.
     Count(u32),
+    /// A line that does not clear the area (the medial line): the uncut
+    /// area is named in a note.
+    Line,
 }
 
 /// The verdict of a guide set by the completeness guard (#4176 review: one
@@ -173,9 +187,14 @@ pub(crate) fn judge(p: &PlanarRegion, set: GuideSet, mut notes: Vec<Note>, ask: 
     let left = &left;
     let gaps: Vec<(Region, f64)> = pieces(left)?.into_iter().filter(|(_, a)| *a > NOISE_AREA).collect();
     let total: f64 = gaps.iter().map(|(_, a)| a).sum();
-    if let Ask::Count(n) = ask {
+    let named = match ask {
+        Ask::Count(n) => Some(format!("a count of {n} ring(s) leaves {total:.3} mm2 of the area uncut, as the choice asks")),
+        Ask::Line => Some(format!("the tool along the line(s) leaves {total:.3} mm2 of the area uncut: the guide does not clear the area")),
+        Ask::Clear => None,
+    };
+    if let Some(text) = named {
         if total > 0.0 {
-            notes.push(Note::new(Stage::Guide, format!("a count of {n} ring(s) leaves {total:.3} mm2 of the area uncut, as the choice asks"))?);
+            notes.push(Note::new(Stage::Guide, text)?);
         }
         return Ok(Verdict::Done { out: set, fallbacks: Vec::new(), notes });
     }

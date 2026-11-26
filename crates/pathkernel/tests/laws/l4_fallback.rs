@@ -23,6 +23,7 @@ fn family(g: &GuideChoice) -> Option<Family> {
         GuideChoice::Rows(_) => Some(Family::Row),
         GuideChoice::Medial => Some(Family::Medial),
         GuideChoice::Trace(_) => Some(Family::Trace),
+        GuideChoice::Helix(_) => Some(Family::Helix),
         _ => None,
     }
 }
