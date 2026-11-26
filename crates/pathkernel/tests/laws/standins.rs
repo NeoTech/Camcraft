@@ -53,8 +53,11 @@ fn pocket_region(part: Region, m: MaterialSide) -> Result<KernelRegion, Refusal>
         MaterialSide::Inside => part.offset_sharp(-R).map_err(geo)?,
         MaterialSide::Outside => part.offset_sharp(R + 6.0).map_err(geo)?.difference(&part.offset_sharp(R).map_err(geo)?).map_err(geo)?,
     };
-    let walls = part.loops().to_vec();
-    PlanarRegion::new(center, m, walls, vec![], Region::empty(), Region::empty(), tool).map(KernelRegion::Planar)
+    // The part walls are the boundary loops of the cutter-centre area (the
+    // partition check of #4025), not the outline of `part`.
+    let walls = center.loops().to_vec();
+    PlanarRegion::new(WorkPlane::setup_xy(0.0)?, center, m, walls, vec![], Region::empty(), Region::empty(), tool)
+        .map(KernelRegion::Planar)
 }
 
 /// A 20 mm square pocket: concentric rings, no split ring.

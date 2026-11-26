@@ -204,7 +204,7 @@ pub fn run(p: &Planners, c: &Case, side: StartSide) -> Result<Run, Refusal> {
 
 /// The region `p` rebuilt with another material side and other part walls.
 pub fn rebuild(p: &PlanarRegion, material: MaterialSide, center: Region, walls: Vec<Loop>) -> Result<KernelRegion, Refusal> {
-    PlanarRegion::new(center, material, walls, p.stock_edge().to_vec(), p.air().clone(), p.keep_out().clone(), p.tool())
+    PlanarRegion::new(p.plane(), center, material, walls, p.stock_edge().to_vec(), p.air().clone(), p.keep_out().clone(), p.tool())
         .map(KernelRegion::Planar)
 }
 

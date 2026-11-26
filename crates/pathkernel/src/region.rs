@@ -1,15 +1,27 @@
-//! Stage 1, Region (K1, #4025): the cutter-centre area and its edges. This
-//! step holds the types and their checked constructors; K1 adds `region()`.
-//! The stage takes no start side: that is law 2 in the type system.
+//! Stage 1, Region (K1, #4025): the cutter-centre area and its edges, the
+//! types and their checked constructors. [`region`] builds the value from a
+//! selection (`region_build.rs`); the checks between the parts of a value
+//! are in `region_check.rs`. The stage takes no start side: that is law 2
+//! in the type system.
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 1: Region"; the cutter-centre offset of a pocket boundary as in
 //! Held, "On the Computational Geometry of Pocket Machining" (1991).
 
-use crate::frame::ToolShape;
+use crate::frame::{ToolShape, WorkPlane};
+use crate::region_check::{oriented, partition};
 use crate::verdict::{Refusal, Stage};
 use crate::{Loop, Region, finite, region_finite};
 
-/// The side of the selection's closed loops where the material is.
+pub use crate::region_build::{
+    BAD_LEAVE, EMPTY_MATERIAL, NEEDS_STOCK, OFF_STOCK, OPEN_NEEDS_SIDE, REGION_GEOMETRY, region,
+};
+pub use crate::region_check::{NOT_ORIENTED, NOT_A_PARTITION};
+
+/// The side of the selection's closed chains where the material to cut
+/// is: `Inside` cuts the area that the chains enclose (a pocket, a bore,
+/// Contour "Inside"); `Outside` cuts the stock round the area that they
+/// enclose (Contour "Outside", the band round a part). It is a parameter
+/// of its own and never depends on the start side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MaterialSide {
     Inside,
@@ -74,9 +86,11 @@ impl KernelRegion {
     }
 }
 
-/// A planar cutter-centre area with its edges.
+/// A planar cutter-centre area with its edges, in the frame of its work
+/// plane (any plane: the 2D coordinates are along the plane's own axes).
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlanarRegion {
+    plane: WorkPlane,
     center: Region,
     material: MaterialSide,
     part_walls: Vec<Loop>,
@@ -97,10 +111,15 @@ pub const FLAT_EDGE: &str = "an edge loop of the region has no area";
 
 impl PlanarRegion {
     /// The checked region. Refused for an empty or degenerate `center`, a
-    /// point that is not finite, an edge loop with no area, or no edge at
-    /// all. The tool is valid by its own type. K1 adds the partition check
-    /// of `part_walls` and `stock_edge` against the boundary of `center`.
+    /// point that is not finite, an edge loop with no area, no edge at all,
+    /// loops of `center` that are not oriented by their nesting (outer
+    /// counter-clockwise, hole clockwise), or edges that do not partition
+    /// the boundary of `center` (each loop of `center` is exactly one part
+    /// wall or one stock edge). The tool and the plane are valid by their
+    /// own types.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        plane: WorkPlane,
         center: Region,
         material: MaterialSide,
         part_walls: Vec<Loop>,
@@ -123,7 +142,18 @@ impl PlanarRegion {
         if part_walls.iter().chain(&stock_edge).any(|l| !l.area().is_finite() || l.area().abs() <= 0.0) {
             return Err(Refusal::new(Stage::Region, FLAT_EDGE));
         }
-        Ok(Self { center, material, part_walls, stock_edge, air, keep_out, tool })
+        if let Some(p) = oriented(&center) {
+            return Err(Refusal::new(Stage::Region, NOT_ORIENTED).at(p));
+        }
+        if let Some(p) = partition(&center, &part_walls, &stock_edge) {
+            return Err(Refusal::new(Stage::Region, NOT_A_PARTITION).at(p));
+        }
+        Ok(Self { plane, center, material, part_walls, stock_edge, air, keep_out, tool })
+    }
+    /// The work plane whose axes the 2D coordinates of the region use.
+    #[must_use]
+    pub fn plane(&self) -> WorkPlane {
+        self.plane
     }
     #[must_use]
     pub fn center(&self) -> &Region {

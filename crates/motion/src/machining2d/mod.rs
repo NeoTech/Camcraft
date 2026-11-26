@@ -92,6 +92,7 @@ mod level_rings;
 mod levels;
 mod microlift;
 mod pass_start;
+mod kernel_region;
 mod ring_fill;
 mod ring_links;
 mod ring_side;
@@ -186,6 +187,10 @@ pub use corner_relief::{
 };
 pub use corner_relief_spur::pocket_relief_plan;
 pub use level_rings::level_ring_plan;
+pub use kernel_region::{
+    bounds_of as kernel_bounds_of, contour_material, pocket_region as kernel_pocket_region,
+    pocket_selection as kernel_pocket_selection, selection_of_area, selection_of_picks,
+};
 pub use crate::approach::OUTSIDE_AIR_REFUSAL;
 pub use entry_warn::{ENTRY_STAND_IN_NOTE, PLUNGE_INTO_STOCK_NOTE, entry_stand_ins, entry_warnings, is_entry_stand_in};
 pub use pass_start::{

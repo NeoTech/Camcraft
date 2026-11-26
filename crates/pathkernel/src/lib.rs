@@ -34,11 +34,16 @@ pub mod order;
 pub mod plan;
 pub mod recipe;
 pub mod region;
+mod region_build;
+mod region_check;
+pub mod selection;
 pub mod verdict;
 
 pub use engine::{PLANNER_ENV, PlannerEngine, engine_from_switch};
 pub use frame::{AxisControl, Disc, PlanarFrame, PlanePoint, Positive, Spot, ToolShape, WorkPlane};
 pub use recipe::Recipe;
+pub use region::{Bounds, KernelRegion, MaterialSide, PlanarRegion, region};
+pub use selection::{Chain, Selection};
 pub use verdict::{Fallback, Gap, Gaps, Note, Refusal, Stage, Verdict};
 
 /// The 2D types of the kernel's data, re-exported so that a caller names
@@ -60,7 +65,7 @@ pub(crate) fn near(a: Point2, b: Point2) -> bool {
 }
 
 /// The distance from `p` to the segment `a`-`b`.
-fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
+pub(crate) fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let len2 = dx * dx + dy * dy;
     let t = if len2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
