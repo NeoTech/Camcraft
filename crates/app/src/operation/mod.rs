@@ -136,7 +136,7 @@ pub use planner_switch::{PHASE1_KINDS, check_engine, planner_engine};
 pub(crate) use agie_profile::{agie_job, agie_quality, agie_sketch_job};
 mod wire_ruled;
 pub(crate) mod wire_sketch;
-mod wire_sketch_arcs;
+pub(crate) mod wire_sketch_arcs;
 mod agie_inspection;
 pub(crate) use agie_inspection::prepare_inspection;
 pub use agie_inspection::{AgieInspectionReceipt, export_agie_inspection, has_agie_inspection_source};
