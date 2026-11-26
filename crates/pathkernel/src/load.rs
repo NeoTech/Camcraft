@@ -1,19 +1,44 @@
 //! Stage 3, Load control (K3, #4026): the load choice, the readings and the
 //! over-limit record, and the stock reader. The `Controlled` constructor
-//! checks law 6: each cut read above the limit is named. K3 adds
-//! `control()` and the engagement law.
+//! checks law 6: each cut read above the limit is named, and each name
+//! agrees with a reading. K3 adds `control()` and the engagement law.
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 3: Load control"; radial engagement as in Stori & Wright (2000)
 //! and Held & Spielberger (2009).
 
+use crate::frame::{Positive, Spot};
 use crate::order::OrderedSet;
 use crate::region::KernelRegion;
-use crate::verdict::{Refusal, Stage, Verdict};
-use crate::{KERNEL_TOL, Point2, finite};
+use crate::verdict::{NO_REASON, Refusal, Stage, Verdict};
+use crate::{KERNEL_TOL, Point2};
 
 /// The relative tolerance of the load limit: a cut above
 /// `load x (1 + PLAN_TOL)` is over the limit.
 pub const PLAN_TOL: f64 = 0.05;
+
+/// Refusal reason: an engagement out of its domain.
+pub const BAD_LOAD: &str = "an engagement ae/D must be a finite number from 0 to 1 (a limit: above 0)";
+/// Refusal reason: a trochoid whose pitch is not below its width.
+pub const BAD_TROCHOID: &str = "a trochoid needs a positive width and a positive pitch below the width";
+
+/// A radial engagement ae/D from 0 to 1 (1 is a full-width slot).
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct Engagement(f64);
+
+impl Engagement {
+    pub fn new(stage: Stage, v: f64) -> Result<Self, Refusal> {
+        if v.is_finite() && (0.0..=1.0).contains(&v) { Ok(Self(v)) } else { Err(Refusal::new(stage, BAD_LOAD)) }
+    }
+    /// A limit: an engagement above 0.
+    pub fn limit(stage: Stage, v: f64) -> Result<Self, Refusal> {
+        let e = Self::new(stage, v)?;
+        if e.0 > 0.0 { Ok(e) } else { Err(Refusal::new(stage, BAD_LOAD)) }
+    }
+    #[must_use]
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
 
 /// What the constant-engagement control reads the cut material from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -24,57 +49,118 @@ pub enum Reach {
     Stock,
 }
 
-/// How the load on the tool is held.
+/// Trochoidal loops along a curve: a positive width and a positive pitch below it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Trochoid {
+    width: Positive,
+    pitch: Positive,
+}
+
+impl Trochoid {
+    pub fn new(width: f64, pitch: f64) -> Result<Self, Refusal> {
+        let (w, p) = (Positive::new(Stage::Recipe, width), Positive::new(Stage::Recipe, pitch));
+        match (w, p) {
+            (Ok(w), Ok(p)) if p < w => Ok(Self { width: w, pitch: p }),
+            _ => Err(Refusal::new(Stage::Recipe, BAD_TROCHOID)),
+        }
+    }
+    #[must_use]
+    pub fn width(&self) -> f64 {
+        self.width.get()
+    }
+    #[must_use]
+    pub fn pitch(&self) -> f64 {
+        self.pitch.get()
+    }
+}
+
+/// How the load on the tool is held. Each variant with data holds a
+/// checked value.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum LoadControl {
     /// The identity: the curves stay; the load is still read and named.
     #[default]
     None,
-    Trochoidal { width: f64, pitch: f64 },
-    /// `load` is the radial engagement ae/D, from 0 (excluded) to 1.
-    ConstantEngagement { load: f64, reach: Reach },
+    Trochoidal(Trochoid),
+    ConstantEngagement(ConstantLoad),
 }
 
-/// Refusal reason: a trochoid with no positive width or pitch, or a pitch
-/// not below the width.
-pub const BAD_TROCHOID: &str = "a trochoid needs a positive width and a positive pitch below the width";
-/// Refusal reason: an engagement out of (0, 1].
-pub const BAD_LOAD: &str = "the engagement ae/D must be above 0 and at most 1";
+/// A constant engagement: a limit above 0 and at most 1, read from `Reach`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConstantLoad {
+    load: Engagement,
+    reach: Reach,
+}
 
-impl LoadControl {
-    /// Checks the choice when the recipe is made (validate early).
-    pub fn validate(&self) -> Result<(), Refusal> {
-        match *self {
-            Self::None => Ok(()),
-            Self::Trochoidal { width, pitch } => {
-                let ok = finite(&[width, pitch]) && width > 0.0 && pitch > 0.0 && pitch < width;
-                if ok { Ok(()) } else { Err(Refusal::new(Stage::Recipe, BAD_TROCHOID)) }
-            }
-            Self::ConstantEngagement { load, .. } => {
-                if load.is_finite() && load > 0.0 && load <= 1.0 {
-                    Ok(())
-                } else {
-                    Err(Refusal::new(Stage::Recipe, BAD_LOAD))
-                }
-            }
-        }
+impl ConstantLoad {
+    pub fn new(load: f64, reach: Reach) -> Result<Self, Refusal> {
+        Ok(Self { load: Engagement::limit(Stage::Recipe, load)?, reach })
+    }
+    #[must_use]
+    pub fn load(&self) -> f64 {
+        self.load.get()
+    }
+    #[must_use]
+    pub fn reach(&self) -> Reach {
+        self.reach
     }
 }
 
-/// One load reading: the engagement ae/D at a place of a cut.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Reading {
-    pub at: Point2,
-    pub load: f64,
+impl LoadControl {
+    /// A constant engagement of `load` (above 0, at most 1).
+    pub fn constant(load: f64, reach: Reach) -> Result<Self, Refusal> {
+        ConstantLoad::new(load, reach).map(Self::ConstantEngagement)
+    }
 }
 
-/// A cut read above the limit, with its place and its reason.
+/// One load reading: the engagement at a finite place of a cut.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reading {
+    at: Spot,
+    load: Engagement,
+}
+
+impl Reading {
+    pub fn new(at: Point2, load: f64) -> Result<Self, Refusal> {
+        Ok(Self { at: Spot::new(Stage::Load, at)?, load: Engagement::new(Stage::Load, load)? })
+    }
+    #[must_use]
+    pub fn at(&self) -> Point2 {
+        self.at.get()
+    }
+    #[must_use]
+    pub fn load(&self) -> f64 {
+        self.load.get()
+    }
+}
+
+/// A cut read above the limit: its reading and a reason that is not blank.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OverLimit {
-    pub at: Point2,
-    pub load: f64,
-    pub reason: &'static str,
+    reading: Reading,
+    reason: &'static str,
+}
+
+impl OverLimit {
+    pub fn new(at: Point2, load: f64, reason: &'static str) -> Result<Self, Refusal> {
+        if reason.trim().is_empty() {
+            return Err(Refusal::new(Stage::Load, NO_REASON));
+        }
+        Ok(Self { reading: Reading::new(at, load)?, reason })
+    }
+    #[must_use]
+    pub fn at(&self) -> Point2 {
+        self.reading.at()
+    }
+    #[must_use]
+    pub fn load(&self) -> f64 {
+        self.reading.load()
+    }
+    #[must_use]
+    pub fn reason(&self) -> &'static str {
+        self.reason
+    }
 }
 
 /// The ordered set after load control, with its readings and every cut
@@ -84,29 +170,40 @@ pub struct Controlled {
     set: OrderedSet,
     readings: Vec<Reading>,
     over: Vec<OverLimit>,
+    limit: Engagement,
 }
 
-/// Refusal reason: a reading that is not finite or below zero.
-pub const BAD_READING: &str = "a load reading must be a finite engagement of 0 or more at a finite place";
 /// Refusal reason: a reading above the limit with no over-limit record (law 6).
 pub const UNNAMED_OVERLOAD: &str = "a cut above the load limit must be named in the over-limit list";
+/// Refusal reason: an over-limit record that names no reading above the limit.
+pub const STRAY_OVERLOAD: &str = "an over-limit record must name a reading above the limit, at its place and with its load";
+/// Refusal reason: two over-limit records for one reading.
+pub const DOUBLE_OVERLOAD: &str = "a reading above the limit must be named once";
+
+fn same(r: &Reading, o: &OverLimit) -> bool {
+    crate::near(r.at(), o.at()) && (r.load() - o.load()).abs() <= KERNEL_TOL
+}
 
 impl Controlled {
-    /// Refused when a reading is not finite, or when a reading above
-    /// `limit x (1 + PLAN_TOL)` has no over-limit record at its place.
+    /// Every record is valid by its type. Refused when the limit is not in
+    /// (0, 1], when a reading above `limit x (1 + PLAN_TOL)` is not named
+    /// exactly once, or when an over-limit record does not agree with a
+    /// reading above the limit (same place and load).
     pub fn new(set: OrderedSet, readings: Vec<Reading>, over: Vec<OverLimit>, limit: f64) -> Result<Self, Refusal> {
-        let ok = |r: &Reading| finite(&[r.at.x, r.at.y, r.load]) && r.load >= 0.0;
-        if !limit.is_finite() || !readings.iter().all(ok) {
-            return Err(Refusal::new(Stage::Load, BAD_READING));
+        let limit = Engagement::limit(Stage::Load, limit)?;
+        let cap = limit.get() * (1.0 + PLAN_TOL);
+        let hot = |r: &&Reading| r.load() > cap;
+        for r in readings.iter().filter(hot) {
+            match over.iter().filter(|o| same(r, o)).count() {
+                0 => return Err(Refusal::new(Stage::Load, UNNAMED_OVERLOAD).at(r.at())),
+                1 => {}
+                _ => return Err(Refusal::new(Stage::Load, DOUBLE_OVERLOAD).at(r.at())),
+            }
         }
-        let cap = limit * (1.0 + PLAN_TOL);
-        let named = |r: &Reading| {
-            over.iter().any(|o| (o.at.x - r.at.x).abs() <= KERNEL_TOL && (o.at.y - r.at.y).abs() <= KERNEL_TOL && !o.reason.is_empty())
-        };
-        if let Some(r) = readings.iter().find(|r| r.load > cap && !named(r)) {
-            return Err(Refusal::new(Stage::Load, UNNAMED_OVERLOAD).at(r.at));
+        if let Some(o) = over.iter().find(|o| !readings.iter().filter(hot).any(|r| same(r, o))) {
+            return Err(Refusal::new(Stage::Load, STRAY_OVERLOAD).at(o.at()));
         }
-        Ok(Self { set, readings, over })
+        Ok(Self { set, readings, over, limit })
     }
     #[must_use]
     pub fn set(&self) -> &OrderedSet {
@@ -119,6 +216,10 @@ impl Controlled {
     #[must_use]
     pub fn over(&self) -> &[OverLimit] {
         &self.over
+    }
+    #[must_use]
+    pub fn limit(&self) -> f64 {
+        self.limit.get()
     }
 }
 
@@ -134,40 +235,4 @@ pub trait StockRead {
 pub trait LoadPlanner {
     fn control(&self, s: OrderedSet, r: &KernelRegion, stock: &dyn StockRead, lc: &LoadControl, tool_r: f64)
     -> Result<Verdict<Controlled>, Refusal>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::guide::GuideSet;
-    use crate::order::StartSide;
-
-    fn empty_set() -> OrderedSet {
-        OrderedSet::new(&GuideSet::default(), vec![], Point2::new(0.0, 0.0), StartSide::Inside).unwrap()
-    }
-
-    #[test]
-    fn a_load_choice_is_checked_when_the_recipe_is_made() {
-        assert!(LoadControl::None.validate().is_ok());
-        assert!(LoadControl::Trochoidal { width: 6.0, pitch: 1.0 }.validate().is_ok());
-        assert_eq!(LoadControl::Trochoidal { width: 1.0, pitch: 1.0 }.validate().unwrap_err().reason, BAD_TROCHOID);
-        assert!(LoadControl::Trochoidal { width: 0.0, pitch: 0.0 }.validate().is_err());
-        assert!(LoadControl::ConstantEngagement { load: 0.3, reach: Reach::Stock }.validate().is_ok());
-        assert_eq!(LoadControl::ConstantEngagement { load: 0.0, reach: Reach::Rings }.validate().unwrap_err().reason, BAD_LOAD);
-        assert!(LoadControl::ConstantEngagement { load: 1.5, reach: Reach::Rings }.validate().is_err());
-    }
-
-    #[test]
-    fn a_cut_over_the_limit_must_be_named() {
-        let p = Point2::new(2.0, 3.0);
-        let hot = vec![Reading { at: p, load: 1.0 }];
-        let e = Controlled::new(empty_set(), hot.clone(), vec![], 0.5).unwrap_err();
-        assert_eq!((e.reason, e.at), (UNNAMED_OVERLOAD, Some(p)));
-        let over = vec![OverLimit { at: p, load: 1.0, reason: "full-width first ring" }];
-        let c = Controlled::new(empty_set(), hot, over, 0.5).unwrap();
-        assert_eq!(c.over().len(), 1);
-        // Within the tolerance band is not over the limit.
-        assert!(Controlled::new(empty_set(), vec![Reading { at: p, load: 0.52 }], vec![], 0.5).is_ok());
-        assert_eq!(Controlled::new(empty_set(), vec![Reading { at: p, load: f64::NAN }], vec![], 0.5).unwrap_err().reason, BAD_READING);
-    }
 }

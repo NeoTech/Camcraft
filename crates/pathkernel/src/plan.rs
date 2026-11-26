@@ -1,7 +1,6 @@
 //! The plan output of one level: a list of steps - cut, link, entry, exit
 //! (record "What phase 1 keeps open", point 5). The constructor checks the
-//! step law: each cut follows an entry or a stay-down link, a lift is
-//! followed by an entry, and the plan ends with an exit.
+//! step law as a transition table (see [`Plan::new`]).
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`.
 
 use crate::entry::{Entry, Exit};
@@ -54,84 +53,68 @@ pub struct Plan {
     steps: Vec<Step>,
 }
 
-/// Refusal reason: a cut with no entry or stay-down link before it.
-pub const CUT_WITHOUT_ENTRY: &str = "a cut must follow an entry or a stay-down link";
-/// Refusal reason: a plan that does not end with an exit.
-pub const NO_EXIT: &str = "a plan with cuts must end with an exit";
-/// Refusal reason: a link that is not between two cuts.
+/// Refusal reason: a cut with no entry or stay-down link just before it.
+pub const CUT_WITHOUT_ENTRY: &str = "each cut must follow an entry or a stay-down link";
+/// Refusal reason: a plan that does not end with an exit after its last cut.
+pub const NO_EXIT: &str = "the last cut of a plan must be followed by an exit";
+/// Refusal reason: a link that does not follow a cut.
 pub const STRAY_LINK: &str = "a link must follow a cut";
+/// Refusal reason: an entry while the tool is at depth after a cut, or two entries in a row.
+pub const STRAY_ENTRY: &str = "an entry must start the plan, or follow an exit or a lift";
+/// Refusal reason: an exit that does not follow a cut.
+pub const STRAY_EXIT: &str = "an exit must follow a cut";
+/// Refusal reason: a plan that ends after an entry, a stay-down link or a lift.
+pub const DANGLING: &str = "a plan must not end after an entry or a link: a cut and an exit must follow";
+
+/// Where the tool is between two steps.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum At {
+    /// Above the material: the start, or after an exit.
+    Clear,
+    /// Above the material after a lift: an entry must follow.
+    Lifted,
+    /// At depth with a proof (after an entry or a stay-down link): one cut may follow.
+    Ready,
+    /// At depth at the end of a cut: a link or an exit must follow.
+    CutEnd,
+}
 
 impl Plan {
-    /// An empty plan is legal (nothing to cut at this level).
+    /// The checked steps. The transition table (any other step is refused):
+    ///
+    /// | at       | entry  | cut     | stay link | lift   | exit  |
+    /// |----------|--------|---------|-----------|--------|-------|
+    /// | clear    | ready  | -       | -         | -      | -     |
+    /// | lifted   | ready  | -       | -         | -      | -     |
+    /// | ready    | -      | cut end | -         | -      | -     |
+    /// | cut end  | -      | -       | ready     | lifted | clear |
+    ///
+    /// A cut consumes the readiness: each next cut needs its own entry or
+    /// stay-down link. The plan ends clear. An empty plan is legal (nothing
+    /// to cut at this level).
     pub fn new(steps: Vec<Step>) -> Result<Self, Refusal> {
-        // `ready`: the tool is at depth with a proof (after an entry or a stay link).
-        let (mut ready, mut after_cut) = (false, false);
+        let mut at = At::Clear;
         for s in &steps {
-            match s {
-                Step::Entry(_) => (ready, after_cut) = (true, false),
-                Step::Cut(_) if !ready => return Err(Refusal::new(Stage::Entry, CUT_WITHOUT_ENTRY)),
-                Step::Cut(_) => after_cut = true,
-                Step::Link(_) if !after_cut => return Err(Refusal::new(Stage::Link, STRAY_LINK)),
-                Step::Link(h) => (ready, after_cut) = (matches!(h, Hop::Stay(_)), false),
-                Step::Exit(_) => (ready, after_cut) = (false, false),
-            }
+            at = match (at, s) {
+                (At::Clear | At::Lifted, Step::Entry(_)) => At::Ready,
+                (_, Step::Entry(_)) => return Err(Refusal::new(Stage::Entry, STRAY_ENTRY)),
+                (At::Ready, Step::Cut(_)) => At::CutEnd,
+                (_, Step::Cut(_)) => return Err(Refusal::new(Stage::Entry, CUT_WITHOUT_ENTRY)),
+                (At::CutEnd, Step::Link(Hop::Stay(_))) => At::Ready,
+                (At::CutEnd, Step::Link(Hop::Lift(_))) => At::Lifted,
+                (_, Step::Link(_)) => return Err(Refusal::new(Stage::Link, STRAY_LINK)),
+                (At::CutEnd, Step::Exit(_)) => At::Clear,
+                (_, Step::Exit(_)) => return Err(Refusal::new(Stage::Exit, STRAY_EXIT)),
+            };
         }
-        let cuts = steps.iter().any(|s| matches!(s, Step::Cut(_)));
-        if cuts && !matches!(steps.last(), Some(Step::Exit(_))) {
-            return Err(Refusal::new(Stage::Exit, NO_EXIT));
+        match at {
+            At::Clear => Ok(Self { steps }),
+            At::CutEnd => Err(Refusal::new(Stage::Exit, NO_EXIT)),
+            At::Ready | At::Lifted => Err(Refusal::new(Stage::Exit, DANGLING)),
         }
-        Ok(Self { steps })
     }
     #[must_use]
     pub fn steps(&self) -> &[Step] {
         &self.steps
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Point2;
-    use crate::entry::{EntryChoice, EntryKind, Proof};
-    use crate::frame::{PlanePoint, ToolShape};
-    use crate::guide::Family;
-
-    fn cut() -> Step {
-        let pts = vec![PlanePoint::flat(Point2::new(0.0, 0.0)), PlanePoint::flat(Point2::new(5.0, 0.0))];
-        Step::Cut(Cut::new(Curve::new(pts, None, false, 0, Family::Row).unwrap(), None).unwrap())
-    }
-    fn entry() -> Step {
-        let c = EntryChoice::new(EntryKind::Air, 2.0, vec![]).unwrap();
-        let t = ToolShape::disc(3.0, 0.0, false, 10.0).unwrap();
-        Step::Entry(Entry::new(EntryKind::Air, vec![PlanePoint::default()], Proof::InAir, &c, t).unwrap())
-    }
-    fn exit() -> Step {
-        Step::Exit(Exit::new(None, 5.0).unwrap())
-    }
-    fn stay() -> Step {
-        Step::Link(Hop::stay(vec![Point2::new(5.0, 1.0)]).unwrap())
-    }
-    fn lift() -> Step {
-        Step::Link(Hop::lift("crosses a planned cut").unwrap())
-    }
-
-    #[test]
-    fn a_cut_needs_an_entry_or_a_stay_link() {
-        assert!(Plan::new(vec![]).is_ok());
-        assert!(Plan::new(vec![entry(), cut(), stay(), cut(), exit()]).is_ok());
-        assert!(Plan::new(vec![entry(), cut(), lift(), entry(), cut(), exit()]).is_ok());
-        assert_eq!(Plan::new(vec![cut(), exit()]).unwrap_err().reason, CUT_WITHOUT_ENTRY);
-        assert_eq!(Plan::new(vec![entry(), cut(), lift(), cut(), exit()]).unwrap_err().reason, CUT_WITHOUT_ENTRY);
-        assert_eq!(Plan::new(vec![entry(), stay(), cut(), exit()]).unwrap_err().reason, STRAY_LINK);
-        assert_eq!(Plan::new(vec![entry(), cut()]).unwrap_err().reason, NO_EXIT);
-    }
-
-    #[test]
-    fn a_cut_axis_is_a_unit_vector() {
-        let pts = vec![PlanePoint::default(), PlanePoint::flat(Point2::new(1.0, 0.0))];
-        let c = Curve::new(pts, None, false, 0, Family::Trace).unwrap();
-        assert!(Cut::new(c.clone(), Some([0.0, 0.0, 1.0])).is_ok());
-        assert_eq!(Cut::new(c.clone(), Some([0.0, 0.0, 2.0])).unwrap_err().reason, BAD_AXIS);
-        assert!(Cut::new(c, Some([f64::NAN, 0.0, 1.0])).is_err());
     }
 }

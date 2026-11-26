@@ -33,9 +33,12 @@ for this step.
 6. **One file for each stage now** (`guide.rs`, `load.rs`, `entry.rs`), not
    the record's directories (`guide/{rings,..}.rs`). A directory comes with
    its first planner (K2, K3, K5), because an empty file is noise.
-7. **The step law of a plan is a checked constructor** (`Plan::new`): each
-   cut follows an entry or a stay-down link, a lift is followed by an
-   entry, and a plan with cuts ends with an exit.
+7. **The step law of a plan is a transition table** (`Plan::new`, #4123
+   review finding 2). The states are clear, ready, cut end and lifted. A
+   cut consumes the readiness, so each cut needs its own entry or
+   stay-down link. A lift must be followed by an entry. The plan must end
+   clear (after an exit, or empty). The table is in the doc comment of
+   `Plan::new`, and the suite tests each cell.
 8. **The pin `switch_default_is_the_old_planner` is a heavy-lane test.** It
    generates the 2D Offset Inside on `fig8.step` through the dispatch and
    compares it with the #3750 golden `offset2d_fig8_inside.cl`. One fig8
@@ -78,6 +81,48 @@ for this step.
    baseline goldens (it renames the files that the record keeps as the
    baseline) and recording them again without annotations (that loses the
    notes and warnings that the pins compare).
+
+12. **One rule for the crate: valid by construction** (#4123 review
+    finding 3). A value of a public type is always valid. A field that
+    could hold an invalid value is private and is set only by a checked
+    constructor. An enum variant with data holds a validated newtype
+    (`PlanarFrame`, `Disc`, `RingsChoice`, `RowsChoice`, `TraceOffset`,
+    `Trochoid`, `ConstantLoad`, `StayPath`, `LiftReason`, `Area`, `Hole`,
+    `Spot`, `Positive`, `Engagement`, `Gaps`). A list in a value holds only
+    validated records, and its constructor checks the rules between them.
+    The only public fields left are of types whose every value is valid
+    (`OrderChoice`). `Refusal` maps a blank reason to `NO_REASON` and drops
+    a place that is not finite, so the error type is valid too. Dropped: a
+    `validate()` call at each boundary (it relies on each boundary
+    remembering it, which is the class of the finding).
+13. **The order stage may only restart or reverse a curve** (finding 1).
+    `Curve::same_cut`: same index, family, closure and circle (within the
+    tolerance); a closed curve is a cyclic shift of the input or of its
+    reverse; an open curve is the input or its reverse. The start point of
+    `OrderedSet` must be the first point of its first curve.
+14. **Each proof names its place, and the descent stays in it** (finding
+    4). `Proof::InAir(Area)`, `InColumn(Area)`, `InHole(Hole)` and
+    `IntoMaterial { area, angle_or_pitch }`. The entry has approach moves
+    (above the material, not bound) and descent moves (bound). A descent
+    move is inside the proved area within the tolerance, or, for a hole, no
+    farther from the centre than the hole radius less the tool radius. A
+    hole proof must name one of the holes of the choice (centre and
+    radius).
+15. **Every record in every list is validated** (finding 5). The limit is
+    an engagement in (0, 1]; a reading and an over-limit record are valid
+    by their types (finite place, engagement in [0, 1], a reason that is
+    not blank). Each reading above the limit is named exactly once, and
+    each over-limit record agrees with a reading above the limit (same
+    place and load within the tolerance).
+16. **The guide set has a total order** (finding 6): index, family, open
+    before closed, the canonical point sequence, then the circle. A closed
+    curve starts at its lowest point (the least sequence among equal lowest
+    points); an open curve runs from its lesser end. A curve of zero length
+    and a closed curve that repeats its first point are refused.
+17. **The tests of the invariants use the public API**, in the directory
+    suite `crates/pathkernel/tests/laws.rs` (one submodule for each
+    stage). The record puts the K7 law suite in that directory, so K7
+    joins it. The engine parse keeps its unit tests.
 
 **Why**: the record fixes the place and the default of the switch, but not
 how a test sets it, and not where the 16 kinds are listed. One check

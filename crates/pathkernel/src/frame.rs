@@ -1,6 +1,7 @@
 //! The frame the stages plan in: the work plane, the tool axis, the tool
-//! shape and a point with a depth along the plane normal (record "What
-//! phase 1 keeps open", points 1, 2, 3 and 8).
+//! shape, a point with a depth along the plane normal, and the validated
+//! scalars and spots that the enum variants of the crate carry (record
+//! "What phase 1 keeps open", points 1, 2, 3 and 8).
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`;
 //! right-handed orthonormal frames as in any machine-tool handbook (ISO 841
 //! axis naming).
@@ -8,21 +9,38 @@
 use crate::verdict::{Refusal, Stage};
 use crate::{KERNEL_TOL, Point2, finite};
 
-/// The plane that the stages plan in. No stage reads "XY" or "+Z"
-/// directly: a later phase adds the lathe's Z-X plane or a wrapped plane
-/// as a new variant.
+/// Refusal reason: a spot that is not a finite point.
+pub const BAD_SPOT: &str = "a place must be a finite point";
+/// Refusal reason: a value that must be a positive finite number.
+pub const NOT_POSITIVE: &str = "the value must be a positive finite number";
+
+/// A finite point in the plane.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum WorkPlane {
-    /// A flat plane: an origin, a unit normal (the tool side) and a unit
-    /// X direction normal to it. Phase 1: the setup's XY plane, or its 3+2
-    /// tilt.
-    Planar { origin: [f64; 3], normal: [f64; 3], x_dir: [f64; 3] },
+pub struct Spot(Point2);
+
+impl Spot {
+    pub fn new(stage: Stage, p: Point2) -> Result<Self, Refusal> {
+        if finite(&[p.x, p.y]) { Ok(Self(p)) } else { Err(Refusal::new(stage, BAD_SPOT)) }
+    }
+    #[must_use]
+    pub fn get(self) -> Point2 {
+        self.0
+    }
 }
 
-/// Refusal reason: a work plane whose axes are not finite unit vectors
-/// at right angles.
-pub const BAD_PLANE: &str = "the work plane needs a finite origin and two unit axes at right angles";
+/// A positive finite number.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct Positive(f64);
+
+impl Positive {
+    pub fn new(stage: Stage, v: f64) -> Result<Self, Refusal> {
+        if v.is_finite() && v > 0.0 { Ok(Self(v)) } else { Err(Refusal::new(stage, NOT_POSITIVE)) }
+    }
+    #[must_use]
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
 
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -33,14 +51,53 @@ pub(crate) fn unit(v: [f64; 3]) -> bool {
     finite(&v) && (dot(v, v).sqrt() - 1.0).abs() <= KERNEL_TOL
 }
 
-impl WorkPlane {
-    /// A planar frame. Refused unless `normal` and `x_dir` are unit vectors
-    /// at right angles and every value is finite.
-    pub fn planar(origin: [f64; 3], normal: [f64; 3], x_dir: [f64; 3]) -> Result<Self, Refusal> {
+/// A flat frame: a finite origin, a unit normal (the tool side) and a unit
+/// X direction at right angles to it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanarFrame {
+    origin: [f64; 3],
+    normal: [f64; 3],
+    x_dir: [f64; 3],
+}
+
+/// Refusal reason: a work plane whose axes are not finite unit vectors
+/// at right angles.
+pub const BAD_PLANE: &str = "the work plane needs a finite origin and two unit axes at right angles";
+
+impl PlanarFrame {
+    pub fn new(origin: [f64; 3], normal: [f64; 3], x_dir: [f64; 3]) -> Result<Self, Refusal> {
         if !finite(&origin) || !unit(normal) || !unit(x_dir) || dot(normal, x_dir).abs() > KERNEL_TOL {
             return Err(Refusal::new(Stage::Recipe, BAD_PLANE));
         }
-        Ok(Self::Planar { origin, normal, x_dir })
+        Ok(Self { origin, normal, x_dir })
+    }
+    #[must_use]
+    pub fn origin(&self) -> [f64; 3] {
+        self.origin
+    }
+    #[must_use]
+    pub fn normal(&self) -> [f64; 3] {
+        self.normal
+    }
+    #[must_use]
+    pub fn x_dir(&self) -> [f64; 3] {
+        self.x_dir
+    }
+}
+
+/// The plane that the stages plan in. No stage reads "XY" or "+Z"
+/// directly: a later phase adds the lathe's Z-X plane or a wrapped plane
+/// as a new variant.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum WorkPlane {
+    /// Phase 1: the setup's XY plane, or its 3+2 tilt.
+    Planar(PlanarFrame),
+}
+
+impl WorkPlane {
+    pub fn planar(origin: [f64; 3], normal: [f64; 3], x_dir: [f64; 3]) -> Result<Self, Refusal> {
+        PlanarFrame::new(origin, normal, x_dir).map(Self::Planar)
     }
 
     /// The setup's own XY plane at height `z`, the tool along +Z.
@@ -52,7 +109,7 @@ impl WorkPlane {
     #[must_use]
     pub fn normal(&self) -> [f64; 3] {
         match self {
-            Self::Planar { normal, .. } => *normal,
+            Self::Planar(f) => f.normal,
         }
     }
 }
@@ -66,20 +123,22 @@ pub enum AxisControl {
     Normal,
 }
 
-/// The tool as the stages read it. Phase 1 has only the disc of a milling
-/// cutter; turning adds an insert with a nose radius and its angles.
+/// The disc of a milling cutter: a positive radius, a corner radius from 0
+/// to the radius, a positive flute length.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum ToolShape {
-    Disc { radius: f64, corner_radius: f64, can_plunge: bool, flute_length: f64 },
+pub struct Disc {
+    radius: f64,
+    corner_radius: f64,
+    can_plunge: bool,
+    flute_length: f64,
 }
 
 /// Refusal reason: a disc with no positive radius, a corner radius out of
 /// range, or no positive flute length.
 pub const BAD_TOOL: &str = "the tool needs a positive radius, a corner radius from 0 to the radius, and a positive flute length";
 
-impl ToolShape {
-    pub fn disc(radius: f64, corner_radius: f64, can_plunge: bool, flute_length: f64) -> Result<Self, Refusal> {
+impl Disc {
+    pub fn new(radius: f64, corner_radius: f64, can_plunge: bool, flute_length: f64) -> Result<Self, Refusal> {
         let ok = finite(&[radius, corner_radius, flute_length])
             && radius > 0.0
             && (0.0..=radius).contains(&corner_radius)
@@ -87,14 +146,36 @@ impl ToolShape {
         if !ok {
             return Err(Refusal::new(Stage::Recipe, BAD_TOOL));
         }
-        Ok(Self::Disc { radius, corner_radius, can_plunge, flute_length })
+        Ok(Self { radius, corner_radius, can_plunge, flute_length })
+    }
+    #[must_use]
+    pub fn corner_radius(&self) -> f64 {
+        self.corner_radius
+    }
+    #[must_use]
+    pub fn flute_length(&self) -> f64 {
+        self.flute_length
+    }
+}
+
+/// The tool as the stages read it. Phase 1 has only the disc of a milling
+/// cutter; turning adds an insert with a nose radius and its angles.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum ToolShape {
+    Disc(Disc),
+}
+
+impl ToolShape {
+    pub fn disc(radius: f64, corner_radius: f64, can_plunge: bool, flute_length: f64) -> Result<Self, Refusal> {
+        Disc::new(radius, corner_radius, can_plunge, flute_length).map(Self::Disc)
     }
 
     /// The radius of the cutter-centre offset in the plane.
     #[must_use]
     pub fn radius(&self) -> f64 {
         match self {
-            Self::Disc { radius, .. } => *radius,
+            Self::Disc(d) => d.radius,
         }
     }
 
@@ -102,62 +183,42 @@ impl ToolShape {
     #[must_use]
     pub fn can_plunge(&self) -> bool {
         match self {
-            Self::Disc { can_plunge, .. } => *can_plunge,
+            Self::Disc(d) => d.can_plunge,
         }
     }
 }
 
-/// A point of a guide curve: its place in the plane and its depth along
-/// the plane normal (0 = the level of the plan; V-Carve and Thread use it).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// A point of a guide curve or a move: its finite place in the plane and
+/// its finite depth along the plane normal (0 = the level of the plan;
+/// V-Carve and Thread use it).
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlanePoint {
-    pub at: Point2,
-    pub depth: f64,
+    at: Point2,
+    depth: f64,
 }
+
+/// Refusal reason: a plane point with a value that is not finite.
+pub const BAD_POINT: &str = "a point needs a finite place and a finite depth";
 
 impl PlanePoint {
-    #[must_use]
-    pub fn flat(at: Point2) -> Self {
-        Self { at, depth: 0.0 }
+    pub fn new(at: Point2, depth: f64) -> Result<Self, Refusal> {
+        if finite(&[at.x, at.y, depth]) { Ok(Self { at, depth }) } else { Err(Refusal::new(Stage::Guide, BAD_POINT)) }
+    }
+    /// A point at the level of the plan (depth 0).
+    pub fn flat(at: Point2) -> Result<Self, Refusal> {
+        Self::new(at, 0.0)
     }
     #[must_use]
-    pub fn is_finite(&self) -> bool {
-        finite(&[self.at.x, self.at.y, self.depth])
+    pub fn at(&self) -> Point2 {
+        self.at
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_work_plane_needs_unit_axes_at_right_angles() {
-        assert!(WorkPlane::setup_xy(5.0).is_ok());
-        assert_eq!(WorkPlane::setup_xy(f64::NAN).unwrap_err().reason, BAD_PLANE);
-        assert!(WorkPlane::planar([0.0; 3], [0.0, 0.0, 2.0], [1.0, 0.0, 0.0]).is_err());
-        assert!(WorkPlane::planar([0.0; 3], [0.0, 0.0, 1.0], [0.0, 0.6, 0.8]).is_err());
-        let s = std::f64::consts::FRAC_1_SQRT_2;
-        let tilted = WorkPlane::planar([0.0; 3], [0.0, s, s], [1.0, 0.0, 0.0]).unwrap();
-        assert_eq!(tilted.normal(), [0.0, s, s]);
+    #[must_use]
+    pub fn depth(&self) -> f64 {
+        self.depth
     }
-
-    #[test]
-    fn a_disc_needs_a_radius_and_a_corner_inside_it() {
-        assert!(ToolShape::disc(4.0, 0.0, true, 20.0).is_ok());
-        assert!(ToolShape::disc(4.0, 4.0, false, 20.0).is_ok());
-        assert_eq!(ToolShape::disc(0.0, 0.0, true, 20.0).unwrap_err().reason, BAD_TOOL);
-        assert!(ToolShape::disc(4.0, 4.5, true, 20.0).is_err());
-        assert!(ToolShape::disc(4.0, -0.1, true, 20.0).is_err());
-        assert!(ToolShape::disc(4.0, 0.0, true, 0.0).is_err());
-        assert!(ToolShape::disc(f64::INFINITY, 0.0, true, 20.0).is_err());
-        let t = ToolShape::disc(3.0, 0.5, false, 12.0).unwrap();
-        assert_eq!((t.radius(), t.can_plunge()), (3.0, false));
-    }
-
-    #[test]
-    fn the_default_axis_is_the_plane_normal() {
-        assert_eq!(AxisControl::default(), AxisControl::Normal);
-        assert!(!PlanePoint { at: Point2::new(0.0, f64::NAN), depth: 0.0 }.is_finite());
-        assert!(PlanePoint::flat(Point2::new(1.0, 2.0)).is_finite());
+    /// The same point within [`KERNEL_TOL`] in place and depth.
+    #[must_use]
+    pub fn near(&self, o: &Self) -> bool {
+        crate::near(self.at, o.at) && (self.depth - o.depth).abs() <= KERNEL_TOL
     }
 }

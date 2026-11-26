@@ -19,19 +19,25 @@ pub enum Stage {
     Exit,
 }
 
+/// Refusal reason: a fallback, a note, a lift or a record with no reason text.
+pub const NO_REASON: &str = "a fallback, a note, a lift or a refusal must name its reason";
+
 /// A stage that cannot meet its law refuses with a named reason. Each
 /// `reason` is a named `const` of the stage that writes it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Refusal {
-    pub stage: Stage,
-    pub reason: &'static str,
-    pub at: Option<Point2>,
-    pub fix: Option<&'static str>,
+    stage: Stage,
+    reason: &'static str,
+    at: Option<Point2>,
+    fix: Option<&'static str>,
 }
 
 impl Refusal {
+    /// A refusal. A blank reason becomes [`NO_REASON`]: a refusal is never
+    /// silent about why.
     #[must_use]
     pub fn new(stage: Stage, reason: &'static str) -> Self {
+        let reason = if reason.trim().is_empty() { NO_REASON } else { reason };
         Self { stage, reason, at: None, fix: None }
     }
 
@@ -43,10 +49,27 @@ impl Refusal {
         self
     }
 
+    /// The fix to show. A blank fix is dropped.
     #[must_use]
     pub fn fix(mut self, fix: &'static str) -> Self {
-        self.fix = Some(fix);
+        self.fix = (!fix.trim().is_empty()).then_some(fix);
         self
+    }
+    #[must_use]
+    pub fn stage(&self) -> Stage {
+        self.stage
+    }
+    #[must_use]
+    pub fn reason(&self) -> &'static str {
+        self.reason
+    }
+    #[must_use]
+    pub fn place(&self) -> Option<Point2> {
+        self.at
+    }
+    #[must_use]
+    pub fn fix_text(&self) -> Option<&'static str> {
+        self.fix
     }
 }
 
@@ -72,17 +95,15 @@ pub struct Fallback {
 
 /// Refusal reason: a fallback whose used behaviour is the asked one.
 pub const FALLBACK_SAME: &str = "a fallback must use another behaviour than the one asked";
-/// Refusal reason: a fallback or a note with no reason text.
-pub const NO_REASON: &str = "a fallback or a note must name its reason";
 
 impl Fallback {
     /// A fallback from `asked` to `used`, for `reason`. Refused when the two
-    /// are the same, or when a name is empty.
+    /// are the same, or when a name is blank.
     pub fn new(stage: Stage, asked: &'static str, used: &'static str, reason: &'static str) -> Result<Self, Refusal> {
-        if reason.trim().is_empty() || asked.trim().is_empty() || used.trim().is_empty() {
+        if [reason, asked, used].iter().any(|s| s.trim().is_empty()) {
             return Err(Refusal::new(stage, NO_REASON));
         }
-        if asked == used {
+        if asked.trim() == used.trim() {
             return Err(Refusal::new(stage, FALLBACK_SAME));
         }
         Ok(Self { stage, asked, used, reason })
@@ -132,24 +153,54 @@ impl Gap {
     }
 }
 
-/// A note for the status line, from one stage.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Note {
-    pub stage: Stage,
-    pub text: String,
-}
-
-/// The result of a stage: done (with each fallback named), incomplete
-/// (with each gap named; never posted silently), or refused.
+/// The gaps of an incomplete result: one or more.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Verdict<T> {
-    Done { out: T, fallbacks: Vec<Fallback>, notes: Vec<Note> },
-    Incomplete { out: T, gaps: Vec<Gap>, notes: Vec<Note> },
-    Refused(Refusal),
-}
+pub struct Gaps(Vec<Gap>);
 
 /// Refusal reason: an incomplete verdict that names no gap.
 pub const INCOMPLETE_NO_GAP: &str = "an incomplete result must name at least one gap";
+
+impl Gaps {
+    pub fn new(stage: Stage, gaps: Vec<Gap>) -> Result<Self, Refusal> {
+        if gaps.is_empty() { Err(Refusal::new(stage, INCOMPLETE_NO_GAP)) } else { Ok(Self(gaps)) }
+    }
+    #[must_use]
+    pub fn list(&self) -> &[Gap] {
+        &self.0
+    }
+}
+
+/// A note for the status line, from one stage. Its text is not blank.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Note {
+    stage: Stage,
+    text: String,
+}
+
+impl Note {
+    pub fn new(stage: Stage, text: impl Into<String>) -> Result<Self, Refusal> {
+        let text = text.into();
+        if text.trim().is_empty() { Err(Refusal::new(stage, NO_REASON)) } else { Ok(Self { stage, text }) }
+    }
+    #[must_use]
+    pub fn stage(&self) -> Stage {
+        self.stage
+    }
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+/// The result of a stage: done (with each fallback named), incomplete
+/// (with each gap named; never posted silently), or refused. Each variant
+/// holds only validated records.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Verdict<T> {
+    Done { out: T, fallbacks: Vec<Fallback>, notes: Vec<Note> },
+    Incomplete { out: T, gaps: Gaps, notes: Vec<Note> },
+    Refused(Refusal),
+}
 
 impl<T> Verdict<T> {
     #[must_use]
@@ -160,14 +211,12 @@ impl<T> Verdict<T> {
     /// An incomplete result. Refused when `gaps` is empty: "incomplete"
     /// without a named gap would hide what is missing.
     pub fn incomplete(stage: Stage, out: T, gaps: Vec<Gap>) -> Result<Self, Refusal> {
-        if gaps.is_empty() {
-            return Err(Refusal::new(stage, INCOMPLETE_NO_GAP));
-        }
-        Ok(Self::Incomplete { out, gaps, notes: Vec::new() })
+        Ok(Self::Incomplete { out, gaps: Gaps::new(stage, gaps)?, notes: Vec::new() })
     }
 
-    /// Adds a fallback. An incomplete or refused verdict keeps its state;
-    /// the fallback goes in as a note so that it is still named.
+    /// Adds a fallback. An incomplete verdict keeps its state, and the
+    /// fallback goes in as a note so that it is still named. A refused
+    /// verdict stays refused.
     #[must_use]
     pub fn with_fallback(self, fb: Fallback) -> Self {
         match self {
@@ -176,7 +225,8 @@ impl<T> Verdict<T> {
                 Self::Done { out, fallbacks, notes }
             }
             Self::Incomplete { out, gaps, mut notes } => {
-                notes.push(Note { stage: fb.stage, text: format!("{} instead of {}: {}", fb.used, fb.asked, fb.reason) });
+                let text = format!("{} instead of {}: {}", fb.used, fb.asked, fb.reason);
+                notes.push(Note { stage: fb.stage, text });
                 Self::Incomplete { out, gaps, notes }
             }
             r @ Self::Refused(_) => r,
@@ -196,58 +246,5 @@ impl<T> Verdict<T> {
     #[must_use]
     pub fn postable(&self) -> bool {
         matches!(self, Self::Done { .. })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_fallback_to_the_same_behaviour_is_refused() {
-        let e = Fallback::new(Stage::Order, "inside", "inside", "x").unwrap_err();
-        assert_eq!(e.reason, FALLBACK_SAME);
-        assert_eq!(Fallback::new(Stage::Order, "inside", "zigzag", " ").unwrap_err().reason, NO_REASON);
-        let fb = Fallback::new(Stage::Order, "inside", "zigzag", "rows have no start side").unwrap();
-        assert_eq!((fb.asked(), fb.used(), fb.stage()), ("inside", "zigzag", Stage::Order));
-    }
-
-    #[test]
-    fn a_gap_needs_a_positive_finite_area() {
-        let p = Point2::new(1.0, 2.0);
-        assert!(Gap::new(0.0, p).is_err());
-        assert!(Gap::new(-1.0, p).is_err());
-        assert!(Gap::new(f64::NAN, p).is_err());
-        assert!(Gap::new(1.0, Point2::new(f64::INFINITY, 0.0)).is_err());
-        assert_eq!(Gap::new(0.5, p).unwrap().area_mm2(), 0.5);
-    }
-
-    #[test]
-    fn incomplete_names_a_gap_and_is_not_postable() {
-        assert_eq!(Verdict::incomplete(Stage::Guide, 1, vec![]).unwrap_err().reason, INCOMPLETE_NO_GAP);
-        let gap = Gap::new(0.2, Point2::new(0.0, 0.0)).unwrap();
-        let v = Verdict::incomplete(Stage::Guide, 1, vec![gap]).unwrap();
-        assert!(!v.postable());
-        assert_eq!(v.out(), Some(&1));
-        assert!(Verdict::done(1).postable());
-        assert_eq!(Verdict::<i32>::Refused(Refusal::new(Stage::Link, "x")).out(), None);
-    }
-
-    #[test]
-    fn a_fallback_on_an_incomplete_verdict_stays_named() {
-        let gap = Gap::new(0.2, Point2::new(0.0, 0.0)).unwrap();
-        let fb = Fallback::new(Stage::Entry, "helix", "ramp", "no room").unwrap();
-        let v = Verdict::incomplete(Stage::Guide, (), vec![gap]).unwrap().with_fallback(fb.clone());
-        let Verdict::Incomplete { notes, .. } = v else { panic!("still incomplete") };
-        assert!(notes[0].text.contains("ramp instead of helix"));
-        let Verdict::Done { fallbacks, .. } = Verdict::done(()).with_fallback(fb) else { panic!("done") };
-        assert_eq!(fallbacks.len(), 1);
-    }
-
-    #[test]
-    fn a_refusal_drops_a_place_that_is_not_finite() {
-        let r = Refusal::new(Stage::Region, "empty").at(Point2::new(f64::NAN, 0.0)).fix("select a closed loop");
-        assert_eq!(r.at, None);
-        assert_eq!(r.to_string(), "Region: empty (select a closed loop)");
     }
 }
