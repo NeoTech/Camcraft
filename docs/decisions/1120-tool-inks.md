@@ -37,3 +37,12 @@ refused value on the cutter pages; the status family can reuse them.
 
 **Cost to change later.** Small: eighteen fields and keys; the functions
 keep the call sites stable.
+
+**Review of #4073: the drawing caches key on their inks.** The tool list
+thumbnails and the holder outline keep built shapes, and the shapes carry
+theme colours. Each cache key now holds the inks that its shapes carry
+(`thumb_flute` and `tool_shank`; `tool_axis`, `tool_body`, `tool_edge` and
+`tool_dim`). A theme change builds the drawing one time, and a still frame
+still builds nothing. Dropped: clearing the caches on a theme change. That
+needs a hook in the theme sync for each cache, and a key that holds its
+inputs is the frame-cost rule as `crates/ui/AGENTS.md` states it.
