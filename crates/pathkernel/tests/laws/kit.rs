@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use camcraft_pathkernel::entry::EntryPlanner;
+use camcraft_pathkernel::entry::{Entry, EntryPlanner};
 use camcraft_pathkernel::guide::{Curve, GuidePlanner, GuideSet};
 use camcraft_pathkernel::link::{Hop, Level, LinkProof, LinkTally};
 use camcraft_pathkernel::load::{Controlled, LoadPlanner, StockRead};
@@ -152,6 +152,8 @@ pub struct Run {
     pub controlled: Verdict<Controlled>,
     pub plan: Plan,
     pub tally: LinkTally,
+    /// The verdict of each entry, in plan order: L4 reads its fallbacks.
+    pub entries: Vec<Verdict<Entry>>,
 }
 
 fn live<T: Clone>(v: Verdict<T>) -> Result<(Verdict<T>, T), Refusal> {
@@ -181,6 +183,7 @@ pub fn run(p: &Planners, c: &Case, side: StartSide) -> Result<Run, Refusal> {
     let cuts = cs.set().curves().iter().map(|cv| Cut::new(cv.clone(), None)).collect::<Result<Vec<_>, _>>()?;
     let (mut steps, mut tally, cleared) = (Vec::new(), LinkTally::default(), Region::empty());
     let mut paths: Vec<Vec<Point2>> = Vec::new();
+    let mut entries = Vec::new();
     for (i, cut) in cuts.iter().enumerate() {
         let lifted = match i.checked_sub(1).and_then(|j| cuts.get(j)) {
             None => true,
@@ -196,7 +199,9 @@ pub fn run(p: &Planners, c: &Case, side: StartSide) -> Result<Run, Refusal> {
             }
         };
         if lifted {
-            steps.push(Step::Entry(p.entry.entry(cut, &region, &cleared, c.recipe.entry())?));
+            let (v, e) = live(p.entry.entry(cut, &region, &cleared, c.recipe.entry())?)?;
+            steps.push(Step::Entry(e));
+            entries.push(v);
         }
         steps.push(Step::Cut(cut.clone()));
     }
@@ -204,7 +209,7 @@ pub fn run(p: &Planners, c: &Case, side: StartSide) -> Result<Run, Refusal> {
         steps.push(Step::Exit(p.entry.exit(last, &region, &cleared)?));
     }
     let plan = Plan::new(steps)?;
-    Ok(Run { side, region, guide, ordered, controlled, plan, tally })
+    Ok(Run { side, region, guide, ordered, controlled, plan, tally, entries })
 }
 
 /// The region `p` rebuilt with another material side and other part walls.

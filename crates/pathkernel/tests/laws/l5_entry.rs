@@ -8,7 +8,7 @@
 use camcraft_pathkernel::entry::{Area, Entry, EntryChoice, EntryKind, EntryPlanner, Exit, Proof};
 use camcraft_pathkernel::plan::Cut;
 use camcraft_pathkernel::region::KernelRegion;
-use camcraft_pathkernel::{PlanePoint, Refusal, Region};
+use camcraft_pathkernel::{PlanePoint, Refusal, Region, Verdict};
 
 use super::grid::walk;
 use super::kit::{Case, Law, LawVerdict, Measure, Planners, Run, assert_broken, assert_held, judge, planar, refused_held, run};
@@ -51,13 +51,13 @@ struct ClaimsFree {
 }
 
 impl EntryPlanner for ClaimsFree {
-    fn entry(&self, first: &Cut, r: &KernelRegion, _cleared: &Region, e: &EntryChoice) -> Result<Entry, Refusal> {
+    fn entry(&self, first: &Cut, r: &KernelRegion, _cleared: &Region, e: &EntryChoice) -> Result<Verdict<Entry>, Refusal> {
         let at = start_of(first);
         let tool = planar(r)?.tool();
         let area = Area::new(square_area(at, 2.0)?)?;
         let (kind, proof) =
             if self.column { (EntryKind::ClearedColumn, Proof::InColumn(area)) } else { (EntryKind::Air, Proof::InAir(area)) };
-        Entry::new(kind, vec![], vec![PlanePoint::flat(at)?], proof, e, tool)
+        Entry::new(kind, vec![], vec![PlanePoint::flat(at)?], proof, e, tool).map(Verdict::done)
     }
     fn exit(&self, last: &Cut, r: &KernelRegion, cleared: &Region) -> Result<Exit, Refusal> {
         ProvedEntry.exit(last, r, cleared)
@@ -70,7 +70,7 @@ struct NoEntry;
 const NO_LEGAL_ENTRY: &str = "no legal entry: the helix does not fit and no hole is pre-drilled";
 
 impl EntryPlanner for NoEntry {
-    fn entry(&self, _f: &Cut, _r: &KernelRegion, _c: &Region, _e: &EntryChoice) -> Result<Entry, Refusal> {
+    fn entry(&self, _f: &Cut, _r: &KernelRegion, _c: &Region, _e: &EntryChoice) -> Result<Verdict<Entry>, Refusal> {
         Err(Refusal::new(camcraft_pathkernel::Stage::Entry, NO_LEGAL_ENTRY))
     }
     fn exit(&self, last: &Cut, r: &KernelRegion, cleared: &Region) -> Result<Exit, Refusal> {
