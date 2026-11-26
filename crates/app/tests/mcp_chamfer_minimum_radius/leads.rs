@@ -23,7 +23,8 @@ fn chamfer_leads_are_listed_patched_saved_and_reset() {
         .expect("Chamfer");
     let fields = chamfer["fields"].as_array().expect("fields");
     assert!(fields.iter().any(|field| {
-        field["name"] == json!("lead") && field["default"] == json!("none")
+        field["name"] == json!("lead")
+            && field["default"] == json!({ "perpendicular": { "length": 3.0 } })
     }));
     assert!(fields.iter().any(|field| {
         field["name"] == json!("lead_out") && field["default"].is_null()
@@ -35,7 +36,10 @@ fn chamfer_leads_are_listed_patched_saved_and_reset() {
             "kind": "2D Chamfer",
             "tool": "CM-0600-90",
             "params": {
-                "lead": { "arc": { "radius": 2.5 } },
+                "lead": {
+                    "perpendicular": null,
+                    "arc": { "radius": 2.5 }
+                },
                 "lead_out": "none"
             }
         }),

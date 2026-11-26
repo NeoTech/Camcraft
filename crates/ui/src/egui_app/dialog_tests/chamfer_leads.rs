@@ -126,7 +126,7 @@ fn chamfer_lead_shapes_apply_and_undo_without_entry_controls() {
         matches!(
             live(harness.state()),
             OpParams::Chamfer2D {
-                lead: Some(Lead::None),
+                lead: Some(Lead::Perpendicular { length: 3.0 }),
                 lead_out: None,
                 ..
             }
@@ -150,7 +150,7 @@ fn chamfer_lead_shapes_apply_and_undo_without_entry_controls() {
     assert!(matches!(
         live(state),
         OpParams::Chamfer2D {
-            lead: Some(Lead::None),
+            lead: Some(Lead::Perpendicular { length: 3.0 }),
             lead_out: None,
             ..
         }

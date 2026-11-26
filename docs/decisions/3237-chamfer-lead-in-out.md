@@ -6,6 +6,9 @@ outer optional value as the pre-v83 compatibility marker. An absent lead
 keeps the old fixed-width open-chain extension. A stored
 `Lead::None` means that a newly stated operation adds no XY lead.
 `lead_out` keeps the existing "absent means same" convention.
+New 2D Chamfer operations seed a 3 mm perpendicular lead, with the lead-out
+mirroring it. Existing project files still use the absent-key compatibility
+marker. Users can state `Lead::None` to remove the added XY move.
 
 The Chamfer planner may halve each end independently through four half
 steps. It names the used value. It refuses when neither end fits. The
@@ -24,8 +27,12 @@ overlap, extension or vertical-lead controls.
 **Why:** This reuses one lead engine and its DTO vocabulary. It preserves
 old saved paths and project bytes while making the difference between a
 legacy fixed approach and a new explicit no-lead choice visible in the
-file and digest. The full verifier already reads the exact tool stack,
-so a second safety model would drift.
+file and digest. Perpendicular is the default because it moves directly
+onto the already-classified air side; a linear lead follows the selected
+tangent and can leave material or fixtures less room at an endpoint. Three
+millimetres follows the existing lead-in length scale and leaves room for
+the planner to halve the request. The full verifier already reads the exact
+tool stack, so a second safety model would drift.
 
 **Considered and dropped:** Replacing absent fields with `Lead::None`
 during load was dropped because it changes old open-chain motion.

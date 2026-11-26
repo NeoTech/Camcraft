@@ -5,20 +5,23 @@ use camcraft_app::machining2d::Lead;
 use super::*;
 
 #[test]
-fn explicit_none_is_a_persisted_seed_but_not_the_legacy_marker() {
+fn the_seed_uses_a_three_mm_perpendicular_lead_and_explicit_none_stays_distinct() {
     let seed = camcraft_app::operation::seed_params(
         camcraft_app::operation::OpType::Chamfer2D.ordinal(),
     );
     assert!(matches!(
         &seed,
         OpParams::Chamfer2D {
-            lead: Some(Lead::None),
+            lead: Some(Lead::Perpendicular { length }),
             lead_out: None,
             ..
-        }
+        } if (length - 3.0).abs() < 1e-9
     ));
     let explicit_json = project::params_to_json(&seed);
-    assert_eq!(explicit_json["chamfer2_d"]["lead"], serde_json::json!("none"));
+    assert_eq!(
+        explicit_json["chamfer2_d"]["lead"],
+        serde_json::json!({ "perpendicular": { "length": 3.0 } })
+    );
     assert!(explicit_json["chamfer2_d"]["lead_out"].is_null());
 
     let legacy = params(0.0);
@@ -34,6 +37,15 @@ fn explicit_none_is_a_persisted_seed_but_not_the_legacy_marker() {
     assert_eq!(
         project::params_from_json(&legacy_json).expect("legacy lead DTO"),
         legacy
+    );
+    let mut none = legacy.clone();
+    if let OpParams::Chamfer2D { lead, .. } = &mut none {
+        *lead = Some(Lead::None);
+    }
+    assert_eq!(
+        project::params_from_json(&project::params_to_json(&none))
+            .expect("explicit None lead DTO"),
+        none
     );
 }
 

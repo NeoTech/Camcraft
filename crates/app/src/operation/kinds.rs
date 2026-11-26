@@ -908,7 +908,7 @@ fn seed_chamfer2d(c: &Carried) -> OpParams {
         width: 0.8,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
-        lead: Some(Lead::None),
+        lead: Some(Lead::Perpendicular { length: 3.0 }),
         lead_out: None,
         clearance_z: c.clearance,
         retract_z: None,

@@ -720,7 +720,7 @@ settings off for open chains.
 | Geometry | Chamfer angle | 45° |
 | Geometry | Side | Auto |
 | Geometry | Tolerance | 0.01 |
-| Lead in / Lead out | Lead-in shape | None |
+| Lead in / Lead out | Lead-in shape | Perpendicular, 3 mm |
 | Lead in / Lead out | Lead-out shape | Same as lead-in |
 
 Lead-in and lead-out use the shared 2D lead shapes: **None**, **Linear**,
@@ -730,9 +730,11 @@ refused if no stated lead fits; it does not silently fall back to a bare
 wall. The check uses the complete cone, flute, shank and modelled body
 against the selected model.
 
-New operations with **None** add no XY lead. Chamfer projects saved before
-the lead controls keep their earlier fixed-width open-chain air extension
-until an explicit lead is stated.
+New Chamfer operations default to a 3 mm perpendicular lead at each end.
+That choice enters and leaves on the physical air side. A user can select
+**None** when no XY lead is wanted. Chamfer projects saved before the lead
+controls keep their earlier fixed-width open-chain air extension until an
+explicit lead is stated.
 
 The floor is not set: it follows from the width and angle. It has no Passes
 tab.
