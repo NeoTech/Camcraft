@@ -38,11 +38,12 @@ pub fn segments_cross(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> bool {
 /// The least distance between the closed segments `a0`-`a1` and `b0`-`b1`:
 /// zero when they cross properly, else the least distance of an end point
 /// of one to the other segment (a touch or a collinear overlap gives zero
-/// that way). A value that is not finite comes from a point that is not
-/// finite; the caller treats it as "not proved apart".
+/// that way). A point that is not finite gives zero: the two segments are
+/// not proved apart.
 #[must_use]
 pub fn segment_gap(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> f64 {
-    if segments_cross(a0, a1, b0, b1) {
+    let finite = [a0, a1, b0, b1].iter().all(|p| p.x.is_finite() && p.y.is_finite());
+    if !finite || segments_cross(a0, a1, b0, b1) {
         return 0.0;
     }
     point_segment_distance(a0, b0, b1)
@@ -91,6 +92,6 @@ mod tests {
     #[test]
     fn a_point_segment_and_a_non_finite_point_are_read() {
         assert!((point_segment_distance(p(1.0, 1.0), p(0.0, 0.0), p(0.0, 0.0)) - 2f64.sqrt()).abs() < 1e-12);
-        assert!(!segment_gap(p(f64::NAN, 0.0), p(1.0, 0.0), p(0.0, 1.0), p(1.0, 1.0)).is_finite());
+        assert_eq!(segment_gap(p(f64::NAN, 0.0), p(1.0, 0.0), p(0.0, 1.0), p(1.0, 1.0)), 0.0);
     }
 }
