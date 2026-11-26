@@ -202,3 +202,25 @@ fn the_guide_stage_sends_each_family_to_its_planner_or_refuses_it_by_name() {
     assert_eq!(Guides.guide(&r, &g, TOL).unwrap(), plan(&r, &g));
     assert_eq!(refused(Guides.guide(&r, &GuideChoice::Medial, TOL)), FAMILY_NOT_YET);
 }
+
+#[test]
+fn a_full_width_stretch_on_an_open_ring_round_a_part_is_named() {
+    // A U-shaped part with a bay 6 mm wide and 16 mm deep that opens to the
+    // stock edge, tool radius 1, step 1.5. Ring 1 enters the bay (its
+    // strands 1 mm apart) and is cut open at the stock edge; ring 2 does not
+    // enter the bay. The two strands and their turn are one named stretch.
+    let part = vec![p(-20.0, -10.0), p(-3.0, -10.0), p(-3.0, 6.0), p(3.0, 6.0), p(3.0, -10.0), p(20.0, -10.0), p(20.0, 10.0), p(-20.0, 10.0)];
+    let r = around(part, rect(-30.0, -12.0, 30.0, 18.0), 1.0);
+    let v = plan(&r, &rings(RingRef::Part, 0.0, 1.5, None));
+    let set = done(&v);
+    let bay: Vec<_> = marks(set, MarkKind::FullWidth)
+        .into_iter()
+        .filter(|m| !set.curves()[m.curve()].closed() && matches!(m.span(), Span::Part(_)))
+        .collect();
+    assert_eq!(bay.len(), 1, "one named stretch on an open ring");
+    assert_eq!(set.curves()[bay[0].curve()].k(), 1);
+    let pts = mark_pts(set, bay[0]);
+    assert!(pts.iter().all(|q| q.x.abs() <= 0.5 + TOL && q.y < 4.0), "the stretch is in the bay");
+    let (lo, hi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), q| (a.min(q.y), b.max(q.y)));
+    assert!(lo < -9.0 && hi > 3.0, "the stretch runs the depth of the bay: y {lo} to {hi}");
+}

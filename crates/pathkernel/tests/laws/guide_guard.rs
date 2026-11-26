@@ -5,10 +5,10 @@
 //! area less the swept discs along every curve of the set); an incomplete
 //! verdict names more than that; any other result is a named refusal.
 
-use super::guide_kit::{center, circle, pocket, rect, segs};
+use super::guide_kit::{center, circle, marks, pocket, rect, segs};
 use camcraft_pathkernel::guide::rings::{NO_RING, WALL_STRIP_UNCUT};
 use camcraft_pathkernel::guide::{
-    GuideChoice, GuidePlanner, GuideSet, RingPlanner, RingRef, RingsChoice, RowPlanner, RowsChoice,
+    GuideChoice, GuidePlanner, GuideSet, MarkKind, RingPlanner, RingRef, RingsChoice, RowPlanner, RowsChoice,
     STEP_ABOVE_DIAMETER,
 };
 use camcraft_pathkernel::{KernelRegion, Point2, Region, Verdict};
@@ -144,4 +144,19 @@ fn the_guard_refusals_stay_named() {
     let rings = |d0: f64, step: f64| GuideChoice::Rings(RingsChoice::new(RingRef::Boundary, d0, step, None, Some(1)).unwrap());
     assert_eq!(RingPlanner.guide(&r, &rings(18.0, 2.0), TOL).unwrap_err().reason(), NO_RING);
     assert_eq!(RingPlanner.guide(&r, &rings(0.0, 7.0), TOL).unwrap_err().reason(), STEP_ABOVE_DIAMETER);
+}
+
+#[test]
+fn the_closing_ring_of_rows_runs_round_each_island_too() {
+    let r = pocket(rect(0.0, 0.0, 60.0, 40.0), vec![circle(30.0, 20.0, 8.0, 128)], 3.0);
+    let v = RowPlanner.guide(&r, &GuideChoice::Rows(RowsChoice::new(0.0, 4.0, true).unwrap()), TOL).unwrap();
+    let set = v.out().unwrap();
+    let closing = marks(set, MarkKind::Closing);
+    // One closing ring on the outer wall and one round the island (radius
+    // 8 + 3): each loop of the centre area is a closing ring.
+    assert_eq!(closing.len(), 2);
+    let round_island = closing.iter().filter(|m| {
+        set.curves()[m.curve()].pts().iter().all(|q| ((q.at().x - 30.0).hypot(q.at().y - 20.0) - 11.0).abs() < 0.01)
+    });
+    assert_eq!(round_island.count(), 1);
 }
