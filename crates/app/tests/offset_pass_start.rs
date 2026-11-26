@@ -33,6 +33,16 @@ mod planner_switch;
 mod shared_planner;
 #[path = "offset_pass_start/start_side_entry.rs"]
 mod start_side_entry;
+#[path = "offset_pass_start/kernel_laws_fig8.rs"]
+mod kernel_laws_fig8;
+/// The law measures of `camcraft-motion`'s test helpers (#4154), shared
+/// by `#[path]` with no new dependency between our crates.
+#[allow(dead_code)]
+#[path = "../../motion/tests/common"]
+mod motion_common {
+    pub mod law_measure;
+    mod mask_grid;
+}
 
 use area_support::*;
 use camcraft_app::machining2d::{PASS_START_NOTE, PassStart};
