@@ -10,7 +10,7 @@
 //! `docs/decisions/4176-kernel-guides-rings-rows.md`. Written new: no code
 //! path of the old Face and Zigzag planners of `camcraft-motion` is ported.
 
-use super::cover::{ARC_SAG, Raw, check_step, check_tol, finish, geo, judge, planar, uncovered};
+use super::cover::{ARC_SAG, Ask, Raw, check_step, check_tol, finish, geo, judge, planar};
 use super::mark::{Mark, MarkKind};
 use super::rings::length;
 use super::{Family, GuideChoice, GuidePlanner, GuideSet, RowsChoice};
@@ -87,11 +87,10 @@ fn plan(p: &PlanarRegion, c: &RowsChoice, tol: f64) -> Result<Verdict<GuideSet>,
             raws.push(Raw { pts: l.points().to_vec(), closed: true, k: 0 });
         }
     }
-    let left = uncovered(center, &raws, rad, tol + ARC_SAG)?;
     let (curves, marks, mut notes) = finish(&raws, marks, |r| if r.closed { Family::Ring } else { Family::Row })?;
     if crumbs > 0 {
         let text = format!("{crumbs} row piece(s) shorter than the tolerance touch the area at one point and are not rows");
         notes.push(Note::new(Stage::Guide, text)?);
     }
-    judge(GuideSet::with_marks(curves, marks)?, &left, notes)
+    judge(p, GuideSet::with_marks(curves, marks)?, notes, Ask::Clear, tol + ARC_SAG)
 }

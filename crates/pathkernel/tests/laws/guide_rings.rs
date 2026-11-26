@@ -3,7 +3,9 @@
 //! stretch is named (#3788); a small piece is kept; each refusal is named.
 
 use super::guide_kit::{around, center, circle, marks, mark_pts, outline, p, pocket, rect, same_set, to_edge, to_set, all_inside};
-use camcraft_pathkernel::guide::rings::{BAND_NOT_YET, CIRCLE_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS};
+use camcraft_pathkernel::guide::rings::{
+    BAND_NOT_YET, CIRCLE_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS, WALL_STRIP_UNCUT,
+};
 use camcraft_pathkernel::guide::{
     BAD_TOL, Circle, FAMILY_NOT_YET, Family, GuideChoice, GuidePlanner, GuideSet, Guides, MarkKind, RingPlanner, RingRef,
     RingsChoice, RowsChoice, STEP_ABOVE_DIAMETER, Span,
@@ -184,7 +186,8 @@ fn each_ring_refusal_is_named() {
     assert_eq!(refused(RingPlanner.guide(&r, &g, TOL)), CIRCLE_NOT_YET);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Band, 0.0, 2.0, None), TOL)), BAND_NOT_YET);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, -0.5, 2.0, None), TOL)), OFFSET_BELOW_CENTER);
-    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 18.0, 2.0, None), TOL)), NO_RING);
+    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 18.0, 2.0, Some(1)), TOL)), NO_RING);
+    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 3.5, 2.0, None), TOL)), WALL_STRIP_UNCUT);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 0.0, 6.5, None), TOL)), STEP_ABOVE_DIAMETER);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 0.0, 1e-3, None), TOL)), TOO_MANY_RINGS);
     for bad in [f64::NAN, 0.0, 1e-9, f64::INFINITY] {

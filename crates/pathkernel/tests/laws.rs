@@ -7,7 +7,7 @@
 //! prove each check (`standins`), and the registry of the 16 phase-1 kinds
 //! (`registry`).
 //!
-//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, selection, guide, guide::rings, guide::rows, guide::mark, guide::cover, guide::all, order, load, link, entry, plan, recipe}.
+//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, selection, guide, guide::rings, guide::rows, guide::cover (the guard), guide::mark, guide::cover, guide::all, order, load, link, entry, plan, recipe}.
 //! Provenance: our own design record docs/decisions/4024-path-kernel-design.md.
 
 #[path = "laws/common.rs"]
@@ -20,6 +20,8 @@ mod entry;
 mod grid;
 #[path = "laws/guide.rs"]
 mod guide;
+#[path = "laws/guide_guard.rs"]
+mod guide_guard;
 #[path = "laws/guide_kit.rs"]
 mod guide_kit;
 #[path = "laws/guide_rings.rs"]

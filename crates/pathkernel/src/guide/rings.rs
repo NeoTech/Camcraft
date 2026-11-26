@@ -12,14 +12,14 @@
 use camcraft_geometry::geo2d::RingClip;
 
 use super::cover::{
-    ARC_SAG, Raw, check_step, check_tol, finish, geo, judge, loop_walks, pieces, planar, uncovered,
+    ARC_SAG, Ask, Raw, check_step, check_tol, finish, geo, judge, loop_walks, pieces, planar, uncovered,
 };
 use super::mark::{Mark, MarkKind};
 use super::{Family, GuideChoice, GuidePlanner, GuideSet, RingRef, RingsChoice};
 use crate::frame::PlanePoint;
 use crate::region::{KernelRegion, PlanarRegion};
 use crate::verdict::{Refusal, Stage, Verdict};
-use crate::{Loop, Point2, Region, in_area};
+use crate::{KERNEL_TOL, Loop, Point2, Region, in_area};
 
 /// Refusal reason: the ring planner was given another guide choice.
 pub const NOT_RINGS: &str = "the ring planner plans only a rings choice";
@@ -29,6 +29,9 @@ pub const CIRCLE_NOT_YET: &str = "exact circle rings are not planned yet: they c
 pub const BAND_NOT_YET: &str = "the band ring reference is not planned yet: it comes with the order stage (K4, #3934)";
 /// Refusal reason: a first ring offset below zero.
 pub const OFFSET_BELOW_CENTER: &str = "a ring offset below zero puts the ring outside the cutter-centre area";
+/// Refusal reason: a first ring offset above the tool radius for a choice
+/// that clears the area: the strip at the wall stays uncut.
+pub const WALL_STRIP_UNCUT: &str = "a first ring offset above the tool radius leaves the strip at the wall uncut";
 /// Refusal reason: the first ring offset leaves no area.
 pub const NO_RING: &str = "the first ring offset leaves no area: there is no ring";
 /// Refusal reason: more rings than the planner makes.
@@ -114,6 +117,12 @@ fn plan(p: &PlanarRegion, c: &RingsChoice, tol: f64) -> Result<Verdict<GuideSet>
     if d0 < 0.0 {
         return Err(Refusal::new(Stage::Guide, OFFSET_BELOW_CENTER));
     }
+    // A clearing choice whose first ring is farther than the tool radius
+    // from the wall cannot cut the strip at the wall; the clean-up rings
+    // would cut what the offset asks to leave. Refused by name.
+    if c.count().is_none() && d0 > rad + KERNEL_TOL {
+        return Err(Refusal::new(Stage::Guide, WALL_STRIP_UNCUT).fix("use a first offset of the tool radius or less, or a stock to leave on the region"));
+    }
     let reach = p.center().bounds().map_or(0.0, |(lo, hi)| (hi.x - lo.x).hypot(hi.y - lo.y));
     if (reach - d0) / step > f64::from(MAX_RINGS) {
         return Err(Refusal::new(Stage::Guide, TOO_MANY_RINGS).fix("use a larger stepover"));
@@ -126,17 +135,18 @@ fn plan(p: &PlanarRegion, c: &RingsChoice, tol: f64) -> Result<Verdict<GuideSet>
     }
     let mut marks = Vec::new();
     // A ring count asks for that many rings, not for a cleared area: the
-    // guard and the clean-up rings apply to a choice without a count.
-    let left = match c.count() {
+    // clean-up rings apply to a choice without a count. The guard reads the
+    // whole centre area in both cases.
+    let ask = match c.count() {
         None => {
-            let target = if d0 > rad { geo(p.center().offset(rad - d0))? } else { p.center().clone() };
-            fill(&target, &levels, &mut raws, &mut marks, rad.min(step), (rad, margin))?
+            fill(p.center(), &levels, &mut raws, &mut marks, rad.min(step), (rad, margin))?;
+            Ask::Clear
         }
-        Some(_) => Region::empty(),
+        Some(n) => Ask::Count(n),
     };
     full_width(p, &raws, &mut marks, rad, (margin, tol))?;
     let (curves, marks, notes) = finish(&raws, marks, |_| Family::Ring)?;
-    judge(GuideSet::with_marks(curves, marks)?, &left, notes)
+    judge(p, GuideSet::with_marks(curves, marks)?, notes, ask, margin)
 }
 
 /// The regular rings, level by level from the first offset, and the level
@@ -160,16 +170,17 @@ fn regular(center: &Region, field: &Field, d0: f64, step: f64, count: Option<u32
     Ok((raws, levels))
 }
 
-/// Adds clean-up rings until the discs cover `target`, at most
-/// [`MAX_FILL_ROUNDS`] rounds; returns the area that stays uncovered. A
-/// clean-up ring of an uncovered piece is the boundary of the piece eroded
-/// by half of `inset` (the piece itself when it is thinner).
-fn fill(target: &Region, levels: &[Region], raws: &mut Vec<Raw>, marks: &mut Vec<(usize, Mark)>, inset: f64, (rad, margin): (f64, f64)) -> Result<Region, Refusal> {
+/// Adds clean-up rings until the discs cover `target` (the whole centre
+/// area), at most [`MAX_FILL_ROUNDS`] rounds. The guard ([`judge`]) then
+/// reads what stays uncut. A clean-up ring of an uncovered piece is the
+/// boundary of the piece eroded by half of `inset` (the piece itself when
+/// it is thinner).
+fn fill(target: &Region, levels: &[Region], raws: &mut Vec<Raw>, marks: &mut Vec<(usize, Mark)>, inset: f64, (rad, margin): (f64, f64)) -> Result<(), Refusal> {
     for _ in 0..MAX_FILL_ROUNDS {
         let left = uncovered(target, raws, rad, margin)?;
         let big: Vec<Region> = pieces(&left)?.into_iter().filter(|(_, a)| *a >= FILL_MIN).map(|(g, _)| g).collect();
         if big.is_empty() {
-            return Ok(left);
+            return Ok(());
         }
         for g in big {
             let core = geo(g.offset(-0.5 * inset))?;
@@ -180,7 +191,7 @@ fn fill(target: &Region, levels: &[Region], raws: &mut Vec<Raw>, marks: &mut Vec
             }
         }
     }
-    uncovered(target, raws, rad, margin)
+    Ok(())
 }
 
 /// The index of a clean-up ring: one more than the deepest level area that

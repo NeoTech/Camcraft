@@ -39,9 +39,36 @@ yet: with the default switch the output is identical.
    um2 are lattice noise. Dropped: a fixed number of sub-levels between two
    rings (the old `ring_fill`, `RING = 4`): its depth is a constant, not a
    law, and it does not stop at a covered area.
-4. **A ring count asks for rings, not for a cleared area.** With
-   `count: Some(n)` (Contour) the planner gives at most `n` rings, no
-   clean-up ring and no guard.
+4. **One guard, on the whole centre area** (review of PR #4189, finding
+   1). The first head narrowed the guard's area to the centre eroded by
+   `first_offset - tool radius`, so a large first offset left the strip at
+   the wall uncut with a done verdict (disc, tool radius 3, first offset 5,
+   step 2: 201 mm2). The rule that closes the class: the guard is one
+   function (`cover::judge`) for both planners. It reads the region's own
+   centre area (`PlanarRegion::center`) and the curves of the finished set,
+   and no planner passes it an area. So no choice of parameters can shrink
+   what the guard measures, and a curve that the curve checks refuse covers
+   nothing. Then:
+   - a clearing ring choice (no count) whose first offset is above the tool
+     radius is refused by name (`WALL_STRIP_UNCUT`): its first ring cannot
+     reach the strip at the wall, and clean-up rings there would cut what
+     the offset asks to leave (a stock to leave belongs to the region);
+   - with a first offset of the tool radius or less, the clean-up rings
+     cover the area or the verdict is `Incomplete` with the gaps named;
+   - a ring count (`count: Some(n)`, Contour) asks for rings, not for a
+     cleared area: no clean-up ring, the verdict is done, and the uncut
+     area of the centre is named in a note;
+   - rows: the same guard; without clean-up (decision 8) the verdict is
+     `Incomplete` when more than 0.1 mm2 stays uncut.
+   Pins: the review case (`a_first_offset_above_the_tool_radius_is_refused_not_left_uncut`,
+   red before the fix), and property grids over tool radius, first offset
+   and stepover for both references on a disc and on a pocket round an
+   island, and over tool radius, angle, stepover and the closing ring for
+   rows. Each grid measures the uncut area on its own and checks "done
+   implies at most 0.1 mm2 uncut". The search of the planners for another
+   guard area derived from their own parameters found none. Dropped: a
+   target narrowed by the first offset (the defect), and clean-up rings in
+   the wall strip (they would cut what the offset leaves).
 5. **Full-width stretches are named, not hidden (#3788).** A stretch of a
    curve of index `k` is marked `FullWidth` where its tool disc overlaps
    no disc of a curve of index `k + 1` and no air within a tool radius of
@@ -56,7 +83,10 @@ yet: with the default switch the output is identical.
    out they are the first cut, as a slot. On the waist pin (two lobes and a
    neck narrower than two steps), the middle 14.5 mm of each strand of ring
    0 through the 21 mm neck is named, and each mouth of the neck gets one
-   clean-up ring. Dropped: the distance from a cut to the nearest earlier
+   clean-up ring. On an open ring round a part (`RingRef::Part`) the same
+   clip names the stretch (review finding 4; pin
+   `a_full_width_stretch_on_an_open_ring_round_a_part_is_named`: the
+   strands of ring 1 in a bay that opens to the stock edge). Dropped: the distance from a cut to the nearest earlier
    cut (the old `full_width_at`), because it needs an order and it missed
    the waist band (#3788).
 6. **Marks are geometry, not point indices.** A `Mark` names a curve by its
@@ -65,9 +95,11 @@ yet: with the default switch the output is identical.
    of its curve and refuses a mark on a missing curve or a stretch with a
    point off its curve. So the canonical rotation of a closed curve does
    not move a mark. `GuideSet::new` stays as it was (no marks).
-7. **Small pieces are kept.** A piece of the centre area of any size gets
-   its ring (pin: a 0.01 mm2 piece). A raw curve that the curve checks
-   refuse is named in a note, never dropped silently.
+7. **Small pieces are kept; nothing is dropped without a note.** A piece
+   of the centre area of any size gets its ring (pin: a 0.01 mm2 piece). A
+   raw curve that the curve checks refuse is named in a note, and the same
+   note names each mark on it that is not kept (review finding 2; unit pin
+   `a_refused_curve_names_its_marks_in_its_note`).
 8. **Rows.** Rows run at the choice's angle, evenly spaced at the stepover
    or less, from one extreme of the area to the other, so that a wall
    parallel to the rows is cut. Each row is clipped to the centre area
@@ -76,7 +108,9 @@ yet: with the default switch the output is identical.
    point) is not a row and is counted in a note. Each piece is an open
    curve of family `Row` with the row's index. The closing ring (when
    asked) is the boundary of the area, family `Ring`, index 0, marked
-   `Closing`. Rows get no `FullWidth` marks: their engagement is a matter of
+   `Closing`: one closing ring for each loop of the area, so an island gets
+   one too (review finding 3; pin
+   `the_closing_ring_of_rows_runs_round_each_island_too`). Rows get no `FullWidth` marks: their engagement is a matter of
    the order (K4) and the load (K3). Rows do not get clean-up rings: a ring
    in a row set is another family, so the uncovered area makes the verdict
    `Incomplete` with the gaps named (pinned on a disc at a step of the tool
@@ -85,7 +119,7 @@ yet: with the default switch the output is identical.
    circle rings come with the helix guide), `BAND_NOT_YET` (the band
    reference comes with K4, #3934), `OFFSET_BELOW_CENTER`, `NO_RING`,
    `TOO_MANY_RINGS` (10000, checked before the work), `TOO_MANY_ROWS`
-   (100000), `STEP_ABOVE_DIAMETER`, `BAD_TOL` (a tolerance under the kernel
+   (100000), `WALL_STRIP_UNCUT` (decision 4), `STEP_ABOVE_DIAMETER`, `BAD_TOL` (a tolerance under the kernel
    tolerance), `NOT_PLANAR`, `GUIDE_GEOMETRY`, and for marks `BAD_STRETCH`,
    `MARK_NO_CURVE`, `MARK_OFF_CURVE`. `Guides` refuses the medial line and
    the trace with `FAMILY_NOT_YET` until the second sub-PR: no family is
