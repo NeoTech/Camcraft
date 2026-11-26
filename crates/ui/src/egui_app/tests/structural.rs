@@ -14,6 +14,9 @@ use egui_kittest::kittest::NodeT;
 
 use super::*;
 
+#[path = "structural/tips.rs"]
+mod tips;
+
 #[path = "structural/corner_relief.rs"]
 mod corner_relief;
 

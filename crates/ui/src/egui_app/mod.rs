@@ -52,6 +52,7 @@ mod browser_open;
 mod donate;
 // #2384: the Home button and the recent projects start page.
 pub(crate) mod home;
+mod tips;
 // #2428: top-band Settings dropdown and startup update-available notice.
 mod settings_drop;
 mod update_notice;

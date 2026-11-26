@@ -1,0 +1,26 @@
+[
+  {
+    "id": "mcp-setup",
+    "title": "Drive CamCraft from your AI agent",
+    "text": "Connect an MCP client to CamCraft. Use headless mode for a separate document, or attach to the open window to watch the agent work. The guide has per-client setup instructions.",
+    "guide_link": "https://neotech.github.io/Camcraft/guide/automate/mcp/"
+  },
+  {
+    "id": "undo-ai-changes",
+    "title": "Undo AI changes",
+    "text": "Press {undo} to undo the last document change. An attached AI agent uses the same undo history as the window. Headless agents have their own document and can use the undo tool.",
+    "guide_link": "https://neotech.github.io/Camcraft/guide/getting-started/keyboard-and-mouse/"
+  },
+  {
+    "id": "verify-before-post",
+    "title": "Verify before you post",
+    "text": "Generate and inspect the toolpaths before posting. A refusal names what prevents CamCraft from posting the program. Read and correct the cause; a passing check does not replace machine simulation and a dry run.",
+    "guide_link": "https://neotech.github.io/Camcraft/guide/reference/refusals/"
+  },
+  {
+    "id": "example-catalog",
+    "title": "Start from an example",
+    "text": "The example catalog contains sample projects and instructions for supported workflows. Read each example's notes, then adapt the stock, tools and machine to your own job. Check the result before use.",
+    "guide_link": "https://github.com/NeoTech/Camcraft/tree/main/examples/catalog"
+  }
+]

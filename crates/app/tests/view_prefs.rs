@@ -149,6 +149,7 @@ fn offline_only_survives_and_the_file_stores_zero_keys() {
         ai_offline_only: true,
         cadmpeg_path: Some("/opt/CAD tools/cadmpeg".into()),
         check_for_updates: false,
+        show_start_tip: false,
         last_update_check_utc: Some(1_795_348_000),
     };
     prefs::save(&path, &all).expect("save");
@@ -169,6 +170,7 @@ fn offline_only_survives_and_the_file_stores_zero_keys() {
             "format",
             "importToolHolders",
             "lastUpdateCheckUtc",
+            "showStartTip",
             "theme",
         ]
     );

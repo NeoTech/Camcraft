@@ -274,6 +274,7 @@ time. The current, authoritative tool list is whatever the client's
 | Area | Tools |
 |---|---|
 | Document and history | `open_project`, `save_project`, `get_job`, `get_selection`, `set_units`, `undo`, `redo` |
+| Help | `list_tips` |
 | Models | `import_model`, `move_model`, `repair_model`, `set_part_axes`, `lay_part_on_points`, `lay_part_on_face`, `align_part_cylinder`, `delete_model`, `set_model_link`, `vouch_model_fidelity` |
 | DXF and SVG profiles | `import_dxf`, `import_svg`, `move_dxf_profile` |
 | Engraving text | `insert_text` |

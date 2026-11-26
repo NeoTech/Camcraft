@@ -1163,13 +1163,14 @@ pub fn ribbon(
     let home_left = super::home::button(ui, state, pal, icons, band, donate_left - pal.item_spacing_x);
     let (settings_left, settings_rect) =
         super::settings_drop::button(ui, state, pal, band, home_left - pal.item_spacing_x);
+    let help_left = super::tips::help_button(ui, state, pal, band, settings_left - pal.item_spacing_x);
     super::update_notice::draw(
         ui,
         state,
         pal,
         band,
         tabs_right + pal.item_spacing_x,
-        settings_left - pal.item_spacing_x,
+        help_left - pal.item_spacing_x,
     );
     let body = Rect::from_min_max(egui::Pos2::new(rect.left(), band.bottom()), rect.max);
     // The plan is read fresh every frame from the two facts it is a

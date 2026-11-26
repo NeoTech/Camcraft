@@ -150,6 +150,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, pal: &Tokens) {
             Some(2) => Some(Pick::Back),
             _ => None,
         });
+        super::tips::start_tip(ui, state);
     });
     match pick {
         // The page stays up until the document changes: a refused open

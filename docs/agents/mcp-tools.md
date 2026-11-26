@@ -1,7 +1,7 @@
 <!-- Generated from crates/app/src/mcp/tools.rs. Do not edit by hand. Write it again with: cargo run -p camcraft-app --bin camcraft-cli -- mcp reference > docs/agents/mcp-tools.md -->
 # CamCraft MCP tool reference
 
-The server lists 124 tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.
+The server lists 125 tools. The live `tools/list` reply is the authority; this file is generated from the same table. An argument with `?` is optional.
 
 | Tool | Arguments | What it does |
 |---|---|---|
@@ -129,3 +129,4 @@ The server lists 124 tools. The live `tools/list` reply is the authority; this f
 | `save_cut_recipe` | `library?`, `name`, `operation`, `replace?` | Save an operation's settings (its kind, tool, every parameter such as depths, stepdown, feeds, tabs, leads and ramps, and the workpiece material in force) as a named cut recipe in the user's recipe library. Not a document change: no undo step. A name already in the library is refused unless replace is true. |
 | `list_cut_recipes` | `library?` | The cut recipes in the user's recipe library: name, operation kind, tool and material of each. |
 | `apply_cut_recipe` | `library?`, `name?`, `recipe`, `source?` | Add an operation from a saved cut recipe, on the stock, a model or a placed DXF profile, in the active setup. One undo step removes it. Refused by the recipe's name: a recipe not in the library, a tool no longer in the document, a material the table no longer has or one other than the material in force. Every add_operation check applies. Not generated until generate runs. |
+| `list_tips` | - | Read the Help tips: stable ids, titles, text and optional guide links. Uses this server's OS for keyboard shortcuts. Does not change the document or undo history. |
