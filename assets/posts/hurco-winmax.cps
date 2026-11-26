@@ -758,10 +758,16 @@ function emitRadiusArc(p, g, planeNum, sx, sy, sz, ex, ey, ez, cx, cy, cz, ccw, 
   return true;
 }
 
+// #3442: a position word as written, for arcFate (origin-relative, like every X/Y/Z word here).
+function arcWord(k, v) { return k + fu(v - (k === "X" ? orgX : (k === "Y" ? orgY : orgZ))); }
+
 function onCircular() {
   var p = properties;
   seatKnown = true;
   startPreamble();
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (!tiltOk(p)) return;
   if (inCycle) { msg(who() + "circular arc inside canned-cycle group"); return; }
   var ccw = String(p.CircularDirection || "CW").toUpperCase() === "CCW";
