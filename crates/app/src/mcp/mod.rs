@@ -68,6 +68,8 @@ mod pockets;
 mod agie_inspection;
 mod post_options_tools;
 mod post_offer_view;
+// #3915: what a re-import moved, in the `import_model` answer.
+mod reimport_changes;
 mod render;
 mod selection;
 mod setup_tools;
