@@ -1,6 +1,7 @@
 // Hurco WinMax (NC) — ISNC (Industry Standard NC) 3-axis mill post processor (#2573).
 // Clean-room implementation from public Hurco WinMax Mill NC documentation
-// (Hurco WinMax Mill NC Programming Manual 704-0116-101, support.hurco.com ISNC tables).
+// (Hurco WinMax Mill NC Programming Manual 704-0116-101 and 704-0116-310 (2010),
+// support.hurco.com WinMax Mill NC Programming online help: ISNC tables, tool offsets, M codes).
 // No vendor post files or proprietary implementations consulted.
 
 description = "Hurco WinMax (NC)";
@@ -94,6 +95,33 @@ declaredOptions = {
     description: "Z retract command before tool changes and at program end",
     choices: ["G28", "G53"],
     default: "G28"
+  },
+  // Hurco online help, Tool and Radius Offsets (G40-G49): with no G43/G44 and no H word,
+  // WinMax takes the tool length from the Tool Setup screen; G43 H overrides it, H00..H200.
+  toolLengthOffset: {
+    type: "boolean",
+    title: "Write G43 H at tool change",
+    group: "Behavior",
+    description: "Write G43 H<tool number> after each tool change (off: the control uses the Tool Setup length)",
+    default: false
+  },
+  // Hurco online help, Program Functions (M140): non-modal retract along the tool vector to
+  // the machine limits. The 2010 NC Programming manual (5-19) limits it to the VMX42 SR.
+  retractAlongToolVector: {
+    type: "boolean",
+    title: "Retract with M140 after each operation",
+    group: "Behavior",
+    description: "Write G00 M140 at the end of each operation (check that the control supports M140)",
+    default: false
+  },
+  // Hurco online help, Program Functions (M126/M127): shortest rotary angle path on/cancel.
+  // The 2010 NC Programming manual (5-13) limits it to the VMX42 SR.
+  shortestRotaryPath: {
+    type: "boolean",
+    title: "Shortest rotary path (M126)",
+    group: "Behavior",
+    description: "Write M126 at program start and M127 before M30 (check that the control supports M126)",
+    default: false
   }
 };
 
@@ -320,6 +348,7 @@ function start() {
     block(["G90", "G17", "G94", "G40", "G49", "G80"]);
     block(["G90", wcsWord]);
   }
+  if (optBool("shortestRotaryPath", false)) block(["M126"]);
 }
 
 function onOpen() {
@@ -444,7 +473,11 @@ function startPreamble() {
     toolKind = ""; toolDia = 0; toolCr = 0;
     if (optStr("showSequenceNumbers", "off") === "tool-change") seqNextForce = true;
     block(["T" + ni(tNo), "M6"]);
-    block(["G43", "H" + ni(tNo)]);
+    if (optBool("toolLengthOffset", false)) {
+      // H00 cancels the offset and the register table ends at H200.
+      if (tNo >= 1 && tNo <= 200) block(["G43", "H" + ni(tNo)]);
+      else msg(who() + "tool " + ni(tNo) + " has no Hurco WinMax length offset register (G43 H01..H200); turn off toolLengthOffset to use the Tool Setup length");
+    }
     xyUnknown = true;
     toolWait = false;
     if (sRpm > 0) spindleWait = true;
@@ -503,6 +536,11 @@ function onSectionEnd() {
   if (wcsRotActive) {
     block(["G69"]);
     wcsRotActive = false;
+  }
+  if (sectionOpen && optBool("retractAlongToolVector", false)) {
+    block(["G00", "M140"]);
+    // The tool is now at the Z limit: the next X/Y traverse states its height first.
+    xyUnknown = true;
   }
   sectionOpen = false;
   seatKnown = false;
@@ -1048,6 +1086,7 @@ function onClose() {
   var eu = optStr("EndUnits", "").toLowerCase();
   if (eu === "inch" && !unitInch) block(["G20"]);
   else if (eu === "mm" && unitInch) block(["G21"]);
+  if (optBool("shortestRotaryPath", false)) block(["M127"]);
   block(["M30"]);
   writeln("%");
 }

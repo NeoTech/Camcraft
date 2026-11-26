@@ -67,7 +67,7 @@ pub fn assert_isnc_words(program: &str) {
     ];
     let allowed_m = [
         "M0", "M00", "M1", "M01", "M2", "M02", "M3", "M03", "M4", "M04", "M5", "M05", "M6",
-        "M06", "M7", "M07", "M8", "M08", "M9", "M09", "M30",
+        "M06", "M7", "M07", "M8", "M08", "M9", "M09", "M30", "M126", "M127", "M140",
     ];
     let lines: Vec<&str> = program.lines().collect();
     assert!(lines.len() >= 3, "program too short");
@@ -219,9 +219,9 @@ ENDSECTION
     assert!(p.contains("\nG21\n"), "metric ISNC G21:\n{p}");
     assert!(p.contains("G90 G17 G94 G54 G40 G49 G80\n"), "safe start:\n{p}");
     assert!(!p.contains("G91.1"), "WinMax ISNC has no G91.1:\n{p}");
-    assert!(p.contains("T1 M6\n") && p.contains("G43 H1\n"), "T1 tool change:\n{p}");
-    assert!(p.contains("T2 M6\n") && p.contains("G43 H2\n"), "T2 tool change:\n{p}");
-    assert!(p.contains("T3 M6\n") && p.contains("G43 H3\n"), "T3 tool change:\n{p}");
+    assert!(p.contains("T1 M6\n") && p.contains("T2 M6\n") && p.contains("T3 M6\n"), "tool changes:\n{p}");
+    // #2573 tester: WinMax takes the length from Tool Setup when no G43/H is written.
+    assert!(!p.contains("G43") && !p.contains(" H"), "no G43 H by default:\n{p}");
     assert!(p.contains("G55\n") || p.contains("G55 "), "second offset G55:\n{p}");
     assert!(p.contains("G02 X20. Y10. I0. J5."), "incremental arc center I0 J5:\n{p}");
     assert!(p.contains("G81 ") && p.contains("G83 ") && p.contains("Q3.") && p.contains("G84.2 "), "cycles:\n{p}");
@@ -336,7 +336,7 @@ fn extended_work_offsets_and_safe_retract_and_o_word() {
         &vm10i(),
         &cycle_stream(CycleKind::Drill, 0.0, 0.0, 1, false),
         &json!({}),
-        &ProgramId { number: 42, numbered: true, comment: String::new() },
+        &ProgramId { number: 42, numbered: true, comment: String::new(), notes: Vec::new() },
     )
     .expect("O0042");
     assert!(o42.program.contains("\nO0042 ("));
@@ -345,7 +345,7 @@ fn extended_work_offsets_and_safe_retract_and_o_word() {
         &vm10i(),
         &cycle_stream(CycleKind::Drill, 0.0, 0.0, 1, false),
         &json!({}),
-        &ProgramId { number: 10000, numbered: true, comment: String::new() },
+        &ProgramId { number: 10000, numbered: true, comment: String::new(), notes: Vec::new() },
     );
     assert_refused(res_o, "O0001..O9999", "O10000 refused");
 }

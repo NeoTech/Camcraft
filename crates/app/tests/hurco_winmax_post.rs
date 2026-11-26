@@ -108,6 +108,9 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         blend_turns: false,
         links: Links::PLANAR,
         tilt: None,
+        blend_radius: None,
+        chain_overrides: Vec::new(),
+        picks: Default::default(),
     };
     let pocket = OpParams::Pocket {
         stepover: 3.0,
@@ -129,6 +132,9 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         blend_radius: None,
         rest: None,
         tilt: None,
+        corner_relief: Default::default(),
+        pass_start: Default::default(),
+        picks: Default::default(),
     };
     let drill = OpParams::Drill {
         clearance_z: Height::fixed(25.0),
@@ -151,6 +157,7 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         cross: Vec::new(),
         break_through: None,
         break_through_from: Default::default(),
+        picks: Default::default(),
     };
     let peck = OpParams::Drill {
         clearance_z: Height::fixed(25.0),
@@ -173,6 +180,7 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         cross: Vec::new(),
         break_through: None,
         break_through_from: Default::default(),
+        picks: Default::default(),
     };
 
     for (name, tool, params) in [
@@ -209,6 +217,7 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         cross: Vec::new(),
         break_through: None,
         break_through_from: Default::default(),
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Tap1", "TAP-M6", SrcRef::Stock, tap).expect("Tap1"));
     h.execute(&world, GenerateOperation::new(&world, "Tap1").expect("gen tap"));

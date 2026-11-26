@@ -78,3 +78,30 @@ Cost to change later: low (`assets/posts/hurco-winmax.cps`,
   **Dropped:** Choosing only one side of the merge conflict.
   Simulator evidence remains pending. No new load results or path comparisons
   were supplied for this fix.
+
+- **Decided (tester report, 2026-11-25):** Write no `G43 H` by default. The
+  option `toolLengthOffset` (default off) writes `G43 H<tool>` after each
+  `T M6`. With the option on, a tool number outside 1..200 is refused by name.
+  **Why:** The tester's WinMax simulator stopped at `G43 H562`. Hurco's online
+  help (Tool and Radius Offsets (G40-G49)) says that with no `G43`/`G44` and no
+  `H` word, the control takes the tool length from the Tool Setup screen. It
+  also gives the `H` range as `H00` to `H200`. `G49` keeps the Tool Setup
+  length (same page, offset table), so the safe start line keeps `G49`.
+  **Dropped:** `G43 H<tool>` as the default; writing an `H` word above 200.
+- **Decided:** `retractAlongToolVector` (default off) writes `G00 M140` at the
+  end of each operation. The next X/Y traverse then states its Z first.
+  `shortestRotaryPath` (default off) writes `M126` after the start line and
+  `M127` before `M30`.
+  **Why:** The tester's 2019 WinMax uses `G0 M140` after each operation and
+  `M126` in the preamble. The online help (Program Functions) documents
+  `M140 [L] [P]` (non-modal, no `L` retracts to the machine limits) and
+  `M126`/`M127`. The 2010 manual (704-0116-310, pages 5-13 and 5-19) says that
+  both work only on the VMX42 SR. Thus the default output does not use them.
+  **Dropped:** `M140` or `M126` in the default output; `M31` (rotary encoder
+  reset), which a 3-axis post does not need.
+- **Deferred:** Tool pre-staging (`T110 M6`, then `T104` on its own line). The
+  online help (Program Functions, "M6 Initiates Tool Change") and the 2010
+  manual (page 4-1) confirm that a `T` word without `M06` pre-fetches the tool
+  when that parameter is Yes. When it is No, a `T` word alone changes the tool.
+  The post also cannot know the next tool: `programTools` is sorted by number,
+  not by tool-change order. Follow-up issue #4113 holds this work.
