@@ -35,8 +35,15 @@ pub struct OrderStage;
 /// Where a full-width stretch of a curve ends, as the curve is cut.
 #[derive(Clone, Copy)]
 enum Heavy {
+    /// No full-width mark.
     None,
+    /// The whole curve is full-width (a `Span::Whole` mark). The curve is
+    /// taken after the other ready curves, as a curve with a stretch. It
+    /// has no stretch end to start at, so it starts as a plain curve does
+    /// (`starts`): no point of it is less heavy than another.
     Whole,
+    /// The end of the longest full-width stretch: a closed curve starts
+    /// there, so that the stretch is cut last on the curve.
     EndsAt(Point2),
 }
 
@@ -64,7 +71,8 @@ fn orient(p: &PlanarRegion, c: &Curve, want_left: bool) -> Result<(Curve, bool),
 }
 
 /// The full-width stretch of each run: the end of its longest stretch in
-/// the run's direction, or the whole curve.
+/// the run's direction, or `Heavy::Whole` when a mark names the whole
+/// curve (a whole mark wins over the stretches of the same curve).
 fn heavy(g: &GuideSet, turned: &[bool]) -> Vec<Heavy> {
     let mut out = vec![Heavy::None; g.curves().len()];
     let mut longest = vec![0.0f64; g.curves().len()];
@@ -109,18 +117,27 @@ fn restarted(c: &Curve, j: usize) -> Result<Curve, Refusal> {
 /// full-width stretch (cut last on the curve) or at one of its vertices
 /// nearest to `at`; a row from its end nearer to `at`; another open
 /// curve as it is.
+///
+/// On the first step there is no tool position (`at` is `None`): a closed
+/// curve without a stretch starts at its first vertex, and a row is never
+/// reversed. The row then keeps the direction that the guide planner gave
+/// it, so the first cut of a level is the guide's own (deterministic, and
+/// the order invents no direction that no tool position asks for). Each
+/// later row starts at its end nearer to the tool (a zigzag).
 fn starts(c: &Curve, at: Option<Point2>, h: Heavy) -> Result<Vec<Curve>, Refusal> {
     if c.closed() {
         let js = match (h, at) {
             (Heavy::EndsAt(e), _) => by_distance(c, e).into_iter().take(1).collect(),
-            (_, Some(q)) => by_distance(c, q).into_iter().take(START_TRIES).collect(),
-            _ => vec![0],
+            (Heavy::None | Heavy::Whole, Some(q)) => by_distance(c, q).into_iter().take(START_TRIES).collect(),
+            (Heavy::None | Heavy::Whole, None) => vec![0],
         };
         return js.into_iter().map(|j| restarted(c, j)).collect();
     }
     let ends = (c.pts().first().map(|p| p.at()), c.pts().last().map(|p| p.at()));
     match (c.family(), at, ends) {
         (Family::Row, Some(q), (Some(a), Some(b))) if dist(b, q) < dist(a, q) => Ok(vec![reversed(c)?]),
+        // A row on the first step (no `at`), a row already from its nearer
+        // end, and any other open curve: as it is.
         _ => Ok(vec![c.clone()]),
     }
 }
@@ -136,9 +153,10 @@ fn first_of(c: &Curve) -> Point2 {
 
 /// The walk: each step takes a run whose neighbours on the side the walk
 /// comes from are cut. Of those, it takes the first start (a curve with a
-/// full-width stretch last; then the run that goes on the chain of the
-/// last run; then the nearest) to which the link stage proves an in-plane
-/// link; if none is proved, the first start (the link will lift, named).
+/// full-width stretch or a whole full-width mark last; then the run that
+/// goes on the chain of the last run; then the nearest) to which the link
+/// stage proves an in-plane link; if none is proved, the first start (the
+/// link will lift, named).
 fn walk(p: &PlanarRegion, runs: &[Curve], heavy: &[Heavy], deep: bool) -> Result<Vec<Curve>, Refusal> {
     let reach = 2.0 * p.tool().radius() + crate::KERNEL_TOL;
     let needs = chain::needs(runs, deep, reach);
@@ -150,6 +168,10 @@ fn walk(p: &PlanarRegion, runs: &[Curve], heavy: &[Heavy], deep: bool) -> Result
     let mut out: Vec<Curve> = Vec::with_capacity(runs.len());
     let mut last: Option<usize> = None;
     let mut paths: Vec<Vec<Point2>> = Vec::new();
+    // The cuts still planned (their run indices beside them): built once,
+    // and a run leaves the list when the walk takes it.
+    let mut planned: Vec<Cut> = runs.iter().map(|c| Cut::new(c.clone(), None)).collect::<Result<_, _>>()?;
+    let mut planned_of: Vec<usize> = (0..runs.len()).collect();
     while out.len() < runs.len() {
         let at = out.last().and_then(end_of);
         let mut options: Vec<((bool, bool, f64), usize, Curve)> = Vec::new();
@@ -167,12 +189,6 @@ fn walk(p: &PlanarRegion, runs: &[Curve], heavy: &[Heavy], deep: bool) -> Result
             }
         }
         options.sort_by(|a, b| a.0.0.cmp(&b.0.0).then(a.0.1.cmp(&b.0.1)).then(a.0.2.total_cmp(&b.0.2)));
-        let planned: Vec<Cut> = runs
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| !done.get(*i).copied().unwrap_or(true))
-            .map(|(_, c)| Cut::new(c.clone(), None))
-            .collect::<Result<_, _>>()?;
         let proved = |s: &Curve| -> Result<Option<Vec<Point2>>, Refusal> {
             let Some(from) = made.last() else { return Ok(Some(Vec::new())) };
             let to = Cut::new(s.clone(), None)?;
@@ -192,6 +208,10 @@ fn walk(p: &PlanarRegion, runs: &[Curve], heavy: &[Heavy], deep: bool) -> Result
         paths.extend(path.filter(|p| !p.is_empty()));
         if let Some(d) = done.get_mut(i) {
             *d = true;
+        }
+        if let Some(k) = planned_of.iter().position(|&j| j == i) {
+            planned.remove(k);
+            planned_of.remove(k);
         }
         last = Some(i);
         made.push(Cut::new(s.clone(), None)?);
