@@ -67,6 +67,18 @@ for this step.
    the crate to `SHARED` (the record says no) and a fan-out rule for every
    crate (a gate change outside this issue).
 
+11. **The CL round-trip test skips the annotation tail of a golden.** The
+   #3750 baseline goldens (`offset2d_fig8_*.cl`, cherry-picked from
+   `9c69f004a`) end with `; note:` and `; warning:` lines after the CL
+   text. `camcraft-cl`'s `cl_text_round_trips_every_golden` reads each app
+   `.cl` golden as CL text, so it failed on them. That fault is in
+   `9c69f004a` itself; no output changed. The test now round-trips the CL
+   text and checks that the tail has only those annotation lines. The
+   golden bytes stay as recorded. Dropped: a new file extension for the
+   baseline goldens (it renames the files that the record keeps as the
+   baseline) and recording them again without annotations (that loses the
+   notes and warnings that the pins compare).
+
 **Why**: the record fixes the place and the default of the switch, but not
 how a test sets it, and not where the 16 kinds are listed. One check
 before the arms keeps the old arms byte-for-byte unchanged.

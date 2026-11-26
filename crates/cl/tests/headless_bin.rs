@@ -20,6 +20,12 @@ fn run(args: &[&std::ffi::OsStr]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_camcraft-cl")).args(args).output().expect("spawn")
 }
 
+/// The CL text of a golden, and the block of annotation lines after it (empty for a plain dump).
+fn split_annotations(all: &str) -> (&str, &str) {
+    let at = ["\n; note: ", "\n; warning: "].iter().filter_map(|m| all.find(m)).min();
+    at.map_or((all, ""), |i| all.split_at(i + 1))
+}
+
 #[test]
 fn cl_text_round_trips_every_golden() {
     let mut n = 0;
@@ -28,7 +34,12 @@ fn cl_text_round_trips_every_golden() {
         if p.extension().is_none_or(|x| x != "cl") {
             continue;
         }
-        let src = std::fs::read_to_string(&p).expect("read golden").replace("\r\n", "\n");
+        let all = std::fs::read_to_string(&p).expect("read golden").replace("\r\n", "\n");
+        // #4055: an equivalence golden (#3750) ends with the path's notes and warnings, one `; note:` or
+        // `; warning:` line each, after the CL text. Only the CL text round-trips.
+        let (src, tail) = split_annotations(&all);
+        assert!(tail.lines().all(|l| l.starts_with("; note: ") || l.starts_with("; warning: ")), "{}", p.display());
+        let src = src.to_string();
         let t = match text::from_text(&src) {
             Ok(t) => t,
             Err(e) => panic!("{}: {e}", p.display()),
