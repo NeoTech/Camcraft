@@ -150,6 +150,106 @@ fn ooznest_workbee_states_the_smaller_envelope_and_feed() {
     ]);
 }
 
+/// #3244: Mikron WF3 DCM (LinuxCNC EtherCAT retrofit) machine file pins
+/// its X/Y/Z travels (500/500/350 mm), feeds (3000/2100/3000 mm/min),
+/// 3000 rpm spindle ceiling with rigid tapping, flood-only coolant,
+/// manual tool change, and LinuxCNC post, and refuses a 3500 rpm op.
+#[test]
+fn mikron_wf3_dcm_linuxcnc_pins_envelope_spindle_and_refuses_3500_rpm() {
+    use camcraft_app::cl::{Move, MoveKind, Toolpath as ClPath};
+    use camcraft_app::geometry::Point3;
+    use camcraft_app::machine::{self, ToolChangeMode};
+    use camcraft_app::operation::{Height, OpParams, SrcRef};
+    use camcraft_app::schema::{Name, Operation, ToolDef, Toolpath};
+    use flecs_ecs::prelude::IdOperations;
+
+    let entry = library::builtins()
+        .into_iter()
+        .find(|e| e.name == "Mikron WF3 DCM (LinuxCNC)")
+        .expect("Mikron WF3 DCM (LinuxCNC) in the library");
+    assert!(entry.is_valid(), "refusals: {:?}", entry.refusals);
+    assert_eq!(entry.kind, Some(Kind::Mill));
+    assert_eq!(entry.units, "mm");
+    assert!(entry.posts.contains(&"LinuxCNC"), "{:?}", entry.posts);
+
+    let (_, m) = library::read_for_assign(&entry.source).expect("assignable machine");
+    assert_eq!(m.vendor, "Camcraft");
+    assert_eq!(m.model, "Mikron WF3 DCM (LinuxCNC)");
+    assert_eq!(m.post.as_deref(), Some("LinuxCNC"));
+    assert_eq!(m.spindle_min, None);
+    assert_eq!(m.spindle_max, Some(3000.0));
+    assert_eq!(m.rigid_tapping, Some(true));
+    assert_eq!(m.tool_count, None);
+    assert_eq!(m.tool_change, Some(ToolChangeMode::Manual));
+    assert_eq!(
+        m.coolants.iter().map(|c| (c.name.as_str(), c.m_code.as_str())).collect::<Vec<_>>(),
+        [("Flood", "M8")]
+    );
+    let axes: Vec<_> = m.axes.iter().map(|a| (a.name.as_str(), a.travel, a.feed, a.rapid)).collect();
+    assert_eq!(axes, [
+        ("X", Some((-500.0, 500.0)), Some(3000.0), Some(3000.0)),
+        ("Y", Some((-500.0, 500.0)), Some(2100.0), Some(2100.0)),
+        ("Z", Some((-350.0, 350.0)), Some(3000.0), Some(3000.0)),
+    ]);
+
+    let judge = |rpm: f64| {
+        let world = camcraft_app::world::new_world();
+        let mut tool = camcraft_app::tools::catalog()
+            .into_iter()
+            .find(|(n, _)| *n == "EM-0400-2FL")
+            .expect("catalog tool")
+            .1;
+        tool.rpm = rpm;
+        world.entity().set(Name("Tool".into())).set(ToolDef { tool, number: Some(1) });
+        let op = world
+            .entity()
+            .set(Name("Op1".into()))
+            .set(Operation {
+                tool: "Tool".into(),
+                src: SrcRef::Stock,
+                stamp: None,
+                setup: None,
+                area: Default::default(),
+                coolant: Default::default(),
+                after: Default::default(),
+                suppressed: false,
+                params: OpParams::Face {
+                    holes: Default::default(),
+                    tilt: None,
+                    blend_turns: false,
+                    blend_radius: None,
+                    stepover: 1.0,
+                    clearance_z: Height::fixed(10.0),
+                    cut_z: Height::fixed(0.0),
+                    top_z: None,
+                    stepdown: None,
+                    feed: 1200.0,
+                    plunge_feed: 300.0,
+                    climb: true,
+                    picks: Default::default(),
+                },
+            })
+            .set(Toolpath::new(
+                ClPath::new(vec![Move::new(
+                    MoveKind::Feed,
+                    Point3::new(0.0, 0.0, 0.0),
+                    Point3::new(10.0, 0.0, 0.0),
+                    Some(1200.0),
+                )]),
+                vec![],
+            ));
+        machine::check_ops(&world, &m, &[("Op1".into(), op.id())]).expect("machine check")
+    };
+
+    assert!(judge(2500.0).is_ok(), "2500 rpm inside 3000 rpm ceiling");
+    let over = judge(3500.0);
+    assert!(
+        over.problems.iter().any(|p| p.contains("3500") && p.contains("above the machine's 3000")),
+        "expected 3500 rpm refusal against 3000 rpm ceiling, got {:?}",
+        over.problems
+    );
+}
+
 /// Every `.mch` in `assets/machines` is a library entry, except the
 /// post-grammar default (`3axis-vmc.mch` is the static mirror form the
 /// post reads, not a checker-grammar machine file).
