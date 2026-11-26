@@ -3,7 +3,7 @@
 //! test builds the invalid cases and expects a named refusal. The K7 law
 //! suite (#4027) joins this directory suite.
 //!
-//! Gate map: covers pathkernel::{frame, verdict, region, guide, order, load, link, entry, plan, recipe}.
+//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, selection, guide, order, load, link, entry, plan, recipe}.
 //! Provenance: our own design record docs/decisions/4024-path-kernel-design.md.
 
 #[path = "laws/common.rs"]
@@ -20,3 +20,5 @@ mod load;
 mod order;
 #[path = "laws/plan.rs"]
 mod plan;
+#[path = "laws/region.rs"]
+mod region;

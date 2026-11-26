@@ -94,7 +94,8 @@ fn bounds_and_regions_are_checked() {
     assert_eq!(Bounds::new(None, Region::empty(), -5.0, 0.0).unwrap_err().reason(), BAD_BOUNDS);
     assert_eq!(Bounds::new(None, Region::empty(), NAN, 0.0).unwrap_err().reason(), BAD_BOUNDS);
     let mk = |c: Region, walls: Vec<Loop>, edge: Vec<Loop>| {
-        PlanarRegion::new(c, MaterialSide::Inside, walls, edge, Region::empty(), Region::empty(), tool(2.0, true))
+        let plane = WorkPlane::setup_xy(0.0).unwrap();
+        PlanarRegion::new(plane, c, MaterialSide::Inside, walls, edge, Region::empty(), Region::empty(), tool(2.0, true))
     };
     assert_eq!(mk(Region::empty(), vec![square(0.0, 0.0, 10.0)], vec![]).unwrap_err().reason(), EMPTY_CENTER);
     assert_eq!(mk(square_region(0.0, 0.0, 10.0), vec![], vec![]).unwrap_err().reason(), NO_EDGE);
@@ -102,7 +103,7 @@ fn bounds_and_regions_are_checked() {
     if let Ok(line) = line {
         assert_eq!(mk(square_region(0.0, 0.0, 10.0), vec![line], vec![]).unwrap_err().reason(), FLAT_EDGE);
     }
-    let r = mk(square_region(0.0, 0.0, 10.0), vec![], vec![square(-1.0, -1.0, 12.0)]).unwrap();
+    let r = mk(square_region(0.0, 0.0, 10.0), vec![], vec![square(0.0, 0.0, 10.0)]).unwrap();
     let k = KernelRegion::Planar(r);
     let p = k.planar().unwrap();
     assert_eq!((p.stock_edge().len(), p.tool().radius()), (1, 2.0));
