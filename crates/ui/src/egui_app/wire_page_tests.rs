@@ -48,8 +48,15 @@ fn press(h: &mut Harness<'static, State>, label: &str) {
     h.run_steps(3);
 }
 
+/// Scroll a row's label into view. A click on the label would land on
+/// the row's control, which carries the same name (#1119).
+fn show_row(h: &mut Harness<'static, State>, row: &str) {
+    h.get_by_role_and_label(Role::Label, row).scroll_to_me();
+    h.run_steps(3);
+}
+
 fn choose(h: &mut Harness<'static, State>, row: &str, choice: &str) {
-    let r = h.get_by_label(row).rect();
+    let r = h.get_by_role_and_label(Role::Label, row).rect();
     h.query_all_by_role(Role::ComboBox)
         .find(|n| (n.rect().center().y - r.center().y).abs() < 12.0)
         .expect("condition combo on row").click();
@@ -179,7 +186,7 @@ fn wire_sync_pick_button_arms_and_says_the_next_click() {
     h.state_mut().op_tab = super::super::op_tabs::SEC_GEO;
     h.run_steps(3);
     press(&mut h, "4-axis (upper and lower profiles)");
-    press(&mut h, "Pairing");
+    show_row(&mut h, "Pairing");
     choose(&mut h, "Pairing", "By sync points");
     assert!(h.query_by_label("Pick sync points in the viewport").is_some(), "the pick button shows");
     press(&mut h, "Pick sync points in the viewport");
@@ -204,7 +211,7 @@ fn wire_four_axis_states_the_stand_off_choice_and_the_verify_tolerance() {
     assert_eq!((four.widening, four.verify_tolerance), (WireWidening::PerRuling, 0.0));
     assert!(h.query_by_label("Verify tolerance").is_some(), "the verify tolerance row shows");
     assert!(h.query_all_by_role(Role::ComboBox).any(|n| n.value().as_deref() == Some("Only where the surface twists")));
-    press(&mut h, "Stand off");
+    show_row(&mut h, "Stand off");
     choose(&mut h, "Stand off", "The same all round");
     assert_eq!(draft(&h).four_axis.as_ref().expect("the block").widening, WireWidening::Uniform);
 }

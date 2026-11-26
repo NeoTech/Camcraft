@@ -96,6 +96,7 @@ mod setup_settings_page;
 mod machine_page;
 mod setup_user_machines;
 mod tool_list_page;
+mod op_page_names;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;

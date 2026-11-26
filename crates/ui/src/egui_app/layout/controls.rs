@@ -69,10 +69,7 @@ pub fn drag_sized_row(ui: &mut Ui, dv: DragValue<'_>) -> Response {
 
 fn seam_field(ui: &Ui, r: Response) -> Response {
     super::field_ring::register(ui, r.id);
-    match super::row_label_id(ui) {
-        Some(l) => r.labelled_by(l),
-        None => r,
-    }
+    super::name_by_row(ui, r)
 }
 
 /// One radio choice inside a `prop_row` or stacked group.
