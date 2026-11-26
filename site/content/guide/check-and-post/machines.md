@@ -113,7 +113,7 @@ tapping uses G84.
 
 A router declares `router` in its machine file. It follows the mill's
 operation, posting and safety rules, using its stated travel, spindle
-range and tool table. The Tormach 24R, xsTECH and Sienci AltMill files
+range and tool table. The Tormach 24R, xsTECH, Sienci AltMill, Shapeoko and X-Carve files
 declare this kind.
 
 Router options stay on the **Milling** tab; there is no separate Router
@@ -131,7 +131,13 @@ before applying. Mounting a router does not relax the mill's checks:
 an out-of-travel move or excessive spindle rpm is refused by name.
 
 The library also supplies **Sienci AltMill 2x4**, **4x4** and **4x8**
-machines, paired with the **grblHAL** post. **grblHAL 3-axis** and
+machines, paired with the **grblHAL** post. For hobby frames it supplies
+**Carbide 3D Shapeoko 5 Pro** (4x4, 4x2 and 2x2), **Inventables X-Carve
+2021 1000 mm** and **Inventables X-Carve Pro** (4x4 and 4x2), paired with
+the **Grbl 1.1** post. These files state only the travel and the spindle
+that the makers publish. They state no axis rates and no machine-Z retract,
+so the Z lift stays in the work offset, and each tool change is an M0 stop.
+**grblHAL 3-axis** and
 **TinyG 3-axis** are generic controller examples. Check their travel,
 spindle and retract settings against your actual machine before use. For a
 complete sheet-goods walkthrough on the Sienci AltMill 4x4 (plus shop-router
