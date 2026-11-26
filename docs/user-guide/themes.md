@@ -83,6 +83,14 @@ clamped to the range.
 | `mount_origin` | Model origin ring of the tool body page |
 | `mount_hint` | Pick hint text of the tool body page |
 
+A theme does not set the colours that carry a meaning: the verdict
+colours of a simulation (clean, rest, gouge, not judged), the move kinds
+(feed, rapid, plunge), the selection, the boundary roles, and the
+warning, error and missing text of the pages. Each colour-vision mode
+(View preferences) has its own fixed set, and each set is tested so that
+these colours stay apart for that eye. A theme file with such a key is
+refused with "unknown token".
+
 ## Geometry (`geometry`, in points)
 
 | Setting | What it changes | Range |

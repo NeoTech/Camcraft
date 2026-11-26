@@ -27,6 +27,7 @@ pub mod clamp;
 mod dropdown;
 mod legal;
 mod tables;
+mod verdict;
 pub use dropdown::DropGeom;
 
 /// One theme's whole truth: colours, then geometry.

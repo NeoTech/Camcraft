@@ -3,13 +3,14 @@
 //! (WCAG 1.4.11) against the ground, while the dark set stays the house
 //! look byte for byte. The dark values are the consts they already were
 //! (interact.rs, boundary_viz.rs, colorvision's EDGE_WIRE); the light
-//! values are ours, pinned by `viewport_ground_tests`.
+//! values are ours, pinned by `viewport_ground_tests`. The light-ground
+//! palettes are in the token table (`theme/verdict.rs`, #1120).
 //! Provenance: our own palette, specced from the WCAG 2.x contrast
 //! definition `contrast` implements; no HSMWorks material consulted.
 
 use egui::Color32;
 
-use super::colorvision::{EDGE_WIRE, Semantic};
+use super::colorvision::EDGE_WIRE;
 use super::{contrast, theme};
 
 /// The luminance past which a ground counts as light (mid-grey sits at
@@ -31,49 +32,6 @@ const EDGE_WIRE_LIGHT: [f32; 3] = [0.20, 0.23, 0.28];
 #[must_use]
 pub const fn wire_ink(light: bool) -> [f32; 3] {
     if light { EDGE_WIRE_LIGHT } else { EDGE_WIRE }
-}
-
-impl Semantic {
-    /// The house palette on a light viewport: the move kinds and the
-    /// boundary roles as tuned on screen (#698). Verdict and selection
-    /// inks are unchanged: they paint the stock and the selected part,
-    /// not lines on the ground.
-    pub const OFF_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.08, 0.36, 0.12],
-        rapid: [0.01, 0.31, 0.90],
-        plunge: [0.90, 0.13, 0.13],
-        bound_include: [0.10, 0.80, 1.00],
-        bound_exclude: [1.00, 0.20, 0.70],
-        bound_open: [1.00, 0.65, 0.05],
-        ..Semantic::OFF
-    };
-
-    /// Protan/deutan on a light viewport: the same blue-yellow axis as
-    /// `RED_GREEN`, darkened to clear 3:1 - gold feed and exclude against
-    /// the blue rapid and include; plunge and open go near-black, the
-    /// lightness end the dark ground's white open and pale inks held.
-    pub const RED_GREEN_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.55, 0.42, 0.00],
-        rapid: [0.01, 0.31, 0.90],
-        plunge: [0.22, 0.08, 0.00],
-        bound_include: [0.00, 0.30, 0.85],
-        bound_exclude: [0.55, 0.42, 0.00],
-        bound_open: [0.12, 0.12, 0.12],
-        ..Semantic::RED_GREEN
-    };
-
-    /// Tritan on a light viewport: red-cyan survives - the deep green
-    /// feed, red plunge and exclude, a teal include; rapid and open go
-    /// near-black so lightness parts them from the green.
-    pub const TRITAN_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.08, 0.36, 0.12],
-        rapid: [0.05, 0.05, 0.12],
-        plunge: [0.90, 0.13, 0.13],
-        bound_include: [0.00, 0.40, 0.45],
-        bound_exclude: [0.80, 0.05, 0.10],
-        bound_open: [0.12, 0.12, 0.12],
-        ..Semantic::TRITAN
-    };
 }
 
 /// The viewport overlay inks that were tuned against the dark ground.
