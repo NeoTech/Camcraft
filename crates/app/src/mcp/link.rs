@@ -12,8 +12,10 @@
 //!   the discovery file, which only the user can read; any other first
 //!   line closes the connection before a byte of it reaches the app.
 //! - **One file per window.** `<pid>.json` in the link folder; a window
-//!   removes its file when it closes. A file left by a crash is stale:
-//!   its socket does not answer, and the client skips it.
+//!   removes its file when it closes. While it runs it holds the OS lock
+//!   of `<pid>.lock` (link_owner.rs, #3995). A file left by a crash is
+//!   stale: its lock is free, so the client removes it and never dials
+//!   its address, which a false server can hold.
 //!
 //! Provenance: our own design (docs/decisions/3751-cli-ui-link.md) over
 //! std; the per-user folders are the platforms' published locations
@@ -216,6 +218,10 @@ pub struct Registration {
     file: PathBuf,
     socket: Option<PathBuf>,
     entry: Entry,
+    lock_file: PathBuf,
+    /// Held for the life of the window: the proof that it runs (#3995).
+    /// Released by `Drop::drop` after it removed the files.
+    lock: std::fs::File,
 }
 
 impl Registration {
@@ -239,12 +245,20 @@ impl Registration {
 
 impl Drop for Registration {
     fn drop(&mut self) {
-        for path in std::iter::once(&self.file).chain(self.socket.as_ref()) {
+        let files = std::iter::once(&self.file).chain(self.socket.as_ref());
+        for path in files.chain(std::iter::once(&self.lock_file)) {
             if let Err(e) = std::fs::remove_file(path)
                 && e.kind() != std::io::ErrorKind::NotFound
             {
                 tracing::warn!("ui link: cannot remove {}: {e}", path.display());
             }
+        }
+        // Release the lock now, not at the close of the file (#4041): on
+        // Unix a child that another thread is starting holds a copy of the
+        // descriptor until its exec, and the close alone leaves the lock
+        // held while that copy lives.
+        if let Err(e) = self.lock.unlock() {
+            tracing::warn!("ui link: cannot release {}: {e}", self.lock_file.display());
         }
     }
 }
@@ -258,7 +272,18 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
     prepare_dir(dir)?;
     let pid = std::process::id();
     let token = new_token();
-    let (listener, transport, address, socket) = bind(dir, pid)?;
+    // The lock comes first, so no link file of this window is ever unproved.
+    let lock = super::link_owner::hold(dir, pid)?;
+    let lock_file = super::link_owner::lock_path(dir, pid);
+    let (listener, transport, address, socket) = match bind(dir, pid) {
+        Ok(bound) => bound,
+        Err(e) => {
+            let _ = lock.unlock();
+            drop(lock);
+            let _ = std::fs::remove_file(&lock_file);
+            return Err(e);
+        }
+    };
     let entry = Entry {
         format: FORMAT,
         pid,
@@ -269,7 +294,8 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
     };
     // Built before the write, so a failed write still removes the socket.
-    let registration = Registration { file: dir.join(format!("{pid}.json")), socket, entry };
+    let file = dir.join(format!("{pid}.json"));
+    let registration = Registration { file, socket, entry, lock_file, lock };
     write_entry(&registration.file, &registration.entry)?;
     Ok((listener, registration, token))
 }

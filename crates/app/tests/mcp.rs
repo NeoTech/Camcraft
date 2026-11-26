@@ -21,6 +21,9 @@ mod mcp_finish3d_direction;
 #[path = "mcp/finish3d_pass_start.rs"]
 mod mcp_finish3d_pass_start;
 mod mcp_open;
+// #3449: every accepted field of a kind, optional ones and enum words.
+#[path = "mcp/op_type_fields.rs"]
+mod op_type_fields;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;

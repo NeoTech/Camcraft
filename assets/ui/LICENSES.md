@@ -52,7 +52,10 @@ SolidCraft or any other product's icons. AGENTS.md's "operation-specific
 glyphs are drawn original when no generic set fits"; public-domain
 subjects, our renderings; no license notice owed, and they are not part of
 the Tabler set below. (The exclusion lists here are the only record of
-which pixels are ours, so both headings name the same files.)
+which pixels are ours, so both headings name the same files.) The
+Rotary Flow glyph (`op-rotary-flow`, #2827) joins the same set: drawn
+original for #2826's flow band, on the same 24-unit grid, no vendor
+material.
 
 ## Tabler Icons (file-plus, folder-open, file-import, device-floppy, arrow-back-up, arrow-forward-up, trash, tools, heart, home PNGs and assets/ui/svg/heart.svg, assets/ui/svg/home.svg, act-report PNG and assets/ui/svg/act-report.svg - loaded by crates/ui/src/egui_app/icons.rs)
 

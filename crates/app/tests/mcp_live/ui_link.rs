@@ -3,10 +3,12 @@
 //! here: no window is a clear error with exit 3 (never a headless run),
 //! a wrong token is refused before a line reaches the app, a good
 //! session carries a tool call to the window's inbox, and the file goes
-//! when the window's inbox drops.
+//! when the window's inbox drops. A file whose window is not proved
+//! alive by its lock is never dialed (#3995).
 //! Provenance: our own tests over our own link; no HSMWorks material.
 
 use camcraft_app::mcp::link::{self, Entry};
+use camcraft_app::mcp::link_owner::{self, Owner};
 use camcraft_app::mcp::{link_call, link_connect, Inbox, LinkError, Select};
 
 use serde_json::{json, Value};
@@ -15,14 +17,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-fn fresh_dir(tag: &str) -> PathBuf {
+pub(super) fn fresh_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("camcraft-ui-link-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("temp dir");
     dir
 }
 
-fn cli_ui(dir: &Path, args: &[&str]) -> std::process::Output {
+pub(super) fn cli_ui(dir: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_camcraft-cli"))
         .env(link::DIR_ENV, dir)
         .arg("--ui")
@@ -31,7 +33,30 @@ fn cli_ui(dir: &Path, args: &[&str]) -> std::process::Output {
         .expect("the CLI binary runs")
 }
 
-fn write_entry(dir: &Path, entry: &Entry) {
+/// Hold the lock of `pid` in `dir`, as a running window does (#3995).
+pub(super) fn hold_lock(dir: &Path, pid: u32) -> std::fs::File {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(link_owner::lock_path(dir, pid))
+        .expect("open the lock file");
+    file.try_lock().expect("take the lock");
+    file
+}
+
+/// End the window of a [`hold_lock`] file: release its lock at once, as
+/// the OS does when a window process ends (#4041). A plain `drop` is not
+/// enough here: on Unix a `flock` belongs to the open file, and a child
+/// that another test thread is starting holds a copy of each descriptor
+/// until its `exec`. Then the close does not release the lock, and the
+/// CLI still reads the window as alive.
+pub(super) fn release_lock(file: std::fs::File) {
+    file.unlock().expect("release the lock");
+}
+
+pub(super) fn write_entry(dir: &Path, entry: &Entry) {
     let text = serde_json::to_string(entry).expect("entry json");
     std::fs::write(dir.join(format!("{}.json", entry.pid)), text).expect("write entry");
 }
@@ -112,9 +137,10 @@ fn a_wrong_token_is_refused_and_the_window_goes_on_serving() {
     assert_eq!(link::entries(&dir), vec![entry.clone()], "the discovery file names the window");
     assert_eq!(entry.token.len(), 64);
 
-    // The same window, but a file with a wrong token.
+    // The same window, but a file with a wrong token (its lock is held).
     let forged = fresh_dir("token-forged");
     write_entry(&forged, &Entry { token: "f".repeat(64), ..entry.clone() });
+    let _forged_lock = hold_lock(&forged, entry.pid);
     let forged_dir = forged.clone();
     let client = std::thread::spawn(move || link_call(&forged_dir, &Select::Only, "get_job", &json!({})));
     let (result, lines) = serve_until(&inbox, client);
@@ -140,9 +166,11 @@ fn a_wrong_token_is_refused_and_the_window_goes_on_serving() {
     let line: Value = serde_json::from_str(&lines[0]).expect("json");
     assert_eq!(line["method"], json!("tools/call"));
 
-    // The window's file goes with its inbox.
+    // The window's file and its lock file go with its inbox.
+    assert_eq!(link_owner::owner(&dir, entry.pid), Owner::Alive, "the window holds its lock");
     drop(inbox);
     assert!(link::entries(&dir).is_empty(), "the discovery file is removed on close");
+    assert!(!link_owner::lock_path(&dir, entry.pid).exists(), "the lock file is removed on close");
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&forged);
 }
@@ -207,6 +235,8 @@ fn false_server_on_stale_entry_is_refused_with_no_tool_calls_sent() {
         app_version: "0.26.0".into(),
     };
     write_entry(&dir, &stale_entry);
+    // A live owner, so the CLI reaches the hello and the proof check.
+    let _lock = hold_lock(&dir, stale_entry.pid);
 
     // False server thread: accepts connection, sends generic HELLO_OK without proving token
     let false_server = std::thread::spawn(move || {
@@ -300,3 +330,4 @@ fn a_second_ui_call_during_a_slow_call_reports_busy_and_exits_4() {
     drop(inbox);
     let _ = std::fs::remove_dir_all(&dir);
 }
+

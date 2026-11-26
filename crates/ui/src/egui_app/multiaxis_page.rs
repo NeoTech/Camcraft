@@ -258,7 +258,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
-            stated_axis: _,
+            stated_axis,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -271,17 +271,22 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 );
                 hint(ui, "a ball-center radius about the rotation axis: the program opens, hops bands and exits on that cylinder");
                 group(ui, LEVELS, None, |ui| {
-                    retract_hop(ui, world, op_ctx.as_deref(), retract_z, clearance_z, clearance_z, "rotary_flow.retract");
+                    retract_radius_hop(ui, world, op_ctx.as_deref(), retract_z, clearance_z, "rotary_flow.retract");
                 });
             }
             if tab == SEC_PASSES {
+                // #2772's stated axis, like the rotary twins: the band's
+                // heights read as radii about the rotation axis, so the
+                // axis stands above the pose trio it answers for.
+                rotary_stated_axis_editor(ui, stated_axis);
                 auto_opt(ui, "Stepover", "Auto", stepover, "scallop law", (24.0 * tolerance.max(1e-9)).sqrt(), |ui, s| {
                     num(ui, u, s)
                 });
                 hint(ui, "Auto: from tolerance and tool by the scallop law. Stated: developed spacing at the band's outermost radius");
-                axis_editor(ui, lead_deg, lag_deg, max_tilt_deg);
+                rotary_axis_editor(ui, lead_deg, lag_deg, max_tilt_deg);
                 prop_row(ui, "Tolerance", |ui| num(ui, u, tolerance));
                 hint(ui, "the scallop budget: the flow passes blend between the picked chains and the cusps between them stay within it");
+                hint(ui, "the guide: the picked edge chains span the band - pick them on the Geometry tab; a pick that is not an edge chain refuses by name");
             }
             if tab == SEC_FEEDS {
                 prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));

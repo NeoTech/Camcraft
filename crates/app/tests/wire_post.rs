@@ -30,6 +30,9 @@ mod sinker_fixture;
 // #3332: the exit pick of a Wire Contour, over this suite's documents.
 #[path = "wire_post/exit_pick.rs"]
 mod exit_pick;
+// #3215: a meshed model's circles and fillets posted as arcs.
+#[path = "wire_post/model_arcs.rs"]
+mod model_arcs;
 
 use flecs_ecs::prelude::World;
 
@@ -107,6 +110,7 @@ fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
     );
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -145,6 +149,7 @@ fn gouging_die() -> World {
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Location::default()).expect("stock");
     h.execute(&world, stock);
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -452,6 +457,7 @@ fn cutoff_doc(wrong: bool) -> World {
     // Travelling +Y the offcut (x > 60) is on the right.
     let side = if up != wrong { WireSide::Right } else { WireSide::Left };
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

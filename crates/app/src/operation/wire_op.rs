@@ -17,7 +17,7 @@ use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
 use crate::wire_edm::{
-    check_passes, clearance_door, wire_burnout, wire_contour_tapered, wire_passes, TabParams, WireCorner, WireParams, WirePass, WireTaper,
+    check_passes, clearance_door, wire_burnout, wire_passes, TabParams, WireCorner, WireParams, WirePass, WireTaper,
 };
 
 use super::kinds::Carried;
@@ -44,6 +44,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         clearance: super::types::DEFAULT_CLEARANCE,
         skims: Vec::new(),
         sharp_corners: false,
+        lead_arc_radius: None,
     })
 }
 
@@ -393,10 +394,11 @@ pub fn skims_refusal(op: &WireContourOp) -> Option<String> {
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
 /// through-silhouette - is the profile. `stock` is read only for an
-/// open run (#1109). No verification runs yet (the
-/// wire sweep against the part is #534), and the path's notes say so.
+/// open run (#1109). `arcs`: a meshed model's chord, its arcs read back (#3215).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn generate_wire(
     op: &WireContourOp,
+    arcs: Option<f64>,
     cond: Result<(WireCondition, Option<WireCondition>), GenError>,
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
@@ -412,6 +414,17 @@ pub(super) fn generate_wire(
     // cut only; beside any other cut it is refused by name here too.
     if let Some(why) = super::pick_kinds::wire_exit_refusal(op) {
         return Err(GenError::Invalid(why));
+    }
+    // #3991: the tangent arc lead is cut on a selected DXF profile
+    // (`wire_sketch_arcs`), which never reaches here; any other profile
+    // is refused by name, never cut with the straight lead silently.
+    if let Some(why) = super::wire_sketch_arcs::lead_arc_refusal(op) {
+        return Err(GenError::Invalid(why));
+    }
+    if op.lead_arc_radius.is_some() {
+        return Err(GenError::Invalid(
+            "Wire Contour: a tangent arc lead is stated on a profile that is not a selected DXF chain - the arc lead is cut on a drawing's lines and arcs so far; set the straight lead or select the profile in a DXF drawing".into(),
+        ));
     }
     let corner = corner_rule(op, &cond)?;
     // #537: two profiles paired into rulings - its own generator, read
@@ -474,7 +487,7 @@ pub(super) fn generate_wire(
             // and leaves a closed profile there; no pick is main's path.
             match op.picks.first(crate::path_picks::PickRole::Exit) {
                 Some(exit) => crate::wire_edm::wire_contour_exit(&loops, &chains, &p, exit.xy)?,
-                None => wire_contour_tapered(&loops, &chains, &p, &taper)?,
+                None => crate::wire_edm::wire_contour_facets(&loops, &chains, &p, &taper, arcs)?,
             }
         }
     };

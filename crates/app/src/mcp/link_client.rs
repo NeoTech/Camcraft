@@ -17,6 +17,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::link::{self, Entry};
+use super::link_owner::{self, Owner};
 use super::wire::Stream;
 
 /// How long a connect and the hello answer may take before a window is
@@ -181,10 +182,21 @@ pub fn connect(dir: &Path, select: &Select) -> Result<(Entry, Stream), LinkError
     }
     let mut refused = None;
     let mut busy = None;
+    let mut unproved = Vec::new();
     let mut open_ones = Vec::new();
     for entry in candidates {
+        // #3995: only a file whose window is proved alive is dialed.
+        if let Some(why) = not_alive(dir, entry) {
+            unproved.push(why);
+            continue;
+        }
         match open(entry) {
-            Ok(stream) => open_ones.push((entry.clone(), stream)),
+            // Proved again after the hello: the window held its lock for the
+            // whole exchange, so the peer that answered is its own socket.
+            Ok(stream) => match not_alive(dir, entry) {
+                None => open_ones.push((entry.clone(), stream)),
+                Some(why) => unproved.push(why),
+            },
             Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => refused = Some(describe(entry)),
             Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {
                 tracing::info!("ui link: {} is busy: {e}", describe(entry));
@@ -206,8 +218,9 @@ pub fn connect(dir: &Path, select: &Select) -> Result<(Entry, Stream), LinkError
             ))
         } else {
             LinkError::NoWindow(format!(
-                "no running CamCraft window answered: the link files in {} are stale (nothing ran)",
-                dir.display()
+                "no running CamCraft window answered: the link files in {} are stale or unproved{} (nothing ran)",
+                dir.display(),
+                if unproved.is_empty() { String::new() } else { format!(": {}", unproved.join("; ")) }
             ))
         }),
         n => {
@@ -216,6 +229,25 @@ pub fn connect(dir: &Path, select: &Select) -> Result<(Entry, Stream), LinkError
                 "{n} CamCraft windows are running: {}; choose one with --window <pid|project path> (nothing ran)",
                 names.join(", ")
             )))
+        }
+    }
+}
+
+/// `None` when the lock of `entry`'s window proves it alive; else why the
+/// entry is not used, logged. A stale entry's files are removed.
+fn not_alive(dir: &Path, entry: &Entry) -> Option<String> {
+    match link_owner::owner(dir, entry.pid) {
+        Owner::Alive => None,
+        Owner::Gone => {
+            let why = format!("{} is stale: its window has ended; its link file is removed", describe(entry));
+            tracing::warn!("ui link: {why}");
+            link_owner::remove_stale(dir, entry.pid);
+            Some(why)
+        }
+        Owner::Unproved(reason) => {
+            let why = format!("{} is not used: nothing proves that its window runs ({reason})", describe(entry));
+            tracing::warn!("ui link: {why}");
+            Some(why)
         }
     }
 }

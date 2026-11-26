@@ -25,11 +25,12 @@ mod common;
 
 use flecs_ecs::prelude::World;
 
-use camcraft_app::cl::MoveKind;
+use camcraft_app::cl::{Move, MoveKind};
 use camcraft_app::commands::{
     AddTool, CommandError, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock,
 };
 use camcraft_app::geometry::{feature, IDENTITY_Q, Mesh, Point3, Triangle};
+use camcraft_app::machine::{AxisLimits, Coolant, LiveToolCodes, Machine};
 use camcraft_app::model;
 use camcraft_app::operation::{FeatureSel, GeoSel, Height, OpParams, OpStatus, SrcRef};
 use camcraft_app::schema::Location;
@@ -120,13 +121,27 @@ fn band_picks(world: &World, axis: usize, stations: [f64; 2]) -> SrcRef {
 /// faces). The WCS origin stays at the default, so the stated line
 /// through it is the bar's own axis. No generation runs here.
 fn build(axis: usize, params: OpParams, machine: Option<&str>) -> World {
+    build_with(axis, params, |world, h| {
+        if let Some(m) = machine {
+            h.execute(world, LoadMachine::builtin(world, m).expect("machine"));
+        }
+    })
+}
+
+/// [`build`] on a hand-built bench machine instead of a registry name:
+/// the standing bar on the bench's spindle C line.
+fn build_on(params: OpParams, machine: Machine) -> World {
+    build_with(2, params, |world, h| {
+        h.execute(world, LoadMachine::new(world, "millturn.mch".into(), Some(machine)).expect("bench"));
+    })
+}
+
+fn build_with(axis: usize, params: OpParams, load: impl FnOnce(&World, &mut History)) -> World {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
     let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
     h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
-    if let Some(m) = machine {
-        h.execute(&world, LoadMachine::builtin(&world, m).expect("machine"));
-    }
+    load(&world, &mut h);
     let loc = if axis == 0 {
         Location { pos: Point3::new(-16.0, 0.0, 0.0), rot: camcraft_app::geometry::quat_from_axis_angle(1, std::f64::consts::FRAC_PI_2) }
     } else {
@@ -160,6 +175,45 @@ fn h_generate(world: &World) {
 fn moves(world: &World) -> Vec<camcraft_app::cl::Move> {
     let e = model::find_by_name(world, "OP").expect("op");
     model::toolpath_of(world, &e).expect("a cached path").path.moves
+}
+
+/// The path's stated C range (deg), for the travel assertions.
+fn c_range(ms: &[camcraft_app::cl::Move]) -> (f64, f64) {
+    ms.iter()
+        .filter_map(|m| m.rotary)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), c| (l.min(c), h.max(c)))
+}
+
+/// A bench shaped like millturn.mch's spindle: a C about Z with
+/// `travel` stated, its rate stated only when `c_rate` is Some (#906).
+fn bench(travel: (f64, f64), c_rate: Option<f64>) -> Machine {
+    Machine {
+        model: "Bench mill-turn".into(),
+        kind: Some("mill-turn".into()),
+        spindle_max: Some(6000.0),
+        coolants: vec![Coolant { name: "Flood".into(), m_code: "M8".into() }],
+        axes: vec![
+            AxisLimits { name: "X".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits { name: "Y".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits { name: "Z".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits {
+                name: "C".into(),
+                rotary: true,
+                axis: Some([0.0, 0.0, 1.0]),
+                travel: Some(travel),
+                feed: c_rate,
+                rapid: c_rate.map(|v| 2.0 * v),
+                ..Default::default()
+            },
+        ],
+        live_tool: Some(LiveToolCodes {
+            c_axis_on: "M1001".into(),
+            c_axis_off: "M1002".into(),
+            spindle_on: "M1003".into(),
+            spindle_off: "M1004".into(),
+        }),
+        ..Default::default()
+    }
 }
 
 fn is_ok(world: &World) -> bool {
@@ -206,24 +260,85 @@ fn the_band_generates_on_the_stated_a_and_cuts_radially() {
     }
 }
 
+/// #2828: the shipped millturn's spindle C (-360..360 travel, stated
+/// rates) carries the full-ring band. Each flow pass winds a whole
+/// turn of C; between passes the path retracts to its link cylinder,
+/// and the unwind rewinds whole turns there - orbit rapids on the
+/// cylinder - so every C stays inside the travel. The refusal the
+/// unproven law answered before is gone. (The section is not posted
+/// here: the radial field law's own verdict on the band's convex
+/// crease is a separate, already-reported finding.)
 #[test]
-fn the_millturns_spindle_c_gate_refuses_a_full_ring_band_past_travel() {
-    // millturn.mch's spindle C states [0, 0, 1]: the standing bar ON
-    // the spindle line holds it, but a full-ring band's flow passes
-    // wind C continuously (climb keeps the sense), and the unwind law
-    // is proven for Rotary Contour only - the stamp refuses where the
-    // C would rewind, by name, and no path is cached (issue #33's
-    // `unwinds: false`, matching RotaryParallel).
-    let world = build(2, flow(None, 25.0), Some(MILLTURN));
-    let err = generate_err_text(&world, "OP");
-    assert!(err.contains("past the machine's C travel"), "{err}");
-    assert!(err.contains("unwinding C"), "{err}");
-    let e = model::find_by_name(&world, "OP").expect("op");
-    assert!(model::toolpath_of(&world, &e).is_none(), "a refused band leaves no path");
+fn the_millturns_spindle_c_unwinds_a_full_ring_band_at_its_radial_links() {
+    let world = world_for(2, flow(None, 25.0), Some(MILLTURN));
+    assert!(is_ok(&world), "the band generates and unwinds on the spindle C");
+    let ms = moves(&world);
+    let (lo, hi) = c_range(&ms);
+    assert!(lo >= -360.0 - 1e-9 && hi <= 360.0 + 1e-9, "every C inside the travel: {lo}..{hi}");
+    for w in ms.windows(2) {
+        assert_eq!(w[0].to, w[1].from, "the chain holds through the rewinds");
+    }
+    let worst = ms.windows(2).filter_map(|w| Some((w[1].rotary? - w[0].rotary?).abs())).fold(0.0, f64::max);
+    assert!(worst < 90.0, "C stays continuous through the rewinds, worst {worst}");
+    // The passes still wind whole turns (a multi-pass band), and the
+    // rewinds ride as orbit rapids on the retract cylinder - tip
+    // radius 25 less the 3 mm ball - spanning whole turns of C.
+    let fed: f64 = ms.iter().filter(|m| m.kind == MoveKind::Feed).filter_map(|m| m.rotary).fold(0.0, |a, c| a.max(c.abs()));
+    assert!(fed >= 300.0, "the band's passes wind C, widest {fed}");
+    let on_cyl = |m: &Move| {
+        m.kind == MoveKind::Rapid
+            && m.from != m.to
+            && m.from.z == m.to.z
+            && (m.from.x.hypot(m.from.y) - 22.0).abs() < 0.5
+            && (m.to.x.hypot(m.to.y) - 22.0).abs() < 0.5
+    };
+    let mut best_run = 0.0f64;
+    let mut run: Vec<&Move> = Vec::new();
+    let flush = |run: &mut Vec<&Move>, best: &mut f64| {
+        if let (Some(first), Some(last)) = (run.first().and_then(|m| m.rotary), run.last().and_then(|m| m.rotary)) {
+            *best = best.max((last - first).abs());
+        }
+        run.clear();
+    };
+    for m in &ms {
+        if on_cyl(m) {
+            run.push(m);
+        } else {
+            flush(&mut run, &mut best_run);
+        }
+    }
+    flush(&mut run, &mut best_run);
+    assert!(best_run >= 300.0, "a rewind orbits a whole turn on the link cylinder, widest run {best_run}");
     // The verify's own read still answers the machine's stated line
     // for the sheet and the axis pick.
+    let e = model::find_by_name(&world, "OP").expect("op");
     let op = model::operation_of(&world, &e).expect("operation");
     let _ = fixture::rotary_axis_of(&world, &op);
+}
+
+/// #906: a rewind needs a stated C rate. The bench states the travel
+/// but no rate, so the multi-pass band's rewind is refused by name -
+/// never posted at an uncapped feed - and no path is cached.
+#[test]
+fn a_flow_rewind_without_a_stated_c_rate_is_refused_by_name() {
+    let world = build_on(flow(None, 25.0), bench((-360.0, 360.0), None));
+    let err = generate_err_text(&world, "OP");
+    assert!(err.contains("Rotary Flow") && err.contains("states a C travel but no C rate"), "{err}");
+    let e = model::find_by_name(&world, "OP").expect("op");
+    assert!(model::toolpath_of(&world, &e).is_none(), "a refused band leaves no path");
+}
+
+/// The single-cut stretch the radial rewind cannot answer: one flow
+/// pass spans a whole turn of C between the band's radial links, wider
+/// than a travel that narrow - no clear link stands inside it, and
+/// the band is refused by name.
+#[test]
+fn a_flow_pass_wider_than_the_stated_travel_refuses_by_name() {
+    let world = build_on(flow(None, 25.0), bench((-90.0, 90.0), Some(6000.0)));
+    let err = generate_err_text(&world, "OP");
+    assert!(err.contains("Rotary Flow") && err.contains("no clear link stands inside it"), "{err}");
+    let e = model::find_by_name(&world, "OP").expect("op");
+    assert!(model::toolpath_of(&world, &e).is_none(), "a refused band leaves no path");
 }
 
 #[test]

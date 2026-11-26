@@ -26,8 +26,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             blend_turns, blend_radius,
             holes,
-            tilt, picks: _,
+            tilt, picks,
         } => {
+            if tab == SEC_GEO {
+                super::start_exit_rows::raster_groups(ui, u, picks); // #3326
+            }
             if tab == SEC_HEIGHTS {
                 orientation_editor(ui, u, tilt);
                 height_editor(

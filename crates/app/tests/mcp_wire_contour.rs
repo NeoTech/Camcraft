@@ -9,12 +9,15 @@
 //!
 //! Gate map (#1108): covers app::mcp (edit, job, tools, setup_tools),
 //! app::commands (CreateOperation, EditOperationParams tool and wire
-//! doors), app::operation (wire_op).
+//! doors), app::operation (wire_op, wire_sketch_arcs).
 //! Provenance: our own tests over our own fixtures. The conditions are
 //! SYNTHETIC - invented numbers of a plausible size, from no machine's
 //! manual (#290 D4, D10).
 
 mod pocket_support;
+// #3991: the tangent arc lead over MCP.
+#[path = "mcp_wire_contour/arc_lead.rs"]
+mod arc_lead;
 
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::mcp::Server;
@@ -344,6 +347,7 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
             verify_tolerance: 0.01,
         }),
         sharp_corners: true,
+        lead_arc_radius: Some(0.5),
     };
     let dto_keys: BTreeSet<String> = serde_json::to_value(&populated)
         .expect("serialize WireContourDto")

@@ -1907,6 +1907,9 @@ pub struct State {
     /// cut to the playhead on a worker thread, its newest picture
     /// feeding `field_view` (dropping it stops and joins the worker).
     pub field_play: Option<camcraft_app::stock_play_worker::PlayWorker>,
+    /// #3336: the layer playback of `field_play` (the GPU cutter on the
+    /// render device, and whether the eye can show its frames).
+    pub layer_play: crate::play_layer::LayerPlayback,
     /// The transport's timeline, built once per `doc_version` (never
     /// per frame: it walks every op's path) - see `shell::cached_script`.
     pub sim_script_cache: Option<(u64, std::sync::Arc<camcraft_app::sim::Script>)>,
@@ -2450,6 +2453,7 @@ impl State {
             program_sim: None,
             field_view: None,
             field_play: None,
+            layer_play: crate::play_layer::LayerPlayback::default(),
             sim_script_cache: None,
             sim_op_starts: None,
             sim_tool_cache: std::sync::Mutex::default(),

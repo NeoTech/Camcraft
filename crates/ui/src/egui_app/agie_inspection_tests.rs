@@ -219,6 +219,7 @@ fn plain_dxf_wire_page() -> State {
         skims: Vec::new(),
         four_axis: None,
         sharp_corners: false,
+        lead_arc_radius: None,
     });
     let src = SrcRef::Selection(vec![GeoSel { entity: "shape".into(), feature: FeatureSel::SketchChain(id) }]);
     let cmd = camcraft_app::commands::CreateOperation::new(&st.world, "Die", "Wire", src, params).expect("die cut");

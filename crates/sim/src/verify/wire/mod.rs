@@ -60,6 +60,12 @@
 //! the last pass under it: a move that cuts a drafted wall at one
 //! height must cut it at every height.
 //!
+//! Arcs read from a meshed model (#3215): a vertical cut whose arcs were
+//! read back from the facets passes between the facet chords and the
+//! true circle. The caller states the model's chord as the verify
+//! tolerance (`taper_chord`) for it too. The undercut law runs only for
+//! a cut that states a taper.
+//!
 //! Provenance: plain 2D distance and region geometry (point-segment
 //! distance, polygon booleans and the disc sweep of `geo2d`, clipper2)
 //! over the public wire EDM practice the umbrella #290 cites: the kerf
@@ -176,8 +182,9 @@ pub struct WireJob<'a> {
     /// kerf may enter the model's facets and still pass the kerf law.
     /// 0 judges the facets as they stand.
     pub verify_tol: f64,
-    /// A constant-taper cut (#3210, module head): `verify_tol` is the
-    /// model's chord tolerance, and the undercut law runs under it.
+    /// `verify_tol` is the model's chord tolerance (module head): a
+    /// constant-taper cut (#3210), whose undercut law runs under it, or a
+    /// vertical cut of arcs read from the facets (#3215).
     pub taper_chord: bool,
 }
 
@@ -315,7 +322,10 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
     }
     if job.taper_chord {
         gouge = gouge.map(WireFinding::under_chord);
-        // A burnout is cut vertical and never states a taper.
+    }
+    // A burnout is cut vertical and never states a taper; nor does a
+    // vertical cut of arcs read from the facets (#3215).
+    if job.taper_chord && job.taper {
         v.findings.extend(undercut::judge(&job.sections, |s| product(s, opening), &wire, &passes, tol));
     }
     v.findings.extend(gouge);

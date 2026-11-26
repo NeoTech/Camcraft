@@ -122,6 +122,8 @@ mod camera_target;
 mod structural;
 // #2772 parts 1-2 (PR #3674 item 5): the stated rotation axis group.
 mod rotary_stated_axis;
+// #2827: the Rotary Flow band's Passes tab - axis group, band rows, guide hint.
+mod rotary_flow_page;
 // #2181: the transport row of the calculation before playback.
 mod transport_precalc;
 mod sim_op_steps;

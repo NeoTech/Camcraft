@@ -187,19 +187,15 @@ use super::*;
 /// off the model - so a v78, v79 and v80 file steps up unchanged. An
 /// old reader must refuse a v81 file rather than drop the statement
 /// and turn the part about an axis the user never named.
-/// v81 (#2772): the rotary kinds' operations may state their own
-/// rotation axis (`stated_axis`, a direction through the setup's work
-/// offset origin, overriding the machine's stated rotary line). Absent
-/// is what every v80 file stated: follow the machine, else fit the axis
-/// off the model - so a v78, v79 and v80 file steps up unchanged. An
-/// old reader must refuse a v81 file rather than drop the statement
-/// and turn the part about an axis the user never named.
 /// v82 (#2826): the Rotary Flow operation arrives (`rotary_flow`, the
 /// picked guide chains' kind, its heights read as ball-center radii
 /// about the stated axis). No older file names the arm, so a v81 file
-/// steps up unchanged. An old reader must refuse a v82 file rather
-/// than drop the op it cannot read: the post would re-open a document
-/// whose flow band op vanished without a word.
+/// steps up unchanged. This step is a compatibility break: every file
+/// this build writes says v82, and a v81 reader refuses the new files
+/// (see the `BREAKING CHANGE` footer of the commit that stepped the
+/// ladder). An old reader must refuse a v82 file rather than drop the
+/// op it cannot read: the post would re-open a document whose flow
+/// band op vanished without a word.
 /// v83 (#3237): a 2D Chamfer may state its planar lead-in and lead-out.
 /// Absence is the compatibility marker for the pre-v83 fixed open-chain
 /// air extension; explicit `Lead::None` is different and adds no XY
