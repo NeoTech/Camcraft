@@ -24,6 +24,7 @@ fn plan3() -> Plan {
 fn batch_runs_kernel_and_release_and_slow_list_are_unchanged() {
     assert!(plan::BATCH_CRATES.contains(&"kernel"));
     assert!(plan::ALL_CRATES.contains(&"kernel"));
+    assert!(plan::BATCH_CRATES.contains(&"pathkernel") && plan::ALL_CRATES.contains(&"pathkernel"));
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let b = plan::batch(&root);
     assert!(b.steps.iter().any(|s| s.name.starts_with("kernel suites")));
@@ -83,4 +84,28 @@ fn gate_options_parse() {
     assert_eq!(g.failed.as_deref(), Some("gate-logs/release-1"));
     assert!(parse_gate(&a("batch --only")).is_err());
     assert!(parse_gate(&a("test op_area --only kernel")).is_err());
+}
+
+/// #4055: the quick gate reads `ALL_CRATES` (quick.rs), so a workspace crate that no list names would be
+/// missed. Each `crates/<d>` member of the root manifest is in `ALL_CRATES`, batch runs each but ui,
+/// and clippy covers each but kernel (as before).
+#[test]
+fn the_gate_lists_name_every_workspace_crate() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let text = std::fs::read_to_string(root.join("Cargo.toml")).expect("root manifest");
+    let start = text.find("members").expect("members list");
+    let end = start + text[start..].find(']').expect("end of the members list");
+    let members: std::collections::BTreeSet<&str> = text[start..end]
+        .split('"')
+        .filter_map(|m| m.strip_prefix("crates/"))
+        .collect();
+    let all: std::collections::BTreeSet<&str> = plan::ALL_CRATES.iter().copied().collect();
+    assert_eq!(members, all, "the root members and ALL_CRATES differ");
+    let batch: Vec<&str> = plan::ALL_CRATES.iter().copied().filter(|d| *d != "ui").collect();
+    assert_eq!(plan::BATCH_CRATES, batch.as_slice());
+    let mut clippy: Vec<&str> = plan::CLIPPY.to_vec();
+    clippy.sort_unstable();
+    let mut want: Vec<&str> = plan::ALL_CRATES.iter().copied().filter(|d| *d != "kernel").collect();
+    want.sort_unstable();
+    assert_eq!(clippy, want);
 }

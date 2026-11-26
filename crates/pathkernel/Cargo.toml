@@ -1,0 +1,11 @@
+[package]
+name = "camcraft-pathkernel"
+description = "The path kernel: the stage types of one 2D path planner (region, guide curves, load control, order, link, entry and exit) and their laws. Depends on geometry only. Clean-room implementation, public sources only."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# docs/decisions/4024-path-kernel-design.md "Dependencies": geometry only -
+# no cl, tools or sim edge (the tool and the stock are passed in).
+camcraft-geometry = { workspace = true }

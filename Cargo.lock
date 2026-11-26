@@ -843,6 +843,7 @@ version = "0.27.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
+ "camcraft-pathkernel",
  "camcraft-sim",
  "camcraft-tools",
  "serde",
@@ -850,6 +851,13 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "camcraft-pathkernel"
+version = "0.27.0"
+dependencies = [
+ "camcraft-geometry",
 ]
 
 [[package]]
