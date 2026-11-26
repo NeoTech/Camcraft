@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use egui::accesskit::Role;
 use egui_kittest::kittest::Queryable;
@@ -15,8 +15,8 @@ use super::super::super::ai_chat::{
 use super::super::super::layout;
 use super::super::{shell_harness, CommandKind, Tab};
 use super::{
-    blank_harness, has_op_row, pump_until_idle, select_provider, submit_prompt,
-    toggle_ai_chat_via_view_door, BlockingTransport, ScriptedTransport,
+    blank_harness, has_op_row, pump_until_idle, pump_until_started, select_provider, submit_prompt,
+    toggle_ai_chat_via_view_door, BlockingTransport, HANG_GUARD, ScriptedTransport,
 };
 
 #[test]
@@ -154,12 +154,7 @@ fn cancel_stops_running_worker_via_atomic_flag_and_leaves_document_unchanged() {
     let before_done = h.state().state.history.done_len();
 
     submit_prompt(&mut h, "Long running request");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !started.load(Ordering::SeqCst) {
-        assert!(Instant::now() < deadline, "worker never started");
-        std::thread::sleep(Duration::from_millis(5));
-        h.run();
-    }
+    pump_until_started(&mut h, &started, HANG_GUARD);
     assert!(h.state().state.ai_chat.is_running());
     h.get_by_role_and_label(Role::Button, "Cancel").click();
     pump_until_idle(&mut h);
@@ -167,6 +162,41 @@ fn cancel_stops_running_worker_via_atomic_flag_and_leaves_document_unchanged() {
     assert!(saw_cancel.load(Ordering::SeqCst), "Arc<AtomicBool> cancel stopped worker");
     assert!(h.query_by_label_contains("Cancelled").is_some());
     assert_eq!(h.state().state.history.done_len(), before_done);
+}
+
+#[test]
+fn cancel_after_long_ui_stall_still_reaches_blocked_worker() {
+    // Pins #4021: a slow machine can stall the UI thread between the worker start
+    // and the Cancel click. The worker must wait for the flag, not for a clock.
+    let mut h = blank_harness();
+    h.run();
+    toggle_ai_chat_via_view_door(&mut h);
+
+    let started = Arc::new(AtomicBool::new(false));
+    let saw_cancel = Arc::new(AtomicBool::new(false));
+    let transport = Arc::new(BlockingTransport {
+        started: Arc::clone(&started),
+        saw_cancel: Arc::clone(&saw_cancel),
+    });
+    h.state_mut().state.ai_chat.set_transport(transport);
+
+    submit_prompt(&mut h, "Long running request");
+    pump_until_started(&mut h, &started, HANG_GUARD);
+    std::thread::sleep(Duration::from_secs(6));
+    h.get_by_role_and_label(Role::Button, "Cancel").click();
+    pump_until_idle(&mut h);
+
+    assert!(saw_cancel.load(Ordering::SeqCst), "worker saw the cancel flag");
+    assert!(h.query_by_label_contains("Cancelled").is_some());
+}
+
+#[test]
+#[should_panic(expected = "AI chat transport never started before the hang guard expired")]
+fn startup_wait_refuses_a_transport_that_never_started() {
+    let mut h = blank_harness();
+    let started = AtomicBool::new(false);
+    // Exercise the same deadline check without waiting for the full hang guard.
+    pump_until_started(&mut h, &started, Duration::ZERO);
 }
 
 #[test]

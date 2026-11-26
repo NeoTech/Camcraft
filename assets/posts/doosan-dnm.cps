@@ -28,7 +28,7 @@
 //     - M88: High-Pressure Through-Spindle Coolant (TSC) ON
 //     - M89: High-Pressure Through-Spindle Coolant (TSC) OFF
 // - Real-world machine G-code verification:
-//   * Production sample program from @spikeypineapple (NeoTech/Camcraft#614) stored at
+//   * Production sample program from a machine owner (NeoTech/Camcraft#614) stored at
 //     docs/evidence/614-dnm5700-sample.nc, confirming G5.1 Q1 R5 / G5.1 Q0, M07, and
 //     G65 P9832 / P9833 / P9810 / P9814 on Doosan DNM 5700 (Fanuc 0i-MF).
 // Clean-Room Protocol: Original clean-room work; behavior specced only from public manuals.

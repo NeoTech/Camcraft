@@ -147,6 +147,35 @@ fn the_picked_start_over_the_stock_matches_golden() {
     common::write_golden("contour_start_point.cl", &common::gen_to_cltext(&tp.path));
 }
 
+/// #3326 review: a pick is stated in the setup's frame, as the geometry is.
+/// Under a work offset turned 90 degrees the generator works in a turned
+/// frame; the start and the exit pick enter it with the ring. Without that
+/// the cut enters at (0, 25) and leaves at (-35, 0), on the wrong walls.
+#[test]
+fn a_rotated_work_offset_reads_the_contour_picks_in_the_setup_frame() {
+    use camcraft_app::commands::SetWcsOrigin;
+    use camcraft_app::geometry::{quat_from_euler, Point3};
+    use camcraft_app::schema::Location;
+
+    let (world, mut h) = job();
+    let placement = Location { pos: Point3::new(0.0, 0.0, 0.0), rot: quat_from_euler(0.0, 0.0, 90f64.to_radians()) };
+    h.execute(&world, SetWcsOrigin::new(&world, placement).expect("yaw WCS"));
+    let mut op = contour_op(Some(Point2::new(36.0, 0.0)));
+    if let Some(picks) = op.path_picks_mut() {
+        picks.exit = vec![PathPick::xy(Point2::new(0.0, 26.0))];
+    }
+    h.execute(&world, CreateOperation::new(&world, "Op1", "T", SrcRef::Stock, op).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Op1").expect("generate"));
+    let e = model::find_by_name(&world, "Op1").expect("op");
+    let tp = model::toolpath_of(&world, &e).expect("cached path");
+    let near = |v: f64, want: f64| (v - want).abs() < 1e-6;
+    // The cutter-centre ring is 5 mm off the walls: x = 35 on the right, y = 25 on the top.
+    let on = tp.path.moves.iter().any(|m| near(m.to.x, 35.0) && near(m.to.y, 0.0) && m.from.x > 35.0);
+    assert!(on, "the lead-in ends at the start pick's foot (35, 0): {:?}", tp.path.notes);
+    let leaves = tp.path.moves.iter().any(|m| near(m.from.x, 0.0) && near(m.from.y, 25.0) && m.to.y > 25.0);
+    assert!(leaves, "the lead-out leaves at the exit pick's foot (0, 25): {:?}", tp.path.notes);
+}
+
 fn mcp(s: &mut Server, name: &str, args: Value) -> (bool, Value) {
     let msg = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } });
     let reply = s.handle(&msg).expect("an answer");

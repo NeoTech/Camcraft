@@ -43,6 +43,8 @@ const ORIGIN_Z: f64 = 20.0;
 enum Rig {
     /// A about X on the table.
     TableA,
+    /// A about X on the table, with stated clearance for the index swing.
+    TableAClear,
     /// A about X on the table, B about Y on A.
     Trunnion,
 }
@@ -53,7 +55,7 @@ fn machine_text(rig: Rig) -> String {
     };
     let head = r#"{ "id": "hed", "name": "head", "type": "head", "spindle": { "min_speed": 50.0, "max_speed": 15000.0 } }"#;
     let (table, b) = match rig {
-        Rig::TableA => (rot("ra", "A", "[1.0, 0.0, 0.0]", ""), ""),
+        Rig::TableA | Rig::TableAClear => (rot("ra", "A", "[1.0, 0.0, 0.0]", ""), ""),
         Rig::Trunnion => (rot("ra", "A", "[1.0, 0.0, 0.0]", &format!(r#", "parts": [ {} ]"#, rot("rb", "B", "[0.0, 1.0, 0.0]", ""))), r#", "B": { "coordinate": 4 }"#),
     };
     format!(
@@ -91,7 +93,12 @@ fn face_on(rig: Rig, a_deg: f64, b_deg: f64, over: f64) -> (World, OpStatus, Vec
 fn face_posted(rig: Rig, a_deg: f64, b_deg: f64, over: f64, post: Option<PostRef>) -> (World, OpStatus, Vec<Warning>, Vec<String>) {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
-    let m = parse_mch(&machine_text(rig)).unwrap_or_else(|e| panic!("test machine: {e}"));
+    let mut m = parse_mch(&machine_text(rig)).unwrap_or_else(|e| panic!("test machine: {e}"));
+    if matches!(rig, Rig::TableAClear) {
+        let a = m.axes.iter_mut().find(|a| a.name == "A").expect("table A");
+        a.nose_to_axis = Some(250.0);
+        a.axis_to_table = Some(100.0);
+    }
     h.execute(&world, LoadMachine::new(&world, "test-table-tilt.mch".into(), Some(m)).expect("machine"));
     if let Some(p) = post {
         h.execute(&world, SelectPost::new(&world, p).expect("post"));
@@ -99,7 +106,12 @@ fn face_posted(rig: Rig, a_deg: f64, b_deg: f64, over: f64, post: Option<PostRef
     h.execute(&world, SetWcsOrigin::new(&world, Location { pos: Point3::ZERO, rot: IDENTITY_Q }).expect("G54 on the lines"));
     let at = Location { pos: Point3::ZERO, rot: IDENTITY_Q };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, at).expect("stock"));
-    let t = catalog().into_iter().find(|(n, _)| *n == "EM-0400-2FL").map(|(_, t)| t).expect("catalog");
+    let mut t = catalog().into_iter().find(|(n, _)| *n == "EM-0400-2FL").map(|(_, t)| t).expect("catalog");
+    if matches!(rig, Rig::TableAClear) {
+        // This synthetic long-flute cutter clears the tilted stock.
+        // Keep the stock, tool-body checks and all verdicts intact.
+        t.flute_len = 80.0;
+    }
     h.execute(&world, AddTool::new(&world, "EM-0400-2FL", t).expect("tool"));
     let p = OpParams::Face {
         holes: Default::default(),
@@ -154,6 +166,25 @@ fn a_3_2_plane_under_the_work_a_turning_table_can_leave_turned_up_is_refused_by_
     assert!(warns.iter().any(|w| matches!(w, Warning::FirstTraverseLow { .. }) && w.blocks_post()), "{warns:?}");
     let err = posting::post_setup_unwritten(&world).expect_err("the program must not post");
     assert!(err.contains("Face1"), "{err}");
+}
+
+#[test]
+fn the_posed_verdict_alone_refuses_the_post_by_operation_name() {
+    let (world, status, warns) = face_on(Rig::TableAClear, 30.0, 0.0, 16.0);
+    assert_eq!(status, OpStatus::Ok);
+    let problems = posting::verification_gate(&world);
+    assert!(!problems.iter().any(|p| p.contains("index") || p.contains("nose_to_axis")), "the index swing must not mask the posed refusal: {problems:?}");
+    let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
+    assert_eq!(blocking.len(), 1, "only the posed verdict blocks: {warns:?}");
+    assert!(matches!(blocking[0], Warning::FirstTraverseLow { at: 0, fixture: false, tilted: true, .. }));
+    let err = posting::post_setup_unwritten(&world).expect_err("the posed verdict must hold the post");
+    assert!(err.contains("Face1: the first rapid (move 0) comes from an unknown position at the clearance height 36.000 mm, under the stock top at 38.735 mm (both measured along the tilted tool axis) - raise the clearance height by at least 2.735 mm"), "{err}");
+    // Changing only the clearance removes the posed verdict and posts.
+    let (world, status, warns) = face_on(Rig::TableAClear, 30.0, 0.0, 20.0);
+    assert_eq!(status, OpStatus::Ok);
+    assert_eq!(low(&warns), None, "{warns:?}");
+    assert!(posting::verification_gate(&world).is_empty(), "the control clears the verification gate");
+    posting::post_setup_unwritten(&world).expect("the control must post, not fail another clause");
 }
 
 #[test]

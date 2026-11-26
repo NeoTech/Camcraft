@@ -1,5 +1,6 @@
 //! Provenance: reserved layout definitions and block record owners in the Autodesk DXF Reference.
 use super::entities::layer_name;
+use super::insert::Definitions;
 use super::pairs::{Pairs, Record, handle, integer, number};
 use super::types::{DxfError, error};
 use std::collections::{BTreeMap, BTreeSet};
@@ -51,7 +52,13 @@ impl Blocks {
         Ok(())
     }
 
-    pub fn read(&mut self, input: &mut Pairs<'_>, limit: usize) -> Result<(), DxfError> {
+    /// Layout blocks are checked here; every other block definition is kept in `defs`.
+    pub fn read<'a>(
+        &mut self,
+        input: &mut Pairs<'a>,
+        defs: &mut Definitions<'a>,
+        limit: usize,
+    ) -> Result<(), DxfError> {
         loop {
             let start = input
                 .record()?
@@ -62,8 +69,13 @@ impl Blocks {
             if start.kind != "BLOCK" {
                 return Err(error(start.kind, "expected BLOCK or ENDSEC"));
             }
-            if self.wrappers.len() >= limit {
-                return Err(error("BLOCKS", "layout block count exceeds limit"));
+            if self.wrappers.len() + defs.len() >= limit {
+                return Err(error("BLOCKS", "block count exceeds limit"));
+            }
+            let upper = start.required(2)?.trim().to_ascii_uppercase();
+            if !upper.starts_with("*MODEL_SPACE") && !upper.starts_with("*PAPER_SPACE") {
+                defs.define(start, input)?;
+                continue;
             }
             let name = layout_name(start.required(2)?)
                 .ok_or_else(|| error("BLOCK", "unsupported block definition"))?;

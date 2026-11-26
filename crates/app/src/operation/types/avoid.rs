@@ -54,7 +54,8 @@ impl DoNotTouch {
 pub fn do_not_touch_applies(kind: OpType) -> bool {
     matches!(
         kind,
-        OpType::Pocket
+        OpType::Contour
+            | OpType::Pocket
             | OpType::Offset2D
             | OpType::Adaptive2D
             | OpType::Pocket3D
@@ -72,7 +73,7 @@ pub fn do_not_touch_unsupported(kind: OpType) -> Option<String> {
         None
     } else {
         Some(format!(
-            "'Do not touch' is supported on 2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave operations - clear it on {kind}"
+            "'Do not touch' is supported on 2D Contour, 2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave operations - clear it on {kind}"
         ))
     }
 }

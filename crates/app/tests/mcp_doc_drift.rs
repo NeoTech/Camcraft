@@ -126,6 +126,91 @@ fn every_live_tool_is_in_the_guide_and_the_local_prompt() {
     }
 }
 
+/// Stop at the next section or separator, not at an unrelated tool row.
+fn known_gaps(skill: &str) -> String {
+    let (_, rest) = skill
+        .split_once("## Known Remaining Gaps\n")
+        .expect("the skill keeps its Known Remaining Gaps section");
+    rest.lines()
+        .take_while(|line| {
+            let line = line.trim();
+            line != "---" && !line.starts_with("## ") && !line.starts_with("# ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Recognize snake_case and CamelCase identifiers, plus single-word tools
+/// in code spans. Ordinary prose such as "post a follow-up" is not a tool.
+fn gap_tool_mentions(text: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for (i, span) in text.split('`').enumerate() {
+        for word in span.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
+            let mut snake = String::new();
+            for (i, c) in word.chars().enumerate() {
+                if c.is_ascii_uppercase() && i > 0 {
+                    snake.push('_');
+                }
+                snake.push(c.to_ascii_lowercase());
+            }
+            if is_tool_word(word) || is_tool_word(&snake) || i % 2 == 1 {
+                names.push(snake);
+            }
+        }
+    }
+    names
+}
+
+#[test]
+fn the_gap_scanner_distinguishes_identifiers_from_prose_and_other_sections() {
+    let skill = "## Known Remaining Gaps\nset_units, SetProgram and `post` are identifiers.\n\
+                 A post or undo in prose is not an identifier. `NoSuchCommand` is not live.\n\
+                 ## Shipped\n`get_job`\n";
+    let names = gap_tool_mentions(&known_gaps(skill));
+    let live = catalog::tool_names();
+    let found: Vec<_> = names
+        .iter()
+        .map(String::as_str)
+        .filter(|name| live.contains(name))
+        .collect();
+    assert_eq!(found, ["set_units", "set_program", "post"]);
+    assert_eq!(
+        known_gaps("## Known Remaining Gaps\nmissing\n---\n`get_job`"),
+        "missing"
+    );
+}
+
+#[test]
+fn the_known_gaps_name_no_shipped_tool() {
+    let names = gap_tool_mentions(&known_gaps(&read(DOCS[0])));
+    let shipped: Vec<_> = catalog::tool_names()
+        .into_iter()
+        .filter(|name| names.iter().any(|word| word == name))
+        .collect();
+    assert!(
+        shipped.is_empty(),
+        "the Known Remaining Gaps list names shipped tools: {}",
+        shipped.join(", ")
+    );
+}
+
+#[test]
+fn the_skill_links_the_generated_reference_and_local_prompt() {
+    let skill = read(DOCS[0]);
+    let link = format!("](../../../{})", catalog::REFERENCE_PATH);
+    assert!(
+        skill.contains(&link),
+        "the skill must link to {}",
+        catalog::REFERENCE_PATH
+    );
+    for command in ["camcraft-cli mcp reference", "camcraft-cli mcp prompt"] {
+        assert!(
+            skill.contains(&format!("`{command}`")),
+            "the skill must document {command}"
+        );
+    }
+}
+
 #[test]
 fn the_local_prompt_json_context_carries_the_shared_rules() {
     let context = camcraft_app::mcp::provider::prompt_context(&serde_json::json!({}));

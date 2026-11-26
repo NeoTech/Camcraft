@@ -809,7 +809,9 @@ function onCycle() {
     }
     g = "G84";
   } else if (p.CycleType === "BORE") g = "G86";
-  else if (p.CycleType === "BACKBORE") g = "G89";
+  // #4142: a back-bore with no dwell is G85 (feed in, feed out): a G89
+  // with no P word would leave the dwell to the control's modal P.
+  else if (p.CycleType === "BACKBORE") g = secDwell > 0 ? "G89" : "G85";
   else if (p.CycleType === "REAM") g = "G85";
   else { msg(who() + "canned cycle " + p.CycleType + " is not supported by Mach4 post"); return; }
 
@@ -838,7 +840,7 @@ function onCycle() {
     block(["G99"]);
     var ws = [g, "X" + fu(qBot[0]), "Y" + fu(qBot[1]), "Z" + fu(qBot[2]), "R" + fu(qR[2])];
     if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && Number(p.Q) > 0) ws.push("Q" + fu(Number(p.Q)));
-    if (secDwell > 0 && (g === "G82" || g === "G89")) ws.push("P" + trimDec(secDwell, 3, false));
+    if (secDwell > 0 && (g === "G82" || g === "G89")) ws.push("P" + trimDec(secDwell, 3, true));
     ws.push(g === "G84" ? "F" + fn(Number(p.FeedRate)) : ff(Number(p.FeedRate)));
     block(ws);
     cycleSig = sig;

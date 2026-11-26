@@ -16,7 +16,7 @@ use camcraft_app::operation::{KindInfo, OpParams};
 use camcraft_app::path_picks::{PathPick, PickRole};
 
 use super::super::dialog_tests::{face, opened, page};
-use super::super::op_tabs::SEC_LEADS;
+use super::super::op_tabs::{SEC_GEO, SEC_LEADS};
 use super::{EXIT_GROUP, START_GROUP};
 use crate::state::State;
 
@@ -180,9 +180,10 @@ fn the_slot_lead_tab_has_both_point_groups_and_takes_a_start() {
 #[test]
 fn kinds_without_a_picked_start_say_so_by_name() {
     // #3324: the maintainer's 2D Offset, a lead-tab kind (2D Pocket) and
-    // a Geometry-only kind (Face): each draws both groups, no switch and
-    // no X / Y row, and a line that says why the pick is not taken.
-    for label in ["2D Offset", "2D Pocket", "Face"] {
+    // a Geometry-only kind (Engrave; the Face takes its picks since
+    // #3326): each draws both groups, no switch and no X / Y row, and a
+    // line that says why the pick is not taken.
+    for label in ["2D Offset", "2D Pocket", "Engrave"] {
         let mut state = opened(crate::operations::retype(&face(), kind(label)));
         state.op_tab = SEC_LEADS;
         let mut harness = page(state);
@@ -199,6 +200,44 @@ fn kinds_without_a_picked_start_say_so_by_name() {
         assert_eq!(why, 2, "{label}: each says why, by name");
         assert_eq!(draft(&harness), (None, None), "drawing the tab writes no point");
     }
+}
+
+/// #3326: the Face states its start and exit on Geometry, typed in model
+/// X and Y; the switch seeds a point, Clear puts the automatic raster back,
+/// and Apply commits through the command history.
+#[test]
+fn the_face_geometry_tab_states_and_clears_its_start_and_exit() {
+    let mut state = opened(face());
+    state.op_tab = SEC_GEO;
+    let mut harness = page(state);
+    harness.run();
+    for label in [START_GROUP, EXIT_GROUP, "Start point stated", "Exit point stated"] {
+        assert!(harness.query_by_label(label).is_some(), "Face has {label} on Geometry");
+    }
+    assert_eq!(harness.query_all_by_label_contains(super::NOT_TAKEN).count(), 0, "the Face takes both picks");
+    for r in ["Start X", "Start Y", "Exit X", "Exit Y", "Clear start", "Clear exit"] {
+        assert!(harness.query_by_label(r).is_none(), "{r} waits for its switch");
+    }
+    assert_eq!(draft(&harness), (None, None), "drawing the tab writes no point");
+    harness.get_by_label("Start point stated").click();
+    harness.run();
+    harness.get_by_label("Exit point stated").click();
+    harness.run();
+    assert!(same(draft(&harness).0, 0.0, 0.0) && same(draft(&harness).1, 0.0, 0.0), "each switch seeds its point");
+    for r in ["Start X", "Start Y", "Exit X", "Exit Y", "Clear start", "Clear exit"] {
+        assert!(harness.query_by_label(r).is_some(), "{r} is on the page");
+    }
+    harness.get_by_label("Apply").click();
+    harness.run();
+    harness.state_mut().drain_actions();
+    assert!(same(live(harness.state()).0, 0.0, 0.0) && same(live(harness.state()).1, 0.0, 0.0), "Apply stores both picks");
+    harness.get_by_label("Clear exit").click();
+    harness.run();
+    assert_eq!(draft(&harness).1, None, "Clear exit restores the automatic exit");
+    assert!(same(draft(&harness).0, 0.0, 0.0), "the start stays");
+    let st = harness.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert_eq!(live(harness.state()), (None, None), "undo restores the automatic raster");
 }
 
 /// #3328: Drill, Bore and Thread take the first hole and the last hole.

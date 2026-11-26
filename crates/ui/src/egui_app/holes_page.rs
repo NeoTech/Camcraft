@@ -10,6 +10,7 @@
 use super::fields::*;
 use super::layout::prop_row_hint;
 use camcraft_app::machining2d::BoreStrategy;
+use camcraft_app::machining3d::Entry3D;
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
@@ -128,17 +129,23 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             break_through,
             strategy,
             pass_start,
+            entry,
             picks: _,
         } => {
             let helical = *strategy != BoreStrategy::Rings;
             if tab == SEC_LEADS {
-                // Each hole opens with the dive at its centre; the
-                // descents between levels and the links are the user's.
-                // #2830: a helical bore has one level and no dive.
+                // Each hole opens with the entry the user chose (plunge by
+                // default); the descents between levels and the links are
+                // the user's. Ramp and helix angles cap the descent.
+                lead_page::bore_entry_group(ui, u, entry, links);
+                // #2830 x #3828: a helical bore has one level, and its helix
+                // is the entry. The group stays, so a Ramp or Helix entry can
+                // be set back to Plunge; it is refused by name, never ignored.
                 if helical {
-                    hint(ui, "each hole opens with a helix on the wall radius from the plunge height; the level links do not apply");
-                } else {
-                    hint(ui, "each hole opens with a plunge at its centre");
+                    hint(ui, HELICAL_ENTRY_HINT);
+                    if *entry != Entry3D::Plunge {
+                        consequence(ui, HELICAL_ENTRY_REFUSED);
+                    }
                 }
                 lead_page::leads_tab(ui, u, "bore", None, links);
             }
@@ -338,6 +345,15 @@ fn hole_floor(ui: &mut Ui, world: &World, setup: Option<&str>, bottom_z: &mut Op
         None => hint(ui, "every hole stops at its own floor from the model"),
     }
 }
+
+/// The Lead-in hint of a Helical Bore (#2830 x #3828): its helix is the
+/// entry of each hole.
+pub(crate) const HELICAL_ENTRY_HINT: &str =
+    "Helical: each hole opens with a helix on the wall radius from the plunge height; the helix is the entry, and the level links do not apply";
+/// The note under the Entry group when a Bore is Helical and the entry is
+/// Ramp or Helix (#2830 x #3828): the generator refuses the operation.
+pub(crate) const HELICAL_ENTRY_REFUSED: &str =
+    "Ramp and Helix entries are not available with the Helical strategy (the helix is the entry): set the entry to Plunge, or the operation is refused";
 
 /// The Bore strategy (#2830): the ring ladder, or one helix per hole
 /// with an optional spring pass.

@@ -24,7 +24,7 @@ fn between(a: Point, b: Point, p: Point) -> bool {
     (0..2).all(|d| (a[d].min(b[d])..=a[d].max(b[d])).contains(&p[d]))
 }
 
-fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
+pub(super) fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
     let (u, v, w, z) = (
         cross(a, b, c),
         cross(a, b, d),

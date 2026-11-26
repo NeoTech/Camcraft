@@ -673,7 +673,8 @@ fn viewport_panel(
         };
         // #195: the origin triads, chunky - a dark outline, then the axis
         // colour - over the 1 px GPU lines (a wgpu line has no width).
-        let shade = egui::Color32::from_black_alpha(170);
+        let pal = super::theme::current();
+        let shade = pal.handle_shade;
         let segs = crate::frame_cost::time("ui/viewport.gizmos", || interact::gizmo_segments(state, aspect));
         for (a, b, _) in &segs {
             ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::GIZMO_OUTLINE_PX, shade));
@@ -720,7 +721,7 @@ fn viewport_panel(
         // row-hover ink.
         {
             let ink = rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::RowHover));
-            let halo = egui::Color32::from_black_alpha(200);
+            let halo = pal.pick_halo;
             crate::frame_cost::time("ui/viewport.row_hover", || {
                 crate::pick_highlight_mesh::paint_row_hover(
                     ui.painter(),
@@ -742,10 +743,10 @@ fn viewport_panel(
         // The machined mesh's hovered facet (#25): the hover ink's yellow,
         // a veil over the class colour and its outline.
         if let Some(tri) = crate::machined::hover_facet_uv(state, aspect) {
-            let ink = egui::Color32::from_rgb(255, 217, 102);
+            let ink = super::theme::current().viewport_hover;
             ui.painter().add(egui::Shape::convex_polygon(
                 tri.iter().map(|uv| to_px(*uv)).collect(),
-                egui::Color32::from_rgba_unmultiplied(255, 217, 102, 90),
+                super::ground_ink::facet_veil(ink),
                 egui::Stroke::new(1.5, ink),
             ));
         }
@@ -753,11 +754,11 @@ fn viewport_panel(
         // the names along row A and column 1.
         let plates = crate::frame_cost::time("ui/viewport.plates", || crate::plate_viz::plate_marks(state, aspect));
         for (a, b, dowel) in &plates.segs {
-            let ink = if *dowel { egui::Color32::from_rgb(120, 200, 255) } else { egui::Color32::from_rgb(230, 190, 90) };
+            let ink = if *dowel { pal.plate_dowel } else { pal.plate_hole };
             ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(1.5, ink));
         }
         for (uv, text) in plates.labels {
-            ui.painter().text(to_px(uv), egui::Align2::LEFT_BOTTOM, text, font.clone(), egui::Color32::from_rgb(230, 190, 90));
+            ui.painter().text(to_px(uv), egui::Align2::LEFT_BOTTOM, text, font.clone(), pal.plate_hole);
         }
         // The Boundary group's marks (M11.5 UX): role-coloured picked
         // edges, the edge a click would take, chain ends, machined side.
@@ -850,7 +851,7 @@ fn viewport_panel(
                 .map(|u| egui::pos2(rx0 + u[0] * rw, ry0 + u[1] * rh));
             let pb = interact::project_uv(&mvp, b)
                 .map(|u| egui::pos2(rx0 + u[0] * rw, ry0 + u[1] * rh));
-            let amber = egui::Color32::from_rgb(255, 170, 60);
+            let amber = pal.gcode_line;
             if let (Some(pa), Some(pb)) = (pa, pb) {
                 ui.painter()
                     .line_segment([pa, pb], egui::Stroke::new(2.5, amber));
@@ -910,7 +911,7 @@ fn viewport_panel(
             ui.painter().galley_with_override_text_color(
                 r.min,
                 g.clone(),
-                egui::Color32::from_white_alpha(150),
+                super::theme::current().empty_hint,
             );
         }
         // Corner hint: the control legend, or the live mode while dragging.

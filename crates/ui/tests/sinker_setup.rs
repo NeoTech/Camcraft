@@ -52,6 +52,7 @@ fn electrode() -> Tool {
         turning: None,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         catalog: Default::default(),
         cutting: Vec::new(),
         outline: Vec::new(),

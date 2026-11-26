@@ -32,7 +32,7 @@ pub(crate) fn paint(
     to_px: impl Fn([f32; 2]) -> egui::Pos2,
     ink: impl Fn([f32; 3]) -> egui::Color32,
 ) {
-    let halo = egui::Color32::from_black_alpha(HALO_ALPHA);
+    let halo = crate::egui_app::theme::current().pick_halo;
     crate::pick_highlight_mesh::paint_selected(
         painter,
         state,

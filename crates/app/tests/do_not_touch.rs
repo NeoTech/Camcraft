@@ -1,9 +1,12 @@
 //! #2055: Protection commands, generation and the post gate.
 //! Gate map (M4.4): covers app::operation, app::commands::operation::do_not_touch,
-//! app::mcp, app::posting, motion::machining2d::pocket, motion::machining3d, sim::verify::avoid.
+//! app::mcp, app::posting, motion::machining2d::pocket, motion::machining2d::contour_avoid,
+//! motion::machining3d, sim::verify::avoid.
 
 mod common;
 mod do_not_touch_support;
+#[path = "do_not_touch/contour.rs"]
+mod contour;
 #[path = "do_not_touch/trace.rs"]
 mod trace;
 
@@ -221,16 +224,18 @@ fn pocket3d_do_not_touch_keeps_clear_raises_links_and_blocks_impossible_cut() {
     assert_eq!(c.ok("get_operation_do_not_touch", json!({ "operation": op_name }))["clearance"], json!(2.0));
 
     // Unsupported kind refusal + overlap with src & Include boundary refusal.
-    let contour_op = c.ok("add_operation", json!({ "kind": "2D Contour", "tool": "SteppedMill" }))["operation"]
+    // #3344: 2D Contour takes protection now; a Slot does not.
+    let slot_op = c.ok("add_operation", json!({ "kind": "Slot", "tool": "SteppedMill" }))["operation"]
         .as_str()
-        .expect("contour name")
+        .expect("slot name")
         .to_owned();
     let unsup = c.refused("set_operation_do_not_touch", json!({
-        "operation": contour_op,
+        "operation": slot_op,
         "picks": [{ "model": "tower", "id": tower_top_face }]
     }));
     assert!(
-        unsup.contains("2D Pocket")
+        unsup.contains("2D Contour")
+            && unsup.contains("2D Pocket")
             && unsup.contains("2D Offset")
             && unsup.contains("3D Pocket")
             && unsup.contains("Engrave"),

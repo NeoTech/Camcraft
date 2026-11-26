@@ -92,6 +92,6 @@ fn a_saved_file_keeps_its_key_order_and_new_keys_go_last() {
 #[test]
 fn a_new_machine_writes_the_same_text_serde_json_would() {
     let m = MachineDraft::blank(Kind::MillTurn);
-    let want = serde_json::to_string_pretty(&m.value).expect("pretty") + "\n";
+    let want = serde_json::to_string_pretty(m.value()).expect("pretty") + "\n";
     assert_eq!(m.text(), want);
 }

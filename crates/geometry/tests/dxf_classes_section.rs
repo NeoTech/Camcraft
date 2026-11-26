@@ -98,3 +98,28 @@ fn an_entity_in_a_section_without_geometry_is_refused() {
         }
     }
 }
+
+#[test]
+fn mpolygon_and_the_surface_kinds_in_a_section_without_geometry_are_refused() {
+    // #3683: these ENTITIES-chapter kinds were missing from the list and slipped through.
+    for name in ["CLASSES", "ACDSDATA", "THUMBNAILIMAGE"] {
+        for kind in [
+            "MPOLYGON",
+            "EXTRUDEDSURFACE",
+            "LOFTEDSURFACE",
+            "NURBSURFACE",
+            "PLANESURFACE",
+            "REVOLVEDSURFACE",
+            "SWEPTSURFACE",
+        ] {
+            let record = format!("0\n{kind}\n8\n0\n");
+            let error = parse(file(&section(name, &record)).as_bytes())
+                .unwrap_err()
+                .0;
+            assert!(
+                error.contains(name) && error.contains(&format!("{kind} entity")),
+                "{error}"
+            );
+        }
+    }
+}

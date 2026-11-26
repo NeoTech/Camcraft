@@ -46,6 +46,7 @@ var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
 var setupNext = null;      // #1647: null means no marker; a cleaned name may be empty
+var dOff = false;          // #4144: a G53 retract wrote D0 - the next section selects the D again
 var homedAt = -1;          // linesWritten() just after a trip home (#504): onClose skips its own home when nothing followed
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;
@@ -376,7 +377,7 @@ function safeZ() {
 // Cutter radius compensation in the control (#39; DIN 66025 / ISO 6983
 // G41 left / G42 right / G40 cancel, and the family's published
 // programming fundamentals: the radius is the ACTIVE cutting edge's -
-// the D the tool call already selected (T n D n) - so no D word rides
+// the D the tool call already selected (T n D1, dWord) - so no D word rides
 // the engage block; the approach NORM runs straight to the first point
 // and stands the tool perpendicular to the path tangent at that start
 // point, the start-up the generator's lead law assumes - stated on the
@@ -400,7 +401,7 @@ function onRadiusCompensation(side) {
   compD = "";
   compOn = true;
   if (properties.CompensationType === "wear" && !compNoted) {
-    block(["; WEAR COMP - D" + ni(tNo) + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS"]);
+    block(["; WEAR COMP - " + dWord() + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS"]);
     compNoted = true;
   }
 }
@@ -456,6 +457,36 @@ function onSpindleSpeed() {
   }
 }
 
+// #4143: the D word of the tool call. 840D sl Fundamentals 12/2018,
+// section 6.6 (pp. 82-83): D selects an offset data block of the ACTIVE
+// tool. With "D number = cutting edge number" each tool has D1..D12, so a
+// one-edge milling cutter is D1 - D<T> selects an edge that a high tool
+// number does not have (an alarm, or no length). A control set to free D
+// numbers states `tooling.d_number: "tool-number"` in its machine file.
+var dRuleRefused = false;
+function dWord() {
+  var r = (typeof machine !== "undefined" && machine && machine.dNumber) || "first-edge";
+  if (r === "tool-number") return "D" + ni(tNo);
+  if (r !== "first-edge" && !dRuleRefused) {
+    dRuleRefused = true;
+    msg("machine tooling.d_number " + r + " - this post writes first-edge (D1) or tool-number (D = T) only");
+  }
+  return "D1";
+}
+
+// #4144: every G53 retract is a rapid (G53 is not a motion word: after a
+// G1 the move would run at the feed, after G2/G3 the control alarms) and
+// deselects the tool offset in the same block. 840D sl Fundamentals
+// 12/2018: G53 suppresses only the frames (section 9.1 p. 151, section
+// 13.10 p. 358), D0 deactivates the tool offsets (section 6.6 p. 82), and
+// the manual's own program example retracts with "G0 G53 X.. Z.. D0"
+// (section 4.4, pp. 54-55). So the Z word is the spindle reference
+// point's machine height, not the tool tip's.
+function retractZ(z) {
+  block(["G0", "G53", "Z" + fu(z), "D0"]);
+  dOff = true;
+}
+
 function onToolChange(number, name) {
   toolName = clean(name);
   tNo = number;
@@ -464,7 +495,7 @@ function onToolChange(number, name) {
 
 // The preamble closes over everything a raw motion line needs to be a
 // legal program: plane, offsets, tool, spindle, coolant. The tool call
-// selects tool and geometry together (T n D n) - no G43 word exists
+// selects tool and geometry together (T n D1, dWord) - no G43 word exists
 // in this family.
 // #616: per-operation smoothing, only when the document turned it on
 // (the stream then carries PARAM Smoothing / SmoothingMode). Siemens CYCLE832 high-speed settings: tolerance plus _ROUGH/_FINISH.
@@ -502,9 +533,17 @@ function startPreamble() {
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
-    block(["T" + ni(tNo), "D" + ni(tNo), "M6"]);
+    block(["T" + ni(tNo), dWord(), "M6"]);
     xyUnknown = true;          // #1633: the first traverse states its height again
     toolWait = false;
+    dOff = false;
+  } else if (dOff) {
+    // #4144: a retract left D0 active with the same tool in the spindle;
+    // select its offset again before any motion, and the first traverse
+    // states its height (the length applies on the first Z move, section 6.6).
+    block([dWord()]);
+    xyUnknown = true;
+    dOff = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
     block(["S" + ni(sRpm), "M3"]);
@@ -538,7 +577,7 @@ function afterOp() {
     // #1647: lift Z before inviting the operator to re-clamp the part.
     var setupZ = safeZ();
     if (setupZ === null) return;
-    block(["G0", "G53", "Z" + fu(setupZ)]);
+    retractZ(setupZ);
     note("SETUP CHANGE - NEXT: " + (next || "UNNAMED SETUP"));
   }
   if (ask === "optional-stop") { block(["M1"]); return; }
@@ -546,7 +585,7 @@ function afterOp() {
   if (ask === "home") {
     var z = safeZ();            // refused (named once): no Z lift, so no XY move either
     if (z === null) return;
-    block(["G0", "G53", "Z" + fu(z)]);   // machine coordinates, Z first (onClose's law)
+    retractZ(z);               // machine coordinates, Z first (onClose's law)
     block(["G0", "G53", "X0", "Y0"]);
     homedAt = linesWritten();
     return;
@@ -957,7 +996,7 @@ function onClose() {
   // home) already is the program-end home - written once, not twice.
   if (linesWritten() !== homedAt) {
     var z = safeZ();
-    if (z !== null) block(["G53", "Z" + fu(z)]);
+    if (z !== null) retractZ(z);   // #4144: G0, and D0 like every G53 retract
   }
   var u = endUnitsWord();
   if (u) block([u]);

@@ -290,3 +290,56 @@ fn a_taper_the_machine_cannot_post_is_refused_at_the_command_door() {
     let (world, _) = punch(&angle, 3.0);
     assert!(model::find_by_name(&world, "Punch1").is_some(), "an angle-word machine needs no guide planes for a taper");
 }
+
+/// #4039: the origin at the part bottom, and the machine's lower guide
+/// at Z0. The work bottom meets the guide, so a vertical and a tapered
+/// cut post. A round-off of the origin (1e-12, or 0.1 + 0.2 - 0.3) is
+/// no gap. A real gap is still refused by name, and its message never
+/// reads "-0.000".
+#[test]
+fn a_work_bottom_at_the_lower_guide_is_within_reach() {
+    use camcraft_app::commands::SetWcsOrigin;
+    use camcraft_app::schema::Location;
+
+    let at_zero = FIXTURE.replace("\"lower_guide_z\": -5.0", "\"lower_guide_z\": 0.0");
+    let posted = |taper: f64, origin_z: f64, tag: &str| {
+        let (world, made) = punch(&at_zero, taper);
+        made.expect("the punch generates");
+        let origin = Location { pos: Point3::new(0.0, 0.0, origin_z), ..Location::default() };
+        History::default().execute(&world, SetWcsOrigin::new(&world, origin).expect("set the work origin"));
+        post(&world, tag)
+    };
+    for taper in [0.0, 3.0] {
+        for (i, z) in [0.0, 1e-12, 0.1 + 0.2 - 0.3].into_iter().enumerate() {
+            if let Err(e) = posted(taper, z, &format!("bottom-at-guide-{taper}-{i}")) {
+                panic!("taper {taper}, origin Z{z:e}: the work bottom meets the lower guide: {e}");
+            }
+        }
+    }
+    let err = posted(0.0, 0.01, "bottom-gap").expect_err("the work is 0.01 mm below the lower guide");
+    assert!(err.contains("Punch1: work bottom Z-0.010 is below the lower guide Z0.000, outside the guides' reach"), "{err}");
+    let err = posted(0.0, 1e-4, "bottom-small-gap").expect_err("the work is 0.0001 mm below the lower guide");
+    assert!(err.contains("Punch1: work bottom Z-0.000100 is below the lower guide Z0.000"), "{err}");
+    let err = posted(3.0, 0.01, "taper-gap").expect_err("the tapered work is below the lower guide");
+    assert!(err.contains("Punch1") && err.contains("outside the guides' reach") && !err.contains("-0.000 "), "{err}");
+}
+
+/// #4039, the mirror: the work top at the upper guide is within reach,
+/// with the origin's round-off; a real gap above it is refused.
+#[test]
+fn a_work_top_at_the_upper_guide_is_within_reach() {
+    use camcraft_app::commands::SetWcsOrigin;
+    use camcraft_app::schema::Location;
+
+    let at_top = FIXTURE.replace("\"upper_guide_z\": 25.0", "\"upper_guide_z\": 12.0");
+    let posted = |origin_z: f64, tag: &str| {
+        let (world, made) = punch(&at_top, 0.0);
+        made.expect("the punch generates");
+        let origin = Location { pos: Point3::new(0.0, 0.0, origin_z), ..Location::default() };
+        History::default().execute(&world, SetWcsOrigin::new(&world, origin).expect("set the work origin"));
+        post(&world, tag)
+    };
+    posted(-1e-12, "top-at-guide").expect("the work top meets the upper guide");
+    let err = posted(-0.01, "top-gap").expect_err("the work is 0.01 mm above the upper guide");
+    assert!(err.contains("Punch1: work top Z12.010 is above the upper guide Z12.000, outside the guides' reach"), "{err}");
+}

@@ -1515,8 +1515,10 @@ impl ParamsDto {
                 break_through,
                 strategy,
                 pass_start,
+                entry,
                 picks,
             } => ParamsDto::Bore {
+                entry: super::links::entry_dto(*entry),
                 break_through: *break_through,
                 helical: matches!(strategy, crate::machining2d::BoreStrategy::Helical { .. }),
                 spring_pass: matches!(strategy, crate::machining2d::BoreStrategy::Helical { spring_pass: true }),
@@ -2959,8 +2961,10 @@ impl ParamsDto {
                 helical,
                 spring_pass,
                 pass_start,
+                entry,
                 picks,
             } => OpParams::Bore {
+                entry: super::links::entry_of(*entry),
                 break_through: *break_through,
                 strategy: if *helical {
                     crate::machining2d::BoreStrategy::Helical { spring_pass: *spring_pass }

@@ -177,7 +177,7 @@ pub use field_cut::SdfTool;
 pub use field_lathe::{LatheAxis, MERIDIAN_TOL};
 pub use field_rotary::{rotary_chords, rotary_chords_law, ChordLaw, RotaryChordStats, MAX_SUBCHORDS, ROTARY_COLUMN_REFUSAL};
 pub use gouge::dist_seg_tri;
-pub use kernel::{measure, part_surface, StockError, StockReport};
+pub use kernel::{cells_across, measure, part_surface, StockError, StockReport};
 pub use preview::{preview, Preview, PreviewCamera};
 pub use scan::{envelope_scan, envelope_scan_centers, envelope_scan_turned, envelope_scan_within, EnvelopeReport};
 pub use scan_hidden::{HiddenRest, ScanBudget};

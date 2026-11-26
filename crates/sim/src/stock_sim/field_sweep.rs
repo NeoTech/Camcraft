@@ -104,6 +104,18 @@ impl Sweep {
         window_of(self, cell, cap, ax)
     }
 
+    /// The window of the same solid with no travel: its path collapsed
+    /// to its start, the same reach and padding (`window_of`). It lies
+    /// inside `window`. `None` for the lathe's revolved stadium, whose
+    /// window is its own box.
+    pub(crate) fn rest_window(&self, cell: f64, cap: f64, ax: [f64; 3]) -> Option<[(i32, i32); 3]> {
+        if let Sweep::Lathe(_) = self {
+            return None;
+        }
+        let (p0, _) = self.path();
+        Some(window_between(self, p0, p0, cell, cap, ax))
+    }
+
     /// Does the solid span the world above its tip - hold every point
     /// above any point it holds, up to height `z`? The monotone law
     /// `field_floor` reads a cut floor by (#637 E1): true only for an
@@ -233,6 +245,11 @@ fn window_of(sw: &Sweep, cell: f64, cap: f64, ax: [f64; 3]) -> [(i32, i32); 3] {
         return l.window(cell, cap); // the revolved stadium's own box
     }
     let (p0, p1) = sw.path();
+    window_between(sw, p0, p1, cell, cap, ax)
+}
+
+/// `window_of` for the path `p0`..`p1` of `sw`'s solid.
+fn window_between(sw: &Sweep, p0: Point3, p1: Point3, cell: f64, cap: f64, ax: [f64; 3]) -> [(i32, i32); 3] {
     let (lat, axial) = sw.reach();
     let span = |lo: f64, hi: f64, u: usize| {
         let e = axial * ax[u];

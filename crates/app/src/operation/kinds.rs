@@ -1063,6 +1063,7 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
         break_through: None,
         strategy: crate::machining2d::BoreStrategy::Rings,
         pass_start: crate::machining2d::PassStart::Auto,
+        entry: crate::machining3d::Entry3D::Plunge,
         picks: crate::path_picks::PathPicks::default(),
     }
 }

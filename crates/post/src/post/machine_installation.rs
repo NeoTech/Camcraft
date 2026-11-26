@@ -7,7 +7,7 @@ use std::borrow::Cow;
 /// File-form input through the public engine receives the same typed facts, limits and axis
 /// inventory as the app and standalone CLI, which normally supply the static machine mirror.
 pub(super) fn checked_input(m: &Value) -> Result<Cow<'_, Value>, String> {
-    let has_facts = ["/controller/identity", "/tooling/tool_change"]
+    let has_facts = installation::FACT_KEYS
         .iter()
         .any(|key| m.pointer(key).is_some_and(|v| !v.is_null()));
     if has_facts {
@@ -18,6 +18,7 @@ pub(super) fn checked_input(m: &Value) -> Result<Cow<'_, Value>, String> {
         }
         installation::identity(m)?;
         installation::tool_change(m)?;
+        installation::d_number(m)?;
     }
     Ok(Cow::Borrowed(m))
 }
@@ -41,6 +42,9 @@ pub(super) fn mirror(m: &Machine, out: &mut Map<String, Value>) {
     }
     if let Some(mode) = m.tool_change {
         out.entry("tooling").or_insert_with(|| json!({}))["tool_change"] = json!(mode);
+    }
+    if let Some(rule) = m.d_number {
+        out.entry("tooling").or_insert_with(|| json!({}))["d_number"] = json!(rule.word());
     }
 }
 
@@ -66,5 +70,9 @@ pub(super) fn script_props(m: &Value, props: &mut Value) {
     }
     if let Some(mode) = m.pointer("/tooling/tool_change").and_then(Value::as_str) {
         props["toolChangeMode"] = json!(mode);
+    }
+    // #4143: the stated D rule ("first-edge" / "tool-number"); absent when unstated.
+    if let Some(rule) = m.pointer("/tooling/d_number").and_then(Value::as_str) {
+        props["dNumber"] = json!(rule);
     }
 }

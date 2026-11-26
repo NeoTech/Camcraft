@@ -19,13 +19,14 @@ pub(crate) fn draw(ui: &egui::Ui, state: &State, pointer: Option<[f32; 2]>, pane
         return;
     }
     let ink = super::ground_ink::cube();
-    let shade = egui::Color32::from_black_alpha(170);
+    let pal = super::theme::current();
+    let shade = pal.handle_shade;
     let live = state.body_turn.as_ref().map(|d| d.axis);
     let under = pointer.and_then(|p| turn_drag::ring_in(&rings, p));
     let hot = live.or(under);
     for (axis, pts) in &rings {
         let enabled = turn_drag::ring_enabled(state, r.center, *axis);
-        let col = ink.triad.get(*axis).copied().unwrap_or(egui::Color32::WHITE);
+        let col = ink.triad.get(*axis).copied().unwrap_or(pal.handle_text);
         let dim = !enabled || live.is_some_and(|a| a != *axis);
         let col = if dim { col.gamma_multiply(0.35) } else { col };
         let w = if hot == Some(*axis) { 3.5 } else { 2.0 };
@@ -48,7 +49,7 @@ pub(crate) fn draw(ui: &egui::Ui, state: &State, pointer: Option<[f32; 2]>, pane
         let bar = super::viewport_bar::panel_rect(pane, true);
         let at = egui::pos2(bar.center().x, bar.min.y - 6.0);
         ui.painter().text(at + egui::vec2(1.0, 1.0), egui::Align2::CENTER_BOTTOM, &text, font.clone(), shade);
-        ui.painter().text(at, egui::Align2::CENTER_BOTTOM, text, font.clone(), egui::Color32::WHITE);
+        ui.painter().text(at, egui::Align2::CENTER_BOTTOM, text, font.clone(), pal.handle_text);
     }
     if under.is_some_and(|axis| turn_drag::ring_enabled(state, r.center, axis)) || live.is_some() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);

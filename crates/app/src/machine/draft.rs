@@ -15,9 +15,12 @@
 //! machine to a setup stays `LoadMachine`'s job).
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use super::chain::{self, Place, Step};
+use super::chain_view::{ChainView, Memo};
 use super::fields::{self, FieldGroup, FieldKind};
 use super::library::{text_of, MachineSource};
 use super::order::{self, KeyOrder};
@@ -28,8 +31,10 @@ use super::Kind;
 /// One machine file open in the editor.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MachineDraft {
-    /// The file's whole JSON, unknown keys included.
-    pub value: Value,
+    /// The file's whole JSON, unknown keys included. Read it with
+    /// [`Self::value`]; every write goes through [`Self::value_mut`], which
+    /// drops the derived view (#2756, the frame-cost rule of #2238).
+    value: Value,
     /// Where Save writes; `None` = never saved (Save As first).
     pub path: Option<PathBuf>,
     /// A shipped machine: Save is refused, Save As writes a copy.
@@ -38,6 +43,9 @@ pub struct MachineDraft {
     pub dirty: bool,
     /// The key order the file was read in; a save keeps it (#480).
     pub order: KeyOrder,
+    /// The axis chain as the editor shows it, built on the first read
+    /// after a write.
+    view: Memo,
 }
 
 fn read(source: &MachineSource) -> Result<(Value, KeyOrder), Refusal> {
@@ -65,7 +73,7 @@ impl MachineDraft {
             MachineSource::Builtin(_) => (None, true),
             MachineSource::File(p) => (Some(p.clone()), is_shipped_path(p)),
         };
-        Ok(Self { value, path, read_only, dirty: false, order })
+        Ok(Self { value, path, read_only, dirty: false, order, view: Memo::default() })
     }
 
     /// A new machine copied from a catalogue entry: every key of the
@@ -75,7 +83,7 @@ impl MachineDraft {
         let model = value.pointer("/general/model").and_then(Value::as_str).unwrap_or("Machine").to_owned();
         // The template read as an object, so this cannot refuse.
         let _ = fields::set(&mut value, "/general/model", FieldKind::Text, &format!("{model} copy"));
-        Ok(Self { value, path: None, read_only: false, dirty: true, order })
+        Ok(Self { value, path: None, read_only: false, dirty: true, order, view: Memo::default() })
     }
 
     /// A new machine with the keys its kind requires: the model, the
@@ -117,7 +125,27 @@ impl MachineDraft {
                 "parts": [ { "id": "base", "name": "base", "type": "table", "parts": parts } ]
             } }
         });
-        Self { value, path: None, read_only: false, dirty: true, order: KeyOrder::default() }
+        Self { value, path: None, read_only: false, dirty: true, order: KeyOrder::default(), view: Memo::default() }
+    }
+
+    /// The file's whole JSON as it stands.
+    #[must_use]
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+
+    /// The file's JSON to write. Every write to the file comes through
+    /// here, so the derived view is dropped before the file changes.
+    pub fn value_mut(&mut self) -> &mut Value {
+        self.view.clear();
+        &mut self.value
+    }
+
+    /// The axis chain's rows, notes and row keys, built once per write
+    /// and shared on every later read (#2756; the frame-cost rule, #2238).
+    #[must_use]
+    pub fn chain_view(&self) -> Arc<ChainView> {
+        self.view.get(&self.value)
     }
 
     /// The model the file states (empty when none).
@@ -150,7 +178,7 @@ impl MachineDraft {
 
     /// Write one field's typed text into the file (empty = unstated).
     pub fn set(&mut self, pointer: &str, kind: FieldKind, text: &str) -> Result<(), String> {
-        fields::set(&mut self.value, pointer, kind, text)?;
+        fields::set(self.value_mut(), pointer, kind, text)?;
         self.dirty = true;
         Ok(())
     }
@@ -173,10 +201,10 @@ impl MachineDraft {
         let list = format!("{head}/tool_station/coolants");
         if !self.value.pointer(&list).is_some_and(Value::is_array) {
             // Creates the station on the way; the placeholder is replaced at once.
-            fields::set(&mut self.value, &list, FieldKind::Text, "-")?;
+            fields::set(self.value_mut(), &list, FieldKind::Text, "-")?;
         }
         let entry = json!({ "name": name, "mCode": code });
-        match self.value.pointer_mut(&list) {
+        match self.value_mut().pointer_mut(&list) {
             Some(Value::Array(a)) => a.push(entry),
             Some(slot) => *slot = json!([entry]),
             None => return Err(format!("{list}: not a coolant list")),
@@ -197,12 +225,72 @@ impl MachineDraft {
         if !list.ends_with("/coolants") {
             return Err(not_one());
         }
-        match self.value.pointer_mut(list) {
+        match self.value_mut().pointer_mut(list) {
             Some(Value::Array(a)) if index < a.len() => {
                 a.remove(index);
             }
             _ => return Err(not_one()),
         }
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Add a linear axis part (X, Y, Z, U, V or W) at `place` (#2756).
+    /// Returns the new part's pointer. Refused by name, with the file
+    /// unchanged, when the name is taken or not a linear letter.
+    pub fn add_linear_axis(&mut self, place: Place, name: &str) -> Result<String, String> {
+        let at = chain::add_linear(self.value_mut(), place, name.trim())?;
+        self.dirty = true;
+        Ok(at)
+    }
+
+    /// Add a rotary axis part (A, B or C) about `axis` at `place`
+    /// (#2756). Returns the new part's pointer. Refused by name, with
+    /// the file unchanged, on a taken name, a non-rotary letter or a
+    /// zero or non-finite direction.
+    pub fn add_rotary_axis(&mut self, place: Place, name: &str, axis: [f64; 3]) -> Result<String, String> {
+        let at = chain::add_rotary(self.value_mut(), place, name.trim(), axis)?;
+        self.dirty = true;
+        Ok(at)
+    }
+
+    /// Move the axis part at `pointer` one row up or down the chain
+    /// (#2756). Returns where it is now. Refused by name at either end
+    /// or when the pointer names no axis.
+    pub fn move_axis(&mut self, pointer: &str, step: Step) -> Result<String, String> {
+        let at = chain::move_axis(self.value_mut(), pointer, step)?;
+        self.dirty = true;
+        Ok(at)
+    }
+
+    /// Reverse the linear axis at `pointer` (`"direction": -1`, #373),
+    /// or set it back to standard (the key goes: unstated is standard).
+    /// Refused by name on a rotary or when the pointer names no axis.
+    pub fn set_axis_reversed(&mut self, pointer: &str, reversed: bool) -> Result<(), String> {
+        chain::set_reversed(self.value_mut(), pointer, reversed)?;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Turn the rotary at `pointer` about `axis` (#2756). Refused by
+    /// name, with the file unchanged, on a linear and on a zero or
+    /// non-finite direction.
+    pub fn set_rotary_axis(&mut self, pointer: &str, axis: [f64; 3]) -> Result<(), String> {
+        chain::set_axis(self.value_mut(), pointer, axis)?;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// The axis chain's rows in depth-first order (#2756).
+    #[must_use]
+    pub fn axis_rows(&self) -> Vec<chain::AxisRow> {
+        chain::rows(&self.value)
+    }
+
+    /// Remove the axis part at `pointer` (#2756); the parts it carried
+    /// take its place. Refused by name when the pointer names no axis.
+    pub fn remove_axis(&mut self, pointer: &str) -> Result<(), String> {
+        chain::remove(self.value_mut(), pointer)?;
         self.dirty = true;
         Ok(())
     }

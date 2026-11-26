@@ -307,6 +307,13 @@ unstated capability into existence.
   `manual-retract-top`, or `changer`. The middle value requires the
   physical upper change position before manual tool release. A post
   must verify whether its proposed procedure serves the installation.
+- `tooling.d_number` (#4143, optional string) is `first-edge` or
+  `tool-number`. It tells a post that writes a D word in the tool call
+  (the Siemens 840D post) which offset data block to select. Unstated
+  reads `first-edge`: D1, the first cutting edge of the active tool
+  (840D sl Fundamentals, section 6.6, "D number = cutting edge number").
+  State `tool-number` only for a control set to free D numbers where the
+  shop gives each tool the D number equal to its T number.
 - `controller.post` (#2374, optional string): the name of the built-in
   post (`posting::BUILTINS`) that writes this machine's programs. The
   Setup page offers it when the machine is mounted and the setup posts

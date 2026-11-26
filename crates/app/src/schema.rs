@@ -643,12 +643,12 @@ impl PostScriptOptions {
         let aliased: Vec<String> = self
             .by_post
             .keys()
-            .filter(|k| crate::posting::agie::current_key(k) != **k)
+            .filter(|k| crate::posting::aliases::current_key(k) != **k)
             .cloned()
             .collect();
         for old in aliased {
             if let Some(v) = self.by_post.remove(&old) {
-                self.by_post.entry(crate::posting::agie::current_key(&old)).or_insert(v);
+                self.by_post.entry(crate::posting::aliases::current_key(&old)).or_insert(v);
             }
         }
     }

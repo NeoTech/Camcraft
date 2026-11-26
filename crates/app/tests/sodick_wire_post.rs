@@ -182,7 +182,7 @@ fn the_punch_contour_posts_its_sodick_golden_through_the_gate() {
     // The fixture's fictional codes are never read by this post.
     assert!(!text.contains("FX-"), "{text}");
     // The program says it was not verified and what it leaves to the operator.
-    for said in ["NOT VERIFIED ON A CONTROL", "WIRE NOT THREADED AT START", "NO G92 IS WRITTEN", "FLUSHING ARE NOT PROGRAMMED"] {
+    for said in ["NOT VERIFIED ON A CONTROL", "THREADS THE WIRE WITH T91 AT START", "LN1W/LN2W: NOT SUPPORTED", "NO G92 IS WRITTEN", "FLUSHING ARE NOT PROGRAMMED"] {
         assert!(lines.iter().any(|l| l.starts_with('(') && l.contains(said)), "{said}:\n{text}");
     }
 }
@@ -207,11 +207,13 @@ fn taper_and_four_axis_are_refused_by_name() {
 
     let out = run(FIXTURE, &with_param(recs.clone(), "WireTaper", json!(3.0)), &serde_json::Value::Null);
     assert!(out.warnings.iter().any(|m| m.contains("Punch1") && m.contains("is tapered") && m.contains("2-axis cut only")), "{:?}", out.warnings);
-    assert!(!out.program.contains("G01") && !out.program.contains("T91") && !out.program.contains("C110"), "{}", out.program);
+    // #4044: the header comment names T91; only the code lines must not.
+    let code = |p: &str| p.lines().filter(|l| !l.starts_with('(')).collect::<Vec<_>>().join("\n");
+    assert!(!code(&out.program).contains("G01") && !code(&out.program).contains("T91") && !out.program.contains("C110"), "{}", out.program);
 
     let out = run(FIXTURE, &with_param(recs.clone(), "WireFourAxis", json!("arc-length")), &serde_json::Value::Null);
     assert!(out.warnings.iter().any(|m| m.contains("Punch1") && m.contains("is a 4-axis cut")), "{:?}", out.warnings);
-    assert!(!out.program.contains("G01") && !out.program.contains("T91"), "{}", out.program);
+    assert!(!code(&out.program).contains("G01") && !code(&out.program).contains("T91"), "{}", out.program);
 
     // A leaning move (an upper guide offset) in a section that states no
     // taper: refused, and no U V word is written.

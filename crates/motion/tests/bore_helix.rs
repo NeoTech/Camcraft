@@ -20,7 +20,7 @@ use camcraft_motion::entry::Entry3D;
 use camcraft_motion::geo2d::Point2;
 use camcraft_motion::links::Links;
 use camcraft_motion::machining2d::{
-    BoreHole, BoreParams, BoreStrategy, MAX_HELIX_ANGLE_DEG, PassStart, bore, bore_started, helical_pass_start_refusal,
+    BoreHole, BoreParams, BoreStrategy, MAX_HELIX_ANGLE_DEG, PassStart, bore, bore_started, helical_entry_refusal, helical_pass_start_refusal,
     helix_leaves_core, max_helix_bore_diameter, min_helix_bore_diameter_no_center_cut,
 };
 
@@ -244,4 +244,20 @@ fn a_helical_bore_refuses_a_pass_order_by_name() {
         assert!(why.contains("Helical strategy") && why.contains(start.label()), "{why}");
     }
     assert_eq!(bore_started(&p, PassStart::Auto).ok(), Some(path(&p)));
+}
+
+#[test]
+fn a_helical_bore_refuses_a_ramp_or_helix_entry_by_name() {
+    let p = params(hole(11.0, false), false);
+    assert_eq!(helical_entry_refusal(p.strategy, Entry3D::Plunge), None, "Plunge is the default entry word");
+    assert_eq!(helical_entry_refusal(BoreStrategy::Rings, Entry3D::Ramp), None, "the rings take the entry");
+    for (entry, name) in [(Entry3D::Ramp, "Ramp"), (Entry3D::Helix, "Helix")] {
+        let q = BoreParams { entry, ..p.clone() };
+        let why = match bore(&q) {
+            Ok(_) => panic!("{name}: the helix is the entry, so the word is refused"),
+            Err(e) => e.to_string(),
+        };
+        assert!(why.contains("Helical strategy") && why.contains(name), "{why}");
+    }
+    assert_eq!(bore(&p).ok(), Some(path(&p)), "a Plunge entry keeps the helix");
 }

@@ -211,3 +211,21 @@ fn tilted_moves_and_control_comp_are_refused_by_name() {
     let (_, warnings) = run(&m, comp, &Value::Null);
     assert!(warnings.iter().any(|w| w.contains("G41/G42")), "{warnings:?}");
 }
+
+#[test]
+fn blend_tolerance_never_writes_g64_p0() {
+    // #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
+    // When a tolerance rounds to zero under fu() resolution (0.001 mm or 0.0001 in),
+    // the post must clamp to the smallest positive value and never write P0.
+    let m = stated(Some(0.0), false);
+
+    // Header blend tolerance: 0.001 mm in inch is ~0.000039 in, which rounds to 0.0000 in.
+    let nc_inch = post(&m, STREAM, &json!({ "Units": "inch", "blendTolerance": 0.001 }));
+    assert!(nc_inch.contains("\nG64 P0.0001\n"), "inch header clamped: {nc_inch}");
+    assert!(!nc_inch.contains("P0\n") && !nc_inch.contains("P0.0000\n"), "never P0: {nc_inch}");
+
+    // Header blend tolerance: smallest metric value 0.001 mm writes P0.001.
+    let nc_mm = post(&m, STREAM, &json!({ "blendTolerance": 0.001 }));
+    assert!(nc_mm.contains("\nG64 P0.001\n"), "mm header clamped: {nc_mm}");
+    assert!(!nc_mm.contains("P0\n"), "never P0: {nc_mm}");
+}

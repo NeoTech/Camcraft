@@ -28,9 +28,9 @@ use super::contour_whole_slice::{next_region, whole_region_at};
 use super::face::GenError;
 use super::fillet_tally::FilletTally;
 
-const SAME_LEVEL: f64 = 1e-6;
+pub(super) const SAME_LEVEL: f64 = 1e-6;
 
-fn check_unread(
+pub(super) fn check_unread(
     lad: &Ladder,
     remaining: &[f64],
     p: &ContourParams,
@@ -67,7 +67,7 @@ fn check_unread(
 /// First index in `remaining` that needs a fresh region slice below it: either
 /// an outer boundary ring ended before that level, or an interior hole ring
 /// ended and a narrower hole opened inside it at that level (counterbore).
-fn first_split(
+pub(super) fn first_split(
     band: &PreparedBand,
     lad: &Ladder,
     remaining: &[f64],
@@ -116,7 +116,7 @@ fn first_split(
     })
 }
 
-fn trim_ladder(lad: &Ladder, z_cut: f64) -> Ladder {
+pub(super) fn trim_ladder(lad: &Ladder, z_cut: f64) -> Ladder {
     let per_ring: Vec<Vec<f64>> = lad
         .per_ring
         .iter()
@@ -128,7 +128,7 @@ fn trim_ladder(lad: &Ladder, z_cut: f64) -> Ladder {
     Ladder { zs, per_ring, unread: lad.unread.clone() }
 }
 
-fn forward_band_notes(
+pub(super) fn forward_band_notes(
     band: &PreparedBand,
     lad: &Ladder,
     remaining_last: f64,
@@ -151,7 +151,7 @@ fn forward_band_notes(
 /// passes: an outer ring that stops there and has no floor level above it
 /// gets no pass, and the re-slice does not return to it (#2538). Name the
 /// uncut Z range of each such ring.
-fn note_rings_without_floor(
+pub(super) fn note_rings_without_floor(
     band: &PreparedBand,
     lad: &Ladder,
     trimmed: &Ladder,
@@ -175,7 +175,7 @@ fn note_rings_without_floor(
     }
 }
 
-fn stopped(msg: String, b: PathBuilder) -> GenError {
+pub(super) fn stopped(msg: String, b: PathBuilder) -> GenError {
     let partial = b.finish();
     if partial.moves.is_empty() {
         GenError::Invalid(msg)
@@ -184,7 +184,7 @@ fn stopped(msg: String, b: PathBuilder) -> GenError {
     }
 }
 
-fn match_pick(
+pub(super) fn match_pick(
     res: Result<Option<(usize, Point2)>, GenError>,
     matched: &mut bool,
     deferred: &mut Option<GenError>,

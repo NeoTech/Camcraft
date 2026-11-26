@@ -102,8 +102,12 @@ fn a_left_hand_cut_mill_under_m4_climbs_clockwise_and_posts_m4() {
     let out = post_with(&world, include_str!("../../../assets/posts/fanuc.cps"));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert!(out.program.lines().any(|l| l.contains('S') && l.contains("M4")), "{}", out.program);
-    // A post that cannot reverse the spindle refuses the section by name.
+    // #1977: Haas reverses too (M04, Haas Mill NGC Operator's Manual 2025, p. 436).
     let out = post_with(&world, include_str!("../../../assets/posts/haas.cps"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.lines().any(|l| l.starts_with('S') && l.split_whitespace().any(|w| w == "M4")), "{}", out.program);
+    // A post that cannot reverse the spindle refuses the section by name.
+    let out = post_with(&world, include_str!("../../../assets/posts/tormach.cps"));
     assert!(out.warnings.iter().any(|w| w.contains("does not declare millSpindleReverse")), "{:?}", out.warnings);
 }
 

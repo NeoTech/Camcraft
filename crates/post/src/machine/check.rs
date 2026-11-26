@@ -20,6 +20,32 @@ fn source_name(source: Option<SourceLocation<'_>>) -> String {
     }
 }
 
+/// The fix that a spindle-range finding names (#3792).
+pub const SPINDLE_FIX: &str = "set the tool's speed (edit_tool) or apply_cutting_data";
+
+/// Each stated spindle limit that `rpm` is outside of, as (side, limit):
+/// the maximum first. A zero RPM is an unspun tool and is never outside.
+fn outside_spindle_range(machine: &Machine, rpm: f64) -> Vec<(&'static str, f64)> {
+    if rpm.is_nan() || rpm <= 0.0 {
+        return Vec::new();
+    }
+    let above = machine.spindle_max.filter(|hi| rpm > *hi).map(|hi| ("above", hi));
+    let below = machine.spindle_min.filter(|lo| rpm < *lo).map(|lo| ("below", lo));
+    above.into_iter().chain(below).collect()
+}
+
+/// The warning for a tool that enters a document outside the mounted
+/// machine's spindle range (#3792), in the words of the machine check.
+/// `None` inside the range, and for a machine that states no range.
+#[must_use]
+pub fn spindle_range_warning(machine: &Machine, tool_name: &str, rpm: f64) -> Option<String> {
+    let (side, limit) = outside_spindle_range(machine, rpm).into_iter().next()?;
+    Some(format!(
+        "{tool_name} runs {rpm:.0} rpm, {side} the {}'s {limit:.0} - the post will be held; {SPINDLE_FIX}",
+        machine.model
+    ))
+}
+
 /// What a program asks that the machine cannot give. Findings name the
 /// caller-provided source, so a limit violation identifies where it occurs.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -79,7 +105,8 @@ impl MachineCheck {
         self.check_tool_size(machine, source, tool_name, len, diameter);
     }
 
-    /// A zero RPM represents an unspun tool, such as a probe.
+    /// A zero RPM represents an unspun tool, such as a probe. A finding of
+    /// an operation names the fix (#3792); an NC line has no tool to edit.
     pub fn check_spindle(
         &mut self,
         machine: &Machine,
@@ -88,29 +115,15 @@ impl MachineCheck {
         rpm: f64,
     ) {
         let name = source_name(source);
-        if rpm > 0.0 {
-            if let Some(hi) = machine.spindle_max
-                && rpm > hi
-            {
-                say(
-                    self,
-                    format!(
-                        "{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0}",
-                        tool_name
-                    ),
-                );
-            }
-            if let Some(lo) = machine.spindle_min
-                && rpm < lo
-            {
-                say(
-                    self,
-                    format!(
-                        "{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0}",
-                        tool_name
-                    ),
-                );
-            }
+        let fix = match source {
+            Some(SourceLocation::Operation(_)) => format!(" - {SPINDLE_FIX}"),
+            _ => String::new(),
+        };
+        for (side, limit) in outside_spindle_range(machine, rpm) {
+            say(
+                self,
+                format!("{name}: tool {tool_name} runs {rpm:.0} rpm, {side} the machine's {limit:.0}{fix}"),
+            );
         }
     }
 

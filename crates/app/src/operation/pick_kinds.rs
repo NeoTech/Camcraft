@@ -19,6 +19,8 @@ use super::types::{OpParams, OpType};
 pub enum PickCapability {
     /// A point on a closed ring: the ring is re-sequenced to start there
     /// (the 2D contour). Snaps to a wall. Takes a start and an exit.
+    /// The Sinker Burn's ring is its orbit (#3333): the pick is an angle
+    /// round the burn position.
     Ring,
     /// A point inside the region: the descent place of the first pass
     /// and the end of the last pass. Snaps to a point in the region.
@@ -34,6 +36,11 @@ pub enum PickCapability {
     /// The wire's threading point (`WireContourOp.picks`) and its exit
     /// (#3332): the end of an open run, or where a closed cut leaves.
     Threading,
+    /// A point on an edge chain (#3329, the Deburr): the chain nearest
+    /// the start pick is cut first from its end nearest it (a closed
+    /// chain from its point nearest it), and the chain nearest the exit
+    /// pick is cut last to its end nearest it. Snaps to an edge.
+    Chain,
     /// A point in the lathe (Z, X) plane (#3331): the first pass starts
     /// there and the last pass leaves there. Each pick states its Z.
     Meridian,
@@ -61,7 +68,7 @@ impl PickCapability {
     pub fn takes(self, role: PickRole) -> bool {
         match self {
             Self::NotTaken(_) => false,
-            Self::Threading | Self::Ring | Self::Region | Self::HoleOrder | Self::Ends | Self::Raster | Self::Meridian => {
+            Self::Threading | Self::Ring | Self::Region | Self::HoleOrder | Self::Ends | Self::Raster | Self::Chain | Self::Meridian => {
                 matches!(role, PickRole::Start | PickRole::Exit)
             }
         }
@@ -78,7 +85,15 @@ impl KindInfo {
             // the start pick and run on to the exit pick.
             OpType::Contour | OpType::Contour5D => PickCapability::Ring,
             OpType::WireContour => PickCapability::Threading,
+            // #3326: the corner of the first row, the side of the last.
+            OpType::Face => PickCapability::Raster,
+            // #3333: the orbit ring round the burn position, and the two
+            // ends of the side move.
+            OpType::SinkerBurn => PickCapability::Ring,
+            OpType::SinkerSideBurn => PickCapability::Ends,
             OpType::Probe => PickCapability::NotTaken(PICK_NO_PATH),
+            // #3334: the pierce and the torch-off place on a closed contour.
+            OpType::PlasmaProfile => PickCapability::Ring,
             // #3328: the first hole and the last hole of the list.
             OpType::Thread | OpType::Drill | OpType::Bore => PickCapability::HoleOrder,
             // #3331 slice 1: the pick is a point in the lathe (Z, X) plane.
@@ -86,8 +101,12 @@ impl KindInfo {
             OpType::Threading => PickCapability::NotTaken(PICK_THREAD_LAW),
             // #3325: the end where the pass starts, and where it stops.
             OpType::Slot => PickCapability::Ends,
-            OpType::Face
-            | OpType::Pocket
+            // #3330: the raster corner where the cut starts, and the end
+            // of the last pass.
+            OpType::Parallel5D => PickCapability::Raster,
+            // #3329 slice 1: the chain cut first and the chain cut last.
+            OpType::Deburr => PickCapability::Chain,
+            OpType::Pocket
             | OpType::Trace
             | OpType::Adaptive2D
             | OpType::Offset2D
@@ -96,9 +115,7 @@ impl KindInfo {
             | OpType::Circular
             | OpType::Pocket3D
             | OpType::Finish3D
-            | OpType::Deburr
             | OpType::MultiAxisDeburr
-            | OpType::Parallel5D
             | OpType::Swarf
             | OpType::AdvancedSwarf
             | OpType::RotaryContour
@@ -115,12 +132,9 @@ impl KindInfo {
             | OpType::MultiPassTurning
             | OpType::FormTurning
             | OpType::BoringTurning
-            | OpType::PlasmaProfile
-            // #1883: the waterjet's lead picks are owed, as the plasma's.
+            // #1883: the waterjet's lead picks are owed (the plasma's: #3334).
             | OpType::WaterjetProfile
             | OpType::TrochoidalSlot
-            | OpType::SinkerBurn
-            | OpType::SinkerSideBurn
             | OpType::SlotUndercut
             // #2826: the flow band's own start and exit ride its
             // picked chains' own ends, the planner's choice.
@@ -273,6 +287,10 @@ impl OpParams {
             if matches!(self, OpParams::Contour { tilt: Some(_), .. }) {
                 return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
             }
+            // #3326: the Face reads a pick in the setup's XY only.
+            if matches!(self, OpParams::Face { tilt: Some(_), .. }) {
+                return Some(format!("a {what} point is not taken on a tilted (3+2) face yet - clear it or the tilt"));
+            }
             // #3325: a pick is a model-frame point; the tilted slot's ends are not.
             if matches!(self, OpParams::Slot { tilt: Some(_), .. }) {
                 return Some(format!("a {what} point is not taken on a tilted (3+2) slot yet - clear it or the tilt"));
@@ -298,6 +316,9 @@ impl OpParams {
         }
         match self {
             OpParams::WireContour(w) => wire_exit_refusal(w),
+            // #3333: a pick that the sinker's orbit or side move cannot hold.
+            OpParams::SinkerBurn(p) => p.orbit_ends().err(),
+            OpParams::SinkerSideBurn(p) => p.side_ends().err(),
             _ => self.hole_order().err(),
         }
     }

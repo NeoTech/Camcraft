@@ -79,3 +79,26 @@
 **Cost to change later.** Low. One enum, one kernel file, two DTO flags
 with defaults, one digest tag. An inner-helix plan for wide holes can
 replace the core refusal without a file change.
+
+## The Bore `entry` (#3828) on a Helical strategy
+
+**What was decided.** #3832 gave the Bore an `entry` word (Plunge, Ramp,
+Helix) for the first descent of the ring ladder. On the Helical strategy
+the helix is the entry of each hole. Plunge, the default, keeps the helix.
+Ramp and Helix are refused by name: at the command (`named_refusal`) and
+again in the generator (`bore_started`). The Lead-in tab keeps the Entry
+group for the helix, with a hint and a refusal line, so the user can set
+the entry back to Plunge. The project file and the digest keep the two
+fields apart, so a reopened file shows the same refusal.
+
+**Why.** A Ramp or Helix entry has nothing to change on one helix to the
+floor. If it is ignored, the user sets a value that does nothing, with no
+message. This is the same choice as Pass starts at on the helix.
+
+**Dropped.**
+- Use the Helix entry to select the Helical strategy: two fields for one
+  choice, and the Helix entry keeps its meaning on the rings.
+- Hide the Entry group on the helix: a Ramp set before the change of
+  strategy cannot be set back without a change back to Rings.
+- Take the helix slope from the Lead-in `helix_angle`: the stepdown is
+  the pitch (see above), and the slope limit is already a refusal.

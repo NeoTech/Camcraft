@@ -29,7 +29,7 @@ impl SelectPost {
     /// real names, so a stranger is a corrupt project, and a corrupt
     /// project's post choice is refused the same way.
     pub fn new(world: &World, next: PostRef) -> Result<Self, CommandError> {
-        let next = posting::agie::current_ref(next);
+        let next = posting::aliases::current_ref(next);
         validate(&next)?;
         let prev = posting::document_post_of(world);
         if prev == next {

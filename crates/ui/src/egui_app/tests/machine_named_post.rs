@@ -70,7 +70,7 @@ fn a_users_own_machine_picks_its_post_from_the_editors_dropdown() {
     select_row(&mut h, "SHOP GRBL");
     press(&mut h, "Edit machine");
     let draft = |h: &Harness<'static, ShellUi>| {
-        h.state().state.machines_pane.editor.as_ref().and_then(|e| e.draft.value.pointer("/controller/post").cloned())
+        h.state().state.machines_pane.editor.as_ref().and_then(|e| e.draft.value().pointer("/controller/post").cloned())
     };
     pick(&mut h, "(none)", "grblHAL");
     assert_eq!(draft(&h), Some("grblHAL".into()), "the pick is in the draft");

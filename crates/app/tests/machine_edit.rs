@@ -134,7 +134,7 @@ fn a_refused_file_is_not_written_and_each_refusal_sits_on_its_field() {
 fn a_refusal_with_no_field_is_listed_above_the_grid() {
     let mut m = MachineDraft::blank(Kind::Mill);
     // Remove the Y axis part: the mill now lacks a required axis.
-    if let Some(Value::Array(a)) = m.value.pointer_mut("/kinematics/default/parts/0/parts") {
+    if let Some(Value::Array(a)) = m.value_mut().pointer_mut("/kinematics/default/parts/0/parts") {
         a.remove(1);
     }
     let r = m.refusals();

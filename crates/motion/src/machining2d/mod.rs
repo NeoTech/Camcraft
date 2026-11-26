@@ -46,6 +46,12 @@ mod trochoid_level;
 mod trochoid_loops;
 mod trochoid_slot;
 mod contour;
+mod contour_avoid;
+mod contour_avoid_clip;
+mod contour_avoid_emit;
+mod contour_avoid_open;
+mod contour_avoid_piece;
+mod contour_avoid_whole;
 mod contour_region;
 mod contour_auto;
 mod contour_bore;
@@ -77,6 +83,7 @@ mod face;
 mod face_entry;
 mod face_holes;
 mod face_keep;
+mod face_raster;
 mod fillet;
 mod gen_error;
 mod ghost;
@@ -161,7 +168,7 @@ pub use arcs::{fit_arcs, fit_arcs_sided, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
 pub use bore::{bore, bore_started, BoreHole, BoreParams};
 pub use bore_helix::{
-    helical_pass_start_refusal, helix_leaves_core, max_helix_bore_diameter, min_helix_bore_diameter_no_center_cut, BoreStrategy,
+    helical_entry_refusal, helical_pass_start_refusal, helix_leaves_core, max_helix_bore_diameter, min_helix_bore_diameter_no_center_cut, BoreStrategy,
     MAX_HELIX_ANGLE_DEG,
 };
 pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};
@@ -169,6 +176,9 @@ pub use chamfer::{chamfer, chamfer_open_runs, ChamferParams};
 pub use chamfer_ride::{ride_loops as chamfer_ride_loops, wall_lean as chamfer_wall_lean};
 pub use circular::{circular, CircularParams};
 pub use contour::{contour, contour_on_bodies, contour_on_part, contour_on_picked, ContourParams, Lead, Side};
+pub use contour_avoid::{contour_avoid, contour_on_bodies_avoid, contour_on_part_avoid, contour_on_picked_avoid};
+pub use contour_avoid_open::{contour_along_chain_avoid, contour_open_run_avoid, contour_open_run_sided_avoid};
+pub use contour_avoid_whole::contour_whole_bodies_with_avoid;
 pub use contour_whole::{contour_whole_bodies, contour_whole_bodies_with};
 pub use contour_auto::{auto_side, AutoSide, AUTO_BAND, AUTO_PROBE_DZ};
 pub use contour_chain::contour_along_chain;
@@ -177,7 +187,7 @@ pub use contour_run_stock::contour_open_run_sided;
 pub use contour_link::DEFAULT_LEVEL_RAMP_ANGLE;
 pub use crate::links::{Link, Links};
 pub use equal_steps::{cut_levels_for, equal_stepdown, ladder_stepdown};
-pub use face::{face, face_led, face_over, face_over_kept, FaceKeep, FaceParams, GenError, MAX_PASSES};
+pub use face::{face, face_led, face_over, face_over_kept, face_picked, FaceKeep, FaceParams, GenError, MAX_PASSES};
 pub use face_holes::FaceHoles;
 pub use ghost::Ghost;
 pub use face_entry::{air_lead, AIR_MARGIN};

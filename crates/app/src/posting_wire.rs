@@ -161,7 +161,8 @@ pub(super) fn stream(
         let lean = if let Some(a) = angle {
             angle_lean(name, &machine.model, a, four.is_some(), hs.top, origin[2])?
         } else {
-            Lean::Guides(crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?)
+            let at = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
+            Lean::Guides { at, origin_z: origin[2], part: (hs.bottom, hs.top) }
         };
         Some((p.taper_deg, lean))
     };
@@ -194,9 +195,11 @@ pub(super) fn stream(
 /// How a leaning section's moves reach the control: as U/V offsets over
 /// the machine's guide planes (#536), or as an angle word on the top
 /// plane (#1164; `left`: a positive word leans the top left of travel).
+/// `part` is the cut's bottom and top (world Z), for a post that states
+/// the part's planes (#4075, Sodick TP / TN).
 #[derive(Clone, Copy)]
 enum Lean {
-    Guides((f64, f64)),
+    Guides { at: (f64, f64), origin_z: f64, part: (Option<f64>, Option<f64>) },
     Angle { top: f64, left: bool, corner: &'static str, plane: f64 },
 }
 
@@ -216,7 +219,12 @@ fn section(
     let mut dialect = Vec::new();
     match taper {
         None => {}
-        Some((_, Lean::Guides(guides))) => records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?,
+        Some((_, Lean::Guides { at, origin_z, part })) => {
+            records = guided(records, at).map_err(|e| format!("{name}: {e}"))?;
+            // #4075: the planes U V are stated at, and the part's, work Z.
+            let planes = [("WireGuideLower", Some(at.0)), ("WireGuideUpper", Some(at.1)), ("WireBottom", part.0), ("WireTop", part.1)];
+            dialect = planes.iter().filter_map(|(n, z)| z.map(|z| cnc::Record::Param { name: (*n).into(), value: json!(z - origin_z) })).collect();
+        }
         Some((deg, Lean::Angle { top, left, corner, plane })) => {
             records = angled(records, top, deg.abs(), left).map_err(|e| format!("{name}: {e}"))?;
             dialect = vec![

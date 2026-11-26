@@ -349,15 +349,7 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
                 ov.at = r.p2(ov.at);
             }
         }
-        OpParams::Slot { a, b, picks, .. } => {
-            *a = r.p2(*a);
-            *b = r.p2(*b);
-            // Compare temporary generation-frame points; stored picks stay in model coordinates.
-            for pick in picks.start.iter_mut().chain(picks.exit.iter_mut()) {
-                pick.xy = r.p2(pick.xy);
-            }
-        }
-        OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::Slot { a, b, .. } | OpParams::TrochoidalSlot { a, b, .. } => {
             *a = r.p2(*a);
             *b = r.p2(*b);
         }
@@ -367,6 +359,16 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
             }
         }
         _ => {}
+    }
+    // #3326 review: each start and exit pick is stated in Setup `S` and
+    // enters `W_gen` with the geometry that it names, for every kind. This is
+    // the one place that turns a pick (the Slot of #3325 included): a second
+    // loop in a kind's arm turns its picks two times. The stored picks stay in
+    // model coordinates; these are the temporary generation-frame points.
+    if let Some(picks) = params.path_picks_mut() {
+        for k in picks.start.iter_mut().chain(&mut picks.exit) {
+            k.xy = r.p2(k.xy);
+        }
     }
 }
 

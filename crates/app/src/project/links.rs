@@ -55,7 +55,7 @@ fn link_of(d: LinkDto) -> Link {
     }
 }
 
-fn entry_dto(e: Entry3D) -> EntryDto {
+pub(super) fn entry_dto(e: Entry3D) -> EntryDto {
     match e {
         Entry3D::Plunge => EntryDto::Plunge,
         Entry3D::Ramp => EntryDto::Ramp,
@@ -64,7 +64,7 @@ fn entry_dto(e: Entry3D) -> EntryDto {
     }
 }
 
-fn entry_of(d: EntryDto) -> Entry3D {
+pub(super) fn entry_of(d: EntryDto) -> Entry3D {
     match d {
         EntryDto::Plunge => Entry3D::Plunge,
         EntryDto::Ramp => Entry3D::Ramp,

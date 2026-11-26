@@ -64,6 +64,7 @@ fn bore(strategy: BoreStrategy) -> OpParams {
         tolerance: 0.01,
         holes: vec![Hole { xy: Point2::new(15.0, 15.0), radius: 5.5, entry_z: TOP, floor_z: FLOOR, through: false, stepped: false }],
         picks: Default::default(),
+        entry: Default::default(),
     }
 }
 
@@ -176,4 +177,35 @@ fn the_stamp_moves_when_the_strategy_changes() {
     assert!(rings.is_some());
     assert_ne!(rings, helix, "rings to helix marks the op Stale");
     assert_ne!(helix, spring, "the spring pass marks the op Stale");
+}
+
+#[test]
+fn a_helical_bore_with_a_ramp_or_helix_entry_is_refused_by_name() {
+    use camcraft_app::machining3d::Entry3D;
+    let world = world();
+    let with = |e: Entry3D| {
+        let mut p = bore(HELICAL);
+        if let OpParams::Bore { entry, .. } = &mut p {
+            *entry = e;
+        }
+        p
+    };
+    for (e, name) in [(Entry3D::Ramp, "Ramp"), (Entry3D::Helix, "Helix")] {
+        let p = with(e);
+        assert!(
+            p.named_refusal().is_some_and(|why| why.contains("Helical strategy") && why.contains(name)),
+            "the command refuses {name} first"
+        );
+        let msg = generate(&world, "CC", p.clone()).err().unwrap_or_default();
+        assert!(msg.contains("Helical strategy") && msg.contains(name), "{msg}");
+        // The file keeps the pair, so a reopened project shows the refusal.
+        assert_eq!(project::params_from_json(&project::params_to_json(&p)), Ok(p));
+    }
+    assert_eq!(with(Entry3D::Plunge).named_refusal(), None, "Plunge is the helix's entry word");
+    // The pass order refusal is still reached (one Bore arm in `sane.rs`).
+    let mut p = bore(HELICAL);
+    if let OpParams::Bore { pass_start, .. } = &mut p {
+        *pass_start = camcraft_app::machining2d::PassStart::Inside;
+    }
+    assert!(p.named_refusal().is_some_and(|why| why.contains("Pass starts at")), "the pass order is refused too");
 }

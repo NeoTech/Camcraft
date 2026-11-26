@@ -275,8 +275,11 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     ui.separator();
     if let Some(ed) = p.editor.as_mut() {
         let dir = p.user_dir.clone().flatten();
+        // Full width like the list: shrunk to its content, the editor
+        // kept last frame's width and clipped the axis chain's rows.
         let out = ScrollArea::vertical()
             .id_salt("machines-editor")
+            .auto_shrink([false, true])
             .show(ui, |ui| file_editor::draw(ui, ed, dir.as_deref(), pal, inks.error))
             .inner;
         if out.close {
@@ -302,7 +305,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         }
         return;
     };
-    ScrollArea::vertical().id_salt("machines-detail").show(ui, |ui| {
+    ScrollArea::vertical().id_salt("machines-detail").auto_shrink([false, true]).show(ui, |ui| {
         ui.add(Label::new(RichText::new(&e.name).strong()).wrap());
         ui.add(Label::new(RichText::new(e.source.label()).small().color(pal.text_dim)).wrap());
         let ink = if e.is_valid() { pal.accent } else { inks.error };

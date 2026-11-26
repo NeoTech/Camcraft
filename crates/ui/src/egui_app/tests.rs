@@ -102,6 +102,7 @@ mod layout;
 mod panel_setups;
 mod machines_pane;
 mod machines_edit;
+mod machines_axis_chain;
 mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
@@ -156,6 +157,7 @@ mod holes_break_through;
 mod holes_fine_bore;
 // #2830: the Bore strategy (rings or one helix per hole).
 mod bore_strategy;
+mod bore_entry_group;
 mod ma_deburr_page;
 mod radial_step_field;
 mod auto_input_manual;

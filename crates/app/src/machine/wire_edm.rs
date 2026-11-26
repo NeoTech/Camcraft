@@ -80,6 +80,54 @@ pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, E
     Ok(out)
 }
 
+/// How far (mm) the work may pass a guide plane before the guide-reach
+/// law refuses it (#4039): the wire path's own tolerance,
+/// [`crate::wire_edm::PATH_TOL`] (10 nm). Work that meets a guide plane
+/// is in reach. Two float paths to the same plane (an origin anchored on
+/// a box, facets moved by their transform) can differ by round-off, and
+/// such a difference is not a gap. A real gap is refused.
+pub const GUIDE_REACH_TOL: f64 = crate::wire_edm::PATH_TOL;
+
+/// `true` when the work height `z` is below the guide plane `guide` by
+/// more than [`GUIDE_REACH_TOL`], or is not a number.
+#[must_use]
+pub fn below_guide(z: f64, guide: f64) -> bool {
+    z.is_nan() || z < guide - GUIDE_REACH_TOL
+}
+
+/// `true` when the work height `z` is above the guide plane `guide` by
+/// more than [`GUIDE_REACH_TOL`], or is not a number.
+#[must_use]
+pub fn above_guide(z: f64, guide: f64) -> bool {
+    z.is_nan() || z > guide + GUIDE_REACH_TOL
+}
+
+/// A height in a guide-reach message (#4039): three decimals, and never
+/// "-0.000". When `z` and `guide` differ but read the same in three
+/// decimals, six are written, so a refused gap never reads as no gap.
+#[must_use]
+pub fn reach_z(z: f64, guide: f64) -> String {
+    if z != guide && guide_z(z) == guide_z(guide) {
+        unsigned_zero(format!("{z:.6}"))
+    } else {
+        guide_z(z)
+    }
+}
+
+/// `text` without the sign of a negative zero ("-0.000" reads "0.000").
+fn unsigned_zero(text: String) -> String {
+    match text.strip_prefix('-') {
+        Some(rest) if rest.chars().all(|c| c == '0' || c == '.') => rest.to_owned(),
+        _ => text,
+    }
+}
+
+/// A guide plane's height in a message: three decimals, never "-0.000".
+#[must_use]
+pub fn guide_z(z: f64) -> String {
+    unsigned_zero(format!("{z:.3}"))
+}
+
 /// The machine's guide planes in the work frame: stated in machine Z,
 /// moved by the work offset's Z (`origin_z`).
 ///
@@ -162,12 +210,13 @@ fn judge_pose(machine: &Machine, to: Point3, axis: [f64; 3], origin_z: f64) -> R
         Some(_) => {}
     }
     let (lo, hi) = guide_planes(machine, origin_z)?;
-    if !(lo..=hi).contains(&to.z) {
+    if below_guide(to.z, lo) || above_guide(to.z, hi) {
+        let near = if to.z < lo { lo } else { hi } - origin_z;
         return Err(format!(
-            "rides Z{:.3}, outside the guides' reach (Z{:.3} .. Z{:.3}) - the wire's programmed plane must stand between its guides",
-            to.z - origin_z,
-            lo - origin_z,
-            hi - origin_z
+            "rides Z{}, outside the guides' reach (Z{} .. Z{}) - the wire's programmed plane must stand between its guides",
+            reach_z(to.z - origin_z, near),
+            guide_z(lo - origin_z),
+            guide_z(hi - origin_z)
         ));
     }
     let (lower, uv) = guide_points(to, axis, (lo, hi))?;

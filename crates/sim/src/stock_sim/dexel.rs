@@ -1,7 +1,7 @@
 //! Split from `stock_sim.rs` by M5.0.1; structure only.
 
 use super::dexel_arc::Atom;
-use super::kernel::{MAX_CELLS_PER_AXIS, StockError};
+use super::kernel::{cells_across, MAX_CELLS_PER_AXIS, StockError};
 use super::tiles::{Tile, TILE};
 
 use crate::cl::{Move, MoveKind};
@@ -44,8 +44,7 @@ impl Dexel {
         {
             return Err(StockError::Invalid("stock box and cell must be finite, box non-empty, cell positive".into()));
         }
-        let nx = ((x1 - x0) / cell).ceil() as usize;
-        let ny = ((y1 - y0) / cell).ceil() as usize;
+        let (nx, ny) = (cells_across(x1 - x0, cell), cells_across(y1 - y0, cell));
         if nx == 0 || ny == 0 || nx > MAX_CELLS_PER_AXIS || ny > MAX_CELLS_PER_AXIS {
             return Err(StockError::Invalid(format!(
                 "grid would be {nx}x{ny} cells; at most {MAX_CELLS_PER_AXIS} per axis"

@@ -94,24 +94,27 @@ fn flow(stated_axis: Option<[f64; 3]>, clearance: f64) -> OpParams {
     }
 }
 
-/// The band's guide chains: the model's feature chains whose points
-/// all stand at one of the given stations along the axis (the
-/// shoulder ring at -2 and the neck ring at 2 bound the neck band).
-fn band_picks(world: &World, axis: usize, stations: [f64; 2]) -> SrcRef {
+/// The band's guide chains: the model's RING chains - the long
+/// closed chains whose points all stand at ONE station each. A
+/// cone's meridian edge also touches two stations, but no one
+/// station owns the whole chain; a disc's fan edge holds two
+/// points - neither is a ring.
+fn band_picks(world: &World, axis: usize, stations: &[f64]) -> SrcRef {
     let e = model::find_by_name(world, "bar").expect("bar");
     let f = model::features_of(world, &e).expect("features");
     let mut items: Vec<([f64; 3], GeoSel)> = feature::chains(&f)
         .into_iter()
         .filter_map(|c| {
             let pts = feature::chain_points(&f, &c);
-            let on_band = pts.iter().all(|p| (p[axis] - stations[0]).abs() < 1e-4 || (p[axis] - stations[1]).abs() < 1e-4);
+            let on_band = stations.iter().any(|&st| pts.iter().all(|p| (p[axis] - st).abs() < 1e-4))
+                && pts.len() >= 10;
             let n = pts.len() as f64;
             let key = pts.iter().fold([0.0f64; 3], |a, p| [a[0] + p[0] / n, a[1] + p[1] / n, a[2] + p[2] / n]);
             on_band.then(|| (key, GeoSel { entity: "bar".into(), feature: FeatureSel::Chain(c.id) }))
         })
         .collect();
     items.sort_by(|a, b| a.0[0].total_cmp(&b.0[0]).then(a.0[1].total_cmp(&b.0[1])).then(a.0[2].total_cmp(&b.0[2])));
-    assert!(items.len() >= 2, "the band's ring chains must exist, got {}", items.len());
+    assert!(!items.is_empty(), "the band's ring chains must exist");
     SrcRef::Selection(items.into_iter().map(|(_, g)| g).collect())
 }
 
@@ -120,23 +123,33 @@ fn band_picks(world: &World, axis: usize, stations: [f64; 2]) -> SrcRef {
 /// given machine (its stated rotary line judged against the bar's
 /// faces). The WCS origin stays at the default, so the stated line
 /// through it is the bar's own axis. No generation runs here.
-fn build(axis: usize, params: OpParams, machine: Option<&str>) -> World {
-    build_with(axis, params, |world, h| {
-        if let Some(m) = machine {
-            h.execute(world, LoadMachine::builtin(world, m).expect("machine"));
-        }
-    })
+fn build_at(axis: usize, params: OpParams, machine: Option<&str>, stations: &[f64]) -> World {
+    build_with(
+        axis,
+        params,
+        |world, h| {
+            if let Some(m) = machine {
+                h.execute(world, LoadMachine::builtin(world, m).expect("machine"));
+            }
+        },
+        stations,
+    )
 }
 
-/// [`build`] on a hand-built bench machine instead of a registry name:
-/// the standing bar on the bench's spindle C line.
+/// [`build_at`] on a hand-built bench machine instead of a registry
+/// name: the standing bar on the bench's spindle C line.
 fn build_on(params: OpParams, machine: Machine) -> World {
     build_with(2, params, |world, h| {
         h.execute(world, LoadMachine::new(world, "millturn.mch".into(), Some(machine)).expect("bench"));
-    })
+    }, &[2.0, 8.0])
 }
 
-fn build_with(axis: usize, params: OpParams, load: impl FnOnce(&World, &mut History)) -> World {
+fn build_with(
+    axis: usize,
+    params: OpParams,
+    load: impl FnOnce(&World, &mut History),
+    stations: &[f64],
+) -> World {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
     let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
@@ -154,9 +167,13 @@ fn build_with(axis: usize, params: OpParams, load: impl FnOnce(&World, &mut Hist
     h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(bar(axis))));
     h.execute(
         &world,
-        CreateOperation::new(&world, "OP", "BN-0600", band_picks(&world, axis, [2.0, 8.0]), params).expect("create"),
+        CreateOperation::new(&world, "OP", "BN-0600", band_picks(&world, axis, stations), params).expect("create"),
     );
     world
+}
+
+fn build(axis: usize, params: OpParams, machine: Option<&str>) -> World {
+    build_at(axis, params, machine, &[2.0, 8.0])
 }
 
 /// [`build`], with the band generated.
@@ -373,9 +390,77 @@ fn a_flat_tool_is_refused_by_name_on_the_band() {
     let em = catalog().into_iter().find(|(n, _)| *n == "EM-0600-4FL").map(|(_, t)| t).expect("flat");
     h.execute(&world, AddTool::new(&world, "EM-0600-4FL", em).expect("tool"));
     h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(bar(2))));
-    let ask = CreateOperation::new(&world, "OP", "EM-0600-4FL", band_picks(&world, 2, [2.0, 8.0]), flow(None, 25.0));
+    let ask = CreateOperation::new(&world, "OP", "EM-0600-4FL", band_picks(&world, 2, &[2.0, 8.0]), flow(None, 25.0));
     let Err(CommandError::Invalid(msg)) = ask else {
         panic!("expected an invalid refusal");
     };
     assert!(msg.contains("ball-nose"), "{msg}");
+}
+
+#[test]
+fn three_ring_chains_cut_two_bands_and_the_boundary_once() {
+    // #2829: the rings at the shoulder (station 2), the neck (8) and
+    // the end-face rim (16), picked in band order. The neck ring
+    // extracts wound against its pair, so the kernel walks it
+    // backwards; the shared neck ring is band 1's own last pass
+    // already, so band 2 starts at its first interior pass: the
+    // plunge count is band 1's passes plus band 2's passes less the
+    // one shared boundary, and no two passes land on one station.
+    // (The ring chains start at arbitrary corners, so each band
+    // carries the matched-place phase the extraction gave it - the
+    // pass counts are read from the kernel's own notes, never
+    // hard-coded.)
+    let world = build_at(0, flow(None, 25.0), Some(MICROARC), &[2.0, 8.0, 16.0]);
+    h_generate(&world);
+    assert!(is_ok(&world), "three ordered rings machine two bands");
+    let e = model::find_by_name(&world, "OP").expect("op");
+    let notes = model::toolpath_of(&world, &e).expect("a cached path").path.notes;
+    let ms = moves(&world);
+    let ls: Vec<Point3> = ms
+        .iter()
+        .filter(|m| m.kind == MoveKind::Plunge)
+        .filter_map(|m| {
+            let a = m.axis?;
+            Some(Point3::new(
+                m.to.x + a[0] * 3.0,
+                m.to.y + a[1] * 3.0,
+                m.to.z + a[2] * 3.0,
+            ))
+        })
+        .collect();
+    // Each band's own pass count, as the kernel states it. Band 2's
+    // count is its full division LESS the shared boundary (the
+    // exact arithmetic is pinned at the motion level, on fixtures
+    // whose widths read exact; here the rings' arbitrary start
+    // corners add matched-place phase, so the counts are read, not
+    // hard-coded).
+    let counts: Vec<usize> = notes
+        .iter()
+        .filter(|n| n.contains("flow passes"))
+        .filter_map(|n| n.split(';').nth(1)?.split(" flow passes").next()?.trim().parse().ok())
+        .collect();
+    assert_eq!(counts.len(), 2, "the notes do not state two bands: {notes:?}");
+    assert!(counts[0] >= 4 && counts[1] >= 4, "the bands divided thin: {notes:?}");
+    assert_eq!(
+        ls.len(),
+        counts[0] + counts[1],
+        "the plunge count disagrees with the bands' own counts: {notes:?}"
+    );
+    for (i, &x) in ls.iter().enumerate() {
+        for &y in ls.iter().skip(i + 1) {
+            let d = x - y;
+            assert!(
+                d.dot(d) > 1e-12,
+                "two passes land on one station - the boundary is cut twice: {x:?} ~ {y:?}"
+            );
+        }
+    }
+    assert!(
+        notes.iter().any(|n| n.contains("walked backwards")),
+        "the notes do not state the sense normalization: {notes:?}"
+    );
+    assert!(
+        notes.iter().any(|n| n.contains("boundary chain shared with band 1")),
+        "the notes do not state the shared boundary: {notes:?}"
+    );
 }

@@ -28,6 +28,7 @@ use std::f64::consts::PI;
 use crate::cl::{lattice, MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
 
+use crate::entry::Entry3D;
 use crate::plunge_law::CORE;
 
 use super::bore::{BoreHole, BoreParams};
@@ -86,6 +87,19 @@ pub fn helical_pass_start_refusal(strategy: BoreStrategy, start: PassStart) -> O
         format!(
             "Pass starts at {} is not available with the Helical strategy - one helix per hole has no ring order; use Auto or Rings",
             start.label()
+        )
+    })
+}
+
+/// Why a helical bore refuses `entry` (#3828), or `None`. The helix is
+/// each hole's entry, so a Ramp or Helix entry has nothing to change and
+/// is refused by name, never ignored. Plunge is the default entry word.
+#[must_use]
+pub fn helical_entry_refusal(strategy: BoreStrategy, entry: Entry3D) -> Option<String> {
+    (strategy != BoreStrategy::Rings && entry != Entry3D::Plunge).then(|| {
+        let name = if entry == Entry3D::Ramp { "Ramp" } else { "Helix" };
+        format!(
+            "Entry {name} is not available with the Helical strategy - the helix is the entry of each hole; set the entry to Plunge, or use Rings"
         )
     })
 }

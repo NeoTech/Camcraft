@@ -50,11 +50,11 @@ fn fields(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     );
     if crate::browser_files::button(
         ui,
-        state.browser_refusal_of(&CommandKind::ImportAgieDrawing),
+        state.browser_refusal_of(&CommandKind::ImportInspectionDrawing),
         "Import DXF drawing",
         "Place a drawing on the active setup",
     ) {
-        state.pending.push_back(CommandKind::ImportAgieDrawing);
+        state.pending.push_back(CommandKind::ImportInspectionDrawing);
     }
     let id = ui.make_persistent_id(("agie-inspection-input", ctx));
     let mut draft = ui.data_mut(|d| d.get_temp::<Draft>(id)).unwrap_or_default();

@@ -66,6 +66,11 @@ pub const CUTTER_VERSION: u64 = 5;
 /// smaller tool than the real one. A library without one keeps its older
 /// number.
 pub const TIP_FORM_VERSION: u64 = 6;
+/// #4031: older readers must refuse libraries whose tools state a
+/// left-hand cutter (`cutter_hand`); they would read it as right-hand
+/// and post M3 for a cutter that must reverse. A library without one
+/// keeps its older number.
+pub const CUTTER_HAND_VERSION: u64 = 7;
 /// The extension the file dialogs offer.
 pub const EXTENSION: &str = "camtools";
 
@@ -129,6 +134,9 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
         if !t.tip_form.is_sharp() {
             version = version.max(TIP_FORM_VERSION);
         }
+        if t.cutter_hand == camcraft_tools::cutter_hand::CutterHand::Left {
+            version = version.max(CUTTER_HAND_VERSION);
+        }
         let mut def = project::tool_to_json(&t);
         if let Some(b) = tool_body::body_of(world, &e) {
             // #2016: a library holder is written as its reference.
@@ -179,11 +187,11 @@ pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
             match o.get("version").and_then(Value::as_u64) {
                 Some(
                     VERSION | LEFT_HAND_VERSION | CUTTING_STEPS_VERSION | HOLDER_REF_VERSION | CUTTER_VERSION
-                    | TIP_FORM_VERSION,
+                        | TIP_FORM_VERSION | CUTTER_HAND_VERSION,
                 ) => {}
                 Some(v) => {
                     return Err(format!(
-                        "tool library version {v} is not supported (this build reads {VERSION} to {TIP_FORM_VERSION})"
+                        "tool library version {v} is not supported (this build reads {VERSION} to {CUTTER_HAND_VERSION})"
                     ));
                 }
                 None => return Err("not a tool library: no \"version\"".into()),
