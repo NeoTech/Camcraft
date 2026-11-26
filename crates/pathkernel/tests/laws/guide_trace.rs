@@ -121,6 +121,65 @@ fn each_refusal_of_the_trace_is_named() {
     assert_eq!(Guides.guide(&r, &row, TOL).unwrap_err().reason(), camcraft_pathkernel::guide::NOT_AN_AREA);
 }
 
+/// The chain region of the downstream pin: one open chain, no keep-out.
+fn ell_region(_m: camcraft_pathkernel::MaterialSide) -> Result<KernelRegion, Refusal> {
+    Ok(chains(vec![ell()], Region::empty()))
+}
+
+#[test]
+fn each_later_stage_refuses_the_chain_region_of_a_trace_by_name() {
+    // The trace guide plans on a chain region, but the later stages on this
+    // branch plan an area only. Each stage that reads the region must refuse
+    // the chain region by a named reason: never a panic, never a plan. The
+    // follow-up #4236 makes these stages accept it; then this table changes
+    // with it. The order, load and link stages have no planner on this
+    // branch yet (traits only, K3 and K4): #4236 covers them too.
+    use camcraft_pathkernel::entry::{self, ArcChoice, EntryChoice, EntryKind, EntryPlanner, EntryStage, Heights};
+    use camcraft_pathkernel::link::LinkPolicy;
+    use camcraft_pathkernel::plan::Cut;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    use super::kit::{self, Case, Planners};
+    use super::standins::{ProvedEntry, ReadLoad, ShapeReader, StraightLink, recipe};
+
+    let r = ell_region(camcraft_pathkernel::MaterialSide::Inside).unwrap();
+    let set = done(&plan(&r, 0.0).unwrap()).clone();
+    let cut = Cut::new(set.curves()[0].clone(), None).unwrap();
+    let stage = EntryStage::new(Heights::new(5.0, 2.0, 10.0).unwrap(), ArcChoice::new(5.0, 90.0).unwrap(), 0.01).unwrap();
+    let choice = EntryChoice::new(EntryKind::Plunge, 1.0, vec![]).unwrap();
+    let case = Case {
+        name: "trace of an open chain",
+        region: ell_region,
+        material: camcraft_pathkernel::MaterialSide::Inside,
+        recipe: recipe(trace(0.0), EntryKind::Plunge, LinkPolicy::StayWhereProved).unwrap(),
+        stock: Region::empty(),
+        reader: Box::new(ShapeReader(Region::empty())),
+        no_split: false,
+        recorded: None,
+    };
+    let planners = Planners {
+        guide: Box::new(TracePlanner),
+        order: Box::new(SideOrder),
+        load: Box::new(ReadLoad { blind: false }),
+        link: Box::new(StraightLink),
+        entry: Box::new(ProvedEntry),
+    };
+    type Call<'a> = Box<dyn Fn() -> Result<(), Refusal> + 'a>;
+    let table: Vec<(&str, &str, Call<'_>)> = vec![
+        ("entry stage: entry", entry::NOT_PLANAR, Box::new(|| stage.entry(&cut, &r, &Region::empty(), &choice).map(|_| ()))),
+        ("entry stage: exit", entry::NOT_PLANAR, Box::new(|| stage.exit(&cut, &r, &Region::empty()).map(|_| ()))),
+        ("law kit: planar", kit::NOT_PLANAR, Box::new(|| kit::planar(&r).map(|_| ()))),
+        ("law kit: run", kit::NOT_PLANAR, Box::new(|| kit::run(&planners, &case, StartSide::Auto).map(|_| ()))),
+    ];
+    for (what, reason, call) in table {
+        match catch_unwind(AssertUnwindSafe(&call)) {
+            Err(_) => panic!("{what}: panics on the chain region of a trace"),
+            Ok(Ok(())) => panic!("{what}: accepts the chain region of a trace (a finding of #4236)"),
+            Ok(Err(e)) => assert_eq!(e.reason(), reason, "{what}"),
+        }
+    }
+}
+
 fn curves(v: &Verdict<GuideSet>) -> Vec<&camcraft_pathkernel::guide::Curve> {
     v.out().map(|g| g.curves().iter().collect()).unwrap_or_default()
 }
