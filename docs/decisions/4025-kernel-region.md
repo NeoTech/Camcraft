@@ -54,6 +54,10 @@ planner switch at its default, the output does not change.
    uncut, at the radius times the square root of 2); erode it by the radius
    plus the stock to leave (that also leaves a skin of stock at an edge
    that has no part).
+   **Decided by the maintainer** (question dialog, 2026-11-26): "Yes, to
+   the edge". For the material side Outside, the tool centre can go to
+   the stock outline. The cutter overhangs the stock by up to one tool
+   radius. A clamp at the stock edge needs a keep-out.
 5. **The Inside centre is the exact erosion.** The centre is the selection
    eroded by the tool radius plus the stock to leave. It is not clipped to
    the stock, and it has no air: it is a closed area. The kernel keeps a
