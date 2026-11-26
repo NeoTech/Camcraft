@@ -10,7 +10,7 @@ use std::fmt;
 
 use camcraft_pathkernel::entry::EntryPlanner;
 use camcraft_pathkernel::guide::{Curve, GuidePlanner, GuideSet};
-use camcraft_pathkernel::link::{Hop, LinkProof, LinkTally};
+use camcraft_pathkernel::link::{Hop, Level, LinkProof, LinkTally};
 use camcraft_pathkernel::load::{Controlled, LoadPlanner, StockRead};
 use camcraft_pathkernel::order::{OrderChoice, OrderPlanner, OrderedSet, StartSide};
 use camcraft_pathkernel::plan::{Cut, Plan, Step};
@@ -180,11 +180,16 @@ pub fn run(p: &Planners, c: &Case, side: StartSide) -> Result<Run, Refusal> {
     let (controlled, cs) = live(p.load.control(os, &region, c.reader.as_ref(), &c.recipe.load(), tool_r)?)?;
     let cuts = cs.set().curves().iter().map(|cv| Cut::new(cv.clone(), None)).collect::<Result<Vec<_>, _>>()?;
     let (mut steps, mut tally, cleared) = (Vec::new(), LinkTally::default(), Region::empty());
+    let mut paths: Vec<Vec<Point2>> = Vec::new();
     for (i, cut) in cuts.iter().enumerate() {
         let lifted = match i.checked_sub(1).and_then(|j| cuts.get(j)) {
             None => true,
             Some(prev) => {
-                let hop = p.link.link(prev, cut, &region, &cuts[..i], c.recipe.link(), &mut tally);
+                let level = Level::new(cuts.get(..i).unwrap_or_default(), cuts.get(i..).unwrap_or_default()).with_links(&paths);
+                let hop = p.link.link(prev, cut, &region, level, c.recipe.link(), &mut tally);
+                if let Hop::Stay(path) = &hop {
+                    paths.push(path.points());
+                }
                 let lift = matches!(hop, Hop::Lift(_));
                 steps.push(Step::Link(hop));
                 lift

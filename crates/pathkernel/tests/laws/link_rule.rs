@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use camcraft_pathkernel::link::{Hop, LinkPolicy, LinkProof, LinkTally};
+use camcraft_pathkernel::link::{Hop, Level, LinkPolicy, LinkProof, LinkTally};
 use camcraft_pathkernel::plan::{Cut, Step};
 use camcraft_pathkernel::region::KernelRegion;
 use camcraft_pathkernel::{Point2, Refusal};
@@ -76,7 +76,7 @@ enum BadLink {
 }
 
 impl LinkProof for BadLink {
-    fn link(&self, _from: &Cut, _to: &Cut, _r: &KernelRegion, _planned: &[Cut], _policy: LinkPolicy, tally: &mut LinkTally) -> Hop {
+    fn link(&self, _from: &Cut, _to: &Cut, _r: &KernelRegion, _level: Level<'_>, _policy: LinkPolicy, tally: &mut LinkTally) -> Hop {
         let lift = || Hop::lift(LEAVES_AREA).expect("a named lift");
         match self {
             Self::Silent => lift(),
