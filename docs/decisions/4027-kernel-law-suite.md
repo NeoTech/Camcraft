@@ -64,9 +64,13 @@
    test `the_law_runner_passes_a_registered_kind_that_obeys_every_law` runs
    the stand-ins through the same path.
 5. **No change in `crates/pathkernel/src`.** Each law can be read through
-   the public API. The kit rebuilds a `PlanarRegion` (for L1's permutation
-   and L2's flipped material side) in one place, `kit::rebuild`, so a K1
-   change of the constructor changes one function.
+   the public API. The suite builds a `PlanarRegion` in two places:
+   `kit::rebuild` (L1's permutation and L2's flipped material side) and
+   `standins::pocket_region` (the fixtures). K1 (#4025) changes
+   `PlanarRegion::new` and adds a checked `region(...)`. After K1 merges,
+   these two functions must take K1's constructor: the PR of #4025 or of
+   #4027 that merges second takes `git merge origin/side/path-kernel` and
+   fixes the two calls.
 
 **How the two halves meet at the switch-over.** The stage-level laws are
 here: they read the kernel's own outputs (`GuideSet`, `OrderedSet`,
