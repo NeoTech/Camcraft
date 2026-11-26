@@ -301,3 +301,7 @@ fn a_pocket_with_a_hollow_boss_is_cut_whole() {
         cuts_whole(&format!("pass_start_hollow_boss_{}", start.label()), &pocket, &pocket, side);
     }
 }
+
+// #4153: the old-planner baseline of each phase-1 kind (golden pins).
+#[path = "pass_start_levels/kernel_baseline/mod.rs"]
+mod kernel_baseline;
