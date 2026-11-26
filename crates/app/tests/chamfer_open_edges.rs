@@ -54,6 +54,8 @@ fn params() -> OpParams {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: Height::fixed(25.0),
         retract_z: Some(Height::fixed(12.0)),
         top_z: Height::fixed(10.0),

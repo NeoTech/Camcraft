@@ -6,6 +6,9 @@
 use camcraft_app::mcp::Server;
 use serde_json::{Value, json};
 
+#[path = "mcp_chamfer_minimum_radius/leads.rs"]
+mod leads;
+
 struct Client {
     server: Server,
     id: i64,

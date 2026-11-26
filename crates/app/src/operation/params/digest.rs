@@ -4,6 +4,43 @@
 
 use super::*;
 
+/// The shared five-shape lead tag. Every persistence family uses these
+/// bytes in the same order.
+pub(super) fn write_lead(h: &mut std::hash::DefaultHasher, lead: crate::machining2d::Lead) {
+    use crate::machining2d::Lead;
+    match lead {
+        Lead::None => h.write_u8(0),
+        Lead::Linear { length } => {
+            h.write_u8(1);
+            w(h, length);
+        }
+        Lead::Arc { radius } => {
+            h.write_u8(2);
+            w(h, radius);
+        }
+        Lead::Tangential { radius } => {
+            h.write_u8(3);
+            w(h, radius);
+        }
+        Lead::Perpendicular { length } => {
+            h.write_u8(4);
+            w(h, length);
+        }
+    }
+}
+
+/// `None` means "same as lead-in"; `Some(Lead::None)` is the explicit
+/// off shape. That distinction is part of the command stamp.
+pub(super) fn write_optional_lead(
+    h: &mut std::hash::DefaultHasher,
+    lead: Option<crate::machining2d::Lead>,
+) {
+    match lead {
+        None => h.write_u8(0xFF),
+        Some(value) => write_lead(h, value),
+    }
+}
+
 /// Pass starts at (#3316, #3354, #3355): written only off Auto, so every
 /// earlier operation keeps the digest it had. One byte pair for every kind.
 pub(super) fn write_pass_start(s: crate::machining2d::PassStart, h: &mut std::hash::DefaultHasher) {
@@ -266,26 +303,7 @@ impl OpParams {
                 if a.equal_steps {
                     h.write_u8(0xC9);
                 }
-                match a.lead_out {
-                    None => h.write_u8(0xFF),
-                    Some(Lead::None) => h.write_u8(0),
-                    Some(Lead::Linear { length }) => {
-                        h.write_u8(1);
-                        w(h, length);
-                    }
-                    Some(Lead::Arc { radius }) => {
-                        h.write_u8(2);
-                        w(h, radius);
-                    }
-                    Some(Lead::Tangential { radius }) => {
-                        h.write_u8(3);
-                        w(h, radius);
-                    }
-                    Some(Lead::Perpendicular { length }) => {
-                        h.write_u8(4);
-                        w(h, length);
-                    }
-                }
+                write_optional_lead(h, a.lead_out);
             }
         }
     }

@@ -367,6 +367,8 @@ fn deburr_at_the_wall_corner_is_chamfer_byte_for_byte() {
         width: w,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: 20.0,
         retract_z: None,
         top_z,

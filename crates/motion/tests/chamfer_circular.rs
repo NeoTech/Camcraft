@@ -16,6 +16,9 @@ use camcraft_motion::machining2d::{
     chamfer, chamfer_open_runs, circular, ChamferParams, CircularParams, GenError,
 };
 
+#[path = "chamfer_circular/leads.rs"]
+mod leads;
+
 fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Region {
     Region::new(vec![Loop::new(vec![
         Point2::new(x0, y0),
@@ -32,6 +35,8 @@ fn chamfer_params() -> ChamferParams {
         width: 2.0,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: 25.0,
         retract_z: None,
         top_z: 20.0,

@@ -24,6 +24,8 @@ use camcraft_app::tools::catalog;
 use crate::boundary_summary;
 use crate::state::{CommandKind, State, UiTarget};
 
+mod chamfer_leads;
+
 pub(super) fn pocket(entry: Entry3D) -> OpParams {
     OpParams::Pocket { pass_start: Default::default(), rest: None,
         blend_radius: None,

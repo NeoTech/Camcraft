@@ -18,6 +18,9 @@ use camcraft_app::tools::{Tool, ToolKind};
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 
+#[path = "chamfer_minimum_radius/leads.rs"]
+mod leads;
+
 const TOOL: &str = "CM-TEST-0600-90";
 
 fn taper(diameter: f64, flute_len: f64) -> Tool {
@@ -58,6 +61,8 @@ fn params(minimum_cone_radius: f64) -> OpParams {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius,
+        lead: None,
+        lead_out: None,
         clearance_z: Height::fixed(25.0),
         retract_z: None,
         top_z: Height::fixed(20.0),

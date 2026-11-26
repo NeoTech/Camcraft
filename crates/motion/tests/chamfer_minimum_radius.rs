@@ -26,6 +26,8 @@ fn params(minimum_cone_radius: f64, side: Side) -> ChamferParams {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius,
+        lead: None,
+        lead_out: None,
         clearance_z: 25.0,
         retract_z: None,
         top_z: 20.0,

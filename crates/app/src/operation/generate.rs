@@ -2648,6 +2648,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             width,
             angle_deg,
             minimum_cone_radius,
+            lead,
+            lead_out,
             feed,
             plunge_feed,
             climb,
@@ -2705,6 +2707,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 width: *width,
                 angle_deg: *angle_deg,
                 minimum_cone_radius: *minimum_cone_radius,
+                lead: *lead,
+                lead_out: *lead_out,
                 clearance_z: hl.clearance,
                 retract_z: hl.retract,
                 top_z: req_z(hl.top, "Top of Part Z")?,
@@ -2716,6 +2720,21 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // chains read their actual wall side in the motion arm.
                 inside: *side == Side::Inside,
             };
+            let lead_law = verify::SolidLaw {
+                step: CONTAIN_STEP,
+                allow: verify::excess_floor_for(
+                    GOUGE_TOL,
+                    m_gen.excess,
+                    m_gen.file_tolerance,
+                )
+                .unwrap_or(GOUGE_TOL),
+                hole_walls: false,
+            };
+            let lead_safety = machining2d::ChamferLeadSafety::new(
+                &m_gen.facets,
+                &cutter,
+                lead_law,
+            );
             match &src {
                 SrcRef::Selection(_) => {
                     let (loops, runs, _) = contour_sel
@@ -2739,7 +2758,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut path = if region.is_empty() {
                         Toolpath::new(Vec::new())
                     } else {
-                        machining2d::chamfer(&region, &cp)?
+                        machining2d::chamfer_with_lead_safety(
+                            &region,
+                            &cp,
+                            &lead_safety,
+                        )?
                     };
                     if !runs.is_empty() {
                         let cut = |facets: &[Triangle],
@@ -2750,8 +2773,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             Err(e) => Err(e),
                         };
                         let section_at = |z: f64| cut(&m_gen.facets, &m_gen.bodies, z);
-                        let mut next = machining2d::chamfer_open_runs(&runs, &cp, &section_at)
-                            .map_err(|e| e.after_moves(&path.moves))?;
+                        let mut next = machining2d::chamfer_open_runs_with_lead_safety(
+                            &runs,
+                            &cp,
+                            &section_at,
+                            &lead_safety,
+                        )
+                        .map_err(|e| e.after_moves(&path.moves))?;
                         let notes = std::mem::take(&mut next.notes);
                         let breaks = std::mem::take(&mut next.breaks);
                         path = stitch(path, next);
@@ -2773,7 +2801,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         m_gen,
                         frame.as_ref(),
                     )?;
-                    let path = machining2d::chamfer(&region, &cp)?;
+                    let path = machining2d::chamfer_with_lead_safety(
+                        &region,
+                        &cp,
+                        &lead_safety,
+                    )?;
                     (region, path)
                 }
             }

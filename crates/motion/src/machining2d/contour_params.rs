@@ -44,6 +44,57 @@ pub enum Lead {
     Perpendicular { length: f64 },
 }
 
+impl Lead {
+    /// Whether the shape's authored dimension is a number a generator may
+    /// cut with. The geometry stays in [`super::arc_leads`].
+    #[must_use]
+    pub fn is_sane(self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Linear { length } | Self::Perpendicular { length } => {
+                length.is_finite() && length >= 0.0
+            }
+            Self::Arc { radius } | Self::Tangential { radius } => {
+                radius.is_finite() && radius > 0.0
+            }
+        }
+    }
+
+    /// The same lead shape at a fraction of its authored size.
+    #[must_use]
+    pub(super) fn scaled(self, factor: f64) -> Self {
+        match self {
+            Self::None => Self::None,
+            Self::Linear { length } => Self::Linear { length: length * factor },
+            Self::Arc { radius } => Self::Arc { radius: radius * factor },
+            Self::Tangential { radius } => Self::Tangential { radius: radius * factor },
+            Self::Perpendicular { length } => Self::Perpendicular { length: length * factor },
+        }
+    }
+
+    /// The length for straight leads, or radius for arc leads.
+    #[must_use]
+    pub(super) fn size(self) -> f64 {
+        match self {
+            Self::None => 0.0,
+            Self::Linear { length } | Self::Perpendicular { length } => length,
+            Self::Arc { radius } | Self::Tangential { radius } => radius,
+        }
+    }
+
+    /// A stable word for notes that name a blocked lead shape.
+    #[must_use]
+    pub(super) fn kind(self) -> &'static str {
+        match self {
+            Self::None => "no",
+            Self::Linear { .. } => "linear",
+            Self::Arc { .. } => "arc",
+            Self::Tangential { .. } => "tangential",
+            Self::Perpendicular { .. } => "perpendicular",
+        }
+    }
+}
+
 /// Which side of a contour boundary the cutter runs on - a sign law on
 /// the offset and one traversal flip, nothing else. Auto is resolved by
 /// the selection layer (only there does anything know what a picked ring
@@ -188,13 +239,8 @@ impl ContourParams {
         if self.tolerance <= 0.0 {
             return Err(GenError::Invalid("tolerance must be positive".into()));
         }
-        match self.lead {
-            Lead::None => {}
-            Lead::Linear { length } if length >= 0.0 && length.is_finite() => {}
-            Lead::Arc { radius } if radius > 0.0 => {}
-            Lead::Tangential { radius } if radius > 0.0 => {}
-            Lead::Perpendicular { length } if length >= 0.0 && length.is_finite() => {}
-            _ => return Err(GenError::Invalid("bad lead-in parameters".into())),
+        if !self.lead.is_sane() {
+            return Err(GenError::Invalid("bad lead-in parameters".into()));
         }
         if self.tab_count > 0 && (self.tab_width <= 0.0 || self.tab_height < 0.0) {
             return Err(GenError::Invalid("tabs need positive width".into()));

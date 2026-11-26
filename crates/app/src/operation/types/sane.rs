@@ -106,6 +106,23 @@ impl OpParams {
             } if !(minimum_cone_radius.is_finite() && *minimum_cone_radius >= 0.0) => {
                 Some("tip offset must be finite and non-negative".into())
             }
+            OpParams::Chamfer2D {
+                lead,
+                lead_out,
+                ..
+            } if lead.is_none() && lead_out.is_some() => Some(
+                "a legacy Chamfer lead-in cannot take an explicit lead-out; choose its lead-in first"
+                    .into(),
+            ),
+            OpParams::Chamfer2D {
+                lead,
+                lead_out,
+                ..
+            } if lead.as_ref().is_some_and(|value| !lead_sane(value))
+                || lead_out.as_ref().is_some_and(|value| !lead_sane(value)) =>
+            {
+                Some("Chamfer lead-in/out parameters must be finite and positive where a radius is used".into())
+            }
             _ => None,
         }
     }
@@ -407,6 +424,8 @@ impl OpParams {
                 width,
                 angle_deg,
                 minimum_cone_radius,
+                lead,
+                lead_out,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -418,6 +437,9 @@ impl OpParams {
                 pos(*width)
                     && (0.0..90.0).contains(angle_deg)
                     && nneg(*minimum_cone_radius)
+                    && lead.as_ref().is_none_or(lead_sane)
+                    && lead_out.as_ref().is_none_or(lead_sane)
+                    && (lead.is_some() || lead_out.is_none())
                     && pos(*tolerance)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())

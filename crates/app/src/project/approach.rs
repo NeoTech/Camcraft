@@ -88,7 +88,7 @@ pub struct ApproachDto {
     pub equal_steps: Option<bool>,
 }
 
-fn lead_dto(l: Lead) -> LeadDto {
+pub(super) fn lead_dto(l: Lead) -> LeadDto {
     match l {
         Lead::None => LeadDto::None,
         Lead::Linear { length } => LeadDto::Linear { length },
@@ -98,7 +98,7 @@ fn lead_dto(l: Lead) -> LeadDto {
     }
 }
 
-fn lead_of(d: LeadDto) -> Lead {
+pub(super) fn lead_of(d: LeadDto) -> Lead {
     match d {
         LeadDto::None => Lead::None,
         LeadDto::Linear { length } => Lead::Linear { length },

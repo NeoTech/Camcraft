@@ -244,6 +244,8 @@ fn chamfer_climb_keeps_the_material_right() {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: 5.0,
         retract_z: Some(2.0),
         top_z: 0.0,

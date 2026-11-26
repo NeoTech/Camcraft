@@ -43,9 +43,10 @@ pub(super) const SEC_MACHINE: usize = 5;
 /// (Trace and its engrave twin, the chamfer whose floor is derived from
 /// width and angle, the deburr's one edge - none has a stepover or a leave
 /// to show); Lead in / Lead out (M11.2, the user's "as is common in most
-/// CAM packages") on every level-ladder kind - the entry, the descent
-/// between levels and the links live there, with the contour's lead moves
-/// and tabs; Machine only Part - the bar feeder's signals are the one
+/// CAM packages") on every level-ladder kind, plus Chamfer's explicit XY
+/// leads - the entry, descent and links live there where they apply,
+/// while Chamfer shows only its two shape controls; Machine only Part -
+/// the bar feeder's signals are the one
 /// lifecycle group no cutting tab names (M5.2 G.2). The tab bar shows
 /// exactly these: no dead tabs.
 pub(crate) fn has_section(kind: OpType, s: usize) -> bool {
@@ -69,6 +70,7 @@ pub(crate) fn has_section(kind: OpType, s: usize) -> bool {
                 | OpType::Circular
                 | OpType::Slot
                 | OpType::Bore
+                | OpType::Chamfer2D
                 | OpType::Pocket3D
                 | OpType::RotaryOffset
                 | OpType::MultiAxisRough

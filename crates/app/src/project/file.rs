@@ -200,7 +200,12 @@ use super::*;
 /// steps up unchanged. An old reader must refuse a v82 file rather
 /// than drop the op it cannot read: the post would re-open a document
 /// whose flow band op vanished without a word.
-pub const PROJECT_VERSION: u32 = 82;
+/// v83 (#3237): a 2D Chamfer may state its planar lead-in and lead-out.
+/// Absence is the compatibility marker for the pre-v83 fixed open-chain
+/// air extension; explicit `Lead::None` is different and adds no XY
+/// lead. An older reader must refuse v83 rather than drop a requested
+/// lead and post only the wall ride.
+pub const PROJECT_VERSION: u32 = 83;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older

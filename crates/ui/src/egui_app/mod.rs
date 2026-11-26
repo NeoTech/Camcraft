@@ -195,6 +195,7 @@ mod setup_sheet_job_row;
 // (user review 2026-11-06): the frame, the Geometry pick block, the
 // params dispatcher and its kind-family pages, the shared widgets.
 mod fields;
+mod lead_editor;
 mod geo_page;
 #[cfg(test)]
 pub(crate) use boundary::hints as boundary_hints;

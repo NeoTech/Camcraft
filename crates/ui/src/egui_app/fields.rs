@@ -29,12 +29,10 @@ pub(super) use super::layout::{
     radio_pair, small_button,
 };
 pub(super) use super::lead_page;
+pub(super) use super::lead_editor::{lead_editor, lead_out_editor};
 pub(super) use super::op_tabs::{SEC_FEEDS, SEC_GEO, SEC_HEIGHTS, SEC_LEADS, SEC_MACHINE, SEC_PASSES};
 pub(super) use super::params_page::Cx;
 
-/// Lead in/out combo items - the whole `Lead` vocabulary, index order
-/// matching the combo-arm mapping in the contour page.
-pub(super) const LEADS: [&str; 5] = ["None", "Linear", "Arc", "Tangential", "Perpendicular"];
 /// The 3-D finish kinematics, in the order the combo maps them.
 pub(super) const FINISH_PATTERNS: [&str; 18] = [
     "Waterline",
@@ -263,12 +261,25 @@ pub(super) fn orientation_editor(ui: &mut Ui, u: Unit, tilt: &mut Option<Tilt>) 
 
 /// Combo over `&[&str]` with a usize model (imgui's combo idiom).
 pub(crate) fn combo(ui: &mut Ui, id: &str, idx: &mut usize, names: &[&str]) {
+    combo_changed(ui, id, idx, names);
+}
+
+/// Combo over `&[&str]`. Returns true when a user selects an item,
+/// including the item that was already current.
+pub(crate) fn combo_changed(
+    ui: &mut Ui,
+    id: &str,
+    idx: &mut usize,
+    names: &[&str],
+) -> bool {
     let cur = names.get((*idx).min(names.len().saturating_sub(1))).copied().unwrap_or("");
+    let mut changed = false;
     ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
-            ui.selectable_value(idx, i, *n);
+            changed |= ui.selectable_value(idx, i, *n).clicked();
         }
     });
+    changed
 }
 
 /// Same, for owned name lists (tool/source lists built per frame).

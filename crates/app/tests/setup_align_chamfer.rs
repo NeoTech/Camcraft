@@ -113,6 +113,8 @@ fn chamfer() -> OpParams {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: Height::fixed(30.0),
         retract_z: None,
         top_z: Height::of(HeightReference::TopOfModel, 0.0),

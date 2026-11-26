@@ -109,34 +109,6 @@ pub(super) fn segs_hold(legal: &Legal, from: Point2, segs: &[Seg], tol: f64) -> 
     true
 }
 
-fn scaled(lead: Lead, f: f64) -> Lead {
-    match lead {
-        Lead::None => Lead::None,
-        Lead::Linear { length } => Lead::Linear { length: length * f },
-        Lead::Arc { radius } => Lead::Arc { radius: radius * f },
-        Lead::Tangential { radius } => Lead::Tangential { radius: radius * f },
-        Lead::Perpendicular { length } => Lead::Perpendicular { length: length * f },
-    }
-}
-
-fn size(lead: Lead) -> f64 {
-    match lead {
-        Lead::None => 0.0,
-        Lead::Linear { length } | Lead::Perpendicular { length } => length,
-        Lead::Arc { radius } | Lead::Tangential { radius } => radius,
-    }
-}
-
-fn kind(lead: Lead) -> &'static str {
-    match lead {
-        Lead::None => "no",
-        Lead::Linear { .. } => "linear",
-        Lead::Arc { .. } => "arc",
-        Lead::Tangential { .. } => "tangential",
-        Lead::Perpendicular { .. } => "perpendicular",
-    }
-}
-
 fn say(notes: &mut Vec<String>, n: String) {
     if !notes.contains(&n) {
         notes.push(n);
@@ -156,11 +128,16 @@ fn both_fit(walk: &[Seg], poly: &[Point2], p: &ContourParams, f: f64, legal: &Le
         return true;
     }
     let (t0, t1) = seam_tangents(walk, poly, p);
-    let (e, segs) = lead_in(poly[0], t0, air_side(t0, p.climb), scaled(p.lead, f));
+    let (e, segs) = lead_in(poly[0], t0, air_side(t0, p.climb), p.lead.scaled(f));
     if !segs_hold(legal, e, &segs, slack(p)) {
         return false;
     }
-    let out = lead_out(poly[n - 1], t1, air_side(t1, p.climb), scaled(p.lead_out_shape(), f));
+    let out = lead_out(
+        poly[n - 1],
+        t1,
+        air_side(t1, p.climb),
+        p.lead_out_shape().scaled(f),
+    );
     segs_hold(legal, poly[n - 1], &out, slack(p))
 }
 
@@ -217,7 +194,7 @@ pub(super) fn reseat(
                 format!(
                     "lead: no room for the {} lead at the ring start ({:.3}, {:.3}) - the \
                      ring starts mid-run at ({:.3}, {:.3}) instead",
-                    kind(p.lead),
+                    p.lead.kind(),
                     pts[0].x,
                     pts[0].y,
                     m.x,
@@ -293,13 +270,13 @@ pub(super) fn plan_leads(
         let f = 0.5f64.powi(k as i32);
         if lin.is_none() {
             let air = air_side(t0, p.climb);
-            let (entry, segs) = lead_in(s, t0, air, scaled(p.lead, f));
+            let (entry, segs) = lead_in(s, t0, air, p.lead.scaled(f));
             if segs_hold(legal, entry, &segs, slack(p)) {
                 lin = Some((seat_inside(legal, entry, air, &segs, p), segs, f));
             }
         }
         if lout.is_none() {
-            let segs = lead_out(e, t1, air_side(t1, p.climb), scaled(out_shape, f));
+            let segs = lead_out(e, t1, air_side(t1, p.climb), out_shape.scaled(f));
             if segs_hold(legal, e, &segs, slack(p)) {
                 lout = Some((segs, f));
             }
@@ -314,11 +291,11 @@ pub(super) fn plan_leads(
             format!(
                 "lead: the {:.3} mm {} lead-{end} at ({:.3}, {:.3}) leaves the legal cutter \
                  region - shrunk to {:.3} mm",
-                size(lead),
-                kind(lead),
+                lead.size(),
+                lead.kind(),
                 at.x,
                 at.y,
-                size(lead) * f
+                lead.size() * f
             ),
         ),
         Some(_) => {}
@@ -327,7 +304,7 @@ pub(super) fn plan_leads(
             format!(
                 "lead: no {} lead-{end} fits the legal cutter region at ({:.3}, {:.3}) - \
                  refused, the cut meets the wall there without one",
-                kind(lead),
+                lead.kind(),
                 at.x,
                 at.y
             ),

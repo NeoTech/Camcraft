@@ -110,26 +110,7 @@ impl OpParams {
                 }
                 h.write_u32(*tab_count);
                 h.write_u8(u8::from(*climb));
-                match lead {
-                    Lead::None => h.write_u8(0),
-                    Lead::Linear { length } => {
-                        h.write_u8(1);
-                        w(h, *length);
-                    }
-                    Lead::Arc { radius } => {
-                        h.write_u8(2);
-                        w(h, *radius);
-                    }
-                    Lead::Tangential { radius } => {
-                        h.write_u8(3);
-                        w(h, *radius);
-                    }
-                    // M11.3 C: an appended tag - no earlier op holds it.
-                    Lead::Perpendicular { length } => {
-                        h.write_u8(4);
-                        w(h, *length);
-                    }
-                }
+                digest::write_lead(h, *lead);
                 // Appended at the v7-era side field: even a pre-Side
                 // contour op digests differently - the mechanism saying
                 // so, so nothing quietly reinterprets a committed path

@@ -180,37 +180,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 super::kind_editors::arc_turn_rows(ui, u, "Arc turns at corners", blend_turns, blend_radius);
             }
             if tab == SEC_LEADS {
-                let mut l_idx = match lead {
-                    Lead::None => 0,
-                    Lead::Linear { .. } => 1,
-                    Lead::Arc { .. } => 2,
-                    Lead::Tangential { .. } => 3,
-                    Lead::Perpendicular { .. } => 4,
-                };
-                let before = l_idx;
-                prop_row(ui, "Lead in/out", |ui| combo(ui, "c_lead", &mut l_idx, &LEADS));
-                if l_idx != before {
-                    *lead = match l_idx {
-                        1 => Lead::Linear { length: 8.0 },
-                        2 => Lead::Arc { radius: 5.0 },
-                        3 => Lead::Tangential { radius: 5.0 },
-                        4 => Lead::Perpendicular { length: 5.0 },
-                        _ => Lead::None,
-                    };
-                }
-                match lead {
-                    Lead::Linear { length } | Lead::Perpendicular { length } => {
-                        prop_row(ui, "Lead length", |ui| num(ui, u, length));
-                    }
-                    Lead::Arc { radius } | Lead::Tangential { radius } => {
-                        // One label for both arc radii: the widgets can
-                        // never coexist (the draft holds one lead), and
-                        // the number is the same thing - the arc's
-                        // radius.
-                        prop_row(ui, "Lead arc radius", |ui| num(ui, u, radius));
-                    }
-                    Lead::None => {}
-                }
+                lead_editor(ui, u, "c_lead", "Lead in/out", lead);
                 lead_page::leads_tab(ui, u, "c", Some((entry, helix_radius)), links);
                 hint(ui, "keep down between levels cuts each ring all the way down, descending on the ring itself");
                 super::approach_page::contour_leads_editor(ui, u, &mut links.approach, picks);

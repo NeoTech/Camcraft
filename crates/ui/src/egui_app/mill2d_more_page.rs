@@ -158,6 +158,8 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             width,
             angle_deg,
             minimum_cone_radius,
+            lead,
+            lead_out,
             clearance_z,
             retract_z,
             top_z,
@@ -210,6 +212,23 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 );
                 group(ui, LEVELS, None, |ui| {
                     retract_hop(ui, world, op_ctx.as_deref(), retract_z, top_z, clearance_z, "chamfer.retract");
+                });
+            }
+            if tab == SEC_LEADS {
+                group(ui, "Lead in", None, |ui| {
+                    let mut shape = lead.unwrap_or(Lead::None);
+                    if lead_editor(ui, u, "ch_lead_in", "Lead-in type", &mut shape) {
+                        // Only an explicit choice replaces the legacy
+                        // marker. Opening or painting the tab is inert.
+                        *lead = Some(shape);
+                    }
+                });
+                group(ui, "Lead out", None, |ui| {
+                    if lead_out_editor(ui, u, "ch_lead_out", "Lead-out type", lead_out)
+                        && lead.is_none()
+                    {
+                        *lead = Some(Lead::None);
+                    }
                 });
             }
             if tab == SEC_FEEDS {

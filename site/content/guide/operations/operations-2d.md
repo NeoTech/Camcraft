@@ -720,6 +720,19 @@ settings off for open chains.
 | Geometry | Chamfer angle | 45° |
 | Geometry | Side | Auto |
 | Geometry | Tolerance | 0.01 |
+| Lead in / Lead out | Lead-in shape | None |
+| Lead in / Lead out | Lead-out shape | Same as lead-in |
+
+Lead-in and lead-out use the shared 2D lead shapes: **None**, **Linear**,
+**Arc**, **Tangential**, and **Perpendicular**. Each end has its own length
+or radius. A blocked request is halved up to four times. The operation is
+refused if no stated lead fits; it does not silently fall back to a bare
+wall. The check uses the complete cone, flute, shank and modelled body
+against the selected model.
+
+New operations with **None** add no XY lead. Chamfer projects saved before
+the lead controls keep their earlier fixed-width open-chain air extension
+until an explicit lead is stated.
 
 The floor is not set: it follows from the width and angle. It has no Passes
 tab.
@@ -727,7 +740,8 @@ tab.
 **Common refusals:** "2D Chamfer rides its face on a cone - it needs a
 chamfer mill"; "a 45-degree chamfer takes a 90-degree cone; 'T5' has ...
 degrees"; "the cone of ... is ... mm of flute, short of the ... mm depth
-this face stands at".
+this face stands at"; "2D Chamfer ... lead-in and ... lead-out cannot fit
+after four halvings".
 
 ## Circular
 

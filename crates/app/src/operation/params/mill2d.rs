@@ -224,6 +224,8 @@ impl OpParams {
                 width,
                 angle_deg,
                 minimum_cone_radius,
+                lead,
+                lead_out,
                 clearance_z,
                 retract_z,
                 top_z,
@@ -250,6 +252,18 @@ impl OpParams {
                 if *minimum_cone_radius != 0.0 {
                     h.write_u8(0xC1);
                     w(h, *minimum_cone_radius);
+                }
+                // #3237: absence is the old fixed-width open-chain
+                // marker. State a lead explicitly - even None - only
+                // after the opt-in marker, so a legacy cache keeps its
+                // exact old bytes.
+                if lead.is_some() || lead_out.is_some() {
+                    h.write_u8(0xC2);
+                    match lead {
+                        None => h.write_u8(0xFE),
+                        Some(value) => digest::write_lead(h, *value),
+                    }
+                    digest::write_optional_lead(h, *lead_out);
                 }
             }
             // The circular ladder digests the pocket family's bytes

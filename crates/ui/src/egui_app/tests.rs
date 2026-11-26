@@ -1189,6 +1189,7 @@ fn every_field_lives_on_exactly_one_section() {
                     vec!["Click selects:", "Chamfer width", "Chamfer angle", "Side", "Tolerance"],
                 ),
                 ("Heights", vec!["Clearance Z", "Levels", "Top Z"]),
+                ("Lead in / Lead out", vec!["Lead in", "Lead out", "Lead-in type", "Lead-out type"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
         ),

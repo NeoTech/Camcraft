@@ -52,6 +52,7 @@ fn tilted_corner_note_uses_the_same_local_frame_as_its_top_row() {
     state.op_ui.params = OpParams::Chamfer2D {
         width: 1.0, angle_deg: 45.0,
         minimum_cone_radius: 2.0,
+        lead: None, lead_out: None,
         clearance_z: Height::of(R::TopOfStock, 10.0), retract_z: None,
         top_z: Height::of(R::TopOfStock, 0.0),
         feed: 800.0, plunge_feed: 200.0, climb: true,
@@ -73,6 +74,8 @@ fn chamfer_geometry_exposes_tip_offset() {
         width: 1.0,
         angle_deg: 45.0,
         minimum_cone_radius: 2.0,
+        lead: None,
+        lead_out: None,
         clearance_z: Height::of(R::TopOfStock, 10.0),
         retract_z: None,
         top_z: Height::of(R::TopOfStock, 0.0),

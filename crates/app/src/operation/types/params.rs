@@ -431,6 +431,13 @@ pub enum OpParams {
         /// the ideal tip. The requested face still ends at radius
         /// `minimum_cone_radius + width`.
         minimum_cone_radius: f64,
+        /// Pre-v83 projects omit the outer `Option` and keep their
+        /// fixed-width open-chain air extension. New operations state
+        /// `Some(Lead::None)`, which explicitly adds no XY lead.
+        lead: Option<Lead>,
+        /// Absent mirrors the lead-in; `Some(Lead::None)` is an explicit
+        /// no-lead-out choice.
+        lead_out: Option<Lead>,
         clearance_z: Height,
         /// Hop plane between chains; None hops to clearance - the
         /// trace's shape.

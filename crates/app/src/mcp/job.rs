@@ -273,6 +273,15 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 }));
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
+            if key == "chamfer2_d" {
+                push_missing_fields(
+                    &mut fields,
+                    &[
+                        ("lead", "string", json!("none")),
+                        ("lead_out", "null", Value::Null),
+                    ],
+                );
+            }
             let mut kind = json!({
                 "label": k.label,
                 "key": key,

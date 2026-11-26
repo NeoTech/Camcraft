@@ -561,6 +561,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // is the stamp itself.
         // v81 -> v82 (#2826): the Rotary Flow arm arrives; no v81
         // file names it, so nothing seats or moves - pure step-up.
+        // v82 -> v83 (#3237): absent Chamfer `lead` and `lead_out`
+        // fields preserve the old open-chain width extensions; absence
+        // is the runtime compatibility marker, not Lead::None.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {

@@ -28,18 +28,11 @@ use crate::cl::{EdgeBreak, MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Point3;
 
-use super::contour::air_side;
-use super::contour_run_side::{
-    LIFT, SectionAt, Words, material_side, offset_run_side, simple,
-};
-use super::chamfer_side::boundary_inside;
+use super::chamfer_lead::plan_walks;
+use super::chamfer_lead_check::ChamferLeadSafety;
 use super::face::GenError;
-use super::levels::{Motion, run_levels};
-
-const CHAMFER_WORDS: Words = Words {
-    body: "selected model",
-    both: "a chamfer on that edge would meet material on both sides; pick a boundary edge with air on one side",
-};
+use super::contour::Lead;
+use super::levels::{Motion, run_level_walks, run_levels};
 
 /// One chamfer ride's numbers. `top_z` is the plane the chamfer's wide
 /// end opens in (the picked edge's top); both the authored break depth
@@ -52,6 +45,13 @@ pub struct ChamferParams {
     pub angle_deg: f64,
     /// Inner radius of the selected cone band, measured from its axis.
     pub minimum_cone_radius: f64,
+    /// `None` is the pre-v83 compatibility marker: closed paths keep
+    /// no added lead and open paths keep their fixed width air extension.
+    /// `Some(Lead::None)` is a newly explicit no-added-XY choice.
+    pub lead: Option<Lead>,
+    /// `None` mirrors the lead-in. `Some(Lead::None)` turns only the
+    /// lead-out off.
+    pub lead_out: Option<Lead>,
     pub clearance_z: f64,
     /// Hop plane; validated at or above `top_z`, never the corner -
     /// between the corner and the top the wall still stands.
@@ -97,6 +97,17 @@ impl ChamferParams {
             return Err(GenError::Invalid(
                 "tip offset must be non-negative".into(),
             ));
+        }
+        if self.lead.is_none() && self.lead_out.is_some() {
+            return Err(GenError::Invalid(
+                "a legacy Chamfer lead-in cannot take an explicit lead-out; choose its lead-in first"
+                    .into(),
+            ));
+        }
+        if self.lead.is_some_and(|lead| !lead.is_sane())
+            || self.lead_out.is_some_and(|lead| !lead.is_sane())
+        {
+            return Err(GenError::Invalid("bad Chamfer lead parameters".into()));
         }
         if !(0.0..90.0).contains(&self.angle_deg) {
             return Err(GenError::Invalid(
@@ -144,6 +155,10 @@ impl ChamferParams {
             - (self.minimum_cone_radius + self.width)
                 * self.angle_deg.to_radians().tan()
     }
+
+    pub(super) fn legacy_leads(&self) -> bool {
+        self.lead.is_none()
+    }
 }
 
 /// Chamfer every loop of the picked region: one circuit per loop, in
@@ -151,6 +166,24 @@ impl ChamferParams {
 /// cone-tip depth. A positive radius offsets the ride on the selected
 /// air side; zero takes the old path without an offset call.
 pub fn chamfer(region: &crate::geo2d::Region, p: &ChamferParams) -> Result<Toolpath, GenError> {
+    chamfer_impl(region, p, None)
+}
+
+/// Chamfer with exact selected-model and full tool-assembly checks for
+/// every requested lead. The legacy wrapper keeps the old public API.
+pub fn chamfer_with_lead_safety(
+    region: &crate::geo2d::Region,
+    p: &ChamferParams,
+    safety: &ChamferLeadSafety<'_>,
+) -> Result<Toolpath, GenError> {
+    chamfer_impl(region, p, Some(safety))
+}
+
+fn chamfer_impl(
+    region: &crate::geo2d::Region,
+    p: &ChamferParams,
+    safety: Option<&ChamferLeadSafety<'_>>,
+) -> Result<Toolpath, GenError> {
     p.validate()?;
     if region.is_empty() {
         return Err(GenError::Empty("empty chamfer region".into()));
@@ -238,7 +271,23 @@ pub fn chamfer(region: &crate::geo2d::Region, p: &ChamferParams) -> Result<Toolp
     // The one level the ride owns: not a ladder - the cone's
     // generatrix meets the wall at exactly one depth.
     let motion = Motion::new(p.clearance_z, p.retract_z, p.feed, p.plunge_feed);
-    run_levels(&mut b, &passes, &[z], &motion, None, None, None);
+    if p.legacy_leads() {
+        run_levels(&mut b, &passes, &[z], &motion, None, None, None);
+    } else {
+        let planned = plan_walks(&passes, p, safety)?;
+        run_level_walks(
+            &mut b,
+            &planned.passes,
+            &[z],
+            &motion,
+            Some(&planned.runs),
+            None,
+            None,
+        );
+        for note in planned.notes {
+            b.note_once(&note);
+        }
+    }
     let cur = b.at();
     b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
 
@@ -261,163 +310,5 @@ pub fn chamfer(region: &crate::geo2d::Region, p: &ChamferParams) -> Result<Toolp
         })
         .filter(EdgeBreak::is_sane)
         .collect();
-    Ok(path)
-}
-
-/// Chamfer joined open edge chains, one safe approach and exit per
-/// chain. At zero radius the pass stands on the selected wall. A positive
-/// radius offsets the selected run toward Side's air side, then adds air
-/// leads one chamfer width beyond each end. The material side is read
-/// from the model at the authored chamfer heights, so climb never
-/// depends on an arbitrary edge-chain orientation. The `EdgeBreak`
-/// contains the selected chain alone; offsets and air leads grant no
-/// extra credit.
-pub fn chamfer_open_runs(
-    runs: &[Vec<Point2>],
-    p: &ChamferParams,
-    section: &SectionAt<'_>,
-) -> Result<Toolpath, GenError> {
-    p.validate()?;
-    if runs.is_empty() {
-        return Err(GenError::Empty("a 2D Chamfer needs a selected edge chain".into()));
-    }
-    let z = p.tip_z();
-    if !z.is_finite() {
-        return Err(GenError::Invalid("virtual cone tip left the finite horizon".into()));
-    }
-    let corner_z = p.corner_z();
-    let depth = p.break_depth();
-    let probe = LIFT.min(depth * 0.25);
-    let mut passes: Vec<Vec<Point2>> = Vec::with_capacity(runs.len());
-    let mut breaks: Vec<EdgeBreak> = Vec::with_capacity(runs.len());
-    for pts in runs {
-        let tangent = |a: Point2, b: Point2| -> Result<Point2, GenError> {
-            let len = (b.x - a.x).hypot(b.y - a.y);
-            if !len.is_finite() || len <= 1e-9 {
-                return Err(GenError::Empty(
-                    "a chamfer edge holds a collapsed segment - re-pick the edge".into(),
-                ));
-            }
-            Ok(Point2::new((b.x - a.x) / len, (b.y - a.y) / len))
-        };
-        for pair in pts.windows(2) {
-            tangent(pair[0], pair[1])?;
-        }
-        let run = simple(pts).map_err(|e| match e {
-            GenError::Empty(_) => {
-                GenError::Empty("a chamfer edge collapses to one point - re-pick the edge".into())
-            }
-            other => other,
-        })?;
-        let mut levels = Vec::new();
-        for at in [corner_z + probe, p.top_z - probe] {
-            if let Some(region) = section(at)?
-                && !region.is_empty()
-            {
-                levels.push((at, region));
-            }
-        }
-        let material_left = material_side(&run, &levels, &CHAMFER_WORDS)?.ok_or_else(|| {
-            GenError::Invalid(
-                "the selected open chamfer edge has no model wall at the programmed chamfer depth - pick an edge on the part, or change Top of Part Z"
-                    .into(),
-            )
-        })?;
-        let pass = if p.minimum_cone_radius == 0.0 {
-            let mut pass = run.clone();
-            // Keep the legacy zero-radius route byte-for-byte. Material
-            // stays on the RIGHT for climb, as on every loop. The model
-            // read above supplies the side that a feature chain's
-            // arbitrary storage direction otherwise cannot.
-            if p.climb == material_left {
-                pass.reverse();
-            }
-            pass
-        } else {
-            let air_left = !material_left;
-            let Some(inside) = boundary_inside(&run, &levels, air_left)? else {
-                return Err(GenError::Invalid(
-                    "the selected open model wall cannot classify Side for the tip offset; re-pick a boundary edge".into(),
-                ));
-            };
-            if inside != p.inside {
-                let side = if p.inside { "Inside" } else { "Outside" };
-                return Err(GenError::Invalid(format!(
-                    "Side {side} names the wrong class of selected model wall for the tip offset; use Side Auto or the other side"
-                )));
-            }
-            let offset_left = air_left;
-            let offset = offset_run_side(&run, p.minimum_cone_radius, offset_left)?
-                .ok_or_else(|| {
-                    GenError::Invalid(format!(
-                        "the tip offset of {} mm folds onto itself or disappears; pick a gentler run or a smaller offset",
-                        p.minimum_cone_radius
-                    ))
-                })?;
-            let offset_forward = !offset_left;
-            let desired_forward = p.climb != material_left;
-            let mut pass = offset;
-            if offset_forward != desired_forward {
-                pass.reverse();
-            }
-            pass
-        };
-        // Guard: simple() gives the ideal-tip pass at least two points. A
-        // shorter tip-offset pass is refused here, never posted.
-        let (Some(&first), Some(&second), Some(&last), Some(&before_last)) =
-            (pass.first(), pass.get(1), pass.last(), pass.get(pass.len().saturating_sub(2)))
-        else {
-            return Err(GenError::Empty("a chamfer edge needs at least two points".into()));
-        };
-        let entry_air = air_side(tangent(first, second)?, p.climb);
-        let exit_air = air_side(tangent(before_last, last)?, p.climb);
-        let mut ride = Vec::with_capacity(pass.len() + 2);
-        ride.push(Point2::new(
-            first.x + entry_air.x * p.width,
-            first.y + entry_air.y * p.width,
-        ));
-        ride.extend(pass);
-        ride.push(Point2::new(
-            last.x + exit_air.x * p.width,
-            last.y + exit_air.y * p.width,
-        ));
-        if p.minimum_cone_radius > 0.0 {
-            let swept = Region::sweep(&[ride.clone()], 1e-3).map_err(GenError::Geo)?;
-            for (z, region) in &levels {
-                let hit = swept.intersect(region).map_err(GenError::Geo)?;
-                if !hit.is_empty()
-                    && let Some(q) = hit.loops().first().and_then(|l| l.points().first())
-                {
-                    return Err(GenError::invalid_at(
-                        format!(
-                            "the tip offset reaches selected-model material on the air side at Z {z:.3} near ({:.3}, {:.3}); pick a smaller offset or a different Side",
-                            q.x, q.y
-                        ),
-                        Point3::new(q.x, q.y, *z),
-                    ));
-                }
-            }
-        }
-        passes.push(ride);
-        breaks.push(EdgeBreak {
-            edge: run.iter().map(|q| Point3::new(q.x, q.y, p.top_z)).collect(),
-            depth: p.break_depth(),
-            slope: p.angle_deg.to_radians().tan(),
-            volume: None,
-        });
-    }
-
-    let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
-    let motion = Motion::new(p.clearance_z, p.retract_z, p.feed, p.plunge_feed);
-    run_levels(&mut b, &passes, &[z], &motion, None, None, None);
-    let cur = b.at();
-    if cur.z < p.clearance_z {
-        b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
-    }
-    let mut path = b.finish();
-    if !path.all_finite() {
-        return Err(GenError::Invalid("open chamfer path left the finite horizon".into()));
-    }
-    path.breaks = breaks.into_iter().filter(EdgeBreak::is_sane).collect();
     Ok(path)
 }

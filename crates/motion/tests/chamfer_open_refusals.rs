@@ -27,6 +27,8 @@ fn chamfer_params() -> ChamferParams {
         width: 2.0,
         angle_deg: 45.0,
         minimum_cone_radius: 0.0,
+        lead: None,
+        lead_out: None,
         clearance_z: 25.0,
         retract_z: None,
         top_z: 20.0,

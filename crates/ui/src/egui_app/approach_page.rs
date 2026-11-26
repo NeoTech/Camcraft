@@ -14,14 +14,13 @@
 use egui::Ui;
 
 use camcraft_app::links::{Approach, Compensation};
-use camcraft_app::machining2d::{Lead, PassStart};
+use camcraft_app::machining2d::PassStart;
 use camcraft_app::machining3d::Entry3D;
 use camcraft_app::units::Unit;
 
-use super::fields::{combo, num, num_feed, num_unit};
+use super::fields::{combo, lead_out_editor, num, num_feed, num_unit};
 use super::layout::{auto_value, check_row, consequence, group, hint, prop_row, prop_row_hint};
 
-const LEAD_OUTS: [&str; 6] = ["Same as lead-in", "None", "Linear", "Arc", "Tangential", "Perpendicular"];
 const COMPS: [&str; 3] = ["In computer", "In control (G41/G42)", "Wear (G41/G42)"];
 
 /// The entry arm's own numbers (`arm` - the first entry, or the level
@@ -144,17 +143,6 @@ pub(super) fn engagement_group(ui: &mut Ui, a: &mut Approach) {
 pub(super) const ENGAGEMENT_SCOPE: &str =
     "entry feeds only: the path keeps its shape - the side load of the passes is Stepover or Optimal load on Passes";
 
-fn lead_idx(l: Option<Lead>) -> usize {
-    match l {
-        None => 0,
-        Some(Lead::None) => 1,
-        Some(Lead::Linear { .. }) => 2,
-        Some(Lead::Arc { .. }) => 3,
-        Some(Lead::Tangential { .. }) => 4,
-        Some(Lead::Perpendicular { .. }) => 5,
-    }
-}
-
 /// The contour's lead geometry beyond the lead-in's shape.
 pub(super) fn contour_leads_editor(
     ui: &mut Ui,
@@ -163,30 +151,7 @@ pub(super) fn contour_leads_editor(
     picks: &mut camcraft_app::path_picks::PathPicks,
 ) {
     group(ui, "Lead out", None, |ui| {
-        let mut i = lead_idx(a.lead_out);
-        let before = i;
-        prop_row_hint(ui, "Type", "every lead and extension stays in the legal room - shrunk, then refused by name", |ui| {
-            combo(ui, "c_lead_out", &mut i, &LEAD_OUTS)
-        });
-        if i != before {
-            a.lead_out = match i {
-                1 => Some(Lead::None),
-                2 => Some(Lead::Linear { length: 8.0 }),
-                3 => Some(Lead::Arc { radius: 5.0 }),
-                4 => Some(Lead::Tangential { radius: 5.0 }),
-                5 => Some(Lead::Perpendicular { length: 5.0 }),
-                _ => None,
-            };
-        }
-        match &mut a.lead_out {
-            Some(Lead::Linear { length } | Lead::Perpendicular { length }) => {
-                prop_row(ui, "Lead-out length", |ui| num(ui, u, length));
-            }
-            Some(Lead::Arc { radius } | Lead::Tangential { radius }) => {
-                prop_row(ui, "Lead-out arc radius", |ui| num(ui, u, radius));
-            }
-            Some(Lead::None) | None => {}
-        }
+        lead_out_editor(ui, u, "c_lead_out", "Type", &mut a.lead_out);
     });
     group(ui, "Extensions", None, |ui| {
         prop_row(ui, "Before lead-in", |ui| num(ui, u, &mut a.ext_in));
