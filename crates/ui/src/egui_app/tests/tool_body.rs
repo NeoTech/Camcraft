@@ -46,7 +46,10 @@ pub(super) fn temp_stl(tag: &str) -> std::path::PathBuf {
 pub(super) fn editor() -> Harness<'static, ShellUi> {
     let mut harness = shell_harness();
     harness.run();
-    crate::actions::open_tool_editor(&mut harness.state_mut().state, TOOL);
+    // #2397: Properties shows the tool page, so its one side preview is
+    // drawn beside the shape window.
+    harness.state_mut().state.ui_target = UiTarget::Tool(TOOL.into());
+    crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, TOOL);
     harness.run();
     harness.run();
     harness
@@ -245,7 +248,7 @@ fn the_simulated_tool_reaches_from_its_tip_into_the_body_on_the_users_document()
     harness.run();
     harness.state_mut().state.pending.push_back(CommandKind::OpenProjectFile(STEP_BLOCK.into()));
     harness.run();
-    crate::actions::open_tool_editor(&mut harness.state_mut().state, TOOL);
+    crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, TOOL);
     harness.run();
     let path = temp_stl("user");
     prism_stl(&path, 20.0, 0.0, 50.0, 24);
@@ -256,7 +259,7 @@ fn the_simulated_tool_reaches_from_its_tip_into_the_body_on_the_users_document()
     harness.run();
     harness.run();
     assert!(body_source(&harness.state().state).is_some(), "status: {}", harness.state().state.status);
-    harness.state_mut().state.close_tool_editor_window();
+    harness.state_mut().state.close_tool_shape_editor();
     harness.state_mut().state.pending.push_back(CommandKind::Select(Some("Face1".into())));
     // Paused at 0, as the user saw it.
     harness.state_mut().state.sim = Some(crate::state::Sim { t: 0.0, playing: false, speed: 1.0 });
@@ -413,4 +416,69 @@ fn pick_tip_sets_manual_placement_note() {
         Some("manual placement")
     );
     assert!(harness.query_by_label("manual placement").is_some());
+}
+
+/// #2007: the Body tab uses plain-English state lines and label-left
+/// property rows for placement fields.
+#[test]
+fn body_tab_uses_plain_english_state_lines_and_label_left_fields() {
+    let mut harness = editor();
+    assert!(
+        harness.query_by_label("In use: the holder cylinder from the dimensions").is_some(),
+        "bare tool states holder cylinder in plain English"
+    );
+    assert!(
+        harness.query_all_by_label_contains("judged").next().is_none(),
+        "no 'judged' jargon on the Body tab"
+    );
+
+    let path = temp_stl("plain_state");
+    prism_stl(&path, 15.0, 0.0, 30.0, 24);
+    let top = shank_top(&harness.state().state);
+    {
+        let st = &mut harness.state_mut().state;
+        st.import_tool_body_from(&path);
+        st.tool_body_ui.offset = top;
+    }
+    harness.run();
+    assert!(
+        harness.query_by_label("Ready to apply: holder.stl (not applied yet)").is_some(),
+        "unapplied body draft says so in plain English"
+    );
+    assert!(
+        harness.query_all_by_label_contains("Placed from ").next().is_some(),
+        "valid placement line uses plain English"
+    );
+    assert!(
+        harness.query_by_label("Tool axis (model direction, tip to spindle)").is_none(),
+        "Tool axis drops stacked parenthetical label"
+    );
+    assert!(
+        harness.query_by_label("Tip offset (model origin above the tip)").is_none(),
+        "Tip offset drops stacked parenthetical label"
+    );
+    let axis_label = super::structural::at(&super::structural::painted(&harness), "Tool axis");
+    let axis_combo = harness
+        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("+Z"))
+        .rect();
+    assert!(axis_label.x < axis_combo.center().x, "Tool axis label sits left of combo: {axis_label:?} vs {axis_combo:?}");
+    assert!((axis_label.y - axis_combo.center().y).abs() < 15.0, "Tool axis label shares a row: {axis_label:?} vs {axis_combo:?}");
+
+    let offset_label = super::structural::at(&super::structural::painted(&harness), "Tip offset");
+    let offset_input = harness
+        .query_all_by_role(egui::accesskit::Role::SpinButton)
+        .find(|n| n.value().as_deref() == Some("55.0 mm"))
+        .expect("Tip offset spin button")
+        .rect();
+    assert!(offset_label.x < offset_input.center().x, "Tip offset label sits left of input: {offset_label:?} vs {offset_input:?}");
+    assert!((offset_label.y - offset_input.center().y).abs() < 15.0, "Tip offset label shares a row: {offset_label:?} vs {offset_input:?}");
+
+    harness.get_by_label("Apply body").click();
+    harness.run();
+    harness.run();
+    assert!(
+        harness.query_by_label("In use: holder.stl").is_some(),
+        "landed body states 'In use: holder.stl'"
+    );
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }

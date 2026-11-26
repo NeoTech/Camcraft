@@ -3,13 +3,15 @@
 //! delete-and-undo; SetModelSource links and unlinks as one undo step;
 //! the project file (v72) keeps it, a v71 file opens unlinked, and a
 //! malformed source row is refused as corrupt. The MCP tool sets the link
-//! and get_job shows it.
+//! and get_job shows it. #2689: the digest is of the one read the import
+//! parsed, and the check hashes a file in pieces.
 //! Provenance: our own fixtures over our own commands.
 //!
 //! Gate map (#2463): covers app::model_source, app::commands::import_model,
 //! app::commands::update_model, app::commands::delete_entity,
 //! app::commands::model_link (SetModelSource), app::project (source_dto,
-//! v72), app::mcp::model_link_tools, app::mcp::job (get_job).
+//! v72), app::mcp::model_link_tools, app::mcp::job (get_job),
+//! app::geometry::import::sourced (#2689).
 //! Lane shape (M4.4): all tests here run in seconds.
 
 use std::path::{Path, PathBuf};
@@ -148,7 +150,7 @@ fn the_project_file_keeps_the_link_and_a_v71_file_opens_unlinked() {
     let text = saved(&world, &dir);
     let doc: Value = serde_json::from_str(&text).expect("json");
     assert_eq!(doc["version"], json!(project::PROJECT_VERSION));
-    assert_eq!(project::PROJECT_VERSION, 72);
+    assert!(doc["version"].as_u64().is_some_and(|v| v >= 72), "linked sources require the v72 format barrier");
     let row = doc["entities"].as_array().and_then(|e| e.iter().find(|e| e["name"] == "part")).expect("part row");
     let want = source_of(&world, "part").expect("linked");
     assert_eq!(row["source"], json!({ "path": want.path, "sha256": want.sha256 }));
@@ -171,9 +173,9 @@ fn the_project_file_keeps_the_link_and_a_v71_file_opens_unlinked() {
     assert!(model::find_by_name(&fresh, "part").is_some());
 
     let mut newer = doc;
-    newer["version"] = json!(project::PROJECT_VERSION + 1);
+    newer["version"] = json!(project::NEWEST_PROJECT_VERSION + 1);
     let err = project::open(&new_world(), &serde_json::to_string(&newer).expect("json")).expect_err("too new");
-    assert!(err.to_string().contains("unsupported project version 73"), "{err}");
+    assert!(err.to_string().contains(&format!("unsupported project version {}", project::NEWEST_PROJECT_VERSION + 1)), "{err}");
 
     let plain = new_world();
     let mut h = History::default();
@@ -246,4 +248,48 @@ fn the_mcp_tool_links_and_unlinks_and_get_job_shows_the_source() {
     let (err, body) = call(&mut s, 9, "undo", json!({}));
     assert!(!err, "undo: {body}");
     assert_eq!(job_source(&mut s, 10), Value::Null, "undo reverts one step");
+}
+
+/// A closed binary STL tetrahedron, wound outward.
+fn binary_tetra() -> Vec<u8> {
+    let (o, a, b, c) = ([0f32, 0., 0.], [10f32, 0., 0.], [0f32, 10., 0.], [0f32, 0., 10.]);
+    let faces = [([0f32, 0., -1.], [o, b, a]), ([0., -1., 0.], [o, a, c]), ([-1., 0., 0.], [o, c, b]), ([0.577, 0.577, 0.577], [a, b, c])];
+    let mut out = vec![0u8; 80];
+    out.extend_from_slice(&4u32.to_le_bytes());
+    for (n, tri) in faces {
+        for v in std::iter::once(n).chain(tri) {
+            for x in v {
+                out.extend_from_slice(&x.to_le_bytes());
+            }
+        }
+        out.extend_from_slice(&0u16.to_le_bytes());
+    }
+    out
+}
+
+/// #2689: the link records the SHA-256 of the one read the import parsed -
+/// an ASCII STL (whose head the streaming parser reads twice), a binary
+/// STL, OBJ and STEP - and the link check's streamed digest agrees.
+#[test]
+fn the_link_digest_is_of_the_one_read_the_import_parsed() {
+    let dir = Dir::new("one-read");
+    let binary = dir.0.join("tetra.stl");
+    std::fs::write(&binary, binary_tetra()).expect("write tetra");
+    for path in [dir.part(), binary, testdata("box.obj"), testdata("box.step")] {
+        let want = camcraft_geometry::solidcraft::sha256_hex(&std::fs::read(&path).expect("read"));
+        let cmd = ImportModel::new(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert_eq!(cmd.source.map(|s| s.sha256), Some(want.clone()), "import digest of {}", path.display());
+        assert_eq!(model_source::read(&path).map(|s| s.sha256), Ok(want), "check digest of {}", path.display());
+    }
+}
+
+/// #2689: the link check hashes a file in pieces, never whole; a file of
+/// several pieces gives the digest of all its bytes.
+#[test]
+fn the_link_check_hashes_a_file_larger_than_one_piece_as_a_whole() {
+    let dir = Dir::new("pieces");
+    let big = dir.0.join("big.stl");
+    let data: Vec<u8> = (0..(3 << 20) + 17u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8).collect();
+    std::fs::write(&big, &data).expect("write big");
+    assert_eq!(model_source::read(&big).map(|s| s.sha256), Ok(camcraft_geometry::solidcraft::sha256_hex(&data)));
 }

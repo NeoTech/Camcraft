@@ -71,10 +71,10 @@ pub fn placed_in(world: &World, declared: Option<&str>) -> Vec<String> {
 
 /// The top of a stock in its own frame: the box height, the cylinder
 /// height, or the highest finite facet Z of a stock copied from a model.
-fn stock_top(world: &World, stock: &Entity) -> Option<f64> {
-    match model::stock_def_of(world, stock)? {
-        StockShape::Box { dz, .. } => dz.is_finite().then_some(dz),
-        StockShape::Cylinder { height, .. } => height.is_finite().then_some(height),
+fn stock_top(world: &World, stock: &Entity, shape: &StockShape) -> Option<f64> {
+    match shape {
+        StockShape::Box { dz, .. } => dz.is_finite().then_some(*dz),
+        StockShape::Cylinder { height, .. } => height.is_finite().then_some(*height),
         StockShape::FromModel { .. } => model::facets_of(world, stock)?
             .iter()
             .flat_map(|t| [t.a.z, t.b.z, t.c.z])
@@ -83,15 +83,49 @@ fn stock_top(world: &World, stock: &Entity) -> Option<f64> {
     }
 }
 
+/// #2576: the refusal for a stock with no flat face on top.
+pub const NO_TOP_FACE: &str = "the stock has no flat top face - a cylinder that lies on its side or a tilted stock takes no profile; \
+     stand the stock upright or turn it square to the axes";
+
 /// The frame profiles of a setup are placed in: the top face of the
 /// setup's stock, at the stock origin, turned with the stock. `None`
-/// when the setup has no stock.
+/// when the setup has no stock, or when the stock has no flat top face
+/// ([`stock_face`] names that).
 #[must_use]
 pub fn face_frame(world: &World, declared: Option<&str>) -> Option<Location> {
-    let stock = crate::setup::stock_entity(world, declared)?;
-    let top = stock_top(world, &stock)?;
+    stock_face(world, declared).ok().flatten()
+}
+
+/// [`face_frame`] with its refusal: `Ok(None)` when the setup has no
+/// stock, `Err(NO_TOP_FACE)` when its stock has no flat face on top
+/// (#2576). An upright stock (any turn about Z) keeps its own top face.
+/// A stock laid square (a quarter turn) is read as the same solid
+/// unturned, by the simulation's law (`stock_follow::sim_frame`), so the
+/// profile lies on the face that is on top in the setup.
+///
+/// # Errors
+/// [`NO_TOP_FACE`] for a laid cylinder or a stock tilted off the axes.
+pub fn stock_face(world: &World, declared: Option<&str>) -> Result<Option<Location>, &'static str> {
+    let Some(stock) = crate::setup::stock_entity(world, declared) else {
+        return Ok(None);
+    };
+    let Some(shape) = model::stock_def_of(world, &stock) else {
+        return Ok(None);
+    };
     let at = model::transform_of(world, &stock).unwrap_or_default();
-    Some(compose(at, Location { pos: Point3::new(0.0, 0.0, top), rot: IDENTITY_Q }))
+    let up = crate::geometry::quat_rotate_point(at.rot, Point3::new(0.0, 0.0, 1.0));
+    let (shape, at) = if matches!(shape, StockShape::FromModel { .. }) || up.z >= 1.0 - 1e-9 {
+        (shape, at)
+    } else {
+        // Since #2758 the simulation keeps a laid cylinder's turn; its ends
+        // stand vertical, so it still has no flat face on top.
+        let (shape, at) = crate::stock_follow::sim_frame(&shape, at).map_err(|_| NO_TOP_FACE)?;
+        if crate::geometry::quat_rotate_point(at.rot, Point3::new(0.0, 0.0, 1.0)).z < 1.0 - 1e-9 {
+            return Err(NO_TOP_FACE);
+        }
+        (shape, at)
+    };
+    Ok(stock_top(world, &stock, &shape).map(|top| compose(at, Location { pos: Point3::new(0.0, 0.0, top), rot: IDENTITY_Q })))
 }
 
 /// Where a profile lies in its setup's frame: its face placement on the

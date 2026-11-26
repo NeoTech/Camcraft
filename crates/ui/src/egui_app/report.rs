@@ -92,13 +92,15 @@ pub(crate) fn issue_url(kind: ReportKind, title: &str, body: &str) -> String {
 
 /// The body: the two questions a triage needs answered, then the plain
 /// text the Debug info window reports (#157) - same fields, one source.
+/// The body travels to GitHub in the URL, so it takes the shared form of
+/// that report: file names only, never a directory of the user (#2744).
 #[must_use]
 pub(crate) fn report_body(state: &State) -> String {
     let mut out = String::new();
     out.push_str("<!-- CamCraft filled in the title, this text and the label. -->\n\n");
     out.push_str("**What happened**\n\n\n\n**Steps to reproduce**\n\n1. \n\n");
     out.push_str("---\n\n");
-    out.push_str(&super::debug_info::report(state));
+    out.push_str(&super::debug_info::shared_report(state));
     if cfg!(not(target_arch = "wasm32")) {
         out.push_str("\n\nScreenshot: CamCraft is copying the whole window to the clipboard - paste it into this description.");
     } else {

@@ -1,17 +1,19 @@
 //! The MCP DXF-profile tools (#1862): `import_dxf` places a DXF drawing
 //! on the stock of a setup through the undoable `ImportDxf`, and
 //! `move_dxf_profile` moves it on the stock face through `MoveSketch` -
-//! the commands the Stock page uses. Each is one History step, and every
-//! refusal is the command's own text, returned as a tool error.
+//! the commands the Stock page uses. `insert_text` (#2679) places a typed
+//! string as a profile of engraving strokes through `InsertText`. Each is
+//! one History step, and every refusal is the command's own text,
+//! returned as a tool error.
 //!
-//! Provenance: our own tool surface over this repo's `ImportDxf` and
-//! `MoveSketch` commands; no vendor material consulted.
+//! Provenance: our own tool surface over this repo's `ImportDxf`,
+//! `MoveSketch` and `InsertText` commands; no vendor material consulted.
 
 use super::setup_tools::{cmd_err, obj};
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::MoveSketch;
 use crate::model;
-use crate::script::{dxf, Env};
+use crate::script::{dxf, text, Env};
 use crate::sketch;
 
 use serde_json::{json, Map, Value};
@@ -29,7 +31,33 @@ pub(super) const TOOLS: &[Tool] = &[
         schema: s_move_dxf_profile,
         run: move_dxf_profile,
     },
+    Tool {
+        name: "insert_text",
+        description: "Place a typed string as a profile of single-line engraving strokes on the top face of a setup's stock - the active setup by default. The strokes are tool-centreline paths in mm on the layer \"text\", made from CamCraft's own stroke font: capital letters, digits, the space and - _ . : / # + = ( ) only. height is the cap height in mm (0.5 to 1000). position [x, y] is the left end of the baseline in mm from the stock origin (default [0, 0]); angle turns the baseline in degrees about the face normal, counterclockwise seen from above (default 0). letter_spacing adds a gap between characters in mm (default 0). The result is a profile like one from import_dxf: move_dxf_profile moves it, and get_job lists it under \"profiles\". One undo step. Refused by name: an empty text, a character with no glyph (a lower-case letter is not changed to a capital), a height or spacing outside the limits, a setup with no stock, an unknown setup, a name in use.",
+        schema: s_insert_text,
+        run: insert_text,
+    },
 ];
+
+fn insert_text(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    text::v_insert_text(env, vec![Value::String(req_str(a, "text")?.to_owned()), Value::Object(a.clone())])
+}
+
+fn s_insert_text() -> Value {
+    obj(
+        json!({
+            "text": { "type": "string", "description": "The string to engrave, on one line: capital letters, digits, the space and - _ . : / # + = ( )." },
+            "height": { "type": "number", "description": "The cap height in mm (0.5 to 1000)." },
+            "position": { "type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+                "description": "[x, y] of the left end of the baseline on the stock's top face, in mm from the stock origin (default [0, 0])." },
+            "angle": { "type": "number", "description": "Turn of the baseline about the face normal in degrees, counterclockwise seen from above (default 0)." },
+            "letter_spacing": { "type": "number", "description": "Extra gap between two characters in mm (default 0; 0 to 1000)." },
+            "setup": { "type": "string", "description": "The setup whose stock takes the text; omitted: the active setup." },
+            "name": { "type": "string", "description": "The profile's name; omitted: \"Text <string>\", made unique." }
+        }),
+        &["text", "height"],
+    )
+}
 
 fn import_dxf(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let mut options = Map::new();

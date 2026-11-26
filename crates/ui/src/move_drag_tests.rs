@@ -241,3 +241,28 @@ fn center_cache_releases_facets_when_rotate_has_no_part() {
         state.hidden_models.push("part".into());
     });
 }
+
+#[test]
+fn shift_snap_rounds_drag_and_toggling_shift_updates_preview() {
+    assert_eq!(crate::egui_app::viewport_bar::controls::snap_step(12.3, 1.0), 12.0);
+    assert_eq!(crate::egui_app::viewport_bar::controls::snap_step(-2.6, 2.5), -2.5);
+    assert_eq!(crate::egui_app::viewport_bar::controls::snap_step(3.4, 0.0), 3.4, "non-positive step is ignored");
+    assert_eq!(crate::egui_app::viewport_bar::controls::snap_step(3.4, f64::NAN), 3.4, "non-finite step is ignored");
+    let mut state = part();
+    state.handle_bar.move_snap_mm = 2.5;
+    let h = handles(&state).expect("handles");
+    let ball = arms_px(&state).iter().find(|a| a.0 == 1).map(|a| a.2).expect("Y ball");
+    assert!(move_drag::press(&mut state, ball));
+    let to = px(&state, [h.center[0], h.center[1] + h.len + 6.4, h.center[2]]);
+    move_drag::motion_snapped(&mut state, to, true);
+    let snapped = state.body_drag.as_ref().map(|d| d.delta).expect("dragging");
+    assert!((snapped - 7.5).abs() < 1e-9, "6.4 mm snaps to 7.5 mm at 2.5 mm step: {snapped}");
+    assert_eq!(state.handle_bar.move_draft, "+7.500");
+    move_drag::resnap(&mut state, false);
+    let raw = state.body_drag.as_ref().map(|d| d.delta).expect("dragging");
+    assert!((raw - 6.4).abs() < 0.05, "releasing Shift restores exact raw {raw}");
+    move_drag::resnap(&mut state, true);
+    assert!((state.body_drag.as_ref().map(|d| d.delta).unwrap_or(0.0) - 7.5).abs() < 1e-9);
+    move_drag::release(&mut state);
+    assert!(matches!(state.pending.front(), Some(CommandKind::MoveModelBy { delta, .. }) if (delta[1] - 7.5).abs() < 1e-9));
+}

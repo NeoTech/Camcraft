@@ -67,6 +67,15 @@ pub(super) fn draw(
             ui.painter()
                 .line_segment([egui::pos2(q1.x, q0.y), egui::pos2(q0.x, q1.y)], s);
         }
+        Nav::Display => {
+            // Three slider rows, each with its knob: the settings menu.
+            let (x0, x1) = (a.x + m, b.x - m);
+            for (k, t) in [(0.0f32, 0.3f32), (1.0, 0.7), (2.0, 0.45)] {
+                let y = a.y + m + k * (NAV_PX - 2.0 * m) * 0.5;
+                ui.painter().line_segment([egui::pos2(x0, y), egui::pos2(x1, y)], s);
+                ui.painter().circle_filled(egui::pos2(x0 + (x1 - x0) * t, y), 2.2, s.color);
+            }
+        }
         Nav::Paths => {
             // A zigzag toolpath.
             let p0 = egui::pos2(a.x + m * 0.4, r.center().y);

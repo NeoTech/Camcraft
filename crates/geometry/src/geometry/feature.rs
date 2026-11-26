@@ -47,6 +47,7 @@ use std::hash::{Hash, Hasher};
 use crate::geometry::Triangle;
 
 mod g1_seam;
+mod contact;
 mod trail;
 mod runs;
 pub use runs::{RUN_LENGTH_RATIO, edge_runs, resolve_chain, run_containing, run_of_edges};
@@ -393,25 +394,12 @@ pub fn features_of_facets(facets: &[Triangle]) -> Features {
             None => FacetGeom::BAD,
         })
         .collect();
-    let mut edge_map: HashMap<(u32, u32), EdgeEntry> = HashMap::new();
-    for (t, row) in fv.iter().enumerate() {
-        let Some([a, b, c]) = *row else { continue };
-        for (x, y) in [(a, b), (b, c), (c, a)] {
-            let key = if x <= y { (x, y) } else { (y, x) };
-            let e = edge_map
-                .entry(key)
-                .or_insert(EdgeEntry { facets: [u32::MAX; 3], count: 0 });
-            if (e.count as usize) < e.facets.len() {
-                e.facets[e.count as usize] = t as u32;
-            }
-            e.count += 1;
-        }
-    }
+    let edge_map = contact::edges(&fv, &verts);
 
     // Join facets across shared *smooth* seams (winding-aware dihedral,
     // the same 40-degree rule the wire uses).
     let mut parent: Vec<u32> = (0..facets.len() as u32).collect();
-    for e in edge_map.values() {
+    for (_, e) in &edge_map {
         if e.count == 2
             && smooth_join(&geoms[e.facets[0] as usize], &geoms[e.facets[1] as usize])
         {
@@ -479,7 +467,7 @@ pub fn features_of_facets(facets: &[Triangle]) -> Features {
     // face are seams and stay hidden.
     let mut boundary: Vec<Vec<(u32, u32)>> = vec![Vec::new(); faces.len()];
     let mut edges: Vec<TopEdge> = Vec::new();
-    let mut ordered: Vec<((u32, u32), EdgeEntry)> = edge_map.into_iter().collect();
+    let mut ordered = edge_map;
     ordered.sort_by_key(|(k, _)| *k);
     for ((a, b), e) in ordered {
         let mut face_ids: Vec<u32> = Vec::new();

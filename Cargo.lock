@@ -3,16 +3,6 @@
 version = 4
 
 [[package]]
-name = "Inflector"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
-dependencies = [
- "lazy_static",
- "regex",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -764,7 +754,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-app"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
@@ -779,24 +769,20 @@ dependencies = [
  "png 0.18.1",
  "rayon",
  "reqwest",
- "ruststep",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "truck-meshalgo",
- "truck-polymesh",
- "truck-stepio",
- "truck-topology",
  "url",
  "web-time",
 ]
 
 [[package]]
 name = "camcraft-cl"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-geometry",
  "tracing",
@@ -804,8 +790,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "camcraft-gcode"
+version = "0.27.0"
+dependencies = [
+ "camcraft-cl",
+ "camcraft-geometry",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "camcraft-geometry"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-kernel",
  "clipper2-rust",
@@ -815,15 +810,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "camcraft-gpu"
+version = "0.27.0"
+dependencies = [
+ "pollster 0.4.0",
+ "tracing",
+ "wgpu",
+]
+
+[[package]]
 name = "camcraft-kernel"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-kernel",
  "flate2",
- "ruststep",
  "serde_json",
  "solidcore",
  "solidcore-convert",
+ "solidcore-ops",
  "solidcore-record",
  "solidcore-step",
  "solidcore-tess",
@@ -831,13 +835,11 @@ dependencies = [
  "truck-meshalgo",
  "truck-modeling",
  "truck-shapeops",
- "truck-stepio",
- "truck-topology",
 ]
 
 [[package]]
 name = "camcraft-motion"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -852,20 +854,23 @@ dependencies = [
 
 [[package]]
 name = "camcraft-post"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
  "camcraft-geometry",
  "getrandom 0.3.4",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "camcraft-sim"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -879,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-tools"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-geometry",
  "serde",
@@ -890,9 +895,10 @@ dependencies = [
 
 [[package]]
 name = "camcraft-ui"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "camcraft-app",
+ "camcraft-gpu",
  "chrono",
  "eframe",
  "egui",
@@ -1281,17 +1287,6 @@ name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
-
-[[package]]
-name = "derive-new"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "derive_more"
@@ -2498,15 +2493,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -3116,7 +3102,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -3764,21 +3750,11 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-crate"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
-dependencies = [
- "once_cell",
- "toml_edit 0.19.15",
-]
-
-[[package]]
-name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
- "toml_edit 0.25.17+spec-1.1.0",
+ "toml_edit",
 ]
 
 [[package]]
@@ -4355,34 +4331,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruststep"
-version = "0.4.0"
-source = "git+https://github.com/ricosjp/ruststep?rev=90fdc9351746f1f1d1e435b88f15371edaaaa14d#90fdc9351746f1f1d1e435b88f15371edaaaa14d"
-dependencies = [
- "Inflector",
- "derive-new",
- "derive_more",
- "itertools 0.10.5",
- "nom 7.1.3",
- "ruststep-derive",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "ruststep-derive"
-version = "0.4.0"
-source = "git+https://github.com/ricosjp/ruststep?rev=90fdc9351746f1f1d1e435b88f15371edaaaa14d#90fdc9351746f1f1d1e435b88f15371edaaaa14d"
-dependencies = [
- "Inflector",
- "proc-macro-crate 1.3.1",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4770,7 +4718,7 @@ dependencies = [
 [[package]]
 name = "solidcore"
 version = "1.0.1"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -4779,7 +4727,7 @@ dependencies = [
 [[package]]
 name = "solidcore-convert"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "solidcore",
  "solidcore-record",
@@ -4788,8 +4736,9 @@ dependencies = [
 [[package]]
 name = "solidcore-ops"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
+ "serde",
  "solidcore",
  "solidcore-convert",
  "solidcore-record",
@@ -4798,7 +4747,7 @@ dependencies = [
 [[package]]
 name = "solidcore-record"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "serde",
  "serde_json",
@@ -4808,7 +4757,7 @@ dependencies = [
 [[package]]
 name = "solidcore-step"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "solidcore",
  "solidcore-convert",
@@ -4819,7 +4768,7 @@ dependencies = [
 [[package]]
 name = "solidcore-tess"
 version = "0.1.0"
-source = "git+https://github.com/NeoTech/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
+source = "git+https://github.com/NeoTech/solidcore?rev=fa67b3f560b7a8d59e99cb728f72f85e91dee2da#fa67b3f560b7a8d59e99cb728f72f85e91dee2da"
 dependencies = [
  "rayon",
  "serde",
@@ -5163,16 +5112,10 @@ checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
 dependencies = [
  "serde_core",
  "serde_spanned",
- "toml_datetime 1.1.2+spec-1.1.0",
+ "toml_datetime",
  "toml_parser",
- "winnow 1.0.4",
+ "winnow",
 ]
-
-[[package]]
-name = "toml_datetime"
-version = "0.6.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
 
 [[package]]
 name = "toml_datetime"
@@ -5185,25 +5128,14 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.19.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
-dependencies = [
- "indexmap",
- "toml_datetime 0.6.11",
- "winnow 0.5.40",
-]
-
-[[package]]
-name = "toml_edit"
 version = "0.25.17+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3641d5bbb5349a79e1020a242d251efbc546ad8048d133958323ce9c40a9c9c"
 dependencies = [
  "indexmap",
- "toml_datetime 1.1.2+spec-1.1.0",
+ "toml_datetime",
  "toml_parser",
- "winnow 1.0.4",
+ "winnow",
 ]
 
 [[package]]
@@ -5212,7 +5144,7 @@ version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
 dependencies = [
- "winnow 1.0.4",
+ "winnow",
 ]
 
 [[package]]
@@ -5435,24 +5367,6 @@ dependencies = [
  "truck-geometry",
  "truck-geotrait",
  "truck-meshalgo",
- "truck-topology",
-]
-
-[[package]]
-name = "truck-stepio"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d29cf5b0dec4b927e80b5dca26ce3ca69601c77ea5b9c953e30bfc3e123d189"
-dependencies = [
- "chrono",
- "derive_more",
- "ruststep",
- "serde",
- "truck-derivers",
- "truck-geometry",
- "truck-geotrait",
- "truck-modeling",
- "truck-polymesh",
  "truck-topology",
 ]
 
@@ -6398,15 +6312,6 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.5.40"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
-dependencies = [
- "memchr 2.8.3",
-]
-
-[[package]]
-name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
@@ -6518,7 +6423,7 @@ checksum = "0637d3a5566a82fa5214bae89087bc8c9fb94cd8e8a3c07feb691bb8d9c632db"
 
 [[package]]
 name = "xtask"
-version = "0.24.0"
+version = "0.27.0"
 dependencies = [
  "regex",
  "resvg",
@@ -6585,7 +6490,7 @@ dependencies = [
  "uds_windows",
  "uuid",
  "windows-sys 0.61.2",
- "winnow 1.0.4",
+ "winnow",
  "zbus_macros",
  "zbus_names",
  "zvariant",
@@ -6608,7 +6513,7 @@ version = "5.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2990635d09ade6df1868f72f8cac69a876a90981e8bd3c40b1be413f8dc88f40"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 3.0.8",
@@ -6624,7 +6529,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8bf88b4a3ff53e883001e0e0115b297a9d53c31b9c1edd2bfdd853e3428624e"
 dependencies = [
  "serde",
- "winnow 1.0.4",
+ "winnow",
  "zvariant",
 ]
 
@@ -6756,7 +6661,7 @@ dependencies = [
  "enumflags2",
  "serde",
  "url",
- "winnow 1.0.4",
+ "winnow",
  "zcheapstr",
  "zvariant_derive",
  "zvariant_utils",
@@ -6768,7 +6673,7 @@ version = "5.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "864155e69b4352db0c7f374917bf45d1e0c8d17659c8b3dbf9795f3673f8c497"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 3.0.8",
@@ -6785,5 +6690,5 @@ dependencies = [
  "quote",
  "serde",
  "syn 3.0.8",
- "winnow 1.0.4",
+ "winnow",
 ]

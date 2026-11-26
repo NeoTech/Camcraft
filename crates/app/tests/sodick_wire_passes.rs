@@ -11,7 +11,8 @@
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test sodick_wire_passes`
 //!
 //! Gate map (#2649): covers app::posting (post_script, stream_records) and
-//! the sodick-wire.cps script's skim and approach-condition words.
+//! the sodick-wire.cps script's skim and approach-condition words; #2686:
+//! app::machine (the edm skim_flushing key) and the skim's flushing word.
 
 use flecs_ecs::prelude::World;
 use serde_json::json;
@@ -26,6 +27,7 @@ use camcraft_app::posting;
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const SODICK: &str = "Sodick Wire EDM (Mark 21)";
 const GOLDEN: &str = "tests/golden/nc/sodick-wire/wire_slug_punch_passes.nc";
+const FLUSHED_GOLDEN: &str = "tests/golden/nc/sodick-wire/wire_slug_punch_passes_flushed.nc";
 
 fn cps() -> &'static str {
     posting::builtin_post_text(SODICK).expect("registered")
@@ -66,18 +68,22 @@ fn punch(machine_text: &str, condition: &str, skims: Vec<WireSkim>) -> World {
     h.execute(&world, AddTool::new(&world, "EDM-W025", camcraft_app::wire_tools::wire_tool(0.25)).expect("wire"));
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: condition.into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -130,9 +136,11 @@ fn a_rough_cut_and_two_skims_post_each_pass_on_its_own_ln_condition() {
     assert!(th < c1 && c1 < c2 && c2 < c3 && c3 < cut, "{text}");
     // Each pass starts with a straight move from the threading point; the
     // one before each skim's C word is the return to it.
+    // #3214: the skim's gap note sits between its SKIM note and its C word.
     for c in [c2, c3] {
-        assert_eq!(lines[c - 2], "G01 X-30. Y0.", "a skim starts at the threading point:\n{text}");
-        assert!(lines[c - 1].starts_with("(SKIM "), "{text}");
+        assert_eq!(lines[c - 3], "G01 X-30. Y0.", "a skim starts at the threading point:\n{text}");
+        assert!(lines[c - 2].starts_with("(SKIM "), "{text}");
+        assert!(lines[c - 1].contains(" KERF GAP "), "{text}");
         assert!(lines[c + 1].starts_with("G01 X-20."), "the skim's lead-in follows its C word:\n{text}");
     }
     // The skims cut nearer the part: the rough lead-in, then each skim's.
@@ -167,6 +175,67 @@ fn the_approach_condition_option_cuts_the_first_approach_on_c000() {
     assert!(off.warnings.is_empty() && !off.program.lines().any(|l| l == "C000"), "{}", off.program);
     let explicit = run(&machine, &recs, &json!({ "approachCondition": false }));
     assert_eq!(explicit.program, off.program);
+}
+
+/// The LN machine with `edm` keys stated after its `awt`.
+fn ln_machine_stating(keys: &str) -> String {
+    let m = ln_machine().replace("\"awt\": true,", &format!("\"awt\": true, {keys},"));
+    assert!(m.contains(keys), "the fixture states {keys}");
+    m
+}
+
+/// #2686 done means: a skim states its flushing (the machine file's
+/// `edm.skim_flushing`), and the post writes that T word before each
+/// skim's C word. Against the #2649 golden only those words, the rough
+/// cut's T84 and the header's flushing lines differ.
+#[test]
+fn a_stated_skim_flushing_posts_its_t_word_before_each_skims_c_word() {
+    let machine = ln_machine_stating("\"flushing\": \"high\", \"skim_flushing\": \"low\"");
+    let skims = vec![WireSkim { condition: "C002".into(), reverse: false }, WireSkim { condition: "C903".into(), reverse: true }];
+    let (r, wrote) = post_app(&punch(&machine, "C001", skims), "skimflush");
+    let text = r.expect("the flushed skims post");
+    assert!(wrote, "the program is written");
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(FLUSHED_GOLDEN, &text).expect("write golden");
+    }
+    let want = std::fs::read_to_string(FLUSHED_GOLDEN).expect("golden present");
+    assert_eq!(text, want, "the Sodick flushed pass program drifted from its golden");
+
+    let plain = std::fs::read_to_string(GOLDEN).expect("the #2649 golden");
+    let mut expect: Vec<&str> = Vec::new();
+    for l in plain.lines() {
+        match l {
+            "(TANK FILL AND FLUSHING ARE NOT PROGRAMMED - SET THEM AT THE CONTROL)" => expect.extend([
+                "(TANK IS NOT PROGRAMMED - SET IT AT THE CONTROL)",
+                "(T84 HIGH-PRESSURE FLUSHING AFTER THREADING)",
+                "(T85 LOW-PRESSURE FLUSHING BEFORE EACH SKIM PASS)",
+            ]),
+            "T91" => expect.extend(["T91", "T84"]),
+            "C002" | "C903" => expect.extend(["T85", l]),
+            other => expect.push(other),
+        }
+    }
+    assert_eq!(text.lines().collect::<Vec<_>>(), expect, "{text}");
+}
+
+/// #2686: the rough cut's flushing is programmed and the skim's is not
+/// stated - the value is not known, the post is refused by name and the
+/// app writes no file. A skim flushing without the rough cut's is no
+/// machine file.
+#[test]
+fn a_skim_with_only_the_rough_flushing_stated_is_refused_by_name() {
+    let machine = ln_machine_stating("\"flushing\": \"high\"");
+    let world = punch(&machine, "C001", vec![WireSkim { condition: "C002".into(), reverse: false }]);
+    let (r, wrote) = post_app(&world, "noskimflush");
+    let err = r.expect_err("a skim on an unknown flushing never posts");
+    assert!(err.contains("Punch1") && err.contains("edm.skim_flushing") && err.contains("edm.flushing"), "{err}");
+    assert!(!wrote, "the refused post wrote a file");
+    // Without a skim the same machine posts (#1499).
+    let (r, wrote) = post_app(&punch(&machine, "C001", Vec::new()), "roughonly");
+    assert!(r.is_ok() && wrote, "{r:?}");
+
+    let err = parse_mch(&ln_machine_stating("\"skim_flushing\": \"low\"")).err().unwrap_or_default();
+    assert!(err.contains("edm.skim_flushing needs edm.flushing"), "{err}");
 }
 
 /// A skim whose condition id is not a Sodick C word is refused by name;

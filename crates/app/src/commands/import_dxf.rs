@@ -85,11 +85,15 @@ impl ImportDxf {
             Some(name) => Some(name.to_owned()),
             None => crate::setup::active(world),
         };
-        if sketch::face_frame(world, setup.as_deref()).is_none() {
-            return Err(CommandError::Invalid(format!(
-                "{} has no stock - make a stock first, then place the DXF profile on it",
-                setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
-            )));
+        match sketch::stock_face(world, setup.as_deref()) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Err(CommandError::Invalid(format!(
+                    "{} has no stock - make a stock first, then place the DXF profile on it",
+                    setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
+                )));
+            }
+            Err(why) => return Err(CommandError::Invalid(why.into())),
         }
         let doc = dxf::parse(data).map_err(|e| CommandError::Dxf(e.to_string()))?;
         let unit = options.units.map(|u| match u {
@@ -121,6 +125,12 @@ impl ImportDxf {
     pub fn data(&self) -> &SketchData {
         &self.sketch.data
     }
+
+    /// A profile read by another importer (#1880: `ImportSvg`), already checked, placed and
+    /// removed as a DXF one is.
+    pub(super) fn placed(name: String, sketch: Sketch) -> Self {
+        ImportDxf { name, sketch }
+    }
 }
 
 /// Only a `.dxf` file is a DXF drawing; any other extension is refused
@@ -135,7 +145,7 @@ fn check_extension(path: &Path) -> Result<(), CommandError> {
 /// A stated name must be free and must not be a setup-furniture name; a
 /// name taken from the file's stem is made unique (`part`, `part (2)`),
 /// so one drawing can be placed more than once.
-fn profile_name(world: &World, path: &Path, stated: Option<&str>) -> Result<String, CommandError> {
+pub(super) fn profile_name(world: &World, path: &Path, stated: Option<&str>) -> Result<String, CommandError> {
     let reserved = |n: &str| n.eq_ignore_ascii_case(STOCK_NAME) || LEGACY_WCS_NAMES.contains(&n) || crate::setup::is_furniture_shape(n);
     if let Some(name) = stated {
         if name.trim().is_empty() || reserved(name) {

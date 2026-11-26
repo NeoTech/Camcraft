@@ -45,11 +45,34 @@ pub fn of_bytes(path: &Path, data: &[u8]) -> Option<ModelSource> {
 }
 
 /// Read `path` and give its source record. An unreadable file is an error
-/// that names it.
+/// that names it. The file is hashed as it is read (#2689), never held
+/// whole: a linked STL may be gigabytes.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read(path: &Path) -> Result<ModelSource, String> {
-    let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    of_bytes(path, &data).ok_or_else(|| format!("{}: no SHA-256 in this build", path.display()))
+    use std::io::Read;
+    let named = |e: std::io::Error| format!("{}: {e}", path.display());
+    let mut file = std::fs::File::open(path).map_err(named)?;
+    let mut hash = camcraft_geometry::solidcraft::Sha256::new();
+    let mut buf = vec![0u8; READ_CHUNK];
+    loop {
+        let n = file.read(&mut buf).map_err(named)?;
+        match buf.get(..n) {
+            Some([]) | None => break,
+            Some(got) => hash.update(got),
+        }
+    }
+    Ok(ModelSource { path: path.to_string_lossy().into_owned(), sha256: hash.finish_hex() })
 }
+
+/// A browser has no file to read again.
+#[cfg(target_arch = "wasm32")]
+pub fn read(path: &Path) -> Result<ModelSource, String> {
+    Err(format!("{}: no SHA-256 in this build", path.display()))
+}
+
+/// How much of a source file is read at a time for its digest.
+#[cfg(not(target_arch = "wasm32"))]
+const READ_CHUNK: usize = 1 << 20;
 
 /// A recorded digest is lowercase hex of the right length; anything else in
 /// a project file is corrupt.

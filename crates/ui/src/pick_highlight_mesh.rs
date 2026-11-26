@@ -42,6 +42,58 @@ pub(crate) struct MeshSlot {
     pub(crate) builds: u64,
 }
 
+/// Clip homogeneous endpoints before dividing by w. The renderer uses
+/// WebGPU depth (z >= 0); w also needs a positive floor for projection.
+fn clipped_screen_segment(
+    a: [f64; 3],
+    b: [f64; 3],
+    mvp: &[[f32; 4]; 4],
+    to_px: &impl Fn([f32; 2]) -> egui::Pos2,
+) -> Option<[egui::Pos2; 2]> {
+    let transform = |p: [f64; 3]| {
+        std::array::from_fn::<_, 4, _>(|i| {
+            f64::from(mvp[0][i]) * p[0]
+                + f64::from(mvp[1][i]) * p[1]
+                + f64::from(mvp[2][i]) * p[2]
+                + f64::from(mvp[3][i])
+        })
+    };
+    let (a, b) = (transform(a), transform(b));
+    if !a.iter().chain(&b).all(|v| v.is_finite()) {
+        return None;
+    }
+    let (mut enter, mut exit) = (0.0_f64, 1.0_f64);
+    for (da, db) in [(a[2], b[2]), (a[3] - 1e-6, b[3] - 1e-6)] {
+        if da < 0.0 && db < 0.0 {
+            return None;
+        }
+        if (da < 0.0) != (db < 0.0) {
+            let t = da / (da - db);
+            if !t.is_finite() {
+                return None;
+            }
+            if da < 0.0 {
+                enter = enter.max(t);
+            } else {
+                exit = exit.min(t);
+            }
+        }
+    }
+    if enter > exit {
+        return None;
+    }
+    let project = |t: f64| {
+        let c: [f64; 4] = std::array::from_fn(|i| a[i] * (1.0 - t) + b[i] * t);
+        let uv = [
+            ((c[0] / c[3] + 1.0) * 0.5) as f32,
+            ((1.0 - c[1] / c[3]) * 0.5) as f32,
+        ];
+        let p = to_px(uv);
+        p.is_finite().then_some(p)
+    };
+    Some([project(enter)?, project(exit)?])
+}
+
 fn push_screen_polyline_runs(
     poly: &WorldPolyline,
     mvp: &[[f32; 4]; 4],
@@ -52,50 +104,47 @@ fn push_screen_polyline_runs(
     if n < 2 {
         return;
     }
-    let proj: Vec<Option<egui::Pos2>> = poly
-        .pts
-        .iter()
-        .map(|&p| {
-            crate::interact::project_uv(mvp, p)
-                .map(to_px)
-                .filter(|q| q.is_finite())
-        })
-        .collect();
-    if let Some(none_idx) = proj.iter().position(Option::is_none) {
-        let mut run: Vec<egui::Pos2> = Vec::new();
-        let start = if poly.closed { (none_idx + 1) % n } else { 0 };
-        for step in 0..n {
-            let idx = (start + step) % n;
-            match proj[idx] {
-                Some(pt) => {
-                    if run.last().copied() != Some(pt) {
-                        run.push(pt);
-                    }
-                }
-                None => {
-                    if run.len() >= 2 {
-                        out.push((std::mem::take(&mut run), false));
-                    } else {
-                        run.clear();
-                    }
-                }
+    let mut runs = Vec::<Vec<egui::Pos2>>::new();
+    let mut run = Vec::new();
+    let closed = poly.closed && n >= 3;
+    let edges = if closed { n } else { n - 1 };
+    for i in 0..edges {
+        let segment = clipped_screen_segment(poly.pts[i], poly.pts[(i + 1) % n], mvp, to_px);
+        if segment.as_ref().map(|s| s[0]) != run.last().copied() {
+            if run.len() >= 2 {
+                runs.push(std::mem::take(&mut run));
+            } else {
+                run.clear();
             }
         }
-        if run.len() >= 2 {
-            out.push((run, false));
-        }
-        return;
-    }
-    let mut screen = Vec::with_capacity(n);
-    for pt in proj.into_iter().flatten() {
-        if screen.last().copied() != Some(pt) {
-            screen.push(pt);
+        if let Some([a, b]) = segment {
+            if run.is_empty() {
+                run.push(a);
+            }
+            if run.last().copied() != Some(b) {
+                run.push(b);
+            }
         }
     }
-    if poly.closed && screen.len() >= 3 {
-        out.push((screen, true));
-    } else if screen.len() >= 2 {
-        out.push((screen, false));
+    if run.len() >= 2 {
+        runs.push(run);
+    }
+    // A closed outline can start inside a surviving run. Join that seam,
+    // but never add an edge between the two near-plane intersections.
+    if closed
+        && runs.len() > 1
+        && runs.last().and_then(|r| r.last()) == runs.first().and_then(|r| r.first())
+        && let Some(mut last) = runs.pop()
+    {
+        last.extend(runs.remove(0).into_iter().skip(1));
+        runs.insert(0, last);
+    }
+    for mut run in runs {
+        let closed = closed && run.len() > 3 && run.first() == run.last();
+        if closed {
+            run.pop();
+        }
+        out.push((run, closed));
     }
 }
 

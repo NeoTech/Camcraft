@@ -21,7 +21,12 @@ pub mod import_fixture;
 pub mod import_model;
 // #1862: a DXF profile placed on a setup's stock, and its move on the stock face.
 pub mod import_dxf;
+pub mod import_svg;
 pub mod move_sketch;
+// #2679: typed text placed as a profile of engraving strokes.
+pub mod insert_text;
+// #3072: typed text in an outline font placed as a profile of closed shapes.
+pub mod insert_outline_text;
 // #339 slice 6: a fixture library entry placed into a setup.
 pub mod insert_fixture;
 // #744: DXF/profile fixtures and STEP profile derivation.
@@ -58,6 +63,7 @@ pub mod setup_post_options;
 // #821: a setup's stated nose-to-rotary figure (a raised rotary).
 pub mod setup_nose;
 pub mod setup_workholding;
+pub mod sheet_job;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -84,6 +90,8 @@ pub mod tool_number;
 pub mod update_model;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
+// #1339: a person vouches for a mesh of unknown fidelity.
+pub mod vouch_fidelity;
 // #547: a sinker electrode generated from a cavity's picked faces.
 pub mod electrode;
 
@@ -103,7 +111,10 @@ pub use mod_vise::PlaceModVisePair;
 pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_dxf::{DxfOptions, ImportDxf};
+pub use import_svg::ImportSvg;
 pub use import_model::ImportModel;
+pub use insert_text::{InsertText, TextOptions};
+pub use insert_outline_text::{InsertOutlineText, OutlineTextOptions};
 pub use move_sketch::MoveSketch;
 pub use insert_fixture::InsertFixture;
 pub use profile_fixture::{DeriveFixtureProfile, InsertProfileFixture, SetFixtureProfile};
@@ -111,10 +122,10 @@ pub use load_machine::LoadMachine;
 pub use locate::{Locate, LocateFixture, LocatePart};
 pub use move_model::MoveModel;
 pub use operation::{
-    ChangeOperationKind, ClearToolpath, CreateOperation, DeleteOperation, EditOperationLinks,
-    EditOperationParams,
-    GenerateOperation, MarkOperationReviewed, PasteOperation, RegenerateAll, RenameOperation,
-    ReorderOperation, SetOperationGeometry, StagedGeneration,
+    ApplyCutRecipe, ChangeOperationKind, ClearToolpath, CreateOperation, DeleteOperation, EditOperationLinks,
+    EditOperationParams, GenerateOperation, MarkOperationReviewed, PasteOperation, RegenerateAll,
+    RenameOperation, ReorderOperation, SetOperationDoNotTouch, SetOperationGeometry,
+    StagedGeneration,
 };
 pub use post::SelectPost;
 pub use post_options::SetPostOptions;
@@ -125,6 +136,7 @@ pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
 pub use model_link::SetModelSource;
 pub use repair_model::RepairModel;
+pub use vouch_fidelity::VouchModelFidelity;
 pub use ribbon_pins::SetRibbonPins;
 pub use select_entity::SelectEntity;
 pub use set_stock::SetStock;
@@ -137,6 +149,7 @@ pub use setup_mount::{SetSetupMachine, SetSetupPost};
 pub use setup_post_options::SetSetupPostOptions;
 pub use setup_nose::SetSetupNoseToAxis;
 pub use setup_workholding::SetSetupWorkholdingRpm;
+pub use sheet_job::SetSheetJob;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
@@ -179,6 +192,9 @@ pub enum CommandError {
     /// #1862: every other refusal of a DXF import, in the reader's words.
     #[error("DXF import: {0}")]
     Dxf(String),
+    /// #1880: a refusal of an SVG import, in the reader's words.
+    #[error("SVG import: {0}")]
+    Svg(String),
     #[error("could not generate the toolpath: {0}")]
     Machining(String),
     /// A [`Machining`](CommandError::Machining) refusal about one spot

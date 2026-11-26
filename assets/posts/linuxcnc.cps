@@ -18,6 +18,7 @@ minimumRevision = 1;
 extension = "ngc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
+axisInversion = true; // verified on the engine's mirrored stream for a flipped WCS X/Y and an inverted machine X/Y (#2475): trace equivalence test + golden
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9
 coolantModes = true;    // reads PARAM Coolant (#112/#150)
@@ -117,6 +118,7 @@ var setupNext = "";        // the section's PARAM SetupChange: the setup the pro
 var coolant = "";          // the M-code this section started, if any
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
+var wcsFlip = "";          // #1649: the flipped WCS axes ("X", "Y", "XY") - the engine mirrored the section
 var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
 var smoothActive = false;  // #616: this section wrote its smoothing words
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
@@ -143,6 +145,23 @@ function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+// #3699: a tap feed is pitch x rpm, kept at 0.001 mm/min by the stream, and
+// the floating G84 cuts the pitch F / S. G84 writes the feed at three mm or
+// four inch decimals; a tap whose written F and S do not hold the pitch to
+// 0.01 percent is refused by name.
+function tapFeed(v) { return fu(v); }
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var written = Number(fu(feed)) * (inch ? 25.4 : 1);
+  var want = sRpm > 0 ? feed / sRpm : 0;
+  var got = speed > 0 ? written / speed : 0;
+  if (!(want > 0 && Math.abs(got - want) / want <= 1e-4)) {
+    msg("canned cycle G84 (tap)" + inOp() + " feed " + feed + " mm/min at " + sRpm +
+      " rpm posts as F" + tapFeed(feed) + " S" + speed + " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 var seqNum = 0;
 var seqNextForce = false;
 var secStarted = 0;
@@ -202,6 +221,7 @@ function writeHeaderExtras() {
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
 }
@@ -338,6 +358,8 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // is led by "- ", so user text stays inert.
 var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
@@ -373,11 +395,24 @@ function pathWords() {
   if (optStr("pathControl", "blend") === "exact") return ["G61"];
   return ["G64", "P" + fu(optNum("blendTolerance", 0.025))];
 }
+// The machine's inverted linear axes (#375): the engine has mirrored the
+// stream into the controller's frame, and the header says so, one note
+// for each axis. A standard machine lists none.
+function invertedNotes() {
+  var a = (typeof machine !== "undefined" && machine && machine.invertedAxes) || [];
+  var where = { X: "LEFT", Y: "TOWARD THE FRONT", Z: "DOWN" };
+  for (var i = 0; i < a.length; i++) {
+    var l = String(a[i]);
+    note("MACHINE " + l + "+ MOVES " + (where[l] || "THE OTHER WAY") + " - INVERTED AXIS");
+  }
+}
+
 function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   if (optBool("percentDelimiters", false)) writeln("%");
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(headTitle(nm));
+  invertedNotes();
   writeHeaderExtras();
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
   block(pathWords());
@@ -473,6 +508,7 @@ function onParameter(name, value) {
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
+  else if (name === "WcsFlip") wcsFlip = String(value || "");
 }
 
 function onSpindleSpeed() {
@@ -529,6 +565,8 @@ function startPreamble() {
   // stopped before its first move, whatever the tool change did.
   var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
+  // #1649: the operator reads why every sign on a flipped axis is the other one.
+  if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
   block(["G17", "G90", wcsWord, "G40", tlo ? "G49" : "", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
@@ -603,7 +641,7 @@ function afterOp() {
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
-function onSectionEnd() { endPreamble(); hopZ = null; clearZ = null; }  // #1028: the next section states its own hop
+function onSectionEnd() { endPreamble(); wcsFlip = ""; hopZ = null; clearZ = null; }  // #1028: the next section states its own hop
 
 // ------------------------------------------------------------ 3 axes only
 // A tilted record (an A, B or C word) has no axis to go to on this
@@ -709,6 +747,9 @@ function onLinear() {
 }
 function onCircular() {
   startPreamble();
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (chainCut() || !upright(properties)) return;
   var p = properties;
   var g = p.CircularDirection === "CW" ? "G2" : "G3";
@@ -909,6 +950,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   var traversed = xyUnknown;
   if (!xyFirst(p.X, p.Y)) return;  // a cycle as the first move: its first hole
   if (rigid) { rigidTap(p, traversed); return; }
@@ -925,7 +967,7 @@ function onCycle() {
     // #2362: LinuxCNC requires a non-negative P on the first G86 block of
     // a cycle, even when the dwell is 0 (P0).
     if (g === "G86" || (dwell > 0 && (g === "G82" || g === "G84" || g === "G89"))) words.push("P" + secs(dwell));
-    words.push(fw(p.FeedRate));
+    words.push(g === "G84" ? "F" + tapFeed(p.FeedRate) : fw(p.FeedRate));
     block(words);
     cycleSig = sig;
   }

@@ -2,7 +2,8 @@
 //! end of the tool axially into the work, and a Thread op states its feed
 //! at the cutting edge (`motion::machining2d::thread_mill`), so for these
 //! two kinds the feed the tool states (its cutting-data row for the
-//! material in force, else its running feed) is the rating:
+//! material in force, else its running feed; never above a running feed
+//! the user lowered for that material, #2724) is the rating:
 //!
 //! - a new Drill or Thread op, and one given a new tool, takes that feed
 //!   (`cutting_rows::seed_feed_for_tool`, `cutting_rows::retargeted_params`,
@@ -34,21 +35,41 @@ use crate::units::{self, Unit};
 /// Float slack on the comparison: a seeded feed is a copy of the rating.
 const SLACK: f64 = 1e-6;
 
-/// The feed `tool` states for `material`: its row in force, else its
-/// running feed. `None` when that is not a positive, finite number (no
-/// rating to seed from or to judge against).
+/// The feed `tool` states for `material` (the one in force on the op's
+/// setup): its row in force, else its running feed. `None` when that is
+/// not a positive, finite number (no rating to seed from or to judge
+/// against).
+///
+/// #2724: the running feed follows the `document` material (`ChangeTool`,
+/// `SetWorkMaterial`), so when `material` is that one, a running feed set
+/// below the row is the user's limit too: the lower of the two is the
+/// rating. A setup whose stock states another material is rated by that
+/// material's row alone - the running feed speaks for a different
+/// material there.
 #[must_use]
-pub fn rated_feed(tool: &Tool, material: Option<WorkMaterial>) -> Option<f64> {
-    let f = crate::cutting_rows::row_in(tool, material).map_or(tool.feed, |r| r.feed);
-    (f.is_finite() && f > 0.0).then_some(f)
+pub fn rated_feed(tool: &Tool, material: Option<WorkMaterial>, document: Option<WorkMaterial>) -> Option<f64> {
+    let usable = |f: f64| (f.is_finite() && f > 0.0).then_some(f);
+    let Some(row) = crate::cutting_rows::row_in(tool, material) else {
+        return usable(tool.feed);
+    };
+    let running = if material == document { usable(tool.feed) } else { None };
+    match (usable(row.feed), running) {
+        (Some(r), Some(t)) => Some(r.min(t)),
+        (r, t) => r.or(t),
+    }
 }
 
-/// Seed a Drill's or a Thread's feeds from `tool`'s rating for `material`:
-/// the Drill's cutting and plunge feed both take it; the Thread's edge
-/// feed takes it and its plunge feed is held to it. `true` when anything
-/// moved; every other kind is left alone.
-pub fn seed_into(params: &mut OpParams, tool: &Tool, material: Option<WorkMaterial>) -> bool {
-    let Some(rated) = rated_feed(tool, material) else {
+/// Seed a Drill's or a Thread's feeds from `tool`'s rating for `material`
+/// ([`rated_feed`]): the Drill's cutting and plunge feed both take it; the
+/// Thread's edge feed takes it and its plunge feed is held to it. `true`
+/// when anything moved; every other kind is left alone.
+pub fn seed_into(
+    params: &mut OpParams,
+    tool: &Tool,
+    material: Option<WorkMaterial>,
+    document: Option<WorkMaterial>,
+) -> bool {
+    let Some(rated) = rated_feed(tool, material, document) else {
         return false;
     };
     let set = |field: &mut f64, v: f64| {
@@ -109,6 +130,7 @@ pub fn problems(world: &World) -> Vec<String> {
     };
     let unit = units::of(world);
     let u = per_minute(unit);
+    let document = crate::cutting::material_of(world);
     ops.iter()
         .filter_map(|(name, e)| {
             let op = model::operation_of(world, e)?;
@@ -116,7 +138,8 @@ pub fn problems(world: &World) -> Vec<String> {
                 return None;
             }
             let tool = model::find_by_name(world, &op.tool).and_then(|t| model::tool_of(world, &t))?;
-            let rated = rated_feed(&tool, crate::stock_material::in_force(world, op.setup.as_deref()))?;
+            let material = crate::stock_material::in_force(world, op.setup.as_deref());
+            let rated = rated_feed(&tool, material, document)?;
             let cache = model::toolpath_of(world, e);
             let feed = judged_feed(&tool, &op.params, cache.as_ref().map(|c| &c.path))?;
             (feed > rated + SLACK).then(|| {

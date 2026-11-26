@@ -4,11 +4,17 @@
 //! Provenance: our own build and process law (AGENTS.md "Three gate tiers", "Test the change",
 //! release step 2), replacing the scripts/gate.*, collect-decisions.* and release.ps1 twins (#748, #749).
 
+mod artifacts;
+#[cfg(test)]
+mod artifacts_tests;
 #[cfg(test)]
 mod asset_tests;
 mod assets;
 mod braces;
 mod budget;
+mod build_stop;
+#[cfg(test)]
+mod build_stop_tests;
 #[cfg(test)]
 mod budget_tests;
 mod catalog;
@@ -20,23 +26,48 @@ mod checkout;
 #[cfg(test)]
 mod checkout_tests;
 mod decisions;
+mod direct;
+#[cfg(test)]
+mod direct_tests;
 mod docs_images;
 #[cfg(test)]
 mod directory_tests;
+mod example_suites;
+#[cfg(test)]
+mod example_suites_tests;
 mod exec;
+mod exit_status;
+mod fixture_inputs;
+mod gate_args;
+mod heavy;
+mod heavy_covers;
+#[cfg(test)]
+mod heavy_covers_tests;
+mod heavy_files;
+#[cfg(test)]
+mod heavy_files_tests;
 mod lanes;
+mod light;
+#[cfg(test)]
+mod light_tests;
 #[cfg(test)]
 mod gate_maps_tests;
+#[cfg(test)]
+mod heavy_plan_tests;
 #[cfg(test)]
 mod heavy_tests;
 mod icon_font;
 mod icons;
+mod json;
 mod known_fail;
 mod known_fail_scan;
 #[cfg(test)]
 mod known_fail_tests;
 #[cfg(test)]
 mod icons_tests;
+mod lane_split;
+#[cfg(test)]
+mod lane_split_tests;
 #[cfg(test)]
 mod lanes_tests;
 mod logo;
@@ -65,31 +96,55 @@ mod release_pack;
 #[cfg(test)]
 mod release_tests;
 mod scan;
+mod seed;
+#[cfg(test)]
+mod seed_tests;
 mod select;
 #[cfg(test)]
 mod select_tests;
 mod single;
+mod stale_base;
+#[cfg(test)]
+mod stale_base_tests;
 #[cfg(test)]
 mod step_tests;
 mod suites;
+mod unit_env;
+mod unit_sweep;
+#[cfg(test)]
+mod unit_sweep_tests;
 #[cfg(test)]
 mod tests;
+mod verdict;
+mod watchdog;
+#[cfg(test)]
+mod watchdog_tests;
+#[cfg(test)]
+mod verdict_tests;
 #[cfg(test)]
 mod package_paths_tests;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "\
+pub use gate_args::{parse_gate, GateArgs};
+
+pub(crate) const USAGE: &str = "\
 usage:
   cargo xtask gate quick [--base main] [--heavy]   tests the diff touches (test fns where it can)
-  cargo xtask gate batch                           one build, then one step for each debug test binary minus SLOW_BINARIES, ui, clippy (#1941)
+  cargo xtask gate batch                           per-crate debug prebuilds, then parallel lanes for each test target minus SLOW_BINARIES, ui, clippy (#1941, #2727)
+  cargo xtask gate light                           the light twins of the heavy tests, in release (#2569): at review and merge time
+  cargo xtask gate heavy [--base main]             the release --ignored heavy lanes the diff reaches, also through crate dependencies (#2568)
+      gate heavy: --covers <PR>:<head sha> [--covers ...]   a wave's trial tree: refuse a head that is not an ancestor of HEAD,
+                                                   print the heads and HEAD^{tree}, write covers.txt to the logs (#3460)
   cargo xtask gate release [--no-snapshots]        everything, plus the --ignored heavy lanes (one step per binary) and the ui snapshot lane
                                                    (--no-snapshots: not the Windows-made pixel goldens - cut.yml on Linux, #1413)
   cargo xtask gate test <filter> [--crate c] [--binary b] [--exact]   exactly the matching test(s)
       any gate (not test): --only <step> [--only <step>...]   run only the steps whose name starts with <step> (kernel, clippy, ui)
       any gate (not test): --failed <gate-logs/run>           run only the steps that failed in that earlier run (#1702)
       any gate: --dry-run (or --plan) prints the plan without running it. Logs: gate-logs/<tier>-<timestamp>/.
+  cargo xtask gate batch --lane N/M                lane N of M of the batch plan: each step is in exactly one lane; writes lane-result.tsv (#2908)
+  cargo xtask gate-verdict <dir>...                one verdict from the lane records under the dirs: lanes, runners, times, red steps (#2908)
   cargo xtask icons [--check | --sheet <out.png> [--px N] [--zoom N]]
                                                    rasterise assets/ui/svg/*.svg to the 32 px PNGs (#661), check
                                                    them against their masters, or draw a 16 px contact sheet
@@ -130,83 +185,6 @@ fn root() -> PathBuf {
     manifest.parent().map(Path::to_path_buf).unwrap_or(manifest)
 }
 
-/// Parsed `gate` options.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct GateArgs {
-    pub tier: String,
-    pub filter: Option<String>,
-    pub base: String,
-    pub krate: Option<String>,
-    pub binary: Option<String>,
-    pub exact: bool,
-    pub heavy: bool,
-    pub dry: bool,
-    /// `gate release --no-snapshots` (#1413): the release plan without the two ui pixel-snapshot lanes.
-    pub no_snapshots: bool,
-    /// `--only <step>` (repeatable, #1702): keep only the steps whose name starts with a given word.
-    pub only: Vec<String>,
-    /// `--failed <gate-logs/run>` (#1702): keep only the steps that failed in that earlier run.
-    pub failed: Option<String>,
-}
-
-pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
-    let mut g = GateArgs {
-        base: "main".into(),
-        ..GateArgs::default()
-    };
-    let mut it = args.iter();
-    let value = |flag: &str, it: &mut std::slice::Iter<String>| {
-        it.next()
-            .cloned()
-            .ok_or_else(|| format!("{flag} needs a value"))
-    };
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--base" => g.base = value(a, &mut it)?,
-            "--crate" => g.krate = Some(value(a, &mut it)?),
-            "--binary" => g.binary = Some(value(a, &mut it)?),
-            "--exact" => g.exact = true,
-            "--heavy" => g.heavy = true,
-            "--dry-run" | "--plan" => g.dry = true,
-            "--no-snapshots" => g.no_snapshots = true,
-            "--only" => g.only.push(value(a, &mut it)?),
-            "--failed" => g.failed = Some(value(a, &mut it)?),
-            s if s.starts_with('-') => return Err(format!("unknown gate option '{s}'\n{USAGE}")),
-            s if g.tier.is_empty() => g.tier = s.to_string(),
-            s if g.tier == "test" && g.filter.is_none() => g.filter = Some(s.to_string()),
-            s => return Err(format!("unexpected argument '{s}'\n{USAGE}")),
-        }
-    }
-    if g.tier.is_empty() {
-        g.tier = "quick".into();
-    }
-    if g.no_snapshots && g.tier != "release" {
-        return Err(format!("--no-snapshots applies to the release tier only, not '{}'", g.tier));
-    }
-    if g.tier == "test" && (!g.only.is_empty() || g.failed.is_some()) {
-        return Err("--only and --failed select steps of quick, batch or release, not of 'gate test'".into());
-    }
-    match g.tier.as_str() {
-        "quick" | "batch" | "release" => Ok(g),
-        "test" => match &g.filter {
-            Some(f)
-                if f.split("::").all(|p| {
-                    !p.is_empty() && p.chars().all(|c| c.is_alphanumeric() || c == '_')
-                }) =>
-            {
-                Ok(g)
-            }
-            Some(f) => Err(format!(
-                "test filter must be a fn name or module::fn path (letters, digits, _): '{f}'"
-            )),
-            None => Err(format!("gate test needs a filter\n{USAGE}")),
-        },
-        t => Err(format!(
-            "unknown tier '{t}' (quick | batch | release | test)\n{USAGE}"
-        )),
-    }
-}
-
 fn run(args: &[String]) -> Result<i32, String> {
     match args.first().map(String::as_str) {
         Some("gate") => gate(&root(), &parse_gate(&args[1..])?),
@@ -223,6 +201,7 @@ fn run(args: &[String]) -> Result<i32, String> {
         Some("logo") => logo::run(&root(), &args[1..]),
         Some("docs-images") => docs_images::run(&root(), &args[1..]),
         Some("catalog") => catalog::run(&root(), &args[1..]),
+        Some("gate-verdict") => verdict::run(&args[1..]),
         Some("merge-plan") => merge_plan_git::run(&root(), &args[1..]),
         Some("process-bump") => process_bump::run(&root(), &args[1..]),
         Some("package") => {
@@ -247,6 +226,7 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
         None => None,
     };
     let mut run = exec::Run::new(root, &g.tier, g.dry)?;
+    seed::before_gate(root, g.dry);
     if let Some(name) = &g.filter {
         let f = single::Filter {
             name,
@@ -263,26 +243,20 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
         }
         return Ok(run.summary());
     }
+    let mut trial = None;
     let plan = match g.tier.as_str() {
+        "heavy" => {
+            if !g.covers.is_empty() {
+                let t = heavy_covers::check(root, &g.covers, &g.base)?;
+                heavy_covers::header(&t).iter().for_each(|l| println!("{l}"));
+                trial = Some(t);
+            }
+            let (_, changed, _) = changed_since(root, &g.base)?;
+            println!("changed since {}: {} file(s)", g.base, changed.len());
+            heavy::plan(root, &changed)?
+        }
         "quick" => {
-            let mb = exec::git(root, &["merge-base", &g.base, "HEAD"])
-                .map(|s| s.trim().to_string())
-                .ok()
-                .filter(|s| !s.is_empty())
-                .ok_or_else(|| format!("no merge base with '{}'", g.base))?;
-            let lines = |s: String| -> Vec<String> {
-                s.lines()
-                    .filter(|l| !l.is_empty())
-                    .map(|l| l.replace('\\', "/"))
-                    .collect()
-            };
-            let untracked = lines(exec::git(
-                root,
-                &["ls-files", "--others", "--exclude-standard"],
-            )?);
-            let mut changed = lines(exec::git(root, &["diff", "--name-only", &mb])?);
-            changed.extend(untracked.iter().cloned());
-            let changed = plan::ps_sorted(changed);
+            let (mb, changed, untracked) = changed_since(root, &g.base)?;
             let short: String = mb.chars().take(7).collect();
             println!(
                 "changed since {} ({short}): {} file(s)",
@@ -310,12 +284,25 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
                 quick::Quick::Plan(p) => p,
                 quick::Quick::Batch(f) => {
                     println!("shared crate / workspace touched ({f}): quick falls back to batch");
+                    run.lanes = true;
                     plan::batch(root)
                 }
             }
         }
+        "light" => match light::plan(root) {
+            Ok(p) => p,
+            Err(e) => {
+                println!("{e}");
+                return Ok(1);
+            }
+        },
         _ => tier_plan(root, g),
     };
+    let plan = match g.lane {
+        Some(lane) => lane_split::apply(plan, lane)?,
+        None => plan,
+    };
+    let planned = plan.steps.len();
     let plan = select::apply(plan, &g.only, failed.as_deref())?;
     if g.tier == "release" {
         match known_fail::check_issues(root, g.dry) {
@@ -327,7 +314,40 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
         }
     }
     run.plan(&plan)?;
-    Ok(run.summary())
+    if let Some(lane) = g.lane {
+        verdict::record(&run, lane, planned);
+    }
+    let covers = match &trial {
+        Some(t) => heavy_covers::write(&run, t, plan.steps.len())?,
+        None => Vec::new(),
+    };
+    let code = run.summary();
+    covers.iter().for_each(|l| println!("  {l}"));
+    Ok(code)
+}
+
+/// The merge base of HEAD with `base`, the files changed since it (untracked ones included, sorted) and
+/// the untracked files: the diff that the quick and the heavy tier plan from.
+fn changed_since(root: &Path, base: &str) -> Result<(String, Vec<String>, Vec<String>), String> {
+    let mb = exec::git(root, &["merge-base", base, "HEAD"])
+        .map(|s| s.trim().to_string())
+        .ok()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("no merge base with '{base}'"))?;
+    stale_base::warnings(root, base).iter().for_each(|w| println!("{w}"));
+    let lines = |s: String| -> Vec<String> {
+        s.lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| l.replace('\\', "/"))
+            .collect()
+    };
+    let untracked = lines(exec::git(
+        root,
+        &["ls-files", "--others", "--exclude-standard"],
+    )?);
+    let mut changed = lines(exec::git(root, &["diff", "--name-only", &mb])?);
+    changed.extend(untracked.iter().cloned());
+    Ok((mb, plan::ps_sorted(changed), untracked))
 }
 
 /// The plan of a non-quick tier, pure (no cargo, no git): `gate()` runs exactly this, so the

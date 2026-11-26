@@ -15,7 +15,7 @@ mod tormach_lathe_support;
 use camcraft_app::post::{cnc, cnc_thread};
 use camcraft_app::posting;
 use camcraft_app::schema::PostOptions;
-use tormach_lathe_support::{g33s, g76, g76_words, post, program_with, thread_world};
+use tormach_lathe_support::{g33s, g76, g76_world, g76_words, post, program_with};
 
 fn with_rec(records: &[cnc::Record], f: impl Fn(&mut cnc_thread::ThreadRec)) -> Vec<cnc::Record> {
     records
@@ -80,7 +80,7 @@ fn r1_pass_schedule(text: &str, inch: bool) -> Vec<(i64, i64)> {
 #[test]
 fn g76_words_cut_exactly_the_records_passes_in_mm_and_inch() {
     for inch in [false, true] {
-        let (world, _history) = thread_world(inch);
+        let (world, _history) = g76_world(inch);
         // The record's rungs: the passes the stream lays (one G33 each
         // without the cycle) and ceil(height / first depth).
         let laid = g33s(&program_with(&world, PostOptions::default())).len() as i64;
@@ -110,14 +110,14 @@ fn g76_refuses_by_name_when_no_grid_j_cuts_the_records_passes() {
     // mm: a crest 2 um over the height law (inside the lattice
     // allowance) makes K 2.402; J 0.8 would cut a fourth 0.002 pass,
     // J 0.801 is a full step over the record's first cut. Refused.
-    let (world, _history) = thread_world(false);
+    let (world, _history) = g76_world(false);
     let records = posting::stream_records(&world).expect("generated");
     let (text, refused) = post(&world, &with_rec(&records, |t| t.major_diameter += 0.002), g76());
     assert!(refused.iter().any(|w| w.contains("G76") && w.contains(why)), "mm: {refused:?}");
     assert!(!text.contains("G76 P"), "mm: a refused cycle was written: {text}");
     // inch: 0.15 deep in rungs of 0.012 is 13 passes; K is 118 steps
     // and no whole J has 12J < 118 <= 13J. Refused.
-    let (world, _history) = thread_world(true);
+    let (world, _history) = g76_world(true);
     let records = posting::stream_records(&world).expect("generated");
     let fine = with_rec(&records, |t| {
         t.height = 0.15;
@@ -140,12 +140,16 @@ fn inch_g76_pass_bottoms_match_pathpilot_hub_8l_readings() {
     // pass 1: X (DIA) 0.4409, Z 0.5512 -> 0.3150 (depth 0.0315)
     // pass 2: X (DIA) 0.4094, Z 0.5512 -> 0.3150 (depth 0.0630)
     // pass 3: X (DIA) 0.3780, Z 0.5512 -> 0.3150 (depth 0.0944)
+    // #2952 moved the start from Z0.5512 (inside the bar) to Z0.6299 in
+    // front of the free end face. The pass bottoms (X and depth) come
+    // from the X I J K words only, which did not change, so the readings
+    // still pin them; the start Z of the readings is the old one.
     let want = [(4409, 315), (4094, 630), (3780, 944)];
-    let (world, _history) = thread_world(true);
+    let (world, _history) = g76_world(true);
     let posted = program_with(&world, g76());
     let golden = include_str!("golden/nc/tormach-lathe/thread_g76_inch.nc").replace("\r\n", "\n");
     assert_eq!(r1_pass_schedule(&posted, true), want, "posted R1 schedule must match Hub 8L DRO pass bottoms: {posted}");
     assert_eq!(r1_pass_schedule(&golden, true), want, "golden R1 schedule must match Hub 8L DRO pass bottoms: {golden}");
     assert_eq!(posted.replace("\r\n", "\n"), golden);
-    assert!(golden.contains("G0 X0.4764\nG0 Z0.5512\nG76 P0.07874 Z0.315 I-0.004 J0.0315 K0.0944 R1 Q0 H0\nG0 X0.4764 Z0.9449\n"));
+    assert!(golden.contains("G0 X0.4764\nG0 Z0.6299\nG76 P0.07874 Z0.315 I-0.004 J0.0315 K0.0944 R1 Q0 H0\nG0 X0.4764 Z0.9449\n"));
 }

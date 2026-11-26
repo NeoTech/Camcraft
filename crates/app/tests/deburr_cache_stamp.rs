@@ -16,7 +16,9 @@ use serde_json::Value;
 const CONE: &str = "CM-0600-90";
 // Captured with the pre-#1888 selection law, with all filters at rest.
 const LEGACY_SELECTED_STAMP: u64 = 10_384_171_768_072_239_596;
-const LEGACY_AUTOMATIC_STAMP: u64 = 16_944_328_116_844_164_518;
+// Captured again at the #2901 salt (v3 -> v4): the salt moves every
+// stamp once; the automatic deburr's stamp still holds no filter word.
+const LEGACY_AUTOMATIC_STAMP: u64 = 8_060_236_086_598_552_561;
 
 fn generated(selected: bool, excluded: bool) -> (World, History) {
     let world = camcraft_app::world::new_world();
@@ -69,6 +71,8 @@ fn generated(selected: bool, excluded: bool) -> (World, History) {
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
         unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
+        sizing: camcraft_app::finishing3d::DeburrBreak::default(),
+        picks: Default::default(),
     };
     h.execute(
         &world,

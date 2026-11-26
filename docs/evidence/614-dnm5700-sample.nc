@@ -1,6 +1,6 @@
 %
 O1001 (DNM 5700 PRODUCTION SAMPLE - ISSUE 614 EVIDENCE)
-(SOURCE: Provided by community user @spikeypineapple on Issue #614)
+(SOURCE: Provided by a machine owner on Issue #614)
 (URL: https://github.com/NeoTech/Camcraft/issues/614#issuecomment-6764944619)
 (MACHINE: Doosan / DN Solutions DNM 5700 with Fanuc 0i-MF control)
 (EVIDENCE FOR: G5.1 Q1 R5 AICC smoothing, M07 coolant, G5.1 Q0 cancel, G65 P9832/P9833/P9810/P9814 Renishaw Inspection Plus)

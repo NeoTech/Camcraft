@@ -110,6 +110,12 @@ pub enum CycleChoice {
     /// Reaming (#1445): feed in, feed out ([`CycleKind::Ream`]). Never
     /// automatic - a reamer is the user's word, like Spot.
     Ream,
+    /// Fine boring (#1445, #1479): feed in, oriented spindle stop, shift
+    /// off the wall, rapid out ([`CycleKind::FineBore`]). The shift is a
+    /// required part of the choice, in micrometres along the X and Y of
+    /// the hole list - there is no default. Make it with
+    /// [`CycleChoice::fine_bore`]; never automatic.
+    FineBore { shift_x_um: i32, shift_y_um: i32 },
 }
 
 /// Which reference point on a twist drill the through-hole `break_through`

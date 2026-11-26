@@ -22,9 +22,8 @@
 //!   solid to cut to.
 //! - **Nothing passes silently.** An operation on a profile states what
 //!   it is checked against ([`checked_against`]): the stock and the
-//!   profile's chains. This build does not yet make a toolpath from the
-//!   chains, so generation refuses by name ([`generation_problem`]) and
-//!   no check can pass for want of a solid.
+//!   profile's chains. Kinds that cannot yet machine those chains refuse
+//!   generation by name ([`generation_problem`]).
 
 use flecs_ecs::prelude::World;
 
@@ -72,7 +71,7 @@ pub fn model_loaded(world: &World, declared: Option<&str>) -> bool {
 /// Can this kind take a profile as its source? The 2D cut kinds only.
 #[must_use]
 pub fn admits(params: &OpParams) -> bool {
-    matches!(params.kind().info().section, Section::Mill2D | Section::Plasma | Section::WireEdm)
+    matches!(params.kind().info().section, Section::Mill2D | Section::Plasma | Section::WireEdm | Section::Waterjet)
 }
 
 /// Does this kind cut to a solid model's surface in 3D?
@@ -99,23 +98,59 @@ pub fn source_profiles(world: &World, src: &SrcRef) -> Vec<String> {
 #[must_use]
 pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, params: &OpParams) -> Option<String> {
     let kind = params.kind();
-    for name in source_profiles(world, src) {
-        if matches!(src, SrcRef::Selection(_)) {
-            return Some(format!(
-                "'{name}' is a DXF profile - an operation takes the whole profile as its source; picked chains of a profile are not supported yet"
-            ));
+    let profiles = source_profiles(world, src);
+    if !profiles.is_empty() {
+        if let SrcRef::Selection(items) = src {
+            for g in items {
+                if sketch::find(world, &g.entity).is_none() {
+                    return Some(format!(
+                        "'{}' is a DXF profile and cannot be combined with model features in '{}' in one operation",
+                        profiles[0], g.entity
+                    ));
+                }
+            }
+            if matches!(params, OpParams::Trace { .. } | OpParams::Engrave { .. })
+                && let Some(g) = items.iter().find(|g| !matches!(g.feature,
+                    crate::operation::FeatureSel::SketchChain(_) | crate::operation::FeatureSel::SketchLayer(_)))
+            {
+                return Some(format!("'{}' is a DXF profile - pick a sketch chain or layer to mark", g.entity));
+            }
+            if matches!(params, OpParams::WireContour(_)) {
+                if let Err(why) = crate::operation::wire_sketch::pick(world, src) {
+                    return Some(why);
+                }
+            } else if !matches!(
+                params,
+                OpParams::Contour { .. } | OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. }
+                    | OpParams::Engrave { .. } | OpParams::Trace { .. }
+            ) {
+                return Some(format!(
+                    "'{}' is a DXF profile - an operation takes the whole profile as its source; picked chains of a profile are not supported yet",
+                    profiles[0]
+                ));
+            }
         }
         if !admits(params) {
             return Some(format!(
-                "a {kind} operation needs a solid model - '{name}' is a DXF profile, a virtual model reference with no solid"
+                "a {kind} operation needs a solid model - '{}' is a DXF profile, a virtual model reference with no solid",
+                profiles[0]
             ));
         }
-        let home = sketch::find(world, &name).and_then(|(_, s)| crate::setup::effective(world, s.setup.as_deref()));
-        if home != crate::setup::effective(world, declared) {
+        if let Some(t) = params.tilt() {
+            let _ = t;
             return Some(format!(
-                "'{name}' is a DXF profile on the stock of {} - an operation cuts the profiles of its own setup only",
-                home.map_or_else(|| "another setup".to_owned(), |s| format!("setup '{s}'"))
+                "a 3+2 tilted operation is not supported on DXF profile '{}' - reset orientation to World",
+                profiles[0]
             ));
+        }
+        for name in profiles {
+            let home = sketch::find(world, &name).and_then(|(_, s)| crate::setup::effective(world, s.setup.as_deref()));
+            if home != crate::setup::effective(world, declared) {
+                return Some(format!(
+                    "'{name}' is a DXF profile on the stock of {} - an operation cuts the profiles of its own setup only",
+                    home.map_or_else(|| "another setup".to_owned(), |s| format!("setup '{s}'"))
+                ));
+            }
         }
     }
     if cuts_a_solid(params)
@@ -133,7 +168,12 @@ pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, param
 /// `None` for an operation whose source is not a profile.
 #[must_use]
 pub fn checked_against(world: &World, op: &Operation) -> Option<String> {
-    let SrcRef::Entity(name) = &op.src else { return None };
+    if crate::operation::wire_sketch::selected(&op.src, &op.params) {
+        let (name, chain) = crate::operation::wire_sketch::pick(world, &op.src).ok()?;
+        return Some(format!("checked against the stock and selected DXF chain {} in '{name}' through the stock height", chain.id));
+    }
+    let profiles = source_profiles(world, &op.src);
+    let name = profiles.first()?;
     let (_, profile) = sketch::find(world, name)?;
     let chains = profile.data.chains();
     Some(format!(
@@ -144,13 +184,29 @@ pub fn checked_against(world: &World, op: &Operation) -> Option<String> {
     ))
 }
 
-/// The generation door: an operation the profile law refuses, or one on
-/// a profile (this build makes no toolpath from profile chains yet), is
-/// refused by name. `None` for every other operation.
+/// The generation door: an operation the profile law refuses, or a non-Contour
+/// operation on a profile whose generator has not shipped yet, is refused by
+/// name. `None` for every other operation.
 #[must_use]
 pub fn generation_problem(world: &World, op: &Operation) -> Option<String> {
     if let Some(why) = source_problem(world, op.setup.as_deref(), &op.src, &op.params) {
         return Some(why);
+    }
+    if matches!(op.params, OpParams::Contour { .. } | OpParams::Engrave { .. } | OpParams::Trace { .. }) || crate::operation::wire_sketch::selected(&op.src, &op.params) {
+        return None;
+    }
+    // #1868: a slot kind reads one picked chain of a profile; the whole
+    // profile names no slot.
+    if matches!(op.params, OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. }) {
+        if matches!(op.src, SrcRef::Selection(_)) {
+            return None;
+        }
+        return source_profiles(world, &op.src).first().map(|name| {
+            format!(
+                "a {} operation on the DXF profile '{name}' needs one picked chain - pick one closed slot outline or one open centerline",
+                op.params.kind()
+            )
+        });
     }
     checked_against(world, op)
         .map(|what| format!("this operation is {what}; a toolpath from the chains of a DXF profile is not generated yet"))

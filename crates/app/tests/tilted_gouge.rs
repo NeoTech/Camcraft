@@ -69,10 +69,11 @@ fn slot(tilt: Option<Tilt>) -> OpParams {
         plunge_feed: 300.0,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -152,4 +153,39 @@ fn the_step_bars_wall_facets_lie_on_the_cylinder() {
         }
     }
     assert!(wall > 0, "fixture: the bar has a wall");
+}
+
+/// #2713: a wall facet's normal follows the cylinder. The #2600 split left
+/// flat "cap" facets (three points on the wall, the apex over the long
+/// edge's middle) whose normal stood up to 65.5 degrees off the radius; the
+/// pick then showed their edges as creases on the smooth wall.
+#[test]
+fn the_step_bars_wall_facet_normals_follow_the_cylinder() {
+    let (mesh, _) = camcraft_app::geometry::import::step::parse_with_chord(&std::fs::read(step_bar()).expect("fixture")).expect("imports");
+    // Two facets that each stand under this off the radius bend by less
+    // than the pick's 40 degree crease angle plus the cylinder's own turn.
+    const LIMIT_DEG: f64 = 25.0;
+    let rad = |p: Point3| p.y.hypot(p.z);
+    let (mut wall, mut off, mut worst) = (0usize, 0usize, 0.0f64);
+    for t in mesh.facets.iter() {
+        let v = [t.a, t.b, t.c];
+        // A wall facet: every vertex on the cylinder, and not an end cap.
+        if !v.iter().all(|p| (rad(*p) - R).abs() < 0.01) || v.iter().all(|p| p.x < 1e-6) || v.iter().all(|p| p.x > LEN - 1e-6) {
+            continue;
+        }
+        let (e1, e2) = ([t.b.x - t.a.x, t.b.y - t.a.y, t.b.z - t.a.z], [t.c.x - t.a.x, t.c.y - t.a.y, t.c.z - t.a.z]);
+        let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        let (cy, cz) = ((t.a.y + t.b.y + t.c.y) / 3.0, (t.a.z + t.b.z + t.c.z) / 3.0);
+        if len <= 0.0 {
+            continue;
+        }
+        wall += 1;
+        let deg = ((n[1] * cy + n[2] * cz) / (len * cy.hypot(cz))).clamp(-1.0, 1.0).acos().to_degrees();
+        worst = worst.max(deg);
+        off += usize::from(deg > LIMIT_DEG);
+    }
+    println!("wall facets {wall} of {}, normal over {LIMIT_DEG} degrees off the radius: {off}, worst {worst:.1}", mesh.facets.len());
+    assert!(wall > 1000, "fixture: the bar has a wall: {wall}");
+    assert_eq!(off, 0, "wall facets stand off the cylinder's normal, worst {worst:.1} degrees");
 }

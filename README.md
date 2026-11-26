@@ -39,7 +39,7 @@ text, assets or post processors were used.
 - **Import** STL, OBJ and STEP models; repair meshes (weld vertices, fill
   holes).
 - **Set up** stock, work offsets (G54–G59), fixtures and machines (mill,
-  5-axis, lathe, mill-turn, and the Tormach 770MX, 770MX (ML), 770M,
+  5-axis, lathe, mill-turn (a lathe with live tooling), and the Tormach 770MX, 770MX (ML), 770M,
   1100M, 1100MX, 1500MX, PCNC 440, PCNC 770 (earlier and Series 3) and
   PCNC 1100 (Series I, II and 3) mills, and generic grblHAL, TinyG and
   LinuxCNC 3-axis machines).
@@ -80,8 +80,10 @@ with `camcraft`. To install the Flatpak bundle, run
 `flatpak install --user ./camcraft-*.flatpak` and launch it with
 `flatpak run io.github.NeoTech.Camcraft` (the Freedesktop runtime downloads
 separately). On macOS, open the DMG and drag `CamCraft.app` to Applications,
-or extract the ZIP. The macOS bundle is ad-hoc signed and not notarized, so
-the first launch may require Control-click → Open. The portable archives
+or extract the ZIP. If macOS 15 or later blocks an ad hoc release, first try
+to open the app. If you trust the download, go to **System Settings →
+Privacy & Security** and choose **Open Anyway**. See [Apple's first-launch
+instructions](https://support.apple.com/en-us/102445). The portable archives
 include the command-line tools and assets. `TESTING.md` in each archive lists
 hand-test checks.
 
@@ -155,6 +157,8 @@ Actions runs only on a pushed release tag (`release.yml`).
   what was dropped.
 - [Machine onboarding](docs/MACHINE-ONBOARDING.md): source facts, registration,
   software-test seams, and current limitations for machine definitions/posts.
+- [SolidCraft and CamCraft over MCP](docs/user-guide/solidcraft-camcraft-mcp.md):
+  one external agent, a local CAD-to-CAM walkthrough, and cross-app safety limits.
 - `AGENTS.md`: engineering rules (clean-room protocol, the never-crash /
   never-gouge directive, layering, testing).
 - `RELEASE_NOTES.md`, `TESTING.md`: the current release.

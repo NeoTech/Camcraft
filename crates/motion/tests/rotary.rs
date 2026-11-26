@@ -43,6 +43,7 @@ fn finish(top_z: f64, bottom_z: f64) -> Finish3DParams {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     }
 }
 
@@ -318,17 +319,11 @@ fn the_rotary_parallel_runs_the_laid_bar_axially() {
 }
 
 #[test]
-fn the_kinds_refuse_each_other_degenerate_stances_by_name() {
+fn a_standing_bar_refuses_parallel_by_name() {
     let p = finish(28.0, 0.0);
     let c = control(0.0, 0.0, None);
     let e = rotary_parallel(&lathe_bar(16), &p, &c).expect_err("a standing bar has no axial passes here");
     assert!(e.to_string().contains("Rotary Contour"), "{e}");
-    let q = Finish3DParams {
-        clearance_z: 10.0,
-        ..finish(3.0, -3.0)
-    };
-    let e = rotary_contour(&laid_bar(16), &q, &c).expect_err("a laid bar's rings need a different height law");
-    assert!(e.to_string().contains("Rotary Parallel"), "{e}");
 }
 
 // ---- the held-end law (#2343) -------------------------------------

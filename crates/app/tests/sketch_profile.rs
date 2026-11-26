@@ -256,8 +256,8 @@ fn a_stock_and_profile_setup_accepts_a_2d_operation_and_refuses_what_needs_a_sol
     assert!(!sketch_model::has_part(&world), "and it is not a solid");
 
     // A 2D operation on the sketch chains is accepted, and says what it is checked against.
-    run(&world, &mut history, CreateOperation::new(&world, "Cut", TOOL, on_profile(), seed(OpType::Contour)), "2D Contour on the profile");
-    let op = model::find_by_name(&world, "Cut").and_then(|e| model::operation_of(&world, &e)).expect("the operation");
+    run(&world, &mut history, CreateOperation::new(&world, "Pkt", TOOL, on_profile(), seed(OpType::Pocket)), "2D Pocket on the profile");
+    let op = model::find_by_name(&world, "Pkt").and_then(|e| model::operation_of(&world, &e)).expect("the operation");
     assert_eq!(op.src, on_profile());
     let what = sketch_model::checked_against(&world, &op).expect("an operation on a profile states its checks");
     assert!(what.contains("the stock 'Stock'") && what.contains("the chains of the DXF profile 'plate' (2 closed, 1 open)"), "{what}");
@@ -275,11 +275,11 @@ fn a_stock_and_profile_setup_accepts_a_2d_operation_and_refuses_what_needs_a_sol
         let why = refusal(CreateOperation::new(&world, "No", TOOL, on_profile(), seed(kind)), "a solid kind on a profile");
         assert!(why.contains("needs a solid model - 'plate' is a DXF profile, a virtual model reference with no solid"), "{kind}: {why}");
     }
-    // The same law at the retype door, and for picked features of a profile.
-    let why = refusal(ChangeOperationKind::new(&world, "Cut", OpType::Pocket3D.ordinal()), "retype to 3D");
+    // The same law at the retype door, and for picked features of a non-Contour profile op.
+    let why = refusal(ChangeOperationKind::new(&world, "Pkt", OpType::Pocket3D.ordinal()), "retype to 3D");
     assert!(why.contains("needs a solid model"), "{why}");
     let pick = SrcRef::Selection(vec![GeoSel { entity: name.clone(), feature: FeatureSel::Chain(7) }]);
-    let why = refusal(CreateOperation::new(&world, "Pick", TOOL, pick, seed(OpType::Contour)), "picked chain");
+    let why = refusal(CreateOperation::new(&world, "Pick", TOOL, pick, seed(OpType::Pocket)), "picked chain");
     assert!(why.contains("picked chains of a profile are not supported yet"), "{why}");
 
     // A model height has no value on a virtual reference, and says why.
@@ -288,11 +288,11 @@ fn a_stock_and_profile_setup_accepts_a_2d_operation_and_refuses_what_needs_a_sol
         Some(sketch_model::NO_SOLID_HEIGHT)
     );
 
-    // Generation never passes for want of a solid: refused by name, with what it checks.
-    let why = refusal(GenerateOperation::new(&world, "Cut"), "generate on a profile");
+    // Non-Contour operations still never pass for want of a solid: refused by name, with what it checks.
+    let why = refusal(GenerateOperation::new(&world, "Pkt"), "generate on a profile");
     assert!(why.contains("checked against the stock 'Stock' and the chains of the DXF profile 'plate'"), "{why}");
     assert!(why.contains("is not generated yet"), "{why}");
-    assert!(model::find_by_name(&world, "Cut").is_some_and(|e| !model::has_toolpath(&world, &e)), "no toolpath landed");
+    assert!(model::find_by_name(&world, "Pkt").is_some_and(|e| !model::has_toolpath(&world, &e)), "no toolpath landed");
 
     // With a part in the document the reference is no longer virtual.
     let block = cube(Point3::new(0.0, 0.0, 0.0), Point3::new(20.0, 20.0, 5.0));
@@ -391,9 +391,9 @@ fn stock_source_word_is_reserved_for_explicit_profile_names_and_file_stems() {
         assert_eq!(name, "profile");
         history.execute(&world, cmd);
         assert!(sketch::find(&world, &name).is_some());
-        let contour = operation::seed_params(OpType::Contour.ordinal());
-        run(&world, &mut history, CreateOperation::new(&world, "Cut", TOOL, SrcRef::Entity(name), contour), "profile operation");
-        let why = refusal(GenerateOperation::new(&world, "Cut"), "profile generation");
+        let pocket = operation::seed_params(OpType::Pocket.ordinal());
+        run(&world, &mut history, CreateOperation::new(&world, "Pkt", TOOL, SrcRef::Entity(name), pocket), "profile operation");
+        let why = refusal(GenerateOperation::new(&world, "Pkt"), "profile generation");
         assert!(why.contains("DXF profile 'profile'") && why.contains("is not generated yet"), "{why}");
     }
 }

@@ -13,7 +13,10 @@ const TOOL: &str = "EM-0600-4FL";
 fn editor() -> Harness<'static, ShellUi> {
     let mut harness = shell_harness();
     harness.run();
-    crate::actions::open_tool_editor(&mut harness.state_mut().state, TOOL);
+    // #2397: Properties shows the tool page, so its one side preview is
+    // drawn beside the shape window.
+    harness.state_mut().state.ui_target = UiTarget::Tool(TOOL.into());
+    crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, TOOL);
     harness.run();
     harness.run();
     harness
@@ -305,32 +308,29 @@ fn body_tab_convert_to_profile_refuses_unaligned_step_and_converts_iso_aligned_s
     assert!(harness.state().state.editor_tool_body().is_some());
 }
 
-/// #2007: the Draw holder view stands in the third column in plain words,
-/// top to bottom: what is in use, the table with its headers, Apply
-/// profile, the file buttons. It has no side view of its own.
+/// #2007 / #2397: the Draw holder view stands in the shape window in
+/// plain words. The controls column reads top to bottom: what is in use,
+/// Parametric / Custom, Apply profile, the file buttons. The table with
+/// its headers and the side view stand beside it, in the view column.
 #[test]
 fn tool_profile_structure() {
     use egui_kittest::kittest::NodeT;
-    let mut harness = shell_harness();
-    harness.run();
-    crate::actions::open_tool_editor(&mut harness.state_mut().state, "EM-0600-4FL");
-    harness.run_steps(2);
-    harness.get_by_label("Profile").click();
-    harness.run_steps(2);
+    let harness = profile_tab();
     let win = harness
         .query_all_by_role(egui::accesskit::Role::Window)
-        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool: EM-0600-4FL"))
-        .expect("the editor window");
-    let fields_right = win.get_by_label("Shank diameter").rect().max.x;
+        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool shape: EM-0600-4FL"))
+        .expect("the shape window");
+    let view_left = win.get_by_label("height mm").rect().min.x;
     let mut last_y = f32::MIN;
-    for label in ["Holder profile", "In use: the holder cylinder from the dimensions", "Parametric", "height mm", "Apply profile", "Import DXF…"] {
+    for label in ["Holder profile", "In use: the holder cylinder from the dimensions", "Parametric", "Apply profile", "Import DXF…"] {
         let r = win.get_by_label(label).rect();
         assert!(r.center().y > last_y, "{label:?} must follow the row above it");
-        assert!(r.min.x > fields_right, "{label:?} sits in the third column");
+        assert!(r.max.x < view_left, "{label:?} sits in the controls column");
         last_y = r.center().y;
     }
-    for head in ["radius mm", "arc"] {
-        assert!(win.query_by_label(head).is_some(), "the table has the {head:?} header");
+    for head in ["height mm", "radius mm", "arc"] {
+        let r = win.get_by_label(head).rect();
+        assert!(r.min.x >= view_left, "the {head:?} header sits in the view column");
     }
     assert!(win.query_all_by_label_contains("landed").next().is_none(), "no \"landed\" jargon on the page");
 }
