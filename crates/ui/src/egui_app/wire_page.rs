@@ -60,13 +60,13 @@ fn skim_fields(ui: &mut Ui, skims: &mut Vec<WireSkim>, ids: &[String]) {
         check_row(ui, &format!("Skim {n} reverse"), &mut skim.reverse);
         prop_row(ui, &format!("Skim {n} order"), |ui| {
             ui.vertical(|ui| {
-                if ui.add_enabled(i > 0, egui::Button::new(format!("Move skim {n} up"))).clicked() {
+                if button_enabled(ui, i > 0, format!("Move skim {n} up")).clicked() {
                     swap = Some((i, i.saturating_sub(1)));
                 }
-                if ui.add_enabled(n < len, egui::Button::new(format!("Move skim {n} down"))).clicked() {
+                if button_enabled(ui, n < len, format!("Move skim {n} down")).clicked() {
                     swap = Some((i, n));
                 }
-                if ui.button(format!("Remove skim {n}")).clicked() {
+                if button(ui, format!("Remove skim {n}")).clicked() {
                     remove = Some(i);
                 }
             });
@@ -78,7 +78,7 @@ fn skim_fields(ui: &mut Ui, skims: &mut Vec<WireSkim>, ids: &[String]) {
         skims.swap(a, b);
     }
     prop_row(ui, "Skim passes", |ui| {
-        if ui.add_enabled(skims.len() < SKIMS_MAX, egui::Button::new("Add skim")).clicked() {
+        if button_enabled(ui, skims.len() < SKIMS_MAX, "Add skim").clicked() {
             skims.push(WireSkim { condition: String::new(), reverse: false });
         }
     });
@@ -97,7 +97,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<WireTabs>, ids: &[String])
     check_row(ui, "Tab count stated", &mut stated);
     if stated {
         let count = t.count.get_or_insert(1);
-        prop_row(ui, "Tab count", |ui| { ui.add(DragValue::new(count)); });
+        prop_row(ui, "Tab count", |ui| drag_row(ui, DragValue::new(count)));
     } else {
         t.count = None;
     }
@@ -113,7 +113,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<WireTabs>, ids: &[String])
         prop_row(ui, &format!("Tab {} X", i + 1), |ui| num(ui, u, &mut xy[0]));
         prop_row(ui, &format!("Tab {} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
         prop_row(ui, "Tab position", |ui| {
-            if ui.button(format!("Remove tab position {}", i + 1)).clicked() {
+            if button(ui, format!("Remove tab position {}", i + 1)).clicked() {
                 remove = Some(i);
             }
         });
@@ -122,7 +122,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<WireTabs>, ids: &[String])
         t.at.remove(i);
     }
     prop_row(ui, "Tab positions", |ui| {
-        if ui.add_enabled(t.at.len() < 1024, egui::Button::new("Add tab position")).clicked() {
+        if button_enabled(ui, t.at.len() < 1024, "Add tab position").clicked() {
             t.at.push([0.0, 0.0]);
         }
     });
@@ -156,31 +156,31 @@ fn four_axis_fields(ui: &mut Ui, u: Unit, f: &mut WireFourAxis, cx: &mut Cx<'_>)
                     prop_row(ui, &format!("Sync {} {which} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
                 }
                 None => {
-                    if ui.button(format!("State sync {} {which} point", i + 1)).clicked() {
+                    if button(ui, format!("State sync {} {which} point", i + 1)).clicked() {
                         *q = Some([0.0, 0.0]);
                     }
                 }
             }
         }
-        if ui.button(format!("Remove sync pair {}", i + 1)).clicked() {
+        if button(ui, format!("Remove sync pair {}", i + 1)).clicked() {
             drop = Some(i);
         }
     }
     if let Some(i) = drop {
         f.sync.remove(i);
     }
-    if ui.button("Add sync pair").clicked() {
+    if button(ui, "Add sync pair").clicked() {
         f.sync.push(WireSyncPair { upper: Some([0.0, 0.0]), lower: Some([0.0, 0.0]) });
     }
     // #1171: state the pairs by two vertex clicks in the viewport.
     let label = if cx.sync_armed { "Stop picking sync points" } else { "Pick sync points in the viewport" };
     prop_row(ui, "Sync pick", |ui| {
-        if ui.button(label).clicked() {
+        if button(ui, label).clicked() {
             cx.sync_toggle = true;
         }
     });
     if cx.sync_armed {
-        ui.label(format!("Next: {}", crate::wire_sync_pick::next_click(&f.sync)));
+        list_row(ui, format!("Next: {}", crate::wire_sync_pick::next_click(&f.sync)));
     }
     hint(ui, "the first click of a pair is a vertex of the upper profile (the higher one), the second a vertex of the lower profile; Apply stores the pairs");
     hint(ui, "each sync pair is one point of the upper profile and the point of the lower profile the wire passes through with it; between pairs the profiles are walked at the same share of their length");
@@ -217,9 +217,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         }
         hint(ui, "on: the wire enters and leaves the profile on a tangent arc, so it does not stop at the entry; the radius must be over wire radius + gap, the start hole more than twice the radius off the path - a selected DXF profile only");
         // #536: a constant taper, degrees from vertical.
-        prop_row(ui, "Taper angle", |ui| {
-            ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));
-        });
+        prop_row(ui, "Taper angle", |ui| drag_row(ui, DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°")));
         hint(ui, "0 cuts vertical; a positive taper widens the profile downward from the top plane (a die's relief), a negative one narrows it - the machine's edm.max_taper_deg bounds it");
         // #537: two profiles paired into a ruled surface.
         let mut on = four_axis.is_some();
