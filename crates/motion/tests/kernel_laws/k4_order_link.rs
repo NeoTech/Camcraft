@@ -93,12 +93,15 @@ fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
 /// The lift count of the kernel for each part and side: (part, side, lifts).
 /// The old planners on the same fixtures (#4154 tables): 2D Pocket 18 on
 /// the disc and 26 on the dog bone, none named; 2D Offset 0. The lifts that
-/// stay are named in `docs/decisions/4177-kernel-order-link.md`.
+/// stay are named in `docs/decisions/4177-kernel-order-link.md`: Outside
+/// starts at the stock edge, and the link from one piece there to the next
+/// runs over the uncut strip along the edge (#4234: that strip is not open
+/// ground until a cut clears it).
 const LIFTS: [(&str, &str, usize); 4] = [
     ("disc", "Inside", 0),
-    ("disc", "Outside", 0),
+    ("disc", "Outside", 13),
     ("dog bone", "Inside", 0),
-    ("dog bone", "Outside", 0),
+    ("dog bone", "Outside", 15),
 ];
 
 #[test]

@@ -8,7 +8,7 @@
 mod proof;
 mod route;
 
-pub use proof::{AIR, LinkStage, SWATH};
+pub use proof::{LinkStage, SWATH};
 pub(crate) use proof::proved_path;
 
 use std::collections::BTreeMap;
@@ -72,6 +72,12 @@ pub const CUTS_PART: &str = "the in-plane link would leave the area that keeps t
 pub const HITS_FIXTURE: &str = "the in-plane link would hit a fixture (a keep-out area)";
 /// Lift reason: the in-plane link crosses a cut of the level.
 pub const CROSSES_CUT: &str = "the in-plane link would cross a cut planned on that plane";
+/// Lift reason: the in-plane path has no finite point to stay on (a cut
+/// with no point, or a point that is not a finite number).
+pub const BAD_PATH: &str = "the in-plane link has no finite path to stay on";
+/// Lift reason: the region is not planar, and the link stage proves
+/// in-plane links on planar regions only.
+pub const NOT_PLANAR_LINK: &str = "the link stage proves in-plane links on planar regions only";
 /// Lift reason: the in-plane link runs through stock that no cut has cleared.
 pub const UNCUT_STOCK: &str = "the in-plane link would cut uncut stock with the full tool width";
 

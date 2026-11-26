@@ -23,7 +23,12 @@ with the default switch the output is identical.
 3. **A full-width stretch is cut last.** Of the curves that are ready
    to cut, a curve with a `FullWidth` stretch comes after the others, and
    a closed curve starts where its longest full-width stretch ends, so
-   that the heavy stretch is the last part of that curve. Why: by then all
+   that the heavy stretch is the last part of that curve. A curve that is
+   full-width as a whole (a `Span::Whole` mark) also comes after the other
+   ready curves. It has no stretch end, and no point of it is less heavy
+   than another, so it starts as a plain curve: a closed curve at its
+   vertex nearest the tool that the link proves (its first vertex on the
+   first step). A whole mark wins over the stretches of the same curve. Why: by then all
    that the other curves can clear round it is cleared, and the tool
    leaves the heavy stretch into cut ground; the link into the curve
    reaches cleared material, not the heavy cut. The walk's sense is not
@@ -50,7 +55,10 @@ with the default switch the output is identical.
    an open piece of a ring round a part has it away from the part walls.
    So Inside on a pocket runs counter-clockwise, Outside clockwise, and
    conventional reverses each ring. Rows have no side: each row starts at
-   its end nearer the tool (a zigzag).
+   its end nearer the tool (a zigzag). On the first step there is no tool
+   position, and the first row is never reversed: it runs as the canonical
+   guide set gives it. So the first cut is deterministic, and the order
+   invents no direction that no tool position asks for.
 7. **The sequence.** A ring waits for its neighbours on the side the
    walk comes from: the rings of the level before it in the walk that
    come within a tool diameter of it (the order of the offset tree, Held
@@ -75,18 +83,32 @@ with the default switch the output is identical.
      verifier's crossing test), but the path may run along it
      (`CROSSES_CUT`);
    - run over cleared stock: each sample (every quarter tool radius)
-     within 0.9 tool radius of a made cut, in the air, or within 0.1 tool
-     radius of the stock edge, where half of the tool is in the air (the
-     `AIR` margin of the ring links) (`UNCUT_STOCK`). Without that margin
-     the disc band had 13 lifts on Outside: each step from one piece to
-     the next along the stock edge ran over the strip that the next piece
-     cuts.
+     within 0.9 tool radius of a made cut (the swath), or in the air of
+     the region (the band outside the stock where the tool does not touch
+     it) (`UNCUT_STOCK`). The strip just inside the stock edge is stock as
+     any other: it is open only where the swath of a made cut covers it.
+     Why (review of PR #4234): the first version also counted a centre
+     within 0.1 tool radius of the stock edge, on either side, as open.
+     Inside the stock such a centre cuts up to 1.1 tool radii into stock
+     that no cut has cleared, more than the swath (0.9 r) that the proof
+     permits. The ring links' `AIR` means "outside the stock by 0.1 r" (the
+     tool then cuts at most 0.9 r into the stock). The kernel's centre area
+     ends at the stock edge and its air starts one tool radius outside, so
+     no link sample can stand in that band: the old margin has no use in
+     the kernel, and the constant is removed. Dropped: the edge strip as
+     open ground (not proved); a strip "covered by a made cut" as a rule of
+     its own (it is the swath test). The cost: the bands round a part lift
+     on Outside (the readings below). A proved band outside the stock for
+     the links is follow-up #4241.
    The tries: the straight chord; back along the open cut just made, then
    a chord (the chain link of `air_chain::link`); a walk along a loop of
    the centre area that both ends stand within a tool radius of, joined at
    the loop's vertices, the shorter way first (`ring_links::edge_route`,
    #3824). If no path is proved, the hop lifts with the reason of the
-   straight chord. `LinkPolicy::Retract` lifts with `USER_RETRACT`. Every
+   straight chord. `LinkPolicy::Retract` lifts with `USER_RETRACT`. Each
+   case has its own named reason and no fallback: a proved path with no
+   finite point lifts with `BAD_PATH`, a region that is not planar with
+   `NOT_PLANAR_LINK`. Every
    hop goes through the tally. The transition table of `Plan::new` stays
    the one gate (a lift needs an entry).
 9. **The link trait reads the level.** `LinkProof::link` takes a
@@ -106,15 +128,23 @@ the test, against the old planners' tables:
 | Fixture | Kernel lifts / crossings | Old 2D Pocket | Old 2D Offset |
 |---|---|---|---|
 | disc, Inside | 0 / 0 | 18 (none named) / 0 | 0 / 0 |
-| disc, Outside | 0 / 0 | 18 (none named) / 0 | 0 / 0 |
+| disc, Outside | 13 (named) / 0 | 18 (none named) / 0 | 0 / 0 |
 | dog bone, Inside | 0 / 0 | 26 (none named) / 0 | 0 / 0 |
-| dog bone, Outside | 0 / 0 | 26 (none named) / 0 | 0 / 0 |
+| dog bone, Outside | 15 (named) / 0 | 26 (none named) / 0 | 0 / 0 |
 
 The held level blend of #3934 had 35 lifts on the disc and 24 crossing
-feeds on the dog bone (Outside). The law suite pins the same 0 lifts on
-the disc pocket, the disc band and the dog-bone band (Auto, Inside,
-Outside), and the lifts of the pocket with an island: 7 Inside (and
-Auto), 5 Outside, each with its reason. Inside, the four corners of that
+feeds on the dog bone (Outside). The law suite pins 0 lifts on the disc
+pocket (Auto, Inside, Outside) and on the disc band and the dog-bone
+band Inside. The bands lift on Outside (and Auto, which resolves to
+Outside): 13 on the disc band (5 `CROSSES_CUT`, 4 `UNCUT_STOCK`, 4
+`CUTS_PART`) and 15 on the dog-bone band (13 `CROSSES_CUT`, 2
+`UNCUT_STOCK`). Outside starts at the stock edge: the link from one
+piece at the edge to the next runs over the strip that the next piece
+cuts, and it may not leave the stock into the air (the kernel's air
+starts one tool radius outside the stock). The reason is the one of the
+straight chord. The first version had 0 there by the edge margin, which
+was not proved. The pocket with an island lifts 7 Inside (and Auto), 5
+Outside, each with its reason. Inside, the four corners of that
 pocket are four separate deepest areas: the walk starts in each, and the
 link between two corners runs over a strip that is not cut yet
 (`UNCUT_STOCK`) or across a ring still planned (`CROSSES_CUT`). Outside,

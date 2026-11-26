@@ -3,8 +3,10 @@
 //! the straight link. A path is clear when each of its chords stays in the
 //! cutter-centre area or the air (so it cuts no part wall and no keep-out
 //! area), crosses no cut of the level, and runs only over cleared stock
-//! (within the swath of a cut already made) or air (the air beyond the
-//! stock, or the stock edge, where half of the tool is in the air). The tries, in order:
+//! (within the swath of a cut already made) or the air of the region (the
+//! band outside the stock where the tool does not touch it). The strip just
+//! inside the stock edge is stock as any other: it is open only where the
+//! swath of a cut already made covers it. The tries, in order:
 //! the straight chord; back along the cut just made, then a chord (the
 //! chain link of the air plan); a walk along an edge of the centre area.
 //! Provenance: ported from `camcraft-motion` with its named reasons - the
@@ -16,7 +18,7 @@
 
 use camcraft_geometry::geo2d::{point_segment_distance, segment_gap, segments_cross};
 
-use super::{CROSSES_CUT, CUTS_PART, HITS_FIXTURE, Hop, LinkPolicy, LinkProof, LinkTally, Level, UNCUT_STOCK, USER_RETRACT};
+use super::{BAD_PATH, CROSSES_CUT, CUTS_PART, HITS_FIXTURE, Hop, LiftReason, LinkPolicy, LinkProof, LinkTally, Level, NOT_PLANAR_LINK, UNCUT_STOCK, USER_RETRACT};
 use crate::plan::Cut;
 use crate::region::{KernelRegion, PlanarRegion};
 use crate::{Point2, in_area, near, to_loops};
@@ -26,9 +28,6 @@ use crate::{Point2, in_area, near, to_loops};
 pub const SWATH: f64 = 0.9;
 /// The sample step of a chord, in tool radii (the ring links' step).
 const STEP: f64 = 0.25;
-/// A centre within this part of the tool radius of the stock edge has
-/// half of the tool in the air: it counts as air (the ring links' `AIR`).
-pub const AIR: f64 = 0.1;
 /// Two segments closer than this (mm) meet.
 const APART: f64 = 1e-6;
 
@@ -117,7 +116,12 @@ impl Proof<'_> {
     /// The proof of one chord, `skip` the index of a made cut that the
     /// chord may run along (the cut it goes back on). The reason names the
     /// first test that fails.
-    pub(super) fn chord(&self, a: Point2, b: Point2, skip: Option<usize>) -> Result<(), &'static str> {
+    ///
+    /// Open ground is only what is proved open: the air of the region, or a
+    /// sample within the swath of a cut already made. A centre inside the
+    /// stock near its edge is not open by itself: with no cut made beside
+    /// it, its tool cuts more than the swath into uncut stock (`UNCUT_STOCK`).
+    pub(super) fn chord(&self, a: Point2, b: Point2, skip: Option<usize>) -> Result<(), LiftReason> {
         if near(a, b) {
             return Ok(());
         }
@@ -126,22 +130,21 @@ impl Proof<'_> {
         if !pts.iter().all(|&q| in_area(self.p.center(), q) || in_area(air, q)) {
             let keep = self.p.keep_out();
             let fixture = !keep.is_empty() && pts.iter().any(|&q| in_area(keep, q) || to_loops(q, keep.loops()) <= self.r);
-            return Err(if fixture { HITS_FIXTURE } else { CUTS_PART });
+            return Err(LiftReason(if fixture { HITS_FIXTURE } else { CUTS_PART }));
         }
         let made = self.made.iter().enumerate().filter(|(i, _)| Some(*i) != skip).chain(self.links.iter().enumerate()).any(|(_, l)| l.meets(a, b, self.ends, true));
         if made || self.planned.iter().any(|l| l.meets(a, b, self.ends, false)) {
-            return Err(CROSSES_CUT);
+            return Err(LiftReason(CROSSES_CUT));
         }
-        let (reach, edge) = (SWATH * self.r, AIR * self.r);
-        let open = |q: Point2| in_area(air, q) || to_loops(q, self.p.stock_edge()) <= edge;
-        if !pts.iter().all(|&q| open(q) || self.made.iter().any(|l| l.dist(q, reach) <= reach)) {
-            return Err(UNCUT_STOCK);
+        let reach = SWATH * self.r;
+        if !pts.iter().all(|&q| in_area(air, q) || self.made.iter().any(|l| l.dist(q, reach) <= reach)) {
+            return Err(LiftReason(UNCUT_STOCK));
         }
         Ok(())
     }
 
     /// The proof of a path: each chord.
-    pub(super) fn path(&self, pts: &[Point2]) -> Result<(), &'static str> {
+    pub(super) fn path(&self, pts: &[Point2]) -> Result<(), LiftReason> {
         pts.windows(2).try_for_each(|w| self.chord(w[0], w[1], None))
     }
 
@@ -163,9 +166,9 @@ fn end_of(c: &Cut) -> Option<Point2> {
 
 /// The in-plane path from the end of `from` to the start of `to`, or the
 /// reason of the straight chord when no path is proved.
-fn stay_path(from: &Cut, to: &Cut, p: &PlanarRegion, level: Level<'_>) -> Result<Vec<Point2>, &'static str> {
+fn stay_path(from: &Cut, to: &Cut, p: &PlanarRegion, level: Level<'_>) -> Result<Vec<Point2>, LiftReason> {
     let (Some(a), Some(b)) = (end_of(from), start_of(to)) else {
-        return Err(CUTS_PART);
+        return Err(LiftReason(BAD_PATH));
     };
     let mut proof = Proof {
         p,
@@ -204,16 +207,18 @@ pub(crate) fn proved_path(from: &Cut, to: &Cut, p: &PlanarRegion, level: Level<'
 
 impl LinkProof for LinkStage {
     fn link(&self, from: &Cut, to: &Cut, r: &KernelRegion, level: Level<'_>, policy: LinkPolicy, tally: &mut LinkTally) -> Hop {
+        // Each lift reason is a named constant of `link.rs`, so a lift can
+        // not be blank; each case has its own arm and no fallback.
         let path = match (policy, r.planar()) {
             (LinkPolicy::StayWhereProved, Some(p)) => stay_path(from, to, p, level),
-            (LinkPolicy::StayWhereProved, None) => Err(CUTS_PART),
-            _ => Err(USER_RETRACT),
+            (LinkPolicy::StayWhereProved, None) => Err(LiftReason(NOT_PLANAR_LINK)),
+            (LinkPolicy::Retract, _) => Err(LiftReason(USER_RETRACT)),
         };
-        let hop = match path {
-            Ok(pts) => Hop::stay(pts).or_else(|_| Hop::lift(CUTS_PART)),
-            Err(why) => Hop::lift(why),
+        let hop = match path.map(Hop::stay) {
+            Ok(Ok(hop)) => hop,
+            Ok(Err(_)) => Hop::Lift(LiftReason(BAD_PATH)),
+            Err(why) => Hop::Lift(why),
         };
-        // Each reason above is a named constant: the fallback is never taken.
-        tally.record(hop.unwrap_or(Hop::Lift(super::LiftReason(CUTS_PART))))
+        tally.record(hop)
     }
 }
