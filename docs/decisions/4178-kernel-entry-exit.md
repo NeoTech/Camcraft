@@ -106,14 +106,18 @@ the output with the default planner switch does not change.
     `Region::holds_path` (no stretch of a polyline outside the region).
     The kernel keeps no private copy.
 
-**For the law suite (#4027, PR #4175)**: when the two meet, the second to
-merge changes these: each stand-in `impl EntryPlanner` returns
-`Ok(Verdict::done(entry))` (or `named(...)`); `kit::run` takes the entry
-out of the verdict (`live(...)`) and keeps the verdict for L4;
-`check_l4` counts an entry as silent when `needs_fallback(asked, used)`
-is true and the entry verdict has no `Fallback` of `Stage::Entry`
-(today it treats `ArcLead` as an entry into material and cannot read a
-fallback).
+**For the law suite (#4027, PR #4175)**: #4175 merged to the side branch
+first, so this PR changes it to the new signature:
+- each stand-in `impl EntryPlanner` returns `Ok(Verdict::done(entry))`
+  (`standins.rs`, `l5_entry.rs`, `l4_fallback.rs`);
+- `kit::Run` gets `entries: Vec<Verdict<Entry>>`, and `kit::run` takes
+  the entry out of its verdict with `live`;
+- `check_l4` counts an entry as silent when `needs_fallback(asked, used)`
+  is true and its verdict has no fallback of `Stage::Entry`. Before, it
+  treated `ArcLead` as an entry into material and could read no record;
+- new pins: `l4_holds_for_a_named_entry_fallback` and
+  `the_entry_stage_passes_l4_and_l5` (the stage on the square and the
+  island cases).
 
 **Why**: the record fixes the order of tries and the laws, but not how a
 fallback is carried, how the room is read from K1's region, or where the
