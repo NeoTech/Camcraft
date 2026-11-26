@@ -73,6 +73,8 @@ mod reimport_changes;
 mod render;
 mod selection;
 mod setup_tools;
+// #3915: SolidCraft face names on features and picks.
+mod source_names;
 mod tool_delete;
 mod tool_edit;
 mod tools;
