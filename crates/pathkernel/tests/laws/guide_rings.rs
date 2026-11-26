@@ -3,7 +3,9 @@
 //! stretch is named (#3788); a small piece is kept; each refusal is named.
 
 use super::guide_kit::{around, center, circle, marks, mark_pts, outline, p, pocket, rect, same_set, to_edge, to_set, all_inside};
-use camcraft_pathkernel::guide::rings::{BAND_NOT_YET, CIRCLE_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS};
+use camcraft_pathkernel::guide::rings::{
+    BAND_NOT_YET, CIRCLE_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS, WALL_STRIP_UNCUT,
+};
 use camcraft_pathkernel::guide::{
     BAD_TOL, Circle, FAMILY_NOT_YET, Family, GuideChoice, GuidePlanner, GuideSet, Guides, MarkKind, RingPlanner, RingRef,
     RingsChoice, RowsChoice, STEP_ABOVE_DIAMETER, Span,
@@ -184,7 +186,8 @@ fn each_ring_refusal_is_named() {
     assert_eq!(refused(RingPlanner.guide(&r, &g, TOL)), CIRCLE_NOT_YET);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Band, 0.0, 2.0, None), TOL)), BAND_NOT_YET);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, -0.5, 2.0, None), TOL)), OFFSET_BELOW_CENTER);
-    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 18.0, 2.0, None), TOL)), NO_RING);
+    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 18.0, 2.0, Some(1)), TOL)), NO_RING);
+    assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 3.5, 2.0, None), TOL)), WALL_STRIP_UNCUT);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 0.0, 6.5, None), TOL)), STEP_ABOVE_DIAMETER);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 0.0, 1e-3, None), TOL)), TOO_MANY_RINGS);
     for bad in [f64::NAN, 0.0, 1e-9, f64::INFINITY] {
@@ -198,4 +201,26 @@ fn the_guide_stage_sends_each_family_to_its_planner_or_refuses_it_by_name() {
     let g = rings(RingRef::Boundary, 0.0, 4.0, None);
     assert_eq!(Guides.guide(&r, &g, TOL).unwrap(), plan(&r, &g));
     assert_eq!(refused(Guides.guide(&r, &GuideChoice::Medial, TOL)), FAMILY_NOT_YET);
+}
+
+#[test]
+fn a_full_width_stretch_on_an_open_ring_round_a_part_is_named() {
+    // A U-shaped part with a bay 6 mm wide and 16 mm deep that opens to the
+    // stock edge, tool radius 1, step 1.5. Ring 1 enters the bay (its
+    // strands 1 mm apart) and is cut open at the stock edge; ring 2 does not
+    // enter the bay. The two strands and their turn are one named stretch.
+    let part = vec![p(-20.0, -10.0), p(-3.0, -10.0), p(-3.0, 6.0), p(3.0, 6.0), p(3.0, -10.0), p(20.0, -10.0), p(20.0, 10.0), p(-20.0, 10.0)];
+    let r = around(part, rect(-30.0, -12.0, 30.0, 18.0), 1.0);
+    let v = plan(&r, &rings(RingRef::Part, 0.0, 1.5, None));
+    let set = done(&v);
+    let bay: Vec<_> = marks(set, MarkKind::FullWidth)
+        .into_iter()
+        .filter(|m| !set.curves()[m.curve()].closed() && matches!(m.span(), Span::Part(_)))
+        .collect();
+    assert_eq!(bay.len(), 1, "one named stretch on an open ring");
+    assert_eq!(set.curves()[bay[0].curve()].k(), 1);
+    let pts = mark_pts(set, bay[0]);
+    assert!(pts.iter().all(|q| q.x.abs() <= 0.5 + TOL && q.y < 4.0), "the stretch is in the bay");
+    let (lo, hi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), q| (a.min(q.y), b.max(q.y)));
+    assert!(lo < -9.0 && hi > 3.0, "the stretch runs the depth of the bay: y {lo} to {hi}");
 }

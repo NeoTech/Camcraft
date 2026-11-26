@@ -135,8 +135,12 @@ pub(crate) fn finish(raws: &[Raw], marks: Vec<(usize, Mark)>, family: impl Fn(&R
                 curves.push(c);
             }
             Err(e) => {
+                // Nothing that a planner made is dropped without a note:
+                // the note names the curve and each mark on it.
                 let at = raw.pts.first().copied().unwrap_or_default();
-                notes.push(Note::new(Stage::Guide, format!("a piece of curve {} at ({:.3}, {:.3}) is not a curve: {}", raw.k, at.x, at.y, e.reason()))?);
+                let lost = marks.iter().filter(|(j, _)| *j == i).count();
+                let text = format!("a piece of curve {} at ({:.3}, {:.3}) is not a curve ({}); {lost} mark(s) on it are not kept", raw.k, at.x, at.y, e.reason());
+                notes.push(Note::new(Stage::Guide, text)?);
             }
         }
     }
@@ -144,12 +148,37 @@ pub(crate) fn finish(raws: &[Raw], marks: Vec<(usize, Mark)>, family: impl Fn(&R
     Ok((curves, marks, notes))
 }
 
-/// The verdict of a guide set by the completeness guard: done when the
-/// uncovered area of `target` is at most [`GUARD_AREA`] (a remnant above
-/// the noise is named in a note); else incomplete with each gap named.
-pub(crate) fn judge(set: GuideSet, left: &Region, mut notes: Vec<Note>) -> Result<Verdict<GuideSet>, Refusal> {
+/// What a guide choice asks of the area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ask {
+    /// Clear the area: more than [`GUARD_AREA`] uncut makes the verdict
+    /// incomplete.
+    Clear,
+    /// A fixed count of rings (Contour): the uncut area is named in a note.
+    Count(u32),
+}
+
+/// The verdict of a guide set by the completeness guard (#4176 review: one
+/// guard for each planner). The guard measures the WHOLE cutter-centre
+/// area of the region (`p.center()`), never an area that a planner derives
+/// from its own parameters: what the tool discs along `raws` leave uncut of
+/// it decides. For [`Ask::Clear`]: done when at most [`GUARD_AREA`] stays
+/// uncut (a remnant above the noise is named in a note); else incomplete
+/// with each gap named. For [`Ask::Count`]: done, with the uncut area named.
+/// The discs are read along the curves of the finished set, so a curve that
+/// the curve checks refused covers nothing.
+pub(crate) fn judge(p: &PlanarRegion, set: GuideSet, mut notes: Vec<Note>, ask: Ask, margin: f64) -> Result<Verdict<GuideSet>, Refusal> {
+    let cut: Vec<Raw> = set.curves().iter().map(|c| Raw { pts: c.pts().iter().map(PlanePoint::at).collect(), closed: c.closed(), k: c.k() }).collect();
+    let left = uncovered(p.center(), &cut, p.tool().radius(), margin)?;
+    let left = &left;
     let gaps: Vec<(Region, f64)> = pieces(left)?.into_iter().filter(|(_, a)| *a > NOISE_AREA).collect();
     let total: f64 = gaps.iter().map(|(_, a)| a).sum();
+    if let Ask::Count(n) = ask {
+        if total > 0.0 {
+            notes.push(Note::new(Stage::Guide, format!("a count of {n} ring(s) leaves {total:.3} mm2 of the area uncut, as the choice asks"))?);
+        }
+        return Ok(Verdict::Done { out: set, fallbacks: Vec::new(), notes });
+    }
     if total > GUARD_AREA {
         let list: Result<Vec<Gap>, Refusal> = gaps.iter().map(|(g, a)| Gap::new(*a, lowest(g))).collect();
         let mut v = Verdict::incomplete(Stage::Guide, set, list?)?;
@@ -162,4 +191,26 @@ pub(crate) fn judge(set: GuideSet, left: &Region, mut notes: Vec<Note>) -> Resul
         notes.push(Note::new(Stage::Guide, format!("{} uncovered piece(s) of {total:.4} mm2 in all stay under the 0.1 mm2 guard", gaps.len()))?);
     }
     Ok(Verdict::Done { out: set, fallbacks: Vec::new(), notes })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::guide::mark::MarkKind;
+
+    #[test]
+    fn a_refused_curve_names_its_marks_in_its_note() {
+        // A closed curve that repeats its first point is refused by the
+        // curve checks; its mark is not kept, and the note says so.
+        let p = |x, y| Point2::new(x, y);
+        let bad = Raw { pts: vec![p(0.0, 0.0), p(1.0, 0.0), p(0.0, 0.0)], closed: true, k: 2 };
+        let good = Raw { pts: vec![p(0.0, 0.0), p(4.0, 0.0)], closed: false, k: 0 };
+        let marks = vec![(0, Mark::whole(0, MarkKind::Fill)), (1, Mark::whole(0, MarkKind::FullWidth))];
+        let (curves, kept, notes) = finish(&[bad, good], marks, |_| Family::Ring).unwrap();
+        assert_eq!(curves.len(), 1);
+        assert_eq!(kept.len(), 1);
+        assert_eq!((kept[0].curve(), kept[0].kind()), (0, MarkKind::FullWidth));
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].text().contains("1 mark(s) on it are not kept"), "{}", notes[0].text());
+    }
 }
