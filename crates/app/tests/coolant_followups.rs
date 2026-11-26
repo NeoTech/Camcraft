@@ -2,7 +2,8 @@
 //! a Flood op on a machine whose list states no flood code is refused,
 //! a post that does not declare `coolantModes` refuses non-Flood asks,
 //! machine names read through spelling variants, and the owed paths -
-//! the Fanuc Lathe post, M88 on the shipped mill-turn, Mist then Flood.
+//! the Fanuc Lathe post, M88 on the shipped mill-turn, Mist then Flood,
+//! and the Haas off code of each coolant option (#1977).
 //!
 //! Gate map (M4.4): covers app::posting, post::post (engine, js),
 //! post::machine (COOLANT_KINDS), assets/posts/*.cps,
@@ -195,6 +196,28 @@ fn every_mill_post_switches_mist_then_flood_with_m9_between() {
             assert_eq!((m7.len(), m8.len(), m9.len()), (1, 1, 2), "{name}: {}", out.program);
             assert!(m7[0] < m9[0] && m9[0] < m8[0] && m8[0] < m9[1], "{name}: mist, off, flood, off: {}", out.program);
         }
+    }
+}
+
+#[test]
+fn haas_stops_each_coolant_option_with_its_own_off_code() {
+    // #1977: Haas Mill NGC Operator's Manual 2025 - M89 stops M88
+    // (p. 449), M84 stops M83 (p. 449), M74 stops M73 (p. 447). M9 stops
+    // only flood and shower, so it never ends one of these.
+    for (air, off) in [("M83", "M84"), ("M73", "M74")] {
+        let (world, mut history) = two_faces(CoolantMode::ThroughTool, CoolantMode::Air);
+        mount(&world, &mut history, vec![coolant("Flood", "M8"), coolant("Through-spindle", "M88"), coolant("Air", air)]);
+        let out = post_with(&world, script("Haas"));
+        assert!(out.warnings.is_empty(), "{air}: {:?}", out.warnings);
+        let (m88, m89, on, stop) = (
+            lines_with(&out.program, "M88"),
+            lines_with(&out.program, "M89"),
+            lines_with(&out.program, air),
+            lines_with(&out.program, off),
+        );
+        assert_eq!((m88.len(), m89.len(), on.len(), stop.len()), (1, 1, 1, 1), "{air}: {}", out.program);
+        assert!(m88[0] < m89[0] && m89[0] < on[0] && on[0] < stop[0], "{air}: TSC on, off, air on, off: {}", out.program);
+        assert!(lines_with(&out.program, "M9").is_empty(), "{air}: M9 does not stop these: {}", out.program);
     }
 }
 

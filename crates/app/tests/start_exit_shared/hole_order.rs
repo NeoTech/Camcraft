@@ -72,6 +72,7 @@ fn drill(picks: PathPicks) -> OpParams {
 
 fn bore(picks: PathPicks) -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: PassStart::Auto,
         break_through: None,
         links: camcraft_app::links::Links::PLANAR,

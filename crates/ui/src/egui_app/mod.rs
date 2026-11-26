@@ -100,6 +100,7 @@ pub(crate) mod machines_pane;
 // pub(crate) for `State::ai_chat` and its `WakeFn` (#1946).
 pub(crate) mod ai_chat;
 // pub(crate): `MachinesPane::editor` names its type (#383).
+pub(crate) mod machine_axis_chain;
 pub(crate) mod machine_file_editor;
 mod feeds_page;
 mod spindle_row;

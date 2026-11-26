@@ -8,6 +8,7 @@ use crate::cl::MoveKind;
 use crate::finishing3d::closest_pt_tri;
 use crate::geometry::{cube, Point3, Triangle};
 
+use super::super::rotary_flow_set::pass_count;
 use super::super::rotary_flow_unwrap::{align_pair, Unwrapped};
 
 const TAU: f64 = std::f64::consts::TAU;
@@ -27,6 +28,7 @@ fn ball(d: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 30.0,
@@ -103,18 +105,63 @@ fn a_tool_that_is_not_a_ball_is_refused_by_name() {
 }
 
 #[test]
-fn fewer_than_two_chains_are_refused_by_name() {
+fn no_picked_chain_is_refused_by_name() {
+    // #2829: ONE chain is a legal pick (it machines the full
+    // revolution as its own next lap); only the empty pick is
+    // refused.
     let t = ball(6.0);
     let none: &[Vec<Point3>] = &[];
-    let one: &[Vec<Point3>] = &[front()];
-    for (got, chains) in [("0", none), ("1", one)] {
-        let e = rotary_flow(chains, &boxy(), &axis(), &params(&t), &AxisControl::default())
-            .unwrap_err();
-        assert!(
-            format!("{e}").contains("at least two picked guide chains") && format!("{e}").contains(got),
-            "got {got}: {e}"
-        );
-    }
+    let e = rotary_flow(none, &boxy(), &axis(), &params(&t), &AxisControl::default()).unwrap_err();
+    assert!(
+        format!("{e}").contains("at least one picked guide chain"),
+        "{e}"
+    );
+}
+
+#[test]
+fn chains_that_meet_are_refused_by_name_at_the_meet() {
+    // The second chain runs up the front face and back, through the
+    // first chain's own middle vertex: the band pinches to a point
+    // there, and the set law refuses it at that spot.
+    let t = ball(6.0);
+    let meeting = vec![p3(20.0, 0.0, 5.0), p3(20.0, 0.0, 15.0), p3(20.0, 0.0, 10.0)];
+    let e = rotary_flow(
+        &[front(), meeting],
+        &boxy(),
+        &axis(),
+        &params(&t),
+        &AxisControl::default(),
+    )
+    .unwrap_err();
+    let msg = format!("{e}");
+    assert!(msg.contains("meet or cross each other"), "{msg}");
+    let at = e.location().expect("the refusal names its spot");
+    assert!(
+        (at.x - 20.0).abs() < 1.0 && (at.y - 0.0).abs() < 1e-6 && (at.z - 15.0).abs() < 1.0,
+        "the refusal stands at {at:?}, not at the meet"
+    );
+}
+
+#[test]
+fn a_chain_set_that_doubles_back_is_refused_by_name() {
+    // Three chains on the front face, the middle one at the HIGHEST
+    // station: the second band doubles back through the first - the
+    // picks are out of band order.
+    let t = ball(6.0);
+    let at = |z: f64| vec![p3(5.0, 0.0, z), p3(35.0, 0.0, z)];
+    let e = rotary_flow(
+        &[at(1.0), at(3.0), at(2.0)],
+        &boxy(),
+        &axis(),
+        &params(&t),
+        &AxisControl::default(),
+    )
+    .unwrap_err();
+    let msg = format!("{e}");
+    assert!(
+        msg.contains("advance in opposite directions") && msg.contains("pick the guide chains in band order"),
+        "{msg}"
+    );
 }
 
 #[test]
@@ -171,19 +218,34 @@ fn a_degenerate_band_is_refused_by_name() {
 }
 
 #[test]
-fn chains_wound_in_opposite_senses_are_refused_by_name() {
+fn a_chain_wound_against_its_pair_is_walked_backwards() {
+    // #2829: the chain direction is the feature layer's read of the
+    // mesh, never the user's choice. A second pick wound against
+    // the first is walked backwards - untwisting the pairing - and
+    // the notes say so. The band is the one the aligned pair
+    // machines.
     let t = ball(6.0);
-    let mut back = front();
-    back.reverse();
-    let e = rotary_flow(
-        &[front(), back],
+    let mut against = inner();
+    against.reverse();
+    let path = rotary_flow(
+        &[front(), against],
         &boxy(),
         &axis(),
         &params(&t),
         &AxisControl::default(),
     )
-    .unwrap_err();
-    assert!(format!("{e}").contains("opposite senses"), "{e}");
+    .unwrap();
+    assert!(path.is_chained() && path.all_finite());
+    assert!(
+        path.notes.iter().any(|n| n.contains("walked backwards")),
+        "the notes do not state the reversal: {:?}",
+        path.notes
+    );
+    assert!(
+        path.notes.iter().any(|n| n.contains("band 1 spans")),
+        "the notes do not state the band: {:?}",
+        path.notes
+    );
 }
 
 #[test]

@@ -48,6 +48,7 @@ pub mod machine;
 mod machine_rotary;
 mod machine_installation;
 mod machine_travel;
+mod manual_change;
 pub mod nose_tip;
 pub mod options;
 mod options_parse;
@@ -63,6 +64,7 @@ pub mod work_offset;
 pub mod units;
 pub mod wcs_flip;
 pub mod wcs_rotate;
+pub mod wire_offset;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;

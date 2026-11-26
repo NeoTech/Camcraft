@@ -1,4 +1,4 @@
-//! Read the selected die rim of a Wire Contour for the native wire EDM job: one opening
+//! Read the selected die rim of a Wire Contour for the Agie Wire EDM job: one opening
 //! (#2957), or one of the two openings of a die group (#2977). The plate and opening geometry
 //! is in `camcraft_geometry::die_opening`.
 //! Provenance: CAMCraft's Wire Contour selection and its closed vertical prism.

@@ -13,7 +13,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Triangle;
 use crate::geometry::slice;
 use crate::machining2d::GenError;
-use crate::plasma::{plasma_profile, PlasmaParams, SMALL_HOLE_DIA, SMALL_HOLE_FEED};
+use crate::plasma::{plasma_profile_picked, PlasmaParams, SMALL_HOLE_DIA, SMALL_HOLE_FEED};
 use crate::tools::{Tool, ToolKind};
 use crate::verify::Warning;
 
@@ -114,6 +114,7 @@ pub(super) fn generate_plasma(
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = plasma_profile(&loops, &chains, &part, &p)?;
+    // #3334: the operation's start and exit picks, in model XY.
+    let path = plasma_profile_picked(&loops, &chains, &part, &p, &op.picks)?;
     Ok((path, Vec::new()))
 }

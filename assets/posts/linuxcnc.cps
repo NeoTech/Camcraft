@@ -391,9 +391,17 @@ function toolNote() {  // just before the tool change it describes
 // feed per minute, compensation, tool length and cycle cancelled. Path
 // control on its own line: G64 with a stated P (a bare G64 is "best
 // possible speed, no tolerance"), or G61 exact path.
+// #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
+// Clamp positive tolerances that round to zero under fu() to the smallest
+// positive value (0.001 mm, 0.0001 in). Never write P0.
+function tolP(tol) {
+  var s = fu(tol);
+  return (s === "0" || s === "-0") ? (inch ? "P0.0001" : "P0.001") : "P" + s;
+}
+
 function pathWords() {
   if (optStr("pathControl", "blend") === "exact") return ["G61"];
-  return ["G64", "P" + fu(optNum("blendTolerance", 0.025))];
+  return ["G64", tolP(optNum("blendTolerance", 0.025))];
 }
 // The machine's inverted linear axes (#375): the engine has mirrored the
 // stream into the controller's frame, and the header says so, one note
@@ -537,7 +545,7 @@ function onToolChange(number, name) {
 // tolerance leaks into the next operation.
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G64", "P" + fu(smoothTol)]);
+  block(["G64", tolP(smoothTol)]);
   smoothActive = true;
 }
 function smoothOff() {

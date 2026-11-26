@@ -42,7 +42,7 @@
 // (G41 / G42, H - the path is the wire-centre path with the kerf in it),
 // G92 and G29, the tank fill / drain, flushing pump and wire-drive T codes
 // (T80-T83, T86 / T87, T96 / T97), M03, M33 / M43.
-description = "Sodick wire EDM, 2-axis (Mark 21 / EX21 words from the 1998 operation manual; not verified on a control)";
+description = "Sodick wire EDM, 2-axis (Mark 21 / EX21 control, words from the 1998 operation manual; not verified on a control). LN1W/LN2W: not supported - G21 alarms (E00170) and the taper words differ - use the Sodick Wire EDM (LN2W) post";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -233,14 +233,19 @@ function dielectricNotes() {
 
 // -------------------------------------------------------------- header
 // The unit and absolute positions. The program starts with the wire NOT
-// threaded, and it states what it leaves to the operator.
+// threaded, and it states what it leaves to the operator. #4046: it names
+// the control its words are for and warns an LN1W / LN2W owner (G21 is an
+// E00170 alarm there, taper is G50-G52 A; owner report on #4046). #4044:
+// the threading line states the word that threads (T91), or the M00 stop.
+// A comment holds no parenthesis: the first ")" would end it.
 function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   machineGood = machineOk();
   approach = typeof postOptions !== "undefined" && postOptions && postOptions.approachCondition === true;
   note(clean(machineName()));
-  note("SODICK MARK 21 WORDS - NOT VERIFIED ON A CONTROL - CHECK BEFORE CUTTING");
-  note("WIRE NOT THREADED AT START");
+  note("SODICK MARK 21 / EX21 CONTROL WORDS - NOT VERIFIED ON A CONTROL - CHECK BEFORE CUTTING");
+  note("LN1W/LN2W: NOT SUPPORTED - G21 ALARMS E00170 AND THE TAPER WORDS DIFFER - USE THE SODICK WIRE EDM LN2W POST");
+  note(awt ? "PROGRAM THREADS THE WIRE WITH T91 AT START" : "WIRE NOT THREADED AT START - THE OPERATOR THREADS IT AT THE M00");
   note("WORK OFFSET SET AT THE CONTROL - NO G92 IS WRITTEN");
   dielectricNotes();
   note("WIRE-CENTRE PATH - NO WIRE OFFSET G41 G42 IS USED");

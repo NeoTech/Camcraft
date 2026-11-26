@@ -8,8 +8,8 @@ aliases = ["guide/operations-multiaxis/"]
 This page is the reference for the kinds in the **Multi-axis** group of
 the [operations](@/guide/operations/_index.md) ribbon: 5-Axis Contour, 5-Axis
 Parallel, 5-Axis Flow, Multi-Axis Contour, Swarf, Advanced Swarf, Rotary
-Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough and Multi-Axis
-Deburr. For the
+Contour, Rotary Parallel, Rotary Offset, Rotary Flow, Multi-Axis Rough and
+Multi-Axis Deburr. For the
 tabs themselves and what a click picks, see that page; for what a refusal
 means in general, see [Reading a refusal](@/guide/reference/refusals.md).
 
@@ -317,6 +317,47 @@ is open: ... edges bound one facet only (a hole in the skin)"; "a feature
 that is not turned (a flat, a keyway, a cross hole) crosses the rotary
 wrap's seam ..."; "the wrapped work has no radial extent to rough"; "the
 height window leaves no station of the work to rough".
+
+## Rotary Flow
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+No catalog case yet.
+<!-- catalog:examples:end -->
+
+{{ <icon name="op-rotary-flow" /> }} ![View of flow passes that blend between two picked helical edges on a turned rotor.](../../../operation-paths.svg#RotaryFlow)
+
+**For:** finishing a helical band on a turned part, such as the flank of
+a screw rotor or a spiral groove, on a continuous 4-axis rotary. The
+passes blend from one picked guide edge to the next, so each pass follows
+the helix. Choose it when rings (Rotary Contour) or straight passes
+(Rotary Parallel) cross the band at a bad angle.
+
+**Picks:** two or more edge chains on the Geometry tab: the edges of the
+band. All chains must run the same way along the band. There is no Top Z
+or Bottom Z: the picked chains bound the band.
+
+**Rotation axis.** The axis is stated, not only fitted: the operation's
+own axis, else the machine's rotary axis through the work offset. With
+neither, the axis is fitted to the model as for Rotary Contour.
+
+| Tab | Setting | Default |
+|---|---|---|
+| Heights | Clearance radius | 25 above the stock top, read as a ball-center radius about the axis |
+| Heights | Retract radius | off: links at the clearance radius |
+| Passes | Rotation axis | follows the machine |
+| Passes | Stepover | Auto: by the scallop law; a stated value is the spacing at the outermost radius of the band |
+| Passes | Lead / lag / max tilt | 0 / 0 / 90 |
+| Passes | Tolerance | 0.05: the scallop budget between passes |
+| Feeds | Feed / Plunge feed / Climb milling | 1200 / 300 / on |
+
+**Common refusals:** "Rotary Flow needs at least two picked guide chains
+to span a band; got ... - pick the two edges of the helical band";
+"Rotary Flow: guide chains ... and ... advance about the axis in opposite
+senses - reverse one pick so both run the same way along the band";
+"Rotary Flow reads its clearance height as a ball-center radius about the
+stated ... - raise it"; "Rotary Flow needs a ball-nose tool, ...".
 
 ## Multi-Axis Rough
 

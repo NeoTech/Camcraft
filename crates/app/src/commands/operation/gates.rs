@@ -239,7 +239,7 @@ pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParam
 /// and setup name. Runs at construction, before any entity exists, so
 /// every surface (UI, CLI, scripts, undo replay) meets the same wall.
 pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
-    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
+    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool, operation::tool_gate::requests_reverse(params)) {
         return Err(CommandError::Invalid(msg));
     }
     thread_gate(world, params, tool)?;

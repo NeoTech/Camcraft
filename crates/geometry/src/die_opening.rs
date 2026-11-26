@@ -19,7 +19,7 @@ pub fn check_die_plate(
     let loops = region.loops();
     if loops.len() != openings + 1 || loops.iter().filter(|r| r.area() > 0.0).count() != 1 {
         return Err(match openings {
-            1 => "The native wire EDM job requires one retained die plate with exactly one through-opening".into(),
+            1 => "The Agie Wire EDM job requires one retained die plate with exactly one through-opening".into(),
             n => format!("The die group requires one retained die plate with exactly {n} through-openings, one for each work"),
         });
     }

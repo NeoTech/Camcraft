@@ -43,6 +43,7 @@ fn world() -> World {
 
 fn bore(start: PassStart) -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: start,
         break_through: None,
         links: camcraft_app::links::Links::PLANAR,

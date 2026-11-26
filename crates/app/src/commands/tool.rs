@@ -90,6 +90,8 @@ pub struct AddTool {
     holder: Option<(String, ToolBody)>,
     /// Why the machine's default holder was not applied, when it was not.
     skipped: Option<String>,
+    /// #3792: the speed is outside the mounted machine's spindle range.
+    warning: Option<String>,
 }
 
 impl AddTool {
@@ -135,6 +137,7 @@ impl AddTool {
             number,
             holder: None,
             skipped: None,
+            warning: None,
         })
     }
 
@@ -146,6 +149,9 @@ impl AddTool {
     /// holder in its place.
     pub fn with_holder(world: &World, name: &str, tool: Tool, pick: HolderPick) -> Result<Self, CommandError> {
         let mut cmd = Self::new(world, name, tool)?;
+        // #3792: said at the add; the speed stays what the library states.
+        cmd.warning = crate::machine::of(world).1
+            .and_then(|m| crate::machine::spindle_range_warning(&m, name, crate::posting::posted_rpm(&cmd.tool)));
         match pick {
             HolderPick::Bare => {}
             HolderPick::Named(entry) => {
@@ -187,6 +193,13 @@ impl AddTool {
             (None, Some(why)) => Some(why.clone()),
             (None, None) => None,
         }
+    }
+
+    /// #3792: the tool's speed is outside the mounted machine's spindle
+    /// range - the machine check will hold the post; the line names the fix.
+    #[must_use]
+    pub fn warning(&self) -> Option<String> {
+        self.warning.clone()
     }
 }
 

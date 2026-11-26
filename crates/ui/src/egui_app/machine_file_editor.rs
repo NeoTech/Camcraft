@@ -26,6 +26,7 @@ use camcraft_app::machine::fields;
 use camcraft_app::machine::store::SaveError;
 
 use super::layout::{group_open, prop_grid};
+use super::machine_axis_chain::{self as axis_chain, AxisForm};
 use super::theme::Tokens;
 
 /// The confirmation step a save is waiting on.
@@ -54,6 +55,8 @@ pub struct MachineFileEditor {
     /// The new coolant's M code being typed (#869): added with its name,
     /// never codeless.
     pub new_coolant_code: String,
+    /// The "add axis" form (#2756).
+    pub axis_form: AxisForm,
     pub prompt: Option<Prompt>,
     /// The last save's outcome: (it worked, the words).
     pub status: Option<(bool, String)>,
@@ -78,6 +81,7 @@ impl MachineFileEditor {
             save_as_name,
             new_coolant: String::new(),
             new_coolant_code: String::new(),
+            axis_form: AxisForm::default(),
             prompt: None,
             status: None,
         }
@@ -248,10 +252,17 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
 
     let ink = if refusals.is_empty() { pal.accent } else { error };
     ui.label(RichText::new(verdict(refusals.len())).color(ink).strong());
-    for r in fields::unplaced(&groups, &refusals) {
+    // A refusal about an axis itself shows at its row in the chain. The
+    // chain's rows, notes and keys are built once per edit (#2238).
+    let chain = crate::frame_cost::time("ui/machines.editor.axis_chain.view", || ed.draft.chain_view());
+    for r in fields::unplaced(&groups, &refusals).into_iter().filter(|r| !chain.at_a_row(&r.key)) {
         super::error_text::error_text(ui, error, &r.to_string());
     }
     ui.add_space(4.0);
+
+    let chain_edit = crate::frame_cost::time("ui/machines.editor.axis_chain", || {
+        axis_chain::draw(ui, &chain, &mut ed.axis_form, &refusals, pal, error)
+    });
 
     let mut edits: Vec<(String, fields::FieldKind, String)> = Vec::new();
     let mut add_coolant = false;
@@ -266,8 +277,12 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
                     let tip = format!("Key: {}", f.key);
                     let l = ui.label(&f.label).on_hover_text(&tip);
                     let buf = ed.buffers.entry(f.pointer.clone()).or_insert_with(|| f.value.clone());
+                    // The id comes from the key, not the field's place in the
+                    // frame: a refusal row that comes or goes above the field
+                    // must not take its focus mid-word.
                     let r = if f.choices.is_empty() {
-                        ui.add(TextEdit::singleline(buf).desired_width(140.0).hint_text("not stated"))
+                        let id = ("machine-field", &f.pointer);
+                        ui.add(TextEdit::singleline(buf).id_salt(id).desired_width(140.0).hint_text("not stated"))
                     } else {
                         choice(ui, buf, &f.choices, &f.pointer)
                     };
@@ -329,6 +344,14 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
     if let Some(pointer) = remove_coolant {
         match ed.draft.remove_coolant(&pointer) {
             // The list's indices shifted: re-seed every buffer from the file.
+            Ok(()) => ed.buffers.clear(),
+            Err(e) => ed.status = Some((false, e)),
+        }
+    }
+    // Last, so this frame's fields wrote to the pointers they drew.
+    if let Some(edit) = chain_edit {
+        match axis_chain::apply(&mut ed.draft, &mut ed.axis_form, edit) {
+            // The parts' pointers shifted: re-seed every buffer from the file.
             Ok(()) => ed.buffers.clear(),
             Err(e) => ed.status = Some((false, e)),
         }

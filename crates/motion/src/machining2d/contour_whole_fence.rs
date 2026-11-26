@@ -52,7 +52,7 @@ fn shares(a: &[f64], b: &[f64]) -> bool {
 /// The lead room of band `i`: its center, with a fence around each ring of
 /// another band that is cut on a level band `i` cuts. `None` when no other
 /// band shares a level (the room is the center, as before #2677).
-fn room(planned: &[Planned], i: usize) -> Result<Option<Region>, GenError> {
+pub(super) fn room(planned: &[Planned], i: usize) -> Result<Option<Region>, GenError> {
     let Some(me) = planned.get(i) else { return Ok(None) };
     let mut fence = Region::empty();
     for (j, other) in planned.iter().enumerate() {

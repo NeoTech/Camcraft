@@ -49,6 +49,17 @@ impl OpParams {
         !matches!(self, OpParams::Pocket { .. }) && self.links().is_some_and(|l| l.approach.predrilled)
     }
 
+    /// A Bore's entry word: plunge, ramp or helix, by name otherwise.
+    #[must_use]
+    pub fn bore_entry_refusal(entry: crate::machining3d::Entry3D) -> Option<String> {
+        use crate::machining3d::Entry3D;
+        // An allow-list: a new entry word is refused here until a Bore ride
+        // is written for it. The circular ramp (Arc) has no meaning on a
+        // ring ladder.
+        (!matches!(entry, Entry3D::Plunge | Entry3D::Ramp | Entry3D::Helix))
+            .then(|| "a Bore enters with plunge, ramp or helix; arc is not offered".to_string())
+    }
+
     /// The by-name refusal behind a failed [`Self::is_sane`], where a
     /// kind can say it (#546: the sinker burn's wear rate and layer
     /// step; the side burn's structural refusal, which names a wear rate
@@ -86,9 +97,12 @@ impl OpParams {
             OpParams::Finish3D { direction_angle, .. } => {
                 crate::finishing3d::parallel_angle_refusal(*direction_angle).map(str::to_owned)
             }
+            OpParams::Bore { entry, .. } => Self::bore_entry_refusal(*entry),
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),
             OpParams::SlotUndercut(p) => p.refusal(),
+            // #3334: an exit pick beside control compensation.
+            OpParams::PlasmaProfile(p) => p.pick_refusal(),
             OpParams::Pocket { corner_relief, .. }
             | OpParams::Offset2D { corner_relief, .. } => corner_relief.validate().err().map(|e| e.to_string()),
             OpParams::Adaptive2D { method, troch, corner_relief, pass_start, .. } => troch.refusal().or_else(|| {

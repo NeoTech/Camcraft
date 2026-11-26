@@ -196,9 +196,9 @@ fn every_operation_refuses_a_non_sharp_taper_by_name() {
     let rows: Vec<&KindInfo> = KindInfo::ALL.iter().filter(|r| r.accepts(ToolKind::Taper)).collect();
     assert!(rows.len() >= 4, "the chamfer mill's operations: {:?}", rows.iter().map(|r| r.ty).collect::<Vec<_>>());
     for row in rows {
-        assert_eq!(tool_gate::tool_refusal(&world, row, "SHARP"), None, "{:?} takes a sharp tip", row.ty);
+        assert_eq!(tool_gate::tool_refusal(&world, row, "SHARP", false), None, "{:?} takes a sharp tip", row.ty);
         for (name, form) in [("FLAT", "flat"), ("BALL", "ball")] {
-            let why = tool_gate::tool_refusal(&world, row, name).unwrap_or_else(|| panic!("{:?} took {name}", row.ty));
+            let why = tool_gate::tool_refusal(&world, row, name, false).unwrap_or_else(|| panic!("{:?} took {name}", row.ty));
             assert!(why.contains(&format!("'{name}' has a {form} tip")), "{:?}: {why}", row.ty);
             assert!(why.contains(row.label), "{:?} names itself: {why}", row.ty);
         }
@@ -227,11 +227,11 @@ fn form_mill_is_refused_by_every_door() {
     let rows: Vec<&KindInfo> = KindInfo::ALL.iter().filter(|r| r.accepts(ToolKind::FormMill)).collect();
     assert!(rows.iter().any(|r| r.ty == OpType::Chamfer2D), "the form mill is in the 2D Chamfer family");
     for row in KindInfo::ALL {
-        assert!(tool_gate::tool_refusal(&world, row, "FM-RO-R6").is_some(), "{:?} took a form mill", row.ty);
+        assert!(tool_gate::tool_refusal(&world, row, "FM-RO-R6", false).is_some(), "{:?} took a form mill", row.ty);
         assert!(!tool_gate::fitting_tools(&world, row).iter().any(|n| n == "FM-RO-R6"), "{:?} offers a form mill", row.ty);
     }
     for row in rows {
-        let why = tool_gate::tool_refusal(&world, row, "FM-RO-R6").unwrap_or_default();
+        let why = tool_gate::tool_refusal(&world, row, "FM-RO-R6", false).unwrap_or_default();
         assert!(why.contains("'FM-RO-R6' is a form mill"), "{:?}: {why}", row.ty);
         assert!(why.contains(row.label), "{:?} names itself: {why}", row.ty);
         assert_eq!(why.contains("edge form work (#896)"), row.ty == OpType::Chamfer2D, "{:?}: {why}", row.ty);

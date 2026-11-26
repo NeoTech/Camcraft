@@ -10,8 +10,9 @@
 //!   derived from the same `FieldView` the viewport traces, and keyed by
 //!   it (`MeshCache`): a new view - any cut appended, any edit re-armed
 //!   - is a new mesh; nothing reads the triangles back as material.
-//! - **A hole is a refusal.** An extraction that is not watertight is
-//!   never written: the file would claim a solid it is not.
+//! - **A hole is a refusal.** An extraction with an edge not on exactly
+//!   two facets (a hole, or fins on one edge: #4122) is never written:
+//!   the file would claim a solid it is not.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -27,9 +28,11 @@ pub fn machined_mesh(fv: &FieldView) -> Result<Vec<Triangle>, String> {
     if tris.is_empty() {
         return Err("the program leaves no material - nothing to export".into());
     }
-    let open = iso::open_edges(&tris);
-    if open > 0 {
-        return Err(format!("the extracted surface has {open} open edges - refused, not written"));
+    // #4122: a solid's every edge is on two facets; an open edge, or one
+    // on four or more facets, is not a solid.
+    let unpaired = iso::unpaired_edges(&tris);
+    if unpaired > 0 {
+        return Err(format!("the extracted surface has {unpaired} edges not on two facets - refused, not written"));
     }
     Ok(tris)
 }

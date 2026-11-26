@@ -105,6 +105,7 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
     out.extend(
         super::trunnion_refusals(&v, &axes)
             .into_iter()
+            .chain(super::work_length_refusals(&axes))
             .map(|(key, rule)| Refusal::new(key, rule)),
     );
     for head in head_parts(&v) {
@@ -384,7 +385,7 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     // #2374: the named post is a built-in one that serves this kind.
     // #3537: a hidden alias name counts as the registry name it selects.
     let known = |n: &str| {
-        let n = crate::posting::agie::current_name(n);
+        let n = crate::posting::aliases::current_name(n);
         crate::posting::BUILTINS.iter().any(|(b, _)| *b == n).then(|| crate::posting::post_serves(n, k))
     };
     if let Some(rule) = super::post_name_refusal(v, k.word(), known) {

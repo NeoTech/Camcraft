@@ -202,6 +202,7 @@ fn drill(cut: Cut, cycle: CycleChoice) -> OpParams {
 
 fn bore(cut: Cut) -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
         links: camcraft_app::links::Links::PLANAR,

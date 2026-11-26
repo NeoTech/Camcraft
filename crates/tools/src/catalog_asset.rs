@@ -90,6 +90,9 @@ struct Def {
     /// Tap thread hand; older tools default to right-hand.
     #[serde(default)]
     thread_hand: crate::thread_hand::ThreadHand,
+    /// #4031: the cutter's hand (right M3, left M4); absent is right-hand.
+    #[serde(default)]
+    cutter_hand: crate::cutter_hand::CutterHand,
     #[serde(default)]
     nose_radius: f64,
     #[serde(default)]
@@ -165,6 +168,7 @@ impl Def {
             pitch: self.pitch,
             pitch_min: self.pitch_min.unwrap_or(0.0),
             thread_hand: self.thread_hand,
+            cutter_hand: self.cutter_hand,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,

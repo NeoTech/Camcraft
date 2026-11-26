@@ -268,16 +268,48 @@ fn mach4_supported_cycle_dwells_use_seconds_on_g82_and_g89_only() {
     let cps = mach4_post();
     let mch = default_vmc();
     for (cycle, g) in [("DRILL", "G82"), ("SPOT", "G82"), ("BACKBORE", "G89")] {
-        let out = engine::run(&cps, &mch, &cycle_stream(cycle, 250)).expect("dwell cycle runs");
-        assert!(out.warnings.is_empty(), "{cycle}: {:?}", out.warnings);
-        let line = out
-            .program
-            .lines()
-            .find(|line| line.split_whitespace().any(|w| w == g))
-            .unwrap_or_else(|| panic!("missing {g}:\n{}", out.program));
-        assert!(
-            line.split_whitespace().any(|w| w == "P0.25"),
-            "{g} needs seconds dwell: {line}"
-        );
+        for (dwell_ms, want_p) in [(250, "P0.25"), (1000, "P1."), (2000, "P2.")] {
+            let out =
+                engine::run(&cps, &mch, &cycle_stream(cycle, dwell_ms)).expect("dwell cycle runs");
+            assert!(
+                out.warnings.is_empty(),
+                "{cycle} {dwell_ms}ms: {:?}",
+                out.warnings
+            );
+            let line = out
+                .program
+                .lines()
+                .find(|line| line.split_whitespace().any(|w| w == g))
+                .unwrap_or_else(|| panic!("missing {g}:\n{}", out.program));
+            assert!(
+                line.split_whitespace().any(|w| w == want_p),
+                "{g} dwell {dwell_ms}ms must write {want_p}: {line}"
+            );
+        }
     }
 }
+
+#[test]
+fn mach4_zero_dwell_backbore_posts_g85() {
+    let cps = mach4_post();
+    let mch = default_vmc();
+    let out = engine::run(&cps, &mch, &cycle_stream("BACKBORE", 0)).expect("zero dwell backbore");
+    assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
+    let line = out
+        .program
+        .lines()
+        .find(|line| line.split_whitespace().any(|w| w == "G85"))
+        .unwrap_or_else(|| panic!("missing G85 for zero-dwell BACKBORE:\n{}", out.program));
+    assert!(
+        !line.split_whitespace().any(|w| w.starts_with('P')),
+        "G85 must not write P: {line}"
+    );
+    assert!(
+        !out.program
+            .lines()
+            .any(|line| line.split_whitespace().any(|w| w == "G89")),
+        "G89 must not be emitted for zero-dwell BACKBORE:\n{}",
+        out.program
+    );
+}
+

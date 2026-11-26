@@ -196,7 +196,14 @@ use super::*;
 /// ladder). An old reader must refuse a v82 file rather than drop the
 /// op it cannot read: the post would re-open a document whose flow
 /// band op vanished without a word.
-pub const PROJECT_VERSION: u32 = 82;
+/// v83 (#4031): a tool may state its cutter hand (`cutter_hand`, right
+/// M3 / left M4); absent is right-hand, what every v82 file cut. This
+/// step is a compatibility break: every file this build writes says
+/// v83, and a v82 reader refuses the new files (see the `BREAKING
+/// CHANGE` footer of the commit that stepped the ladder). An old
+/// reader must refuse a v83 file rather than drop a left hand and post
+/// M3 for a cutter that must reverse.
+pub const PROJECT_VERSION: u32 = 83;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older
@@ -493,6 +500,10 @@ pub struct ToolDto {
     /// Tap thread hand; older tools default to right-hand.
     #[serde(default, skip_serializing_if = "camcraft_tools::thread_hand::ThreadHand::is_right")]
     pub thread_hand: camcraft_tools::thread_hand::ThreadHand,
+    /// #4031 (v83): the cutter's hand (right M3, left M4); older tools
+    /// default to right-hand. Written only when left.
+    #[serde(default, skip_serializing_if = "camcraft_tools::cutter_hand::CutterHand::is_right")]
+    pub cutter_hand: camcraft_tools::cutter_hand::CutterHand,
     /// M5.2 addition (v33): absent from any older file, serde-defaults
     /// to the inert 0.0 every mill kind already meant - the `tip_angle`
     /// / `pitch` law restated.
@@ -725,6 +736,7 @@ impl ToolDto {
             // Written only when set, as before #3662 (0 is absent).
             pitch_min: (t.pitch_min != 0.0).then_some(t.pitch_min),
             thread_hand: t.thread_hand,
+            cutter_hand: t.cutter_hand,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -810,6 +822,7 @@ impl ToolDto {
             pitch: self.pitch,
             pitch_min: self.pitch_min.unwrap_or(0.0),
             thread_hand: self.thread_hand,
+            cutter_hand: self.cutter_hand,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,

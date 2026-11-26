@@ -57,8 +57,28 @@ pub(super) fn submit_prompt(h: &mut Harness<'static, ShellUi>, text: &str) {
     h.run_steps(2);
 }
 
+/// Hang guard only (#4021): a broken worker must not hang the suite forever.
+/// A slow machine must never reach it, so no test outcome depends on this clock.
+pub(super) const HANG_GUARD: Duration = Duration::from_secs(120);
+
+pub(super) fn pump_until_started(
+    h: &mut Harness<'static, ShellUi>,
+    started: &AtomicBool,
+    hang_guard: Duration,
+) {
+    let deadline = Instant::now() + hang_guard;
+    while !started.load(Ordering::SeqCst) {
+        assert!(
+            Instant::now() < deadline,
+            "AI chat transport never started before the hang guard expired"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+        h.step();
+    }
+}
+
 pub(super) fn pump_until_idle(h: &mut Harness<'static, ShellUi>) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + HANG_GUARD;
     while h.state().state.ai_chat.is_running() {
         assert!(
             Instant::now() < deadline,
@@ -139,7 +159,7 @@ impl ChatTransport for BlockingTransport {
         cancel: &AtomicBool,
     ) -> Result<TransportOutput, String> {
         self.started.store(true, Ordering::SeqCst);
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HANG_GUARD;
         while !cancel.load(Ordering::Relaxed) {
             if Instant::now() >= deadline {
                 return Err("cancel never arrived".to_owned());

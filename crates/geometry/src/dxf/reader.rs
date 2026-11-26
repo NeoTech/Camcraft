@@ -4,6 +4,7 @@ use super::blocks::Blocks;
 use super::curves::{EVALUATION_BUDGET, ellipse, spline};
 use super::dictionaries;
 use super::entities::{is_entity_kind, layer_name, simple};
+use super::insert::{self, Definitions};
 use super::pairs::{Pairs, Record, integer};
 use super::polyline::{legacy, lightweight};
 use super::types::{Document, DxfError, Layer, Limits, State, TextAnnotation, error};
@@ -28,8 +29,12 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
         doc: Document::default(),
         limits,
         curve_work: EVALUATION_BUDGET,
+        inserts: Vec::new(),
+        defer_curves: false,
+        curves: Vec::new(),
     };
     let mut blocks = Blocks::default();
+    let mut definitions = Definitions::default();
     let mut sections = BTreeSet::new();
     loop {
         let record = input
@@ -42,6 +47,7 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
                     return Err(error("EOF", "data after EOF"));
                 }
                 blocks.check_owners()?;
+                insert::expand(&definitions, &mut state)?;
                 return Ok(state.doc);
             }
             "SECTION" => {
@@ -66,9 +72,9 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
                         return Err(error(name, "unexpected SECTION fields"));
                     }
                     match name {
-                        "ENTITIES" => entities(&mut input, &mut state)?,
+                        "ENTITIES" => entity_list(&mut input, &mut state, Some("ENDSEC"))?,
                         "TABLES" => tables(&mut input, &mut state, &mut blocks)?,
-                        "BLOCKS" => blocks.read(&mut input, limits.max_entities)?,
+                        "BLOCKS" => blocks.read(&mut input, &mut definitions, limits.max_entities)?,
                         "OBJECTS" => dictionaries::read(&mut input, limits.max_entities)?,
                         _ => return Err(error(name, "unsupported SECTION")),
                     }
@@ -148,12 +154,21 @@ fn header(mut fields: Pairs<'_>, doc: &mut Document) -> Result<(), DxfError> {
     Ok(())
 }
 
-fn entities(input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
+/// Read entity records up to `end` (ENDSEC of ENTITIES), or to the end of `input` when `end`
+/// is `None` (a block body, which holds no ENDBLK).
+pub(super) fn entity_list(
+    input: &mut Pairs<'_>,
+    state: &mut State,
+    end: Option<&str>,
+) -> Result<(), DxfError> {
     loop {
-        let record = input
-            .record()?
-            .ok_or_else(|| error("ENTITIES", "missing ENDSEC"))?;
-        if record.kind == "ENDSEC" {
+        let Some(record) = input.record()? else {
+            return match end {
+                Some(_) => Err(error("ENTITIES", "missing ENDSEC")),
+                None => Ok(()),
+            };
+        };
+        if end == Some(record.kind) {
             return record.empty();
         }
         state.entity(record.kind)?;
@@ -163,7 +178,7 @@ fn entities(input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
             "POLYLINE" => legacy(record, input, state)?,
             "SPLINE" => spline(record, state)?,
             "ELLIPSE" => ellipse(record, state)?,
-            "INSERT" => insert(record, input, state)?,
+            "INSERT" => insert::read(record, input, state)?,
             "TEXT" | "MTEXT" | "DIMENSION" | "HATCH" | "POINT" => {
                 record.validate()?;
                 if matches!(record.kind, "TEXT" | "MTEXT") {
@@ -190,38 +205,6 @@ fn entities(input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
             }
             "EOF" | "SECTION" => return Err(error("ENTITIES", "missing ENDSEC")),
             _ => return Err(error(record.kind, "unsupported entity")),
-        }
-    }
-}
-
-/// A block reference is not expanded (#1865): it is counted as skipped, and the rest of the
-/// drawing is read. Its attributes (`ATTRIB` up to `SEQEND`, group 66) are consumed with it.
-fn insert(record: Record<'_>, input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
-    record.validate()?;
-    layer_name(record.field(8)?.unwrap_or("0"), record.kind)?;
-    *state
-        .doc
-        .summary
-        .skipped
-        .entry("INSERT".into())
-        .or_default() += 1;
-    if record.integer(66, 0)? == 0 {
-        return Ok(());
-    }
-    loop {
-        let next = input
-            .record()?
-            .ok_or_else(|| error("INSERT", "missing SEQEND after attributes"))?;
-        match next.kind {
-            "ATTRIB" => {
-                state.entity("ATTRIB")?;
-                next.validate()?;
-            }
-            "SEQEND" => {
-                state.entity("SEQEND")?;
-                return next.validate();
-            }
-            _ => return Err(error("INSERT", "expected ATTRIB or SEQEND")),
         }
     }
 }

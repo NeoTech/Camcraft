@@ -1,0 +1,520 @@
+# HEIDENHAIN TNC: differences between controls and NC software versions (post-processor view)
+
+Sources: the HEIDENHAIN manuals and overview documents listed in `inventory.md` (document ID, title, edition date, download URL). The manuals themselves are not in this repository.
+
+**How this file was made (read this first).**
+
+- The manuals were not read page by page. The text was extracted with `pdftotext -layout` and searched with scripts. The main source is the "New functions" / "Changed functions" lists at the front of each manual, and the "Overview of New and Modified Software Functions" documents (TNC 620 ID 1322094, TNC 640 ID 1322095, TNC7 ID 1373081 / 1465689). Only short excerpts of the full chapters were read, to confirm a detail.
+- The Q-parameter lists of cycles (section B3) come from the example blocks in the manuals. A script takes the block that starts with the cycle's own number and name (`CYCL DEF 205 UNIVERSAL PECKING`, `N110 G205 UNIVERSAL PECKING`) and collects the `Qnnn=` lines up to the next NC block. The first version of B3 searched for the bare number and took the longest list near any match; it mixed in other cycles (for example the G220 pattern parameters in the iTNC cycle 200 rows). B3 was made again with the new rule. A row was kept only when its list starts with Q200 and ends at the next NC block or at the end of the example. Rows were spot-checked against the PDF pages. B3 covers 200, 203, 205, 207 and 209 only.
+- References: `<manual ID> p<N>` means the PDF page N of that manual. "printed p" means the page number printed in the manual. A version written as `34049x-05` means all variants (340490/340491/340492/340493/340494-05). The iTNC 530 340 49x numbers and 606 42x numbers run in parallel: 606 42x-01 follows 340 49x-05 (single-processor/HSCI line), and 340 49x-06..-08 have the same functions as 606 42x-01..-03 (the 34049x-08 manual lists "60642x-01 since the predecessor version 34049x-05").
+- "not found in the extracted text" means a keyword search found nothing. It does not prove that the control lacks the function.
+- Section C is in its own file, `differences-by-version.md`. It is generated from the new/changed-function lists. A bullet is "post-relevant" when it names a post-dialect keyword (TOOL CALL, PLANE, TCPM, M-functions, cycles 1-32/200-247, ISO, Q/QS parameters, FMAX/FZ/FU, arcs/helix, program names, removed/import notes). All other bullets are cut to one short line under "other". Some bullets are cut off in the middle where the PDF column layout broke them; follow the manual ID and page.
+- Cycle names: the first bare cycle number in each section of sections A, B, B2 and B3 has its HEIDENHAIN short name in parentheses, for example "205 (UNIVERSAL PECKING)". `cycles.md` has the full table (name, purpose, DIN/ISO code, option, versions).
+- "feature-mentions.md" in a source column means a keyword search of the extracted text (which keywords appear in which version's manuals). That matrix is not published here. It is evidence for a search, not proof of support.
+
+---
+
+## A. Standard library (all covered controls)
+
+The covered controls do not share one dialect. Three groups exist:
+
+1. **Positioning displays / straight-cut controls (TNC 124, TNC 128).** Each positioning block holds ONE axis. There is no `L` word, no circle and no DIN/ISO. Radius compensation is `R+` / `R-` (lengthen or shorten a paraxial move) or `R0`.
+   - TNC 124 (246 xxx-08, 284 679-24 p72): `BEGIN PGM 10 MM` (program NUMBER), `F 9999`, `Z+20`, `X-20 R0`, `TOOL CALL 1 Z`, `S 1000`, `M 3`, `CYCL 1.0 PECKING` ... `CYCL 1.7 F 80`, `CYCL CALL`, `END PGM 10 MM`. Max 1000 NC blocks per program, 2000 in total (p? "2000 NC blocks. A single program can contain a maximum of 1000", 284 679-24, line 3222 of the text).
+   - TNC 128 (77184x, 819494-26 printed p132): `BEGIN PGM LINEAR MM`, `BLK FORM 0.1/0.2`, `TOOL CALL 1 Z S4000`, `Z+250 R0 FMAX`, `X+5 R- F500`, `CYCL DEF 200 ...` with Q-parameters, M99. It has the 200-series drilling cycles, 247, 251-256, FN functions and QS strings, but no arcs.
+2. **Contouring controls, Klartext only (TNC 310).**
+3. **Contouring controls with Klartext and (from a version on) DIN/ISO (TNC 410, TNC 426/430, iTNC 530, TNC 320, TNC 620, TNC 640, TNC7).**
+
+**Common to ALL controls (groups 1-3):** `BEGIN PGM <name|number> MM|INCH` ... `END PGM <same> MM|INCH`; numbered blocks (the control numbers them); `TOOL CALL <n> Z` (tool number, spindle axis); F, S and M words; `R0`; `FMAX` (TNC 124 uses `F 9999` instead); `CYCL DEF` / `CYCL CALL`; M3/M4/M5, M8/M9, M2/M30 (by the standard M list of each manual).
+
+**Common to all CONTOURING controls (TNC 310 and later) - the practical "standard library" for CamCraft:**
+
+| Element | Form | Evidence (oldest manual of the group) |
+|---|---|---|
+| Program frame | `BEGIN PGM NAME MM` / `END PGM NAME MM` | TNC 310 313 509-22 p43 |
+| Blank | `BLK FORM 0.1 Z X.. Y.. Z..` / `BLK FORM 0.2 X.. Y.. Z..` | 313 509-22 p45 |
+| Tool | `TOOL DEF n L.. R..` (program-local) and `TOOL CALL n Z S..` | p54, p21 |
+| Line | `L X.. Y.. Z.. RL/RR/R0 F../FMAX M..` | p46, p53 |
+| Arcs | `CC X.. Y..` + `C X.. Y.. DR+/DR-`; `CR X.. Y.. R± DR±`; `CT X.. Y..`; `RND R..`; `CHF ..` | p38, p73, p74 |
+| Polar | `CC` as pole, `LP PR.. PA..`, `CP IPA.. IZ.. DR±` (helix, 3 axes) | p80-81 (TNC 310 spec: "Helices: 3 axes") |
+| Radius comp | `RL` / `RR` / `R0` on L/C blocks | p46 |
+| M functions | M91 (machine datum), M92 (builder position), M94, M97, M99 (cycle call per block), M89 (modal cycle call) | p58, p91-96 |
+| Cycles | 200 DRILLING (Q200 Q201 Q206 Q202 Q210 Q203 Q204), 7 DATUM SHIFT, 10 ROTATION, 12 PGM CALL; old 1 PECKING and 5 CIRCULAR POCKET | 313 509-22 / 331 645-22 |
+| Subprograms | `LBL n`, `CALL LBL n REP ..` | - |
+| Q parameters | `FN 0..` arithmetic and jumps | 331 645-22 ("PARAMETER FUNCTIONS") |
+| Comment | `; text` block | all manuals |
+
+Number format: signed coordinates (`X+10`), 3 decimals on 1 µm controls, 4 decimals on 0.1 µm controls (see B).
+
+---
+
+## B. Per series: what the baseline (oldest manual on the portal) adds to the standard library
+
+| Series / control | Oldest manual on disk | Adds | Lacks (not found in the extracted text) |
+|---|---|---|---|
+| TNC 124 | 246 xxx-08, 284 679-24 | Own positioning dialect (A.1); program numbers; cycles 1.0 PECKING, 2.0 TAPPING (floating holder), hole patterns | L, arcs, BLK FORM, Q parameters, DIN/ISO |
+| TNC 128 | 77184x-01, 819494-20 (2013) | Paraxial blocks with BLK FORM, `TOOL CALL n Z S F DL DR DR2` (819494-26 printed p? "TOOL CALL 5.2 Z S2500 F350 DL+0.2 DR-1 DR2+0.05"), cycles 200-207, 240, 241, 247, 251, 256, FN/QS/QL, M136/M137, M140 | arcs, DIN/ISO, PLANE, TCPM |
+| TNC 310 | 286 040, 313 509-22 | standard library; 1 µm input (3 decimals); program names up to 8 characters (331 645-22 line 1348); memory 128 KB / about 6000 blocks / 64 files (331 645-22 printed p227) | DIN/ISO ("HEIDENHAIN conversational programming" is the only file type, printed p227), TOOL CALL by name, M126/M128/M140, cycle 19 (WORKING PLANE), FAUTO, QS |
+| TNC 410 | 286 060/286 080, 309 740-25 (6/2001) + ISO 345 940-22 | DIN/ISO; old cycles 1 (PECKING)/2 (TAPPING)/3 (SLOT MILLING)/4 (POCKET MILLING)/5 (CIRCULAR POCKET)/17 (RIGID TAPPING GS); 200-204, 210-214, 220, 221, 230, 231 (cycle list of 309 740-25); SL I 6/14-16; M120 look-ahead; M126; TCH PROBE; 1 µm input ("TNC 410: 1 µm", 340 135-22 spec) | TOOL CALL by name (345 940-22: "type the tool name in quotation marks (not TNC 410)"), M140, PLANE, QS. The shared ISO manual 345 940-22 marks these "not TNC 410" (contents, PDF p12 and p17-19): cycles 205-209, 262-267, SL II 20-28, 19 (G80), 32 (G62), 247, 60, M116, M118, M128, M136, M138, tilting the working plane |
+| TNC 426 / TNC 430 | 280 460 (scan, not analysed); 280 462, 311 062-21 (4/97) | TOOL CALL by name in quotes (from 280 462); cycle 19; old cycles 1-5/17/18; M112/M114/M116/M118/M120/M126; FK; LN (3-D comp); 0.1 µm input (4 decimals) | DIN/ISO before 280 472 (the ISO manual 318 179-24 covers 280 472-475; earlier: not found); M128 before 280 472 (first mention 280 472); M140; PLANE; FUNCTION TCPM; QS |
+| iTNC 530 | 340 420, 360 994-23 / 369 475-21 | Klartext + DIN/ISO; old cycles 1-5/17/18 still definable; 200-series incl. Q211; cycle 32 TOLERANCE; cycle 247 DATUM SETTING (datum table based); M128/M129/M144/M140/M136/M137/M138; SPLINE; FAUTO; 0.1 µm input | PLANE, FUNCTION TCPM (both come with 340 422), FZ/FU, QS, QL/QR, label names, FUNCTION DWELL (never on iTNC 530) |
+| TNC 320 | 340 551-01, 550 671-20 | 200-209, SL 20-24, 4/5 pockets; QS strings from the start; M140; FN 16/18; SQL | DIN/ISO before 340 55x-04 (no ISO manual; ISO keywords only 6 times in the -03 manual: unsure); cycle 19 and preset table before 340 55x-03; PLANE before -04; FUNCTION TCPM / M128 5-axis (option 9 is not offered for the TNC 320, 827222-27 p3) |
+| TNC 620 | 340 56x-01, 636 ... (User's Manual) | as TNC 320 -03 plus cycle 19, M128, cycle 32 | DIN/ISO in -01 (no ISO manual: unsure); PLANE before -02; FUNCTION TCPM before -03 |
+| TNC 640 | 34059x-01, 892903/892905/892909-20 | Everything of the iTNC 530 60642x line (PLANE all forms, FUNCTION TCPM in Klartext, QS/QL/QR, label names, TOOL CALL by name), FUNCTION MODE MILL/TURN, turning cycles 8xx | FUNCTION TCPM in ISO mode before -10; FUNCTION DWELL before -07; old cycles 1/2/17 (not in the cycle list; the manuals mention them only in conversion notes) |
+| TNC7 | 81762x-16, 1358773-20 | TNC 640 -16 functions, new UI; TRANS DATUM/MIRROR/ROTATION, FUNCTION DWELL, PRESET SELECT, OCM | DIN/ISO in -16 ("With NC software 81762x-16, the TNC7 does not support ISO programming", 1358773-20 line 4071 of the text); cycle 19 cannot be inserted (from -17); cycle 7 (DATUM SHIFT) is converted to TRANS DATUM on edit (1358773-24 printed p? "The TRANS DATUM function replaces Cycle 7 DATUM SHIFT") |
+
+Not covered: TNC 406 / TNC 416 (280 620/280 621/286 180) are EDM sinking controls (electrode programming) and are out of scope.
+
+---
+
+## B2. Post-dialect features: introduced / changed / removed (the summary the posts need)
+
+Abbreviations: iTNC = iTNC 530, 640 = TNC 640, 620 = TNC 620, 320 = TNC 320, 7 = TNC7.
+
+### Program structure and number format
+
+| Feature | Status | Source |
+|---|---|---|
+| DIN/ISO programs (`%NAME G71 *` ... `N99999999 %NAME G71 *`) | TNC 410: yes. TNC 426/430: from 280 472 (earlier: not found). iTNC: all versions. 320: from 340 55x-04. 620: from 340 56x-02 (-01: not found). 640: all. TNC7: from 81762x-17. Never: TNC 124, TNC 128, TNC 310. | 345 940-22; 318 179-24 title; 679 226-20; TNC7 1373081_03 p17 ("You can run and edit ISO programs"); 1358773-20 (not supported in -16) |
+| Coordinate decimals | 1 µm (3 decimals): TNC 310, TNC 410, TNC 124. 0.1 µm (4 decimals): TNC 426/430, iTNC, 320 (unsure for 340 551), 620, 640, TNC7, TNC 128. 0.01 µm display step: option 23 on 620/640 only. | 331 645-22 printed p228; 340 135-22 spec ("TNC 410: 1 µm"); brochures 892916-28 / 896140-29 "Comparison of controls"; 827222-27 p3 |
+| Program name | TNC 124: number only. TNC 310: name up to 8 characters. iTNC: names longer than 25 characters are not fully displayed; the characters `; * \ / " ? < > .` are not permitted in names (340 49x-03 manual text line 3744). TNC 640: path up to 256 characters. | 284 679-24; 331 645-22; bhb 340 49x-03; 892903-2C |
+| Max size | TNC 124: 1000 blocks/program; TNC 310: about 6000 blocks, 128 KB, 64 files; 620: 1.8-2 GB; 640 and iTNC (HSCI): > 21 GB | 284 679-24; 331 645-22 p227; brochures |
+| Q formula priority | Changed on 640 in 34059x-11: "The priority of arithmetic operations has been changed in the Q parameter formula". A post that writes Q formulas must use parentheses. | 1322095-02 p129 |
+| Control structures `IF/ELSE/FOR/WHILE` | TNC7 81762x-19 only | 1373081_03 p54 |
+
+### TOOL CALL / TOOL DEF
+
+| Feature | Status | Source |
+|---|---|---|
+| `TOOL CALL n Z S..` | all controls | - |
+| Tool name in quotes `TOOL CALL "NAME" Z` | TNC 426 from 280 462; iTNC all; 320/620/640/7 all; TNC 128 yes. Not TNC 410, not TNC 310 (not found). | 311 062-21; 345 940-22 ("(not TNC 410)") |
+| Name length | 640: 16 → 32 characters in 34059x-02 ("TOOL DEF blocks (ISO: T) or TOOL CALL blocks"). | 1322095-02 p24 |
+| `F` / `DL` / `DR` / `DR2` in TOOL CALL | DL/DR in TOOL CALL: all contouring controls. DR2: TNC 410 / 426 and later. DL/DR/DR2 range widened to 999.9999 mm: iTNC 34049x-07 / 60642x-02. | 34049x-08 Klartext p21 |
+| Cutting speed `VC` instead of S | iTNC 34049x-02 | 670387-23 p12 |
+| FZ / FU feed | iTNC 34049x-01; in cycles: 320 340 55x-04, 620 340 56x-02; in TOOL CALL on TNC 128: 77184x-03 | 670387-23 p11; 679 220-20 p7 |
+| Tool name from a QS parameter | iTNC 60642x-04 | 737759-24 p20 |
+| Same tool + same axis = no tool-change macro | 620 81760x-06 (640: same release line, 34059x-09: unsure) | 1322094_03 p72 |
+| `TOOL DEF n L.. R..` | TNC7 81762x-19: "You can no longer program L and R in the TOOL DEF NC function. The control issues an error message during execution." | 1373081_03 p63 |
+
+### Lines, arcs, compensation, feed
+
+| Feature | Status | Source |
+|---|---|---|
+| L, CC/C, CR, CT, CP, LP, RND, CHF, RL/RR/R0 | all contouring controls (TNC 310 on). Not TNC 124/128. | A |
+| Arcs outside the active plane as spatial arcs | iTNC 34049x-03 ("Arcs that are not programmed in the active working plane can now also be run as spatial arcs"); 640 34059x-07; 620 81760x-04 | 533 190-23 p16; 1322095-02 p65; 1322094_03 p48 |
+| Helix by `LIN_` in C/CR/CT; third axis on G02/G03/G05 in ISO | 640 34059x-16; 620 81760x-16; TNC7 81762x-17. Before: helix only as polar `CP` (Klartext) / polar G12/G13 (ISO). | 1322094_03 p94; 1373081_03 p16 |
+| Input range of polar angle increased | iTNC 34049x-04 | 533 190-23 p17 |
+| Up to 6 axes in one L block | 640 34059x-07 | 1322095-02 (34059x-07 modified functions) |
+| FAUTO | iTNC and later; not found on TNC 310/410/426 | feature-mentions.md |
+| M136 + FU in inch programs | not combinable from iTNC 34049x-02 | 670387-23 p27 |
+
+### M functions
+
+| M | Status | Source |
+|---|---|---|
+| M91 / M92 / M94 / M97 / M99 / M89 | all contouring controls; M89 + FK refused from 620 81760x-06 | 1322094_03 p72 |
+| M126 (shortest path rotary) | TNC 410, 426 and later | feature-mentions.md |
+| M128 / M129 | TNC 426/430 from 280 472, iTNC all, 620/640/7. Not TNC 410 (345 940-22 contents PDF p17: "M128 (not TNC 410)"). TNC 320: no 5-axis option (option 9 not offered). M128 for block scan: iTNC 34049x-01. Tool change with M128/TCPM active: iTNC 34049x-07 / 60642x-02. M116 with M128: iTNC 34049x-05. | 827222-27 p3; 670387-23 p11/p16/p21; 345 940-22 p17 |
+| M140 (retract along tool axis, `MB MAX`) | TNC 426/430 from 280 476 (new-features list of 340 135-22). iTNC from 340 420; 320 from 340 551-01; 620/640/7 all; TNC 128 from 77184x-01. Not found on TNC 310/410 and on TNC 426/430 before 280 476. | 340 135-22 p6; 360 994-23 p20; 550 671-20 p17 |
+| M150 | iTNC 34049x-01 | 670387-23 p11 |
+| M124 without T switches it off | iTNC 34049x-07 | 670387-23 p32 |
+| M197 | 640 34059x-02; 620 73498x-02 | 1322095-02 p21 |
+| M109/M110 with M120 changes | 640 34059x-11; 620 81760x-08 | 1322094_03 p90 |
+
+### Cycles
+
+| Feature | Status | Source |
+|---|---|---|
+| Old cycles 1 PECKING, 2 TAPPING, 3 SLOT, 4/5 POCKET, 17 RIGID TAPPING, 18 THREAD CUTTING | TNC 310 (1, 5), TNC 410, TNC 426/430, iTNC 340 420: definable. iTNC 340 422: "The old fixed cycles 1, 2, 3, 4, 5, 17 and 18 were removed from the soft-key structure and can therefore no longer be defined. Old programs containing these cycles can still be run". TNC 320/620/640/TNC7: not in the cycle lists (not found). | 375 738-24 p10 |
+| 200-series drilling (200 DRILLING, 201 REAMING, 202 BORING, 203 UNIVERSAL DRILLING, 204 BACK BORING, 205 UNIVERSAL PECKING, 206 TAPPING, 207 RIGID TAPPING, 208 BORE MILLING, 209 TAPPING W/ CHIP BRKG) | 200/201: TNC 310 and TNC 426 280 462 on. 202/203/204: TNC 410 and TNC 426/430 280 472 on. 205/206/207/208: TNC 426/430 from 280 474 (318 179-24 contents p11: "only with the TNC 426, TNC 430 with NC software 280 474-xx"). 209: TNC 426/430 from 280 476. 205-209: not TNC 410 (345 940-22 contents p18). iTNC, 320/620/640/7: all. On TNC 620, 201-205, 208 and 209 need option 19 ("Cycle 205 UNIVERSAL PECKING (option 19)"); 200, 206, 207 are standard. TNC 320/640/iTNC: option 19 is standard. | 1303427-23 (620 81760x-18 machining cycles) headings; 827222-27 p3 |
+| 210-214 pockets/slots (210 SLOT RECIP. PLNG, 211 CIRCULAR SLOT, 212 POCKET FINISHING, 213 STUD FINISHING, 214 C. POCKET FINISHING) | removed from the soft keys (still run): iTNC 34049x-04, 320 340 55x-04, 620 340 56x-02. Replaced by 251-257 (251 RECTANGULAR POCKET, 252 CIRCULAR POCKET, 253 SLOT MILLING, 254 CIRCULAR SLOT, 256 RECTANGULAR STUD, 257 CIRCULAR STUD; iTNC 340 422, 320 -04, 620 -02, 640 -01). | 533 190-23 p17 |
+| Cycle 200 (DRILLING) Q list | Q200 Q201 Q206 Q202 Q210 Q203 Q204 (TNC 310; TNC 410; TNC 426/430 280 462-280 472); + Q211 (TNC 426/430 280 474; iTNC from 340 420; 320 from 340 551-01; 620 from 340 56x-01; 640 from 34059x-01; TNC 128 77184x-01); + **Q395** (iTNC 60642x-04 only; 640 34059x-04; 620 81760x-01; 320 77185x-01; TNC 128 77184x-02; TNC7 all). | section B3 (each row has its manual ID and PDF page) |
+| Cycle 205 (UNIVERSAL PECKING) Q list | Not on TNC 410, TNC 310 and TNC 426/430 before 280 474. Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 (TNC 426/430 280 474/280 476; iTNC 340 420); + **Q379 Q253** (iTNC 340 422; 320 340 551-01; 620 340 56x-01; 640 34059x-01; TNC 128 77184x-01); + **Q208 Q395** (iTNC 60642x-04 only; 640 34059x-04; 620 81760x-01; 320 77185x-01; TNC 128 77184x-02); + Q373 (640 34059x-16; 620 81760x-16; 320 771851-18; TNC7 81762x-17). | section B3; "Cycle 205: Input parameter Q208 for retraction feed rate added" (737759-24 p20 / 670388-25 p13); 320: 1096959-20 p9 ("New cycle functions of software 77185x-01") and p82 |
+| Cycle 207 (RIGID TAPPING) / 209 (TAPPING W/ CHIP BRKG) | 207: Q200 Q201 Q239 Q203 Q204 in every B3 row (TNC 426/430 from 280 474; not TNC 410). 209: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (TNC 426/430 280 476; iTNC 340 420 to 340 49x-03; 320 340 551-01/-02); + Q403 (retraction speed factor: iTNC 34049x-04; 320 340 55x-03; 620 340 56x-01; 640 34059x-01). Pitch from the tool table PITCH column monitored for 206/207/209: iTNC 60642x-02/-04. | section B3; 670388-25 p15 |
+| Depth reference parameter | The iTNC 60642x-04 list names it "Q359" for cycles 200/203 (UNIVERSAL DRILLING)/205; the example blocks of the same manuals show `Q395`. Treat as Q395 (**unsure**: typo in the list). | 737759-24 p20 vs 670388-24 p99 |
+| Cycle 247 DATUM SETTING | TNC 426/430 from 280 476 (sets a datum value; 340 135-22 p6). Not TNC 410 (345 940-22 p6, p19). iTNC 340 422: "Cycle 247 now activates a preset from the preset table" (before: a datum value). TNC 128 77184x-05: preset number selectable. TNC 320 from 340 55x-03 (preset table). | 375 738-24 p10; 819494-24 p20 |
+| PRESET SELECT | 640 34059x-11 / 620 81760x-08 and later; TNC7 | feature-mentions.md |
+| Cycle 32 TOLERANCE (ISO G62) | TNC 426/430 280 472 and later (cycle list), iTNC all, 320 from 340 55x-03, 620, 640, 7. Not TNC 410 (345 940-22 contents p19). | feature-mentions.md; script cycle list; 345 940-22 p19 |
+| Cycle 9 DWELL TIME (ISO G04) | all contouring controls | 670 391 (iTNC 49x-03) "DWELL TIME (Cycle G04)"; 1303406-23 p? "Cycle 9 DWELL TIME" |
+| `FUNCTION DWELL` | 640 34059x-07; 620 81760x-04; 320 77185x-04; TNC 128 77184x-05; TNC7 all. **iTNC 530: not found in any version.** | 1322095-02 p65; 1322094_03 p48; 819494-24 p14 |
+| `FUNCTION FEED DWELL` (cyclic) | 640 34059x-05; 620 81760x-02; TNC 128 77184x-03 | 1322095-02 p44 |
+| Cycles 7 (DATUM SHIFT) / 8 (MIRRORING) / 10 (ROTATION) / 11 (SCALING FACTOR) / 26 (AXIS-SPECIFIC SCALING) | all contouring controls (26: not in the TNC 410 cycle list). TRANS DATUM ("Define coordinate transformations"): 620 340 56x-03, 320 340 55x-05, iTNC 34049x-04 (unsure). TRANS MIRROR / TRANS ROTATION: 640 34059x-16, 620 81760x-16. TRANS RESET: -18. TNC7: cycle 7 is changed into TRANS DATUM when edited. | 1322094_03 p95/p108; 1358773-24 |
+
+### Tilted working plane and TCPM
+
+| Feature | Status | Source |
+|---|---|---|
+| Cycle 19 WORKING PLANE (ISO G80) | Not TNC 410 (345 940-22 contents p19: "WORKING PLANE (Cycle G80, not TNC 410)"). TNC 426 280 462 on, iTNC all, 320 from 340 55x-03 (option), 620, 640. TNC7 from 81762x-17: "You can edit and execute Cycle 19 ... but you cannot insert it into an NC program as a new element". | 550 671-22 p7; 345 940-22 p19; 1373081_03 p23 |
+| PLANE SPATIAL / PROJECTED / EULER / VECTOR / POINTS / RELATIV / RESET + MOVE/TURN/STAY | iTNC 340 422; 620 340 56x-02; 320 340 55x-04; 640 and TNC7 all. TNC 410/426/310: not found. | 375 738-24 p7; 679 222-20; 679 220-20 p8 |
+| PLANE AXIAL | iTNC 34049x-03; 640/620 all; 320 (from -04, unsure) | 533 190-23 p12 |
+| FMAX in MOVE/TURN | iTNC 34049x-03 | 533 190-23 p16 |
+| TURN with clearance height | iTNC 34049x-06 / 60642x-01 | 670387-23 p18 |
+| SEQ from a Q parameter | iTNC 34049x-08 / 60642x-03; 640 34059x-02; 620 73498x-02 | 1322095-02 p25 |
+| SYM instead of SEQ | 640 34059x-09; 620 81760x-06; TNC7 | 1322095-02 p96 |
+| `MOVE ... ABST` | TNC7 81762x-20 executes old `ABST` and changes it to `DIST` when edited (compatibility). | 1373081_03 p85 |
+| `FUNCTION TCPM F TCP AXIS ... PATHCTRL ...` | Klartext: iTNC 340 422 (first mention; the iTNC 340 422 list does not name it: unsure), 620 340 56x-03 ("The TCPM function was introduced"), 640 all, TNC7 all. **ISO mode: 640 34059x-10, 620 81760x-07** ("FUNCTION TCPM (option 9) is available in ISO programming mode"). iTNC ISO manual lists FUNCTION TCPM in its feature summary only; the ISO form was not found (unsure: use M128 in iTNC ISO). TNC 320: none (option 9 not offered). | 1322095-02 p109; 1322094_03 p77; 737760-24 summary |
+| M128 | see M functions. Still accepted on 620/640/TNC7; FUNCTION TCPM is "an improvement over M128" (1322095-02 p109). | - |
+
+### Q parameters
+
+| Feature | Status | Source |
+|---|---|---|
+| Q parameters / FN 0-FN 12 | all contouring controls | - |
+| 2000 Q parameters; label names; FN 9-12 jump to label names | iTNC 34049x-01 | 670387-23 p11 |
+| QS strings | iTNC 34049x-03; 320 from 340 551-01; 620/640/7 all | 533 190-23 p12 |
+| QL / QR | iTNC 34049x-05; 620 340 56x-03; 320 340 55x-05 | 670387-23 p16; 679 220-21 p10 |
+| QS as jump target | iTNC 34049x-06 / 60642x-01 | 670387-23 p18 |
+| `SEL PGM` with QS | iTNC 34049x-07 / 60642x-02 | 670387-23 p21 |
+| FN 15, FN 31, FN 32, FT, FMAXT (old controls) | TNC 128 77184x-03: imported without ERROR block, but the program stops with an error when it reaches them | 819494-24 p13 |
+
+---
+
+## B3. Cycle Q-parameter lists by version (extracted from example blocks)
+
+Format: `cycle control version: Q list (manual ID pPDF page)`. Each list is the example block that starts with the cycle's own number and name, up to the next NC block (see the method note at the top). Cycles 200 (DRILLING), 203 (UNIVERSAL DRILLING), 205 (UNIVERSAL PECKING), 207 (RIGID TAPPING) and 209 (TAPPING W/ CHIP BRKG) only. A version that is not in the list has no example block of that cycle in the downloaded manuals; this does not prove that the cycle is absent. Removed rows: three TNC 620 cycle 209 rows (340 56x-02, 340 56x-03, 73498x-01) end after Q203 at a column break; they are not confirmed.
+
+Known misprint in the manuals: in many cycle 203 example blocks the fifth line is `Q211=0 ;DWELL TIME AT TOP`. The parameter list of the same page names Q210 for that value (for example 1096959-20 p75). The rows show the block as printed.
+
+Spot-checked against the PDF pages: 200 iTNC 340 49x-01 (53318820 p237), 203 TNC 320 77185x-01 (1096959-20 p75), 205 iTNC 340 49x-01 (53318820 p262).
+
+```
+200 TNC 128 77184x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (819494-20 p313)
+200 TNC 128 77184x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (819494-21 p185)
+200 TNC 128 77184x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (819494-22 p199)
+200 TNC 128 77184x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (819494-23 p386)
+200 TNC 128 77184x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (819494-24 p428)
+200 TNC 128 77184x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1263174-21 p252)
+200 TNC 310 286 040: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (31350922 p106)
+200 TNC 310 286 140: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (33164522 p119)
+200 TNC 320 340 551-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (55067120 p183)
+200 TNC 320 340 551-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (55067121 p189)
+200 TNC 320 340 55x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (550671-22 p67)
+200 TNC 320 340 55x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679220-20 p62)
+200 TNC 320 340 55x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679220-21 p64)
+200 TNC 320 34055x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679226-22 p49)
+200 TNC 320 771851-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096950-25 p78)
+200 TNC 320 77185x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096959-20 p89)
+200 TNC 320 77185x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096959-21 p87)
+200 TNC 320 77185x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096959-22 p90)
+200 TNC 320 77185x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096959-23 p105)
+200 TNC 320 77185x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096950-24 p52)
+200 TNC 410 286 060-xx 286 080-xx: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (30974025 p139)
+200 TNC 426 280 462: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (31106221 p152)
+200 TNC 426/430 280 470: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (31320620 p161)
+200 TNC 426/430 280 472: Q200 Q201 Q206 Q202 Q210 Q203 Q204 (32293824 p171)
+200 TNC 426/430 280 474: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (33164422 p182)
+200 TNC 426/430 280 476: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (34013522 p240)
+200 TNC 620 340 56x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (636026-20 p69)
+200 TNC 620 340 56x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679295-20 p62)
+200 TNC 620 340 56x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679295-21 p64)
+200 TNC 620 34056x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679355-22 p53)
+200 TNC 620 73498x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (679295-21 p64)
+200 TNC 620 73498x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (819499-21 p55)
+200 TNC 620 81760x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096886-20 p92)
+200 TNC 620 81760x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096883-21 p394)
+200 TNC 620 81760x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096883-22 p63)
+200 TNC 620 81760x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096883-23 p67)
+200 TNC 620 81760x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096886-24 p109)
+200 TNC 620 81760x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096886-25 p111)
+200 TNC 620 81760x-07: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1096886-26 p113)
+200 TNC 620 81760x-08: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1303427-20 p108)
+200 TNC 620 81760x-16: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1303427-21 p73)
+200 TNC 620 81760x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1303427-22 p71)
+200 TNC 620 81760x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1303427-23 p71)
+200 TNC 640 34059x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (892905-20 p64)
+200 TNC 640 34059x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (892903-21 p57)
+200 TNC 640 34059x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892905-22 p98)
+200 TNC 640 34059x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-23 p418)
+200 TNC 640 34059x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-24 p67)
+200 TNC 640 34059x-07: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-25 p73)
+200 TNC 640 34059x-08: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-26 p80)
+200 TNC 640 34059x-09: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-27 p62)
+200 TNC 640 34059x-10: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892905-28 p123)
+200 TNC 640 34059x-11: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892909-29 p68)
+200 TNC 640 34059x-16: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-2A p70)
+200 TNC 640 34059x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-2B p64)
+200 TNC 640 34059x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (892903-2C p64)
+200 TNC7 81762x-16: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1358773-20 p386)
+200 TNC7 81762x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1358775-21 p85)
+200 TNC7 81762x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1358775-22 p135)
+200 TNC7 81762x-19: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1358775-23 p127)
+200 TNC7 81762x-20: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (1358775-24 p145)
+200 iTNC 530 340 420: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (36947521 p59)
+200 iTNC 530 340 422: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (38951220 p65)
+200 iTNC 530 340 49x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (53318820 p237)
+200 iTNC 530 340 49x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (53318821 p89)
+200 iTNC 530 340 49x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (53318822 p99)
+200 iTNC 530 340 49x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (533190-23 p105)
+200 iTNC 530 340 49x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-20 p72)
+200 iTNC 530 340 49x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-21 p76)
+200 iTNC 530 340 49x-07: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-22 p78)
+200 iTNC 530 34049x-08: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-23 SP7 p80)
+200 iTNC 530 606 42x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-21 p76)
+200 iTNC 530 606 42x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-22 p78)
+200 iTNC 530 60642x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 (670388-23 SP7 p80)
+200 iTNC 530 60642x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (670388-24 p74)
+200 iTNC 530 60642x-04 SP8: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (670388-25 p76)
+200 vTNC7 81762x-20 SP1: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q211 Q395 (150567200A02 p473)
+203 TNC 128 77184x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (819494-20 p400)
+203 TNC 128 77184x-02: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (819494-21 p405)
+203 TNC 128 77184x-03: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (819494-22 p423)
+203 TNC 128 77184x-05: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (819494-23 p487)
+203 TNC 128 77184x-06: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (819494-24 p538)
+203 TNC 128 77184x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (819494-26 p400)
+203 TNC 320 340 551-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (55067120 p189)
+203 TNC 320 340 551-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (55067121 p195)
+203 TNC 320 340 55x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (550671-22 p224)
+203 TNC 320 340 55x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (679220-20 p72)
+203 TNC 320 340 55x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (679220-21 p74)
+203 TNC 320 34055x-06: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 (679220-22 p71)
+203 TNC 320 771851-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303429-20 p93)
+203 TNC 320 77185x-01: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096959-20 p75)
+203 TNC 320 77185x-02: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096959-21 p73)
+203 TNC 320 77185x-04: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096959-22 p75)
+203 TNC 320 77185x-05: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096959-23 p80)
+203 TNC 320 77185x-06: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096959-24 p82)
+203 TNC 410 286 060-xx 286 080-xx: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 (30974025 p143)
+203 TNC 426/430 280 472: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 (32293824 p175)
+203 TNC 426/430 280 474: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (33164422 p186)
+203 TNC 426/430 280 476: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (34013522 p245)
+203 TNC 620 340 56x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (636026-20 p234)
+203 TNC 620 340 56x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (679295-20 p72)
+203 TNC 620 340 56x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (679295-21 p74)
+203 TNC 620 34056x-04: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 (679295-22 p75)
+203 TNC 620 73498x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (679295-21 p74)
+203 TNC 620 73498x-02: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 (679295-22 p75)
+203 TNC 620 81760x-01: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-20 p77)
+203 TNC 620 81760x-02: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-21 p79)
+203 TNC 620 81760x-03: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-22 p81)
+203 TNC 620 81760x-04: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-23 p81)
+203 TNC 620 81760x-05: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-24 p84)
+203 TNC 620 81760x-06: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-25 p86)
+203 TNC 620 81760x-07: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1096886-26 p86)
+203 TNC 620 81760x-08: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1303427-20 p83)
+203 TNC 620 81760x-16: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303427-21 p84)
+203 TNC 620 81760x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303427-22 p82)
+203 TNC 620 81760x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303427-23 p83)
+203 TNC 640 34059x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (892905-20 p74)
+203 TNC 640 34059x-02: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 (892905-21 p81)
+203 TNC 640 34059x-04: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-22 p83)
+203 TNC 640 34059x-05: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-23 p85)
+203 TNC 640 34059x-06: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-24 p87)
+203 TNC 640 34059x-07: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-25 p89)
+203 TNC 640 34059x-08: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-26 p92)
+203 TNC 640 34059x-09: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-27 p94)
+203 TNC 640 34059x-10: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (892905-28 p96)
+203 TNC 640 34059x-11: Q200 Q201 Q206 Q202 Q211 Q203 Q204 Q212 Q213 Q205 Q208 Q256 Q395 (1303406-20 p94)
+203 TNC 640 34059x-16: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303406-21 p96)
+203 TNC 640 34059x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303406-22 p90)
+203 TNC 640 34059x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1303406-23 p93)
+203 TNC7 81762x-17: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1358775-21 p106)
+203 TNC7 81762x-18: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1358775-22 p203)
+203 TNC7 81762x-19: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1358775-23 p197)
+203 TNC7 81762x-20: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (1358775-24 p215)
+203 iTNC 530 340 420: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (36099423 p252)
+203 iTNC 530 340 422: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (38951220 p239)
+203 iTNC 530 340 49x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (53318820 p256)
+203 iTNC 530 340 49x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (53318821 p282)
+203 iTNC 530 340 49x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (53318822 p302)
+203 iTNC 530 340 49x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (533188-23 p318)
+203 iTNC 530 340 49x-05: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-20 p82)
+203 iTNC 530 340 49x-06: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-21 p86)
+203 iTNC 530 340 49x-07: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-22 p88)
+203 iTNC 530 34049x-08: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-23 SP7 p90)
+203 iTNC 530 606 42x-01: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-21 p86)
+203 iTNC 530 606 42x-02: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-22 p88)
+203 iTNC 530 60642x-03: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 (670388-23 SP7 p90)
+203 iTNC 530 60642x-04: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (670388-24 p84)
+203 iTNC 530 60642x-04 SP8: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (670388-25 p86)
+203 vTNC7 81762x-20 SP1: Q200 Q201 Q206 Q202 Q210 Q203 Q204 Q212 Q213 Q205 Q211 Q208 Q256 Q395 (150567200A02 p538)
+205 TNC 128 77184x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (819494-20 p408)
+205 TNC 128 77184x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (819494-21 p412)
+205 TNC 128 77184x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (819494-22 p430)
+205 TNC 128 77184x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (819494-23 p495)
+205 TNC 128 77184x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (819494-24 p546)
+205 TNC 128 77184x-18: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (819494-26 p411)
+205 TNC 320 340 551-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (55067120 p194)
+205 TNC 320 340 551-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (55067121 p200)
+205 TNC 320 340 55x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (550671-22 p230)
+205 TNC 320 340 55x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679220-20 p80)
+205 TNC 320 340 55x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679220-21 p82)
+205 TNC 320 34055x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679220-22 p77)
+205 TNC 320 771851-18: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303429-20 p104)
+205 TNC 320 77185x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096959-20 p82)
+205 TNC 320 77185x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096959-21 p80)
+205 TNC 320 77185x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096959-22 p83)
+205 TNC 320 77185x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096959-23 p88)
+205 TNC 320 77185x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096959-24 p90)
+205 TNC 426/430 280 474: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 (33164422 p190)
+205 TNC 426/430 280 476: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 (34013522 p250)
+205 TNC 620 340 56x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (636026-20 p239)
+205 TNC 620 340 56x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679295-20 p80)
+205 TNC 620 340 56x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679295-21 p82)
+205 TNC 620 34056x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679295-22 p82)
+205 TNC 620 73498x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679295-21 p82)
+205 TNC 620 73498x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (679295-22 p82)
+205 TNC 620 81760x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-20 p84)
+205 TNC 620 81760x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-21 p86)
+205 TNC 620 81760x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-22 p88)
+205 TNC 620 81760x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-23 p89)
+205 TNC 620 81760x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-24 p92)
+205 TNC 620 81760x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-25 p94)
+205 TNC 620 81760x-07: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1096886-26 p94)
+205 TNC 620 81760x-08: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1303427-20 p93)
+205 TNC 620 81760x-16: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303427-21 p95)
+205 TNC 620 81760x-17: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303427-22 p93)
+205 TNC 620 81760x-18: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303427-23 p94)
+205 TNC 640 34059x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (892905-20 p82)
+205 TNC 640 34059x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (892905-21 p88)
+205 TNC 640 34059x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-22 p90)
+205 TNC 640 34059x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-23 p92)
+205 TNC 640 34059x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-24 p94)
+205 TNC 640 34059x-07: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-25 p97)
+205 TNC 640 34059x-08: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-26 p100)
+205 TNC 640 34059x-09: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-27 p102)
+205 TNC 640 34059x-10: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (892905-28 p104)
+205 TNC 640 34059x-11: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (1303406-20 p104)
+205 TNC 640 34059x-16: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303406-21 p106)
+205 TNC 640 34059x-17: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303406-22 p100)
+205 TNC 640 34059x-18: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1303406-23 p104)
+205 TNC7 81762x-17: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1358775-21 p116)
+205 TNC7 81762x-18: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1358775-22 p210)
+205 TNC7 81762x-19: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1358775-23 p202)
+205 TNC7 81762x-20: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (1358775-24 p220)
+205 iTNC 530 340 420: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 (36099423 p257)
+205 iTNC 530 340 422: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (38951220 p245)
+205 iTNC 530 340 49x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (53318820 p262)
+205 iTNC 530 340 49x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (53319021 p319)
+205 iTNC 530 340 49x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (53319022 p348)
+205 iTNC 530 340 49x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (533188-23 p323)
+205 iTNC 530 340 49x-05: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-20 p90)
+205 iTNC 530 340 49x-06: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-21 p94)
+205 iTNC 530 340 49x-07: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-22 p96)
+205 iTNC 530 34049x-08: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-23 SP7 p98)
+205 iTNC 530 606 42x-01: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-21 p94)
+205 iTNC 530 606 42x-02: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-22 p96)
+205 iTNC 530 60642x-03: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 (670388-23 SP7 p98)
+205 iTNC 530 60642x-04: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (670388-24 p92)
+205 iTNC 530 60642x-04 SP8: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 (670388-25 p94)
+205 vTNC7 81762x-20 SP1: Q200 Q201 Q206 Q202 Q203 Q204 Q212 Q205 Q258 Q259 Q257 Q256 Q211 Q379 Q253 Q208 Q395 Q373 (150567200A02 p543)
+207 TNC 128 77184x-01: Q200 Q201 Q239 Q203 Q204 (819494-20 p420)
+207 TNC 128 77184x-02: Q200 Q201 Q239 Q203 Q204 (819494-21 p423)
+207 TNC 128 77184x-03: Q200 Q201 Q239 Q203 Q204 (819494-22 p442)
+207 TNC 128 77184x-05: Q200 Q201 Q239 Q203 Q204 (819494-23 p507)
+207 TNC 128 77184x-06: Q200 Q201 Q239 Q203 Q204 (819494-24 p565)
+207 TNC 128 77184x-18: Q200 Q201 Q239 Q203 Q204 (819494-26 p432)
+207 TNC 320 340 551-01: Q200 Q201 Q239 Q203 Q204 (55067120 p200)
+207 TNC 320 340 551-02: Q200 Q201 Q239 Q203 Q204 (55067121 p206)
+207 TNC 320 340 55x-03: Q200 Q201 Q239 Q203 Q204 (550671-22 p236)
+207 TNC 320 34055x-06: Q200 Q201 Q239 Q203 Q204 (679220-22 p92)
+207 TNC 320 771851-18: Q200 Q201 Q239 Q203 Q204 (1303429-20 p137)
+207 TNC 320 77185x-01: Q200 Q201 Q239 Q203 Q204 (1096959-20 p98)
+207 TNC 320 77185x-02: Q200 Q201 Q239 Q203 Q204 (1096959-21 p97)
+207 TNC 320 77185x-04: Q200 Q201 Q239 Q203 Q204 (1096959-22 p99)
+207 TNC 320 77185x-05: Q200 Q201 Q239 Q203 Q204 (1096959-23 p116)
+207 TNC 320 77185x-06: Q200 Q201 Q239 Q203 Q204 (1096959-24 p119)
+207 TNC 426/430 280 474: Q200 Q201 Q239 Q203 Q204 (33164422 p198)
+207 TNC 426/430 280 476: Q200 Q201 Q239 Q203 Q204 (34013522 p258)
+207 TNC 620 340 56x-01: Q200 Q201 Q239 Q203 Q204 (636026-20 p245)
+207 TNC 620 34056x-04: Q200 Q201 Q239 Q203 Q204 (679295-22 p100)
+207 TNC 620 73498x-02: Q200 Q201 Q239 Q203 Q204 (679295-22 p100)
+207 TNC 620 81760x-01: Q200 Q201 Q239 Q203 Q204 (1096886-20 p102)
+207 TNC 620 81760x-02: Q200 Q201 Q239 Q203 Q204 (1096886-21 p104)
+207 TNC 620 81760x-03: Q200 Q201 Q239 Q203 Q204 (1096886-22 p106)
+207 TNC 620 81760x-04: Q200 Q201 Q239 Q203 Q204 (1096886-23 p108)
+207 TNC 620 81760x-05: Q200 Q201 Q239 Q203 Q204 (1096886-24 p120)
+207 TNC 620 81760x-06: Q200 Q201 Q239 Q203 Q204 (1096886-25 p123)
+207 TNC 620 81760x-07: Q200 Q201 Q239 Q203 Q204 (1096886-26 p124)
+207 TNC 620 81760x-08: Q200 Q201 Q239 Q203 Q204 (1303427-20 p118)
+207 TNC 620 81760x-16: Q200 Q201 Q239 Q203 Q204 (1303427-21 p126)
+207 TNC 620 81760x-17: Q200 Q201 Q239 Q203 Q204 (1303427-22 p124)
+207 TNC 620 81760x-18: Q200 Q201 Q239 Q203 Q204 (1303427-23 p127)
+207 TNC 640 34059x-02: Q200 Q201 Q239 Q203 Q204 (892905-21 p106)
+207 TNC 640 34059x-04: Q200 Q201 Q239 Q203 Q204 (892905-22 p108)
+207 TNC 640 34059x-05: Q200 Q201 Q239 Q203 Q204 (892905-23 p110)
+207 TNC 640 34059x-06: Q200 Q201 Q239 Q203 Q204 (892905-24 p112)
+207 TNC 640 34059x-07: Q200 Q201 Q239 Q203 Q204 (892905-25 p116)
+207 TNC 640 34059x-08: Q200 Q201 Q239 Q203 Q204 (892905-26 p128)
+207 TNC 640 34059x-09: Q200 Q201 Q239 Q203 Q204 (892905-27 p131)
+207 TNC 640 34059x-10: Q200 Q201 Q239 Q203 Q204 (892905-28 p134)
+207 TNC 640 34059x-11: Q200 Q201 Q239 Q203 Q204 (1303406-20 p130)
+207 TNC 640 34059x-16: Q200 Q201 Q239 Q203 Q204 (1303406-21 p138)
+207 TNC 640 34059x-17: Q200 Q201 Q239 Q203 Q204 (1303406-22 p132)
+207 TNC 640 34059x-18: Q200 Q201 Q239 Q203 Q204 (1303406-23 p137)
+207 TNC7 81762x-17: Q200 Q201 Q239 Q203 Q204 (1358775-21 p143)
+207 TNC7 81762x-18: Q200 Q201 Q239 Q203 Q204 (1358775-22 p243)
+207 TNC7 81762x-19: Q200 Q201 Q239 Q203 Q204 (1358775-23 p233)
+207 TNC7 81762x-20: Q200 Q201 Q239 Q203 Q204 (1358775-24 p251)
+207 iTNC 530 340 420: Q200 Q201 Q239 Q203 Q204 (36099423 p265)
+207 iTNC 530 340 422: Q200 Q201 Q239 Q203 Q204 (38951220 p257)
+207 iTNC 530 340 49x-01: Q200 Q201 Q239 Q203 Q204 (53318820 p271)
+207 iTNC 530 340 49x-02: Q200 Q201 Q239 Q203 Q204 (53319021 p325)
+207 iTNC 530 340 49x-03: Q200 Q201 Q239 Q203 Q204 (53319022 p354)
+207 iTNC 530 340 49x-04: Q200 Q201 Q239 Q203 Q204 (533188-23 p330)
+207 iTNC 530 34049x-08: Q200 Q201 Q239 Q203 Q204 (670388-23 SP7 p115)
+207 iTNC 530 60642x-03: Q200 Q201 Q239 Q203 Q204 (670388-23 SP7 p115)
+207 vTNC7 81762x-20 SP1: Q200 Q201 Q239 Q203 Q204 (150567200A02 p574)
+209 TNC 320 340 551-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (55067120 p202)
+209 TNC 320 340 551-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (55067121 p208)
+209 TNC 320 340 55x-03: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (550671-22 p239)
+209 TNC 320 340 55x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (679220-20 p100)
+209 TNC 320 340 55x-05: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (679220-21 p102)
+209 TNC 320 34055x-06: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (679220-22 p95)
+209 TNC 320 771851-18: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303429-20 p142)
+209 TNC 320 77185x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096959-20 p101)
+209 TNC 320 77185x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096959-21 p100)
+209 TNC 320 77185x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096959-22 p102)
+209 TNC 320 77185x-05: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096959-23 p120)
+209 TNC 320 77185x-06: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096959-24 p124)
+209 TNC 426/430 280 476: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (34013522 p261)
+209 TNC 620 340 56x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (636026-20 p248)
+209 TNC 620 34056x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (679295-22 p103)
+209 TNC 620 73498x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (679295-22 p103)
+209 TNC 620 81760x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-20 p105)
+209 TNC 620 81760x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-21 p107)
+209 TNC 620 81760x-03: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-22 p109)
+209 TNC 620 81760x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-23 p111)
+209 TNC 620 81760x-05: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-24 p124)
+209 TNC 620 81760x-06: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-25 p128)
+209 TNC 620 81760x-07: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1096886-26 p129)
+209 TNC 620 81760x-08: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303427-20 p122)
+209 TNC 620 81760x-16: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303427-21 p131)
+209 TNC 620 81760x-17: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303427-22 p129)
+209 TNC 620 81760x-18: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303427-23 p132)
+209 TNC 640 34059x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-20 p102)
+209 TNC 640 34059x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-21 p109)
+209 TNC 640 34059x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-22 p111)
+209 TNC 640 34059x-05: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-23 p113)
+209 TNC 640 34059x-06: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-24 p115)
+209 TNC 640 34059x-07: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-25 p119)
+209 TNC 640 34059x-08: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-26 p132)
+209 TNC 640 34059x-09: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-27 p136)
+209 TNC 640 34059x-10: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (892905-28 p139)
+209 TNC 640 34059x-11: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303406-20 p134)
+209 TNC 640 34059x-16: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303406-21 p143)
+209 TNC 640 34059x-17: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303406-22 p137)
+209 TNC 640 34059x-18: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1303406-23 p142)
+209 TNC7 81762x-17: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1358775-21 p148)
+209 TNC7 81762x-18: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1358775-22 p248)
+209 TNC7 81762x-19: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1358775-23 p238)
+209 TNC7 81762x-20: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (1358775-24 p256)
+209 iTNC 530 340 420: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (36099423 p268)
+209 iTNC 530 340 422: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (37573824 p301)
+209 iTNC 530 340 49x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (53319020 p298)
+209 iTNC 530 340 49x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (53319021 p327)
+209 iTNC 530 340 49x-03: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 (53319022 p356)
+209 iTNC 530 340 49x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (533190-23 p384)
+209 iTNC 530 340 49x-05: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-20 p110)
+209 iTNC 530 340 49x-06: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-21 p114)
+209 iTNC 530 340 49x-07: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-22 p116)
+209 iTNC 530 34049x-08: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-23 SP7 p118)
+209 iTNC 530 606 42x-01: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-21 p114)
+209 iTNC 530 606 42x-02: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-22 p116)
+209 iTNC 530 60642x-03: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-23 SP7 p118)
+209 iTNC 530 60642x-04: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-24 p112)
+209 iTNC 530 60642x-04 SP8: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (670388-25 p114)
+209 vTNC7 81762x-20 SP1: Q200 Q201 Q239 Q203 Q204 Q257 Q256 Q336 Q403 (150567200A02 p579)
+```
+
+---
+
+Section C (per control, every NC software version) is in [`differences-by-version.md`](differences-by-version.md).

@@ -78,7 +78,7 @@
 
 use super::field::{cell_of, center_of, SdfField};
 use super::field_floor::{shell_extent, ColumnSpan};
-use super::kernel::{StockError, MAX_CELLS_PER_AXIS};
+use super::kernel::{edge_cells, StockError, MAX_CELLS_PER_AXIS};
 
 /// How one column's descent ended.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -124,11 +124,12 @@ pub(crate) struct Lattice {
 pub(crate) fn lattice_of(f: &SdfField) -> Result<Lattice, StockError> {
     let cell = f.cell();
     let b = f.bounds();
-    let (i0, j0) = (cell_of(b.min.x, cell), cell_of(b.min.y, cell));
-    let (mut i1, mut j1) = (
-        (b.max.x / cell).ceil() as i32 - 1,
-        (b.max.y / cell).ceil() as i32 - 1,
-    );
+    // The box's edges by `edge_cells` (#4012): an edge a few ulps past a
+    // cell boundary adds no sliver column, so the field lattice over a box
+    // has the column arm's columns.
+    let edge = |v: f64, upper: bool| edge_cells(v, cell, upper).clamp(i32::MIN as f64, i32::MAX as f64) as i32;
+    let (i0, j0) = (edge(b.min.x, false), edge(b.min.y, false));
+    let (mut i1, mut j1) = (edge(b.max.x, true) - 1, edge(b.max.y, true) - 1);
     (i1, j1) = (i1.max(i0), j1.max(j0));
     let (nx, ny) = ((i1 - i0 + 1) as usize, (j1 - j0 + 1) as usize);
     if nx > MAX_CELLS_PER_AXIS || ny > MAX_CELLS_PER_AXIS {

@@ -211,6 +211,40 @@ pub(super) fn wire_exit_group(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
     });
 }
 
+/// #3326: the Face's Start point and Exit point groups on Geometry, typed
+/// in model X and Y. Apply commits the draft through the undoable command.
+pub(super) fn raster_groups(ui: &mut Ui, u: Unit, picks: &mut PathPicks) {
+    let start = ["Start point stated", "Start X", "Start Y", "Clear start"];
+    let exit = ["Exit point stated", "Exit X", "Exit Y", "Clear exit"];
+    typed_group(ui, u, START_GROUP, start, "the raster starts at the corner of the face nearest this point; the first row and the step direction follow from that corner", &mut picks.start);
+    typed_group(ui, u, EXIT_GROUP, exit, "the last row ends on the side nearest this point; a side that the row count cannot reach from the start corner is refused by name", &mut picks.exit);
+}
+
+/// One typed pick group: a switch, the X and Y rows, a Clear button and
+/// what the pick does. `labels` is [switch, X, Y, clear].
+fn typed_group(ui: &mut Ui, u: Unit, title: &str, labels: [&str; 4], says: &str, list: &mut Vec<PathPick>) {
+    group(ui, title, None, |ui| {
+        let mut stated = !list.is_empty();
+        check_row(ui, labels[0], &mut stated);
+        if stated {
+            if list.is_empty() {
+                list.push(PathPick::xy(Point2::new(0.0, 0.0)));
+            }
+            if let Some(p) = list.first_mut() {
+                prop_row(ui, labels[1], |ui| num(ui, u, &mut p.xy.x));
+                prop_row(ui, labels[2], |ui| num(ui, u, &mut p.xy.y));
+            }
+            if small_button(ui, labels[3]).clicked() {
+                stated = false;
+            }
+            hint(ui, says);
+        }
+        if !stated {
+            list.clear();
+        }
+    });
+}
+
 /// #3324: the Start point / Exit point groups of a kind that does not
 /// take that pick. Each says so by name, with the registry's reason
 /// (`KindInfo::pick`), so no page hides that the planner chooses alone.

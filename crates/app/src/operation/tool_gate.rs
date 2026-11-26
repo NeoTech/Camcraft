@@ -22,9 +22,10 @@ use flecs_ecs::prelude::{Entity, World};
 
 use crate::model;
 use crate::schema::Operation;
-use crate::tools::{Tool, ToolKind};
+use crate::tools::{CutterHand, Tool, ToolKind};
 
 use super::KindInfo;
+use super::OpParams;
 
 /// The kinds as one phrase: "drill", "flat end mill or bull-nose",
 /// "drill, tap or boring bar".
@@ -141,16 +142,82 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
     ))
 }
 
+/// #4031: the built-in posts whose spindle word is a bare M3 - no
+/// reverse path, so not even a Thread operation that asks to reverse
+/// can run a left-hand cutter on them: the ask would reach a post that
+/// cannot answer it with M4. The posts that state the
+/// `millSpindleReverse` manifest flag (Fanuc, Mazak, Mach4, Siemens
+/// 810M, Haas since #1977) are NOT here, and neither is a post of the user's own
+/// (`PostRef::File`) - the post engine refuses a reverse ask its script
+/// cannot voice, so for those only the REQUEST below is checked.
+const M3_ONLY_POSTS: &[&str] = &[
+    "Tormach PathPilot",
+    "Doosan DNM",
+    "Grbl 1.1",
+    "grblHAL",
+    "Makera Carvera",
+    "Heidenhain",
+    "Heidenhain Klartext",
+];
+
+/// Does the operation ask the spindle to reverse (the M4 ask, #988)?
+/// Today only a Thread operation with `spindle_reverse` asks - it is
+/// the one path that calls `ask_reverse_spindle` and posts M4. The
+/// cutter hand is judged against this REQUEST, never against the post
+/// script alone: a permitted post does not make the operation reverse.
+#[must_use]
+pub fn requests_reverse(params: &OpParams) -> bool {
+    matches!(params, OpParams::Thread { passes, .. } if passes.spindle_reverse)
+}
+
+/// Why a left-hand cutter cannot cut with `info`'s family on the setup
+/// context's post (#4031): a left-hand cutter cuts turning M4, so the
+/// OPERATION must ask the spindle to reverse - and the post must be
+/// able to answer the ask. Refused by name when the operation does not
+/// request reverse rotation (a permitted post reverses nothing on its
+/// own), or when the post writes a bare M3 and never M4 even for a
+/// Thread op that asks. `None` for a right-hand cutter, and for a
+/// left-hand cutter whose operation asks on a post that reverses.
+fn left_cutter_refusal(
+    world: &World,
+    setup: Option<&str>,
+    def: &Tool,
+    tool: &str,
+    info: &KindInfo,
+    asks_reverse: bool,
+) -> Option<String> {
+    if def.cutter_hand != CutterHand::Left {
+        return None;
+    }
+    let post = crate::setup_mount::post_of(world, setup);
+    if let Some(name) = crate::posting::post_name(&post)
+        && M3_ONLY_POSTS.contains(&name)
+    {
+        return Some(format!(
+            "'{tool}' is a left-hand cutter: the {name} post starts its spindle M3 and never reverses it (no M4) - a {} operation with it would cut backwards; use a right-hand cutter, or post with a spindle that reverses",
+            info.label
+        ));
+    }
+    (!asks_reverse).then(|| {
+        format!(
+            "'{tool}' is a left-hand cutter: a {} operation does not ask the spindle to reverse (no M4), so the cutter would turn backwards - use a right-hand cutter, or a Thread operation with 'spindle reverse' set",
+            info.label
+        )
+    })
+}
+
 /// Why the named tool cannot cut this kind. `None` when it can, and
 /// also when the name is not a tool - existence is `check_tool`'s door,
 /// not this one. When the whole setup holds nothing that fits, the
 /// setup-level sentence answers instead (it names the real fix).
 #[must_use]
-pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String> {
+pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str, asks_reverse: bool) -> Option<String> {
     let def = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))?;
     let kind = def.kind;
     if info.accepts(kind) {
-        return unread_tip_refusal(&def, tool, info);
+        return unread_tip_refusal(&def, tool, info).or_else(|| {
+            left_cutter_refusal(world, crate::setup::active(world).as_deref(), &def, tool, info, asks_reverse)
+        });
     }
     if let Some(none_fit) = create_refusal(world, info) {
         return Some(none_fit);
@@ -292,7 +359,19 @@ pub fn tool_problem(world: &World, op_name: &str, op: &Operation) -> Option<Stri
         return Some(format!("{op_name}'s tool '{tool}' is no longer a tool; {wants}"));
     };
     if info.accepts(def.kind) {
-        return unread_tip_refusal(&def, tool, info).map(|why| format!("{op_name}'s tool {why}"));
+        return unread_tip_refusal(&def, tool, info)
+            .map(|why| format!("{op_name}'s tool {why}"))
+            .or_else(|| {
+                left_cutter_refusal(
+                    world,
+                    op.setup.as_deref(),
+                    &def,
+                    tool,
+                    info,
+                    requests_reverse(&op.params),
+                )
+                .map(|why| format!("{op_name}'s tool {why}"))
+            });
     }
     Some(format!("{op_name}'s tool '{tool}' is a {}; {wants}", def.kind))
 }

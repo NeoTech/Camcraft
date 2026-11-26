@@ -184,44 +184,19 @@ flag belongs to llama-server, not to CamCraft.
 
 ## Connect an external agent
 
-Install the chosen agent and make **camcraft-cli** available on its PATH,
-or use the full executable path in its server configuration.
-For a job you can watch and inspect, start the app:
+Follow [Setting up an MCP client](@/guide/automate/mcp.md#setting-up-an-mcp-client)
+for installed executable paths and complete headless or attached examples
+for Claude Code, Claude Desktop, Codex CLI and Cursor. That page also explains
+configuration files, quoting, restarts and connection failures.
+Other clients, such as Gemini CLI or Antigravity CLI, need local stdio MCP
+support; use their current configuration instructions with the same bridge.
 
-```text
-camcraft-ui --mcp-port 7777
-```
-
-Add an MCP server named **camcraft** in the external client's stdio server
-settings. The server entry needs this command and these arguments:
-
-```json
-{
-  "command": "camcraft-cli",
-  "args": ["mcp", "--connect", "127.0.0.1:7777"]
-}
-```
-
-| External client | Setup steps |
-|---|---|
-| Claude Code | Add the stdio server entry above in the client's MCP settings. Restart or reconnect the client, then enable its CamCraft tools. |
-| Codex CLI | Add the same command and argument array as a stdio MCP server in the client's MCP configuration. Reconnect and enable the server. |
-| Gemini CLI | Register the same stdio MCP server in the client's settings. Reconnect and enable its tools. |
-| Antigravity CLI | Use its MCP server settings to register the same command and arguments. Reconnect and enable the server. |
-
-The client owns its configuration format and tool permissions. The JSON
-above shows the server entry, not a complete client configuration file.
-Use the client's current instructions for the surrounding file format.
-If a client version has no stdio MCP support, it cannot use this bridge.
-
-The process that the client starts is equivalent to:
-
-```text
-camcraft-cli mcp --connect 127.0.0.1:7777
-```
-
-Ask the agent to list tools, call `get_job`, and describe the active setup.
-Confirm that it sees the open document before asking for an edit.
+Choose **attached** mode for a job you can watch. The setup starts
+`camcraft-ui --mcp-port 7777`, then the client starts
+`camcraft-cli mcp --connect 127.0.0.1:7777` with the installed paths.
+The agent shares the open document and its undo history. Headless mode
+holds a separate document, not the one in the window.
+Confirm the connection with the [first check](#first-check) before an edit.
 The app listens on loopback only and serves one client at a time.
 Disconnect the first client before attaching another. An idle client is
 disconnected after five minutes without a complete request.
@@ -460,3 +435,22 @@ transport, not other programs or their network activity.
 Compact read modes and context budgets remain coming work in #1944.
 Single-source agent skills remain coming work in #1947.
 This guide describes the controls, flags and tools that have shipped.
+
+## First check
+
+For an external client, inspect its CamCraft server status and tool list
+first. Tool listing (`tools/list`) needs no model request or paid provider
+call. If you use an agent prompt, its provider can bill that conversation:
+
+> Use only the CamCraft server. List its tools, then call
+> `list_operation_types` with `{}`. Report the available operation kinds.
+> Do not import, edit, generate, save or post anything.
+
+Success means a nonempty tool list and a result with operation kinds,
+parameters and defaults, not just the model saying it connected.
+In attached mode, also call `get_job` and compare its setup with the open
+window. This is read-only. In headless mode, an empty independent job is
+normal. Neither check proves that a machining program is safe.
+For failures, use [Connection diagnostics](@/guide/automate/mcp.md#connection-diagnostics).
+For the in-app panel, use the read-only current-job prompt in its provider
+setup above; the external-client configuration does not configure AI Chat.

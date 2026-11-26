@@ -200,6 +200,16 @@ fn append_notes(dst: &mut Vec<String>, src: Vec<String>) {
     }
 }
 
+fn is_avoid_empty_room(err: &GenError, avoid: Option<&crate::verify::AvoidSpec>) -> bool {
+    avoid.is_some_and(|s| !s.is_empty())
+        && matches!(
+            err,
+            GenError::Invalid(m)
+                if m.starts_with("cannot cut clear of protected 'Do not touch'")
+                    && m.ends_with("no safe cutting room remains")
+        )
+}
+
 /// Generate the `2D Contour` toolpath for a validated `SketchContourPlan` and its verification region.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn generate_plan(
@@ -210,6 +220,7 @@ pub(super) fn generate_plan(
     mut area: Option<AreaCtx>,
     d: f64,
     comp_name: &str,
+    avoid: Option<&crate::verify::AvoidSpec>,
     carried_top: &mut dyn FnMut(&Region, &Toolpath) -> Option<f64>,
 ) -> Result<(Region, Toolpath, Option<f64>), GenError> {
     let control_comp = cp.links.approach.compensation.in_control();
@@ -240,7 +251,17 @@ pub(super) fn generate_plan(
 
     let mut path = Toolpath::new(Vec::new());
     let mut max_carried: Option<f64> = None;
+    let mut blocked_err: Option<GenError> = None;
+    let spec_opt = avoid.filter(|s| !s.is_empty());
+    let multi_items = plan.items.len() > 1;
     append_notes(&mut path.notes, plan.notes.clone());
+
+    let run_closed = |reg: &Region, p: &ContourParams| -> Result<Toolpath, GenError> {
+        match spec_opt {
+            Some(spec) => machining2d::contour_avoid(reg, p, spec),
+            None => machining2d::contour(reg, p),
+        }
+    };
 
     if !closed_items.is_empty() {
         if can_group_natural(&closed_items, op_climb) {
@@ -252,15 +273,28 @@ pub(super) fn generate_plan(
                 c.contour_side(false);
             }
             let reg = apply_area_controls(verify_region.clone(), ctx.as_ref())?;
-            let mut sub = machining2d::contour(&reg, &g_cp)?;
-            if let Some(m) = carried_top(&super::top_stock::contour_reach(&reg, false, d), &sub) {
-                g_cp.links.approach.material_top = Some(m);
-                max_carried = Some(max_carried.map_or(m, |p| p.max(m)));
-                sub = machining2d::contour(&reg, &g_cp)?;
+            match run_closed(&reg, &g_cp) {
+                Ok(mut sub) => {
+                    if let Some(m) = carried_top(&super::top_stock::contour_reach(&reg, false, d), &sub) {
+                        g_cp.links.approach.material_top = Some(m);
+                        max_carried = Some(max_carried.map_or(m, |p| p.max(m)));
+                        sub = run_closed(&reg, &g_cp)?;
+                    }
+                    let notes = std::mem::take(&mut sub.notes);
+                    path = if path.moves.is_empty() { sub } else { stitch(path, sub) };
+                    append_notes(&mut path.notes, notes);
+                }
+                Err(e) if !plan.open_chains().is_empty() && is_avoid_empty_room(&e, spec_opt) => {
+                    blocked_err.get_or_insert(e);
+                    if let Some(spec) = spec_opt {
+                        append_notes(&mut path.notes, vec![format!(
+                            "Do not touch ({}): skipped closed sketch loops blocked on every level",
+                            spec.names_list()
+                        )]);
+                    }
+                }
+                Err(e) => return Err(e),
             }
-            let notes = std::mem::take(&mut sub.notes);
-            path = if path.moves.is_empty() { sub } else { stitch(path, sub) };
-            append_notes(&mut path.notes, notes);
         } else {
             // Order holes (Inside or nested children) before outer chains so scraps are freed last.
             let mut ordered = closed_items;
@@ -280,18 +314,31 @@ pub(super) fn generate_plan(
                 let mut c_cp = cp.clone();
                 c_cp.side = eff_side;
                 c_cp.climb = item.eff_climb;
-                let mut sub = machining2d::contour(&reg, &c_cp)?;
-                if let Some(m) = carried_top(
-                    &super::top_stock::contour_reach(&reg, eff_side == Side::Inside, d),
-                    &sub,
-                ) {
-                    c_cp.links.approach.material_top = Some(m);
-                    max_carried = Some(max_carried.map_or(m, |p| p.max(m)));
-                    sub = machining2d::contour(&reg, &c_cp)?;
+                match run_closed(&reg, &c_cp) {
+                    Ok(mut sub) => {
+                        if let Some(m) = carried_top(
+                            &super::top_stock::contour_reach(&reg, eff_side == Side::Inside, d),
+                            &sub,
+                        ) {
+                            c_cp.links.approach.material_top = Some(m);
+                            max_carried = Some(max_carried.map_or(m, |p| p.max(m)));
+                            sub = run_closed(&reg, &c_cp)?;
+                        }
+                        let notes = std::mem::take(&mut sub.notes);
+                        path = if path.moves.is_empty() { sub } else { stitch(path, sub) };
+                        append_notes(&mut path.notes, notes);
+                    }
+                    Err(e) if multi_items && is_avoid_empty_room(&e, spec_opt) => {
+                        blocked_err.get_or_insert(e);
+                        if let Some(spec) = spec_opt {
+                            append_notes(&mut path.notes, vec![format!(
+                                "Do not touch ({}): skipped blocked sketch chain {}",
+                                spec.names_list(), item.label
+                            )]);
+                        }
+                    }
+                    Err(e) => return Err(e),
                 }
-                let notes = std::mem::take(&mut sub.notes);
-                path = if path.moves.is_empty() { sub } else { stitch(path, sub) };
-                append_notes(&mut path.notes, notes);
             }
         }
     }
@@ -300,11 +347,39 @@ pub(super) fn generate_plan(
         let mut o_cp = cp.clone();
         o_cp.side = Side::Auto;
         o_cp.climb = item.eff_climb;
-        let next = machining2d::contour_along_chain(&item.pts, &o_cp)
-            .map_err(|e| e.after_moves(&path.moves))?;
-        let notes = next.notes.clone();
-        path = if path.moves.is_empty() { next } else { stitch(path, next) };
-        append_notes(&mut path.notes, notes);
+        let res = match spec_opt {
+            Some(spec) => machining2d::contour_along_chain_avoid(&item.pts, &o_cp, spec),
+            None => machining2d::contour_along_chain(&item.pts, &o_cp),
+        };
+        match res {
+            Ok(next) => {
+                let notes = next.notes.clone();
+                path = if path.moves.is_empty() { next } else { stitch(path, next) };
+                append_notes(&mut path.notes, notes);
+            }
+            Err(e) if multi_items && is_avoid_empty_room(&e, spec_opt) => {
+                blocked_err.get_or_insert(e);
+                if let Some(spec) = spec_opt {
+                    append_notes(&mut path.notes, vec![format!(
+                        "Do not touch ({}): skipped blocked open sketch chain {}",
+                        spec.names_list(), item.label
+                    )]);
+                }
+            }
+            Err(e) => return Err(e.after_moves(&path.moves)),
+        }
+    }
+
+    if path.moves.is_empty()
+        && let Some(e) = blocked_err
+    {
+        return Err(e);
+    }
+    if let Some(spec) = spec_opt
+        && !path.moves.is_empty()
+    {
+        let rnotes = super::avoid::route_links(&mut path, spec, None);
+        append_notes(&mut path.notes, rnotes);
     }
 
     Ok((verify_region, path, max_carried))

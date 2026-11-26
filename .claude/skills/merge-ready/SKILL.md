@@ -155,20 +155,42 @@ If nothing is left, say "no PRs are merge-ready" and stop.
 ## 2. Plan the order - simulate, don't guess
 
 File overlap is a poor predictor (two PRs can touch one file without
-conflicting, and `mod.rs` lists conflict all the time). Simulate instead; it
-takes seconds and builds nothing:
+conflicting, and `mod.rs` lists conflict all the time). Simulate text merges,
+then check the merged wave before the first merge:
 
 ```bash
-cargo xtask merge-plan <N> <N> ...      # the PRs left after step 1
-cargo xtask merge-plan --json <N> <N> ...    # the same plan for other tools
+cargo xtask merge-plan --check <N> <N> ...
+cargo xtask merge-plan --check --json <N> <N> ...
 ```
 
 Pass only the explicit PR numbers retained in step 1. Do not use `--label`
 here: it reloads the label list and includes excluded PRs again. The planner
-simulates merge order; it does not validate review independence.
+does not validate review independence.
 
-It fetches each head, merges them in memory with `git merge-tree` (nothing is
-checked out, built or pushed), and prints the base sha, then:
+The `--check` step makes a temporary worktree from the simulated wave-1
+commit. It runs `cargo check --tests` for the touched workspace packages,
+one package at a time. Shared build inputs select all workspace packages.
+It reuses the caller's `target/`: check builds only, no test binaries. It
+removes its own worktree on success and failure. It never changes a real
+branch or the caller's files. The default plan without `--check` checks text
+conflicts only; it is not premerge validation.
+
+Compiler diagnostics name their files and the PRs that change those files.
+The tool removes these PRs and their stacked children, then plans and checks
+the remaining wave again. An error without an identified owner excludes the
+whole wave. `EXCLUDED` entries (JSON `excluded`) are not merge candidates.
+The command returns exit 1 if it excluded a PR, even when the remaining
+wave passes. Report the errors and leave those PRs out. Repeat `--check`
+with only the retained PR numbers before asking for merges. An operational
+error returns exit 2 and gives no validated plan; stop and report it.
+
+Record the base sha and each head sha from this plan. Immediately before
+the first merge, read them again. If the base or any head moved, repeat
+`--check` with the approved PR numbers. A check proves compilation only;
+it does not replace the review or the required runtime tests.
+
+The planner fetches each head and simulates merges with `git merge-tree`.
+It prints the base sha, then:
 
 - **Wave 1** - the largest set it found that merges cleanly one after the
   other, in order: stack parents before children (a child's base is the

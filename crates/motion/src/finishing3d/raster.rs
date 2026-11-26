@@ -16,6 +16,7 @@ use super::march::{emit_runs, march_curve};
 use super::raster_bridge::bridge_line;
 use super::rim::rim_rows;
 use super::rings::emit_rings_with_trim;
+use super::raster_seam::{order, Pass, RasterEnds, RasterSeam};
 /// One Z-following raster pass: lines along the unit vector `(ux, uy)`
 /// across the shallow facets' padded bounds, stepped by the cos-law
 /// (or an explicit `stepover`), each walked by `march_curve`'s laws
@@ -50,6 +51,24 @@ pub(super) fn raster_pass_spaced(
     continuing: bool,
     spacing_tol: f64,
 ) -> Result<bool, GenError> {
+    let seam = RasterSeam::default();
+    raster_pass_seamed(b, p, r, sups, (ux, uy), continuing, spacing_tol, &seam).map(|e| e.is_some())
+}
+
+/// [`raster_pass_spaced`] with the user's start and exit points (#3330,
+/// `raster_seam::order`): the passes ordered for the picks before they
+/// are linked. `None` when nothing was emitted, else the ordered ends.
+#[allow(clippy::too_many_arguments)] // the pass's flat inputs plus the seam
+pub(super) fn raster_pass_seamed(
+    b: &mut PathBuilder,
+    p: &Finish3DParams,
+    r: f64,
+    sups: &SupSet,
+    (ux, uy): (f64, f64),
+    continuing: bool,
+    spacing_tol: f64,
+    seam: &RasterSeam,
+) -> Result<Option<RasterEnds>, GenError> {
     let (mut umin, mut umax, mut vmin, mut vmax) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
     let mut mz_min = 1.0f64;
     for s in sups.iter().filter(|s| s.shallow) {
@@ -68,7 +87,7 @@ pub(super) fn raster_pass_spaced(
         mz_min = mz_min.min(s.m.z);
     }
     if umin > umax {
-        return Ok(false); // all-steep model: the rings alone carry it
+        return Ok(None); // all-steep model: the rings alone carry it
     }
     let (vx, vy) = (-uy, ux);
     let step = p.stepover.unwrap_or(scallop_stepover(r, spacing_tol) * mz_min);
@@ -144,7 +163,7 @@ pub(super) fn raster_pass_spaced(
         let jf = filled.iter().position(|f| *f).unwrap_or(0);
         lines.insert(jf, (v, line(v), jf % 2 == 0));
     }
-    let mut runs: Vec<Vec<(Point2, f64)>> = Vec::new();
+    let mut passes: Vec<Pass> = Vec::with_capacity(lines.len());
     for (_, pieces, back) in lines {
         // #2431: a hole the ball cannot enter is crossed, not hopped.
         let mut pieces = bridge_line(pieces, r, p.tolerance, eps_chord, sups);
@@ -164,8 +183,10 @@ pub(super) fn raster_pass_spaced(
                 pc.reverse();
             }
         }
-        runs.extend(pieces);
+        passes.push(pieces);
     }
+    let ends = order(seam, &mut passes, r, p.tool_diameter)?;
+    let runs: Vec<Vec<(Point2, f64)>> = passes.into_iter().flatten().collect();
     if trimmed.get() > 0 {
         b.note(format!(
             "raster: {} ground samples refused - their plunge column from clearance crosses the solid; what hides there stands as rest, reported not cut",
@@ -173,10 +194,10 @@ pub(super) fn raster_pass_spaced(
         ));
     }
     if runs.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
     emit_runs(b, p, r, sups, &runs, continuing);
-    Ok(true)
+    Ok(ends)
 }
 
 /// Return the input diagnostic for an angle outside one turn.
@@ -365,30 +386,6 @@ pub(super) fn rings_and_tail_with_trim(
         return Err(GenError::Invalid("path left the finite horizon".into()));
     }
     Ok(path)
-}
-
-/// The shallow terrain's polar stage: its footprint center, the
-/// circumscribed radius over the bbox corner (one stepover of
-/// margin added by the caller, so the rim's ground is reached),
-/// and the smallest shallow tilt - the cos-law's `m_z`. `None`
-/// when every facet is steep: the rings alone carry the model,
-/// exactly as the raster answers to that case.
-pub(super) fn shallow_footprint(sups: &SupSet) -> Option<(Point2, f64, f64)> {
-    let (mut x0, mut x1, mut y0, mut y1) =
-        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
-    let mut mz = 1.0f64;
-    for s in sups.iter().filter(|s| s.shallow) {
-        x0 = x0.min(s.xmin);
-        x1 = x1.max(s.xmax);
-        y0 = y0.min(s.ymin);
-        y1 = y1.max(s.ymax);
-        mz = mz.min(s.m.z);
-    }
-    if x0 > x1 {
-        return None;
-    }
-    let c = Point2::new((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-    Some((c, (x1 - c.x).hypot(y1 - c.y), mz))
 }
 
 /// The placement refusals, shared: a spacing without a number is

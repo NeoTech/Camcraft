@@ -632,6 +632,30 @@ function planeOf(p) {
   return p.CircularPlane === "XZ" ? 18 : (p.CircularPlane === "YZ" ? 19 : 17);
 }
 
+// On Sinumerik 810M, the control reads the first two axes in the block as
+// the plane. Write the two plane axes first (G18: X Z, G19: Y Z), and
+// write the third axis last only when helical motion occurs (#4146).
+function axisMoved(letter, endVal, startVal, curVal, org) {
+  if (!has(endVal)) return false;
+  var from = has(startVal) ? Number(startVal) : (has(curVal) ? curVal : null);
+  if (from === null) return true;
+  return wo(letter, endVal, org) !== wo(letter, from, org);
+}
+
+function arcAxes(p, pl) {
+  if (pl === 18) {
+    var words = [wo("X", p.X, orgX), wo("Z", p.Z, orgZ)];
+    if (axisMoved("Y", p.Y, p.StartY, curY, orgY)) words.push(wo("Y", p.Y, orgY));
+    return words;
+  }
+  if (pl === 19) {
+    var words = [wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)];
+    if (axisMoved("X", p.X, p.StartX, curX, orgX)) words.push(wo("X", p.X, orgX));
+    return words;
+  }
+  return xyz(p);
+}
+
 function centerWords(p, pl) {
   var c = p.IJKIncrement || {};
   var dx = has(c.I) && has(p.StartX) ? c.I - p.StartX : c.I;
@@ -659,7 +683,7 @@ function onCircular() {
     pw = "G" + pl;
     planeG = pl;
   }
-  block([pw, g].concat(xyz(properties), centerWords(properties, pl), [fw(properties.FeedRate)]));
+  block([pw, g].concat(arcAxes(properties, pl), centerWords(properties, pl), [fw(properties.FeedRate)]));
   trackPos(properties.X, properties.Y, properties.Z);
 }
 

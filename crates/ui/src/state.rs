@@ -174,7 +174,7 @@ pub enum CommandKind {
     /// via `posting::post_setup`.
     PostProgramDialog,
     ExportAgieInspection(String),
-    ImportAgieDrawing,
+    ImportInspectionDrawing,
     CreateAgieInspection {
         name: String, tool: String, drawing: String,
         chain: camcraft_app::geometry::sketch_chains::ChainId, start: [f64; 2], setup: Option<String>,
@@ -1216,6 +1216,9 @@ pub struct ToolUi {
     pub pitch_min: f64,
     /// Tap thread hand; older tools default to right-hand.
     pub thread_hand: camcraft_app::tools::ThreadHand,
+    /// The cutter's hand (#4031): right runs M3, left needs the spindle
+    /// reversed (M4) - the app's `Tool` field's law, mirrored.
+    pub cutter_hand: camcraft_app::tools::CutterHand,
     /// Insert nose radius; the turning kind's cutting ball, inert on
     /// the mills (the app's `Tool` field's law, mirrored).
     pub nose_radius: f64,
@@ -1312,6 +1315,7 @@ impl ToolUi {
             pitch: t.pitch,
             pitch_min: t.pitch_min,
             thread_hand: t.thread_hand,
+            cutter_hand: t.cutter_hand,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -1402,6 +1406,7 @@ impl ToolUi {
             pitch: self.pitch,
             pitch_min: self.pitch_min,
             thread_hand: self.thread_hand,
+            cutter_hand: self.cutter_hand,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -3532,7 +3537,7 @@ impl State {
             CommandKind::SaveProjectFile(path) => self.save_project_path(path),
             CommandKind::OpenRecent(kind, path) => self.open_recent(kind, path),
             CommandKind::ClearRecent(kind) => self.clear_recent(kind),
-            CommandKind::ImportAgieDrawing => self.import_agie_drawing(),
+            CommandKind::ImportInspectionDrawing => self.import_inspection_drawing(),
             CommandKind::CreateAgieInspection { name, tool, drawing, chain, start, setup } => {
                 self.create_agie_inspection(name, tool, drawing, chain, start, setup);
             }
@@ -3729,12 +3734,13 @@ impl State {
             CommandKind::AddTool { name, tool } => match AddTool::with_holder(&self.world, &name, tool, HolderPick::MachineDefault) {
                 Ok(command) => {
                     let number = command.number();
-                    let note = command.note();
+                    // #3792: a speed outside the machine's range is said here too.
+                    let notes: Vec<String> = command.note().into_iter().chain(command.warning()).collect();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = match note {
-                        Some(n) => format!("tool {name} added (T{number}) - {n}"),
-                        None => format!("tool {name} added (T{number})"),
+                    self.status = match notes.is_empty() {
+                        false => format!("tool {name} added (T{number}) - {}", notes.join(" - ")),
+                        true => format!("tool {name} added (T{number})"),
                     };
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
@@ -4915,7 +4921,7 @@ impl State {
                 if !posted.bundle_files.is_empty() {
                     self.post_view = None;
                     self.status = format!(
-                        "Native wire EDM job prepared in {} ({} controller files, zero working steps)",
+                        "Agie Wire EDM job prepared in {} ({} controller files, zero working steps)",
                         path.display(), posted.bundle_files.len()
                     );
                     if let Some(review) = posted.controller_review {

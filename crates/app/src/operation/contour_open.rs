@@ -34,13 +34,21 @@ const TOL: f64 = 1e-3;
 /// The open pass: the tool-centre run along the open boundary and the
 /// path riding it. `base` is the operation's own area (what the
 /// selection or source encloses) - it only decides which side is Inside.
-pub(super) fn open_pass(base: &Region, ctx: &AreaCtx, cp: &ContourParams) -> Result<Toolpath, GenError> {
+pub(super) fn open_pass(
+    base: &Region,
+    ctx: &AreaCtx,
+    cp: &ContourParams,
+    avoid: Option<&crate::verify::AvoidSpec>,
+) -> Result<Toolpath, GenError> {
     let Some((_, side)) = &ctx.open else {
         return Err(unreached("contour open boundary"));
     };
     let c = &ctx.controls;
     let (run, d) = open_run(base, ctx, cp.stock_to_leave)?;
-    let mut path = contour_along_chain(&run, cp)?;
+    let mut path = match avoid.filter(|s| !s.is_empty()) {
+        Some(spec) => crate::machining2d::contour_along_chain_avoid(&run, cp, spec)?,
+        None => contour_along_chain(&run, cp)?,
+    };
     path.notes.push(format!(
         "contour: rides the open boundary {d:.3} mm to its {} side (tool centre), {} entering and leaving past its ends",
         if *side == ChainSide::Inside { "Inside (A)" } else { "Outside (B)" },

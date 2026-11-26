@@ -20,6 +20,7 @@
 pub use crate::cutting::{ToolMaterial, WorkMaterial};
 pub use crate::turning_data::TurningData;
 pub use crate::thread_hand::ThreadHand;
+pub use crate::cutter_hand::CutterHand;
 pub use crate::taper::TaperTip;
 pub use crate::form_mill::{FormPreset, FormSpec};
 
@@ -221,6 +222,12 @@ pub struct Tool {
     pub pitch_min: f64,
     /// Tap thread hand; older tools default to right-hand.
     pub thread_hand: crate::thread_hand::ThreadHand,
+    /// The cutter's hand (#4031): right-hand cutters run M3, left-hand
+    /// ones need the spindle reversed (M4). Separate from `thread_hand`:
+    /// a left-hand tap cuts a left thread while its spindle may still
+    /// turn right, so the two hands are stated apart. Older tools
+    /// default to right-hand.
+    pub cutter_hand: crate::cutter_hand::CutterHand,
     /// Insert nose radius in mm (the ISO corner circle ground into the
     /// tip): 0.8 is common roughing stock. Inert unless kind is
     /// Turning, where it is the circle the facing verdict sweeps, or
@@ -534,6 +541,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: stylus_len,
@@ -572,6 +580,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 10.0,

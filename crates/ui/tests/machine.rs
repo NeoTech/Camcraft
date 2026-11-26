@@ -284,3 +284,25 @@ fn the_machine_gate_refuses_the_post_by_name() {
     let _ = std::fs::remove_file(&ok);
     let _ = std::fs::remove_file(&tight);
 }
+
+/// #3792: the catalog add says at once that the tool's speed is above the
+/// mounted machine's maximum. A tool inside the range adds no such line.
+#[test]
+fn adding_a_tool_above_the_machines_speed_says_so_in_the_status() {
+    let path = tmp_mch("addwarn", &mch_text("10000"));
+    let mut state = State::new();
+    state.pending.push_back(CommandKind::LoadMachineFile(path.clone()));
+    state.pending.push_back(CommandKind::AddTool { name: "EM-0300-2FL".into(), tool: catalog_tool("EM-0300-2FL") });
+    state.drain_actions();
+    assert!(
+        state.status.starts_with("tool EM-0300-2FL added (T1) - ")
+            && state.status.contains("EM-0300-2FL runs 15000 rpm, above the ")
+            && state.status.ends_with("'s 10000 - the post will be held; set the tool's speed (edit_tool) or apply_cutting_data"),
+        "{}",
+        state.status
+    );
+    state.pending.push_back(CommandKind::AddTool { name: "EM-1000-4FL".into(), tool: catalog_tool("EM-1000-4FL") });
+    state.drain_actions();
+    assert!(state.status.starts_with("tool EM-1000-4FL added (T2)") && !state.status.contains("rpm"), "{}", state.status);
+    let _ = std::fs::remove_file(&path);
+}

@@ -50,17 +50,20 @@ fn check_guide_span(world: &World, setup: Option<&str>, lo: f64, hi: f64) -> Res
         let z = guide_z + origin[2];
         z.is_finite().then_some(z).ok_or("the wire guide height in the work frame is not finite")
     };
+    // #4039: work that meets a guide plane is in reach; only a gap past
+    // the guide-reach tolerance refuses, and its heights never read "-0.000".
+    use crate::machine::wire_edm::{above_guide, below_guide, guide_z, reach_z};
     if let Some(lower) = edm.lower_guide_z
-        && lo < world_z(lower)?
+        && below_guide(lo, world_z(lower)?)
     {
-        let bottom = lo - origin[2];
-        return Err(format!("work bottom Z{bottom:.3} is below the lower guide Z{lower:.3}, outside the guides' reach"));
+        let bottom = reach_z(lo - origin[2], lower);
+        return Err(format!("work bottom Z{bottom} is below the lower guide Z{}, outside the guides' reach", guide_z(lower)));
     }
     if let Some(upper) = edm.upper_guide_z
-        && hi > world_z(upper)?
+        && above_guide(hi, world_z(upper)?)
     {
-        let top = hi - origin[2];
-        return Err(format!("work top Z{top:.3} is above the upper guide Z{upper:.3}, outside the guides' reach"));
+        let top = reach_z(hi - origin[2], upper);
+        return Err(format!("work top Z{top} is above the upper guide Z{}, outside the guides' reach", guide_z(upper)));
     }
     Ok(())
 }

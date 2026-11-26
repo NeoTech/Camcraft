@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 
 const PICOMAX: &str = include_str!("../../../assets/machines/fehlmann-picomax55.mch");
 const FACTS: &str = r#"
+manualToolChange = ["manual", "manual-retract-top"];
 function onOpen() {
     writeln(JSON.stringify({
         control: machine.controllerIdentity, change: machine.toolChangeMode,
