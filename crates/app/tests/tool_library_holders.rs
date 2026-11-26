@@ -13,9 +13,10 @@
 //! takes the ChangeTool gates, and holders off never clears a body.
 //! Provenance: our own tests over our own format and commands.
 //!
-//! #3897: the holder list's used-by count (`used_by`).
-//! Gate map (M4.4): covers app::tool_library, app::commands (tool_import),
-//! app::mcp (import_tool_library), app::script (importTools), app::tool_body.
+//! #3897: the holder list's used-by count (`used_by`). #3644: the
+//! component table and assembly commands (`assembly_cmds`).
+//! Gate map (M4.4): covers app::tool_library, app::commands (tool_import, tool_assembly),
+//! app::mcp (import_tool_library), app::script (importTools), app::tool_body, app::tool_assembly.
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportMode, ImportReport, ImportTools, SetStock, SetToolBody,
@@ -37,6 +38,8 @@ use serde_json::{Value, json};
 
 #[path = "tool_library_holders/used_by.rs"]
 mod used_by;
+#[path = "tool_library_holders/assembly_cmds.rs"]
+mod assembly_cmds;
 
 const DRAWN: &str = "Six";
 const MESH: &str = "Four";

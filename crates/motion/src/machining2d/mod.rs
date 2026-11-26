@@ -114,6 +114,7 @@ mod adaptive;
 mod adaptive_method;
 mod adaptive_troch;
 mod adaptive_avoid;
+mod adaptive_troch_check;
 mod adaptive_troch_clean;
 mod adaptive_troch_lanes;
 mod adaptive_troch_level;
@@ -233,6 +234,9 @@ pub use adaptive::{rest_adaptive, rest_levels, RestStock, StockFloor, REST_STOCK
 pub use adaptive_method::AdaptiveMethod;
 pub use pocket_hsm_start::trochoidal_pass_start_refusal;
 pub use adaptive_troch::{AdaptiveTrochParams, adaptive_trochoidal, adaptive_trochoidal_with};
+pub use adaptive_troch_check::{
+    CLEANUP_ENGAGEMENT_NOTE_PREFIX, cleanup_engagement_exceeded, cleanup_engagement_move, cleanup_engagement_note,
+};
 pub use adaptive_avoid::{adaptive_spiral_avoid, adaptive_spiral_avoid_on, adaptive_trochoidal_avoid};
 pub use trochoid_air::lifted_cut;
 pub use trochoid_slot::{

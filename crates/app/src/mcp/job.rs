@@ -356,6 +356,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
         Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
         Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
+        Warning::EngagementExceeded { at, .. } => ("engagement_exceeded", *at),
     };
     json!({
         "op": op,

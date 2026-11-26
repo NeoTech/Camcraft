@@ -1,7 +1,7 @@
 ; synthetic program, posted for syntax conformance
 ; VMC 3-AXIS
 ; OPERATION: Ream - G54
-N10 G17 G710 G90 G54 G40 G80
+N10 G17 G710 G90 G94 G54 G40 G80
 ; T3 REAMER 8H7 - D8
 N20 T3 D1 M6
 N30 S400 M3

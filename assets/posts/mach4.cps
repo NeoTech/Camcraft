@@ -57,7 +57,7 @@ var justRetracted = false, homedAt = -1;
 
 var planeG = 17;
 var inCycle = false, cycleSig = "", seatKnown = false, cycX = 0, cycY = 0, cycR = 0;
-var smoothTol = 0, smoothMode = "";
+var smoothTol = 0, smoothMode = "", smoothNamed = false;
 var compG = "", compD = "", compOn = false, wearNoted = false;
 var probeBase = 100;
 
@@ -496,6 +496,17 @@ function startPreamble() {
     coolant = nextCoolant;
     if (coolant) block([coolant]);
   }
+  smoothOn();
+}
+
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - MACH4 G64 HAS NO TOLERANCE");
+  smoothNamed = true;
+}
+function smoothOff() {
+  smoothTol = 0;
+  smoothMode = "";
 }
 
 function restorePlane() {
@@ -539,7 +550,7 @@ function onSectionEnd() {
     compG = ""; compD = ""; compOn = false;
   }
   wearNoted = false;
-  smoothTol = 0; smoothMode = "";
+  smoothOff();
   sectionOpen = false;
   wcsFlip = "";
   seatKnown = false;

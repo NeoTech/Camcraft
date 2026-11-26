@@ -9,7 +9,8 @@ use super::hsm;
 use super::level_ctx::{LevelCtx, feed_leg, walk_pass};
 use super::params::{Entry3D, Pocket3DParams};
 use super::reentry;
-use super::rest::level_target;
+use super::level_seam::{self, LevelSeam};
+use super::rest::{level_target, mask_center};
 use super::shell::Field;
 use super::short_moves;
 use super::troch;
@@ -22,24 +23,6 @@ use crate::links::{Link, LinkTally, NOT_PROVED, TOO_LONG};
 use crate::machining2d::{chord_clears, AdaptiveMethod, GenError};
 use crate::stock_sim::Columns;
 
-/// Half the width, in lattice cells, of the narrowest standing strip
-/// the re-machining mask still sends the cutter to (#1749): a strip
-/// one cell wide along a wall is the lattice's sampling, not stock.
-const MASK_RESIDUE: f64 = 1.0;
-
-/// Narrow `center` (already eroded from the unmasked `target`) to centers
-/// whose tool disc meets still-standing material in `mask` above `z`.
-/// Intersecting `mask` with `center.offset(r)` ignores unreachable corners
-/// and any `stock_to_leave` collar left by an earlier pass.
-fn mask_center(center: Region, mask: &Columns<'_>, z: f64, r: f64) -> Result<Region, GenError> {
-    let s = center.offset(r)?.intersect(&mask.above(z)?)?;
-    let k = MASK_RESIDUE * mask.cell();
-    let standing = if k.is_finite() && k > 0.0 && !s.is_empty() { s.offset_sharp(-k)?.offset_sharp(k)? } else { s };
-    if standing.is_empty() {
-        return Ok(Region::empty());
-    }
-    Ok(center.intersect(&standing.offset(r)?)?)
-}
 /// One ladder run: the level loop shared by both entry points. `zs` is
 /// the plane list, `rest` the post-coarse state whose still-standing
 /// columns the pass is aimed at (None: the pure level law), `mask` the
@@ -98,6 +81,7 @@ pub(super) fn ladder(
     avoid: Option<&AvoidSpec>,
     method: AdaptiveMethod,
     axial_leave: f64,
+    picks: Option<&LevelSeam>,
 ) -> Result<Toolpath, GenError> {
     let r = p.tool_diameter * 0.5;
     let hop_z = p.retract_z.unwrap_or(p.clearance_z).min(p.clearance_z);
@@ -133,6 +117,9 @@ pub(super) fn ladder(
     // leave stock standing, so no level of such a run reads the plane
     // above as cleared: each one enters as a first level does.
     let mut tr = troch::Run::new(method, p, rest.is_none() && !shell && seam.is_none());
+    // #3329: the plane of the last level that cut (the exit's law).
+    let mut last_z = None;
+    level_seam::say_z(&mut b, picks);
     for &z in zs {
         if tr.on() {
             prev_state = None;
@@ -197,8 +184,10 @@ pub(super) fn ladder(
         if tr.level(&mut b, &center, p, z, hop_z).map_err(|e| e.with_ghost_moves(b.moves()))? {
             continue;
         }
-        let lp = hsm::plan_level(&mut b, &center, p, z, hop_z, rest.is_some(), shell, seam, stock)
+        let mut lp = hsm::plan_level(&mut b, &center, p, z, hop_z, rest.is_some(), shell, seam, stock)
             .map_err(|e| e.with_ghost_moves(b.moves()))?;
+        // #3329: the picks seat the plan's own passes (`level_seam`).
+        let moved = picks.map_or(Ok(Vec::new()), |sm| level_seam::seat_plan(sm, &mut lp, p, z))?;
         let passes = &lp.passes;
         let level_p = lp.params(p);
         let Some(first_pass) = passes.first() else {
@@ -306,6 +295,11 @@ pub(super) fn ladder(
             lvl.settle.set(p.tool_diameter);
         }
         let dove = descend(&mut b, &lvl, &ask);
+        if let Some(sm) = picks {
+            sm.descent(dove, z, p.tool_diameter)?;
+            level_seam::columns(&[moved.as_slice(), dove.as_slice()].concat(), |q| lvl.tip(q, 0.0), r, p.clearance_z, facets)?;
+        }
+        last_z = Some(z);
         lvl.tz = p.clearance_z;
         lvl.kept = false;
         walk_pass(&mut b, first_pass, &lvl, 0, /*skip_first=*/ true);
@@ -404,6 +398,9 @@ pub(super) fn ladder(
         b.note_once(&n);
     }
     let cur = b.at();
+    if let Some(sm) = picks {
+        sm.exit_at(cur, last_z, p.tool_diameter)?;
+    }
     if avoid_blocked > 0 && let Some(av) = avoid.filter(|a| !a.is_empty()) {
         b.note(format!(
             "Do not touch ({}) blocked {avoid_blocked} cut level(s); remaining levels stayed clear",

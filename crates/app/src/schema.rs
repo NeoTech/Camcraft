@@ -333,6 +333,37 @@ impl ToolBody {
     }
 }
 
+/// #3644: one shared tool component of the document: the catalog fact
+/// (`ToolComponent`, checked when made) and where its ports, cutting
+/// point and body sit (`ComponentGeometry`). Not a component itself: the
+/// rows of [`DocumentComponents`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentComponent {
+    pub component: camcraft_tools::component::ToolComponent,
+    pub geometry: camcraft_tools::component_geometry::ComponentGeometry,
+}
+
+/// #3644: the document's component table, one row for each id (the
+/// singleton). Written only through the component commands
+/// (`crate::commands::tool_assembly`) and the project loader.
+#[derive(Component, Debug, Clone, Default, PartialEq)]
+pub struct DocumentComponents(pub Vec<DocumentComponent>);
+
+/// #3644: one node of a tool's component stack: the id of a row of
+/// [`DocumentComponents`] and how it sits on its parent (`None`: the
+/// root, on the spindle).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssemblyLink {
+    pub component: String,
+    pub mount: Option<camcraft_tools::tool_assembly::Mount>,
+}
+
+/// #3644: the component stack a tool is built from. The tool's
+/// `ToolDef` and `ToolBody` are derived from it by `SetToolAssembly` and
+/// `EditDocumentComponent`, in the same undo step, never apart.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ToolAssembly(pub Vec<AssemblyLink>);
+
 /// One machine setup (M3.2 stage A): the named context that says WHICH
 /// raw material and WHICH work coordinate system an operation is
 /// machined against. The strings are entity NAMES, resolved through
@@ -938,6 +969,8 @@ pub fn register_schema(world: &World) {
     world.component::<ToolDef>();
     world.component::<ToolBody>();
     world.component::<ToolCutter>();
+    world.component::<DocumentComponents>();
+    world.component::<ToolAssembly>();
     world.component::<Operation>();
     world.component::<OperationMeta>();
     world.component::<ProgramEntry>();

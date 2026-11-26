@@ -30,5 +30,5 @@
       "Z": { "coordinate": 2, "max_rapid_speed": 6000 }
     } }
   },
-  "tooling": { "tool_change": "manual-retract-top" }
+  "tooling": { "tool_change": "manual-retract-top", "max_tool_number": 254 }
 }

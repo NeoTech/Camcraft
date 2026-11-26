@@ -137,6 +137,10 @@ function onToolChange(number, name) {
   if (inSection || !Number.isInteger(number) || number < 1 || number > 32767) {
     refuse("missing or invalid tool number");
   }
+  // #4087: the machine's tool table (MP 7260 lines on the Picomax).
+  if (machine.toolNumberMax > 0 && number > machine.toolNumberMax) {
+    refuse("tool number " + number + " is above the machine tool table maximum " + machine.toolNumberMax);
+  }
   if (section.tool !== undefined) refuse("multiple TOOL declarations in one section");
   section.tool = number;
   section.toolName = name;

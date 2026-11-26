@@ -64,6 +64,17 @@ pub fn entry_not_recommended(path: &Toolpath) -> Option<Warning> {
     Some(Warning::EntryNotRecommended { at, entry, inside })
 }
 
+/// #3849: a trochoidal clean-up pass whose radial engagement remained
+/// above `limit_deg` after peel step-down - one advisory warning on the
+/// operation and status line so an overloaded clean-up cut never passes
+/// silently. `at` is the clean-up feed through the measured peak, not
+/// the path's first cut.
+#[must_use]
+pub fn cleanup_engagement_warning(path: &Toolpath) -> Option<Warning> {
+    let (at, measured_deg, limit_deg) = crate::machining2d::cleanup_engagement_move(path)?;
+    Some(Warning::EngagementExceeded { at, measured_deg, limit_deg })
+}
+
 /// [`run_job`]'s body: every arm, unchanged.
 fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
@@ -90,6 +101,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut slot_bound,
         mut rotary_picks,
         mut prior,
+        prior_staged: _,
         verify_prior,
         mut drills_ahead,
         turned_ahead,
@@ -1360,7 +1372,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
             // extra here.
+            // #3329: the start / exit picks seat each level's passes; no
+            // pick is the match below, move for move.
+            let seam = machining3d::LevelSeam::of(&params.path_picks());
             let generated = match &avoid_spec {
+                spec if !seam.is_empty() => {
+                    machining3d::pocket3d_picked(&material.facets, &region, air_stock, &pp, *shell, mask, spec.as_ref(), &seam)
+                }
                 spec if troch => {
                     machining3d::pocket3d_trochoidal(&material.facets, &region, &pp, *rest_rough, mask, spec.as_ref())
                 }
@@ -4367,6 +4385,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #3035: Adaptive areas cut by Offset rings - a warning, not
             // only a note; advisory (the rings are verified above).
             warns.extend(strategy_fallback(&path));
+            // #3849: trochoidal clean-up passes that still exceed the
+            // engagement limit - advisory (verified path, load risk).
+            warns.extend(cleanup_engagement_warning(&path));
             // #3748: a selected entry that is not the recommended Arc on a
             // start-side pass - one advisory warning, the entry kept.
             let advice = entry_not_recommended(&path);

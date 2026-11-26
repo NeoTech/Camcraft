@@ -67,8 +67,15 @@ impl DNumberRule {
     }
 }
 
-/// The installation facts of the file form, by JSON pointer.
-pub(crate) const FACT_KEYS: [&str; 3] = ["/controller/identity", "/tooling/tool_change", "/tooling/d_number"];
+/// The installation facts of the file form, by JSON pointer. A file-form
+/// input with one of them is parsed and mirrored, so the script sees each
+/// stated limit.
+pub(crate) const FACT_KEYS: [&str; 4] = [
+    "/controller/identity",
+    "/tooling/tool_change",
+    "/tooling/d_number",
+    "/tooling/max_tool_number",
+];
 
 /// The controller file form and the post engine's static form can both carry
 /// installation facts. A mixed input has two sources for a limit or capability.
@@ -123,6 +130,20 @@ pub(crate) fn identity(v: &Value) -> Result<Option<ControllerIdentity>, String> 
         .map_err(|e| format!("machine file: controller.identity: {e}"))?;
     control.validate()?;
     Ok(Some(control))
+}
+
+/// #4087: the highest tool number the control's tool table holds (the
+/// iTNC 530 tool table has MP 7260 lines). A whole number of 1 or more.
+pub(crate) fn max_tool_number(v: &Value) -> Result<Option<u32>, String> {
+    let Some(value) = v.pointer("/tooling/max_tool_number").filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    match value.as_u64().map(u32::try_from) {
+        Some(Ok(n)) if n >= 1 => Ok(Some(n)),
+        _ => Err(format!(
+            "machine file: tooling.max_tool_number must be a whole number of 1 or more, not {value}"
+        )),
+    }
 }
 
 pub(crate) fn tool_change(v: &Value) -> Result<Option<ToolChangeMode>, String> {

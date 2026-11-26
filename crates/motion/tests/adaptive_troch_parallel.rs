@@ -4,6 +4,10 @@
 #[path = "common/adaptive_troch.rs"]
 mod fixtures;
 
+// #3849: the clean-up engagement checks join this binary (no new top-level test binary).
+#[path = "adaptive_troch_parallel/clean.rs"]
+mod clean;
+
 use fixtures::*;
 use camcraft_motion::machining2d::PocketParams;
 

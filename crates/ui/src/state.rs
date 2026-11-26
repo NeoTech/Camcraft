@@ -3495,6 +3495,10 @@ impl State {
                 // script. The theme is NOT reset: it is the user's
                 // preference, not the document's (#877).
                 posting::post_set(&self.world, &PostRef::Builtin);
+                // #3644: the component table is the document's too; a
+                // blank holds no row of the last document (open clears it
+                // the same way).
+                camcraft_app::tool_assembly::table_set(&self.world, Vec::new());
                 self.history.clear();
                 // Frozen evidence of the old document retires with it.
                 self.post_view = None;

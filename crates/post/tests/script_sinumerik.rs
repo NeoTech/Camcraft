@@ -72,3 +72,46 @@ fn sinumerik_g73_without_dwell_still_posts() {
     }
     assert!(!words.iter().any(|w| w.starts_with('P')), "no dwell means no P: {cycle}");
 }
+
+#[test]
+fn sinumerik_840d_preamble_writes_g94() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let machine = serde_json::from_str(
+        &std::fs::read_to_string(root.join("assets/machines/3axis-vmc.mch")).expect("machine fixture"),
+    ).expect("machine JSON");
+    let script = std::fs::read_to_string(root.join("assets/posts/sinumerik.cps")).expect("post fixture");
+
+    let out_metric = peck_output(0.0);
+    assert!(
+        out_metric.program.contains("N10 G17 G710 G90 G94 G54 G40 G80"),
+        "840D metric preamble must state G94:\n{}",
+        out_metric.program
+    );
+
+    let opts_inch = serde_json::json!({ "Units": "inch" });
+    use camcraft_post::post::{cnc::{self, MoveRec, Record}, engine};
+    use camcraft_post::cl::MoveKind;
+    let records = vec![
+        Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(900.0) },
+        Record::Param { name: "ClearancePlane".into(), value: serde_json::json!(10.0) },
+        Record::Param { name: "RetractPlane".into(), value: serde_json::json!(10.0) },
+        Record::Tool { number: 4, name: "DRILL".into() },
+        Record::Section { begin: true },
+        Record::Move(MoveRec {
+            kind: MoveKind::Rapid, x: 10.0, y: 10.0, z: 2.0,
+            feed: None, center: None, ccw: false, plane: Default::default(), abc: None,
+        }),
+        Record::Move(MoveRec {
+            kind: MoveKind::Feed, x: 10.0, y: 10.0, z: -2.0,
+            feed: Some(10.0), center: None, ccw: false, plane: Default::default(), abc: None,
+        }),
+        Record::Section { begin: false },
+    ];
+    let out_inch = engine::run_with(&script, &machine, &cnc::serialize(&records), &opts_inch)
+        .expect("inch post engine");
+    assert!(
+        out_inch.program.contains("N10 G17 G700 G90 G94 G54 G40 G80"),
+        "840D inch preamble must state G94:\n{}",
+        out_inch.program
+    );
+}

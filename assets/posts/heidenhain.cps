@@ -339,6 +339,10 @@ function onSpindleSpeed() {
 }
 
 function onToolChange(number, name) {
+  // #4087: a T number past the control's tool table alarms at the control.
+  if (typeof machine !== "undefined" && machine.toolNumberMax > 0 && number > machine.toolNumberMax) {
+    msg("tool number " + number + " is above the machine tool table maximum " + machine.toolNumberMax);
+  }
   toolName = clean(name);
   tNo = number;
   toolWait = true;

@@ -103,3 +103,31 @@ fn an_ordinary_peck_retract_in_its_own_stock_kerf_stays_clear() {
     });
     assert!(!w.iter().any(|w| matches!(w, Warning::RapidInPart { at: 1 } | Warning::RapidInStock { at: 1 })), "{w:?}");
 }
+
+/// #4211: a finish pass ends with the edge on the wall, inside the finish
+/// tolerance (0.05 in, finish tolerance 0.1). The retract up its own axis
+/// out of that pose enters no part. The cut's pose is the finish law's;
+/// the lift is judged by the shank, the holder and the edge's rise column.
+#[test]
+fn a_retract_from_a_finish_touch_on_the_wall_stays_clear() {
+    let region = Region::new(vec![Loop::new(vec![
+        Point2::new(-10.0, -10.0), Point2::new(10.0, -10.0),
+        Point2::new(10.0, 10.0), Point2::new(-10.0, 10.0),
+    ]).expect("blank outline")]).expect("stock");
+    let wall = cube(Point3::new(-5.0, -5.0, 0.0), Point3::new(0.0, 5.0, 4.0));
+    let tool = ToolGeom {
+        radius: 1.0, nose_radius: 0.0, flute_len: 8.0,
+        shank_radius: 1.0, shank_len: 20.0, holder_radius: 2.0, holder_len: 5.0,
+    };
+    let path = Toolpath::new(vec![
+        Move::new(MoveKind::Feed, Point3::new(0.95, -3.0, 2.0), Point3::new(0.95, 3.0, 2.0), None),
+        Move::new(MoveKind::Rapid, Point3::new(0.95, 3.0, 2.0), Point3::new(0.95, 3.0, 25.0), None),
+    ]);
+    let w = verify(&path, &VerifyContext {
+        region: &region, stock: Some(&region), model: Some(&wall.facets),
+        mode: Mode::Envelope, tool: &tool, cutter: Some(Cutter::flat(&tool)),
+        stock_top_z: 4.0, clearance_z: 25.0, gouge_tol: 0.01, z_tol: 0.001,
+        finish_tol: Some(0.1), ..Default::default()
+    });
+    assert!(!w.iter().any(|w| matches!(w, Warning::RapidInPart { at: 1 })), "{w:?}");
+}
