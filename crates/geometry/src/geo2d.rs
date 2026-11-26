@@ -15,10 +15,12 @@
 
 use thiserror::Error;
 
+mod arc;
 mod clip_line;
 mod slivers;
 mod sweep;
 
+pub use arc::{MAX_ARC_CHORDS, arc_points};
 pub use clip_line::RingClip;
 
 use clipper2_rust::{

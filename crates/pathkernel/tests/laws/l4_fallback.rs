@@ -2,14 +2,15 @@
 //! reads what each stage used against what the recipe asked: a guide whose
 //! curves are of another family than the asked guide, or an entry into
 //! material of another kind than the asked one, must carry a named
-//! fallback of its stage. An entry into air, a pre-drilled hole or a
-//! cleared column is the safer entry of the record's order of tries, not a
-//! fallback.
+//! fallback of its stage. The entry rule is `entry::needs_fallback` (#4178):
+//! an entry into air, a pre-drilled hole or a cleared column where an entry
+//! into material was asked is the safer entry of the record's order of
+//! tries, not a fallback. The entry verdicts of the run carry the records.
 
-use camcraft_pathkernel::entry::{Entry, EntryChoice, EntryKind, EntryPlanner, Exit};
+use camcraft_pathkernel::entry::{Entry, EntryChoice, EntryKind, EntryPlanner, Exit, named as named_entry, needs_fallback};
 use camcraft_pathkernel::guide::{Family, GuideChoice, GuidePlanner, GuideSet, RowsChoice};
 use camcraft_pathkernel::link::LinkPolicy;
-use camcraft_pathkernel::plan::{Cut, Step};
+use camcraft_pathkernel::plan::Cut;
 use camcraft_pathkernel::region::KernelRegion;
 use camcraft_pathkernel::{Fallback, Recipe, Refusal, Region, Stage, Verdict};
 
@@ -35,10 +36,6 @@ fn named<T>(v: &Verdict<T>, stage: Stage) -> usize {
     }
 }
 
-fn into_material(k: EntryKind) -> bool {
-    !matches!(k, EntryKind::Air | EntryKind::Predrilled | EntryKind::ClearedColumn)
-}
-
 /// L4 over one run of the recipe `recipe`.
 pub fn check_l4(run: &Run, recipe: &Recipe) -> LawVerdict {
     let mut m = Vec::new();
@@ -49,12 +46,13 @@ pub fn check_l4(run: &Run, recipe: &Recipe) -> LawVerdict {
     let names = named(&run.guide, Stage::Guide);
     let silent = if other > 0 && names == 0 { other } else { 0 };
     m.push(Measure::count(silent, format!("guide: {other} curves of another family than asked ({asked:?}), {names} named"), None));
-    let entries = run.plan.steps().iter().filter_map(|s| if let Step::Entry(e) = s { Some(e) } else { None });
-    for (i, e) in entries.enumerate() {
-        let wrong = into_material(e.kind()) && e.kind() != recipe.entry().asked();
+    let asked = recipe.entry().asked();
+    for (i, v) in run.entries.iter().enumerate() {
+        let Some(e) = v.out() else { continue };
+        let n = named(v, Stage::Entry);
+        let wrong = needs_fallback(asked, e.kind()) && n == 0;
         let at = e.descent().first().map(|p| p.at());
-        let place =
-            format!("entry {i}: used {:?}, asked {:?}, and the entry stage has no fallback record", e.kind(), recipe.entry().asked());
+        let place = format!("entry {i}: used {:?}, asked {asked:?}, {n} fallback records", e.kind());
         m.push(Measure::count(usize::from(wrong), place, at));
     }
     judge(Law::L4, m)
@@ -75,12 +73,16 @@ impl GuidePlanner for RowsAsRings {
     }
 }
 
-/// Breaks L4: a ramp where a helix was asked, with no record.
-struct RampInstead;
+/// A ramp where a helix was asked: with a fallback record when `named`,
+/// else silent (breaks L4).
+struct RampInstead {
+    named: bool,
+}
 
 impl EntryPlanner for RampInstead {
-    fn entry(&self, first: &Cut, r: &KernelRegion, _cleared: &Region, e: &EntryChoice) -> Result<Entry, Refusal> {
-        helix(start_of(first), r, e, EntryKind::Ramp)
+    fn entry(&self, first: &Cut, r: &KernelRegion, _cleared: &Region, e: &EntryChoice) -> Result<Verdict<Entry>, Refusal> {
+        let ramp = helix(start_of(first), r, e, EntryKind::Ramp)?;
+        if self.named { named_entry(ramp, e, "the helix does not fit", vec![]) } else { Ok(Verdict::done(ramp)) }
     }
     fn exit(&self, last: &Cut, r: &KernelRegion, cleared: &Region) -> Result<Exit, Refusal> {
         ProvedEntry.exit(last, r, cleared)
@@ -113,6 +115,26 @@ fn l4_breaks_for_a_silent_guide_fallback() {
 
 #[test]
 fn l4_breaks_for_a_silent_entry_fallback() {
-    let v = l4(&Planners { entry: Box::new(RampInstead), ..good() }, &square_case().unwrap());
+    let v = l4(&Planners { entry: Box::new(RampInstead { named: false }), ..good() }, &square_case().unwrap());
     assert_broken(&v, Law::L4, "entry 0: used Ramp, asked Helix");
+}
+
+#[test]
+fn l4_holds_for_a_named_entry_fallback() {
+    assert_held(&l4(&Planners { entry: Box::new(RampInstead { named: true }), ..good() }, &square_case().unwrap()));
+}
+
+/// #4178: the entry and exit stage is registered in the suite and passes L4
+/// and L5 on the stand-in cases.
+#[test]
+fn the_entry_stage_passes_l4_and_l5() {
+    let p = || Planners { entry: Box::new(super::entry_stage::stage()), ..good() };
+    for c in [square_case().unwrap(), super::standins::island_case().unwrap()] {
+        let r = run(&p(), &c, Default::default());
+        assert!(r.is_ok(), "{}: {:?}", c.name, r.as_ref().err());
+        assert_held(&super::l5_entry::check_l5(&r, &c));
+        let r = r.unwrap();
+        assert!(r.entries.iter().all(|v| v.out().is_some_and(|e| e.kind() == EntryKind::Helix)), "{}", c.name);
+        assert_held(&check_l4(&r, &c.recipe));
+    }
 }

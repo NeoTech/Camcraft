@@ -273,17 +273,21 @@ pub fn helix(at: Point2, r: &KernelRegion, e: &EntryChoice, kind: EntryKind) -> 
 }
 
 impl EntryPlanner for ProvedEntry {
-    fn entry(&self, first: &Cut, r: &KernelRegion, cleared: &Region, e: &EntryChoice) -> Result<Entry, Refusal> {
-        let at = start_of(first);
-        let tool = planar(r)?.tool();
-        let free = planar(r)?.air().union(cleared).map_err(geo)?;
-        if free.contains(at) {
-            let area = Area::new(square_area(at, tool.radius())?)?;
-            return Entry::new(EntryKind::Air, vec![], vec![PlanePoint::flat(at)?], Proof::InAir(area), e, tool);
-        }
-        helix(at, r, e, EntryKind::Helix)
+    fn entry(&self, first: &Cut, r: &KernelRegion, cleared: &Region, e: &EntryChoice) -> Result<Verdict<Entry>, Refusal> {
+        proved_entry(first, r, cleared, e).map(Verdict::done)
     }
     fn exit(&self, _last: &Cut, _r: &KernelRegion, _cleared: &Region) -> Result<Exit, Refusal> {
         Exit::new(None, 5.0)
     }
+}
+
+fn proved_entry(first: &Cut, r: &KernelRegion, cleared: &Region, e: &EntryChoice) -> Result<Entry, Refusal> {
+    let at = start_of(first);
+    let tool = planar(r)?.tool();
+    let free = planar(r)?.air().union(cleared).map_err(geo)?;
+    if free.contains(at) {
+        let area = Area::new(square_area(at, tool.radius())?)?;
+        return Entry::new(EntryKind::Air, vec![], vec![PlanePoint::flat(at)?], Proof::InAir(area), e, tool);
+    }
+    helix(at, r, e, EntryKind::Helix)
 }
