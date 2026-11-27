@@ -152,6 +152,7 @@ mod tool_library_holders_ui;
 mod tool_library_components;
 mod tool_library_stack;
 mod tool_library_mockup;
+mod tool_library_search;
 mod anchors;
 mod stock_fit;
 mod stock_source_default;

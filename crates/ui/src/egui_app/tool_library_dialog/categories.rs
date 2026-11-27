@@ -1,8 +1,9 @@
 //! #3897 (U6 of #3663): the tool categories on the left of the tool list,
 //! as in the #3663 mock-up: one category for each family of tool kinds,
 //! grouped under Milling, Hole making, Turning and Other, each with the
-//! count of the shown tools. A pick is view state; it filters the rows
-//! as the Tool type choice does. Categories without a tool are not shown.
+//! count of the shown tools. A pick is view state; it filters the rows.
+//! #4335 (U9): every category shows, also one without a tool, and its
+//! count is the count of the rows that match the search.
 //! Provenance: our own grouping of our own tool kinds; no HSMWorks
 //! material involved.
 
@@ -30,7 +31,7 @@ pub(crate) const GROUPS: [(&str, &[ToolCategory]); 4] = [
 ];
 
 /// The label of the row that shows every category.
-pub(crate) const ALL: &str = "All tools in the list";
+pub(crate) const ALL: &str = "All tools";
 
 /// The category of each tool kind. A new kind must name its category here.
 #[must_use]
@@ -75,39 +76,35 @@ pub(crate) fn label(c: ToolCategory) -> &'static str {
     }
 }
 
-/// The column: "All tools in the list", then each group with its
-/// categories that have a tool in `rows`. Gives the new pick when the
-/// user clicks a row. A pick whose category has no tool goes back to all.
-pub(super) fn draw(ui: &mut Ui, rows: &[(String, Tool)], picked: Option<ToolCategory>) -> Option<Option<ToolCategory>> {
-    let count = |c: ToolCategory| rows.iter().filter(|(_, t)| category_of(t.kind) == c).count();
+/// The column: "All tools", then each group with all its categories and
+/// the count of each (`counts`; `total` for all). Gives the new pick when
+/// the user clicks a row.
+pub(super) fn draw(ui: &mut Ui, counts: &[(ToolCategory, usize)], total: usize, picked: Option<ToolCategory>) -> Option<Option<ToolCategory>> {
+    let count = |c: ToolCategory| counts.iter().find(|(k, _)| *k == c).map_or(0, |(_, n)| *n);
     let mut out = None;
-    if picked.is_some_and(|c| count(c) == 0) {
-        out = Some(None);
-    }
-    if row(ui, picked.is_none(), ALL, rows.len()) {
+    if row(ui, picked.is_none(), ALL, total) {
         out = Some(None);
     }
     for (group, cats) in GROUPS {
-        let shown: Vec<(ToolCategory, usize)> = cats.iter().map(|c| (*c, count(*c))).filter(|(_, n)| *n > 0).collect();
-        if shown.is_empty() {
-            continue;
-        }
         ui.add_space(4.0);
         ui.label(RichText::new(group.to_uppercase()).small().weak());
-        for (c, n) in shown {
-            if row(ui, picked == Some(c), label(c), n) {
-                out = Some(Some(c));
+        for c in cats {
+            if row(ui, picked == Some(*c), label(*c), count(*c)) {
+                out = Some(Some(*c));
             }
         }
     }
     out
 }
 
-/// One category row: the name as a selectable label, the count beside it.
+/// One category row: the name as a selectable label, the count at the
+/// column's right (none for an empty category).
 fn row(ui: &mut Ui, selected: bool, text: &str, n: usize) -> bool {
     ui.horizontal(|ui| {
         let clicked = ui.selectable_label(selected, text).clicked();
-        ui.weak(n.to_string());
+        if n > 0 {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.weak(n.to_string()));
+        }
         clicked
     })
     .inner

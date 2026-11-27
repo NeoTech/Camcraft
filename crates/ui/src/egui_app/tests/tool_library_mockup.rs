@@ -7,7 +7,7 @@
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 //! Provenance: our own structural tests; no HSMWorks material involved.
 
-use camcraft_app::units::{self, Unit};
+use camcraft_app::units::Unit;
 use egui::accesskit::Role;
 
 use super::tool_library_editor::{H, click_window_button, library_window, open_in_window};
@@ -91,9 +91,9 @@ fn a_document_row_has_a_cached_drawing_and_its_gauge_length() {
         .and_then(|e| camcraft_app::tool_body::body_of(&st.world, &e))
         .and_then(|b| b.library)
         .unwrap_or_else(|| panic!("{name} is in a library holder"));
-    let gauge = units::len(r.gauge_len + r.projection, st.units(), 2);
+    let gauge = list::compact(r.gauge_len + r.projection, st.units());
     let win = library_window(&h);
-    assert!(win.query_all_by_label(list::GAUGE).next().is_some(), "the list has a Gauge length column");
+    assert!(win.query_all_by_label(&list::gauge_head(st.units())).next().is_some(), "the list has a Gauge column");
     assert!(win.query_all_by_label(&gauge).next().is_some(), "the row shows the gauge length {gauge}");
     let b = thumbs::builds();
     h.run_steps(3);

@@ -21,23 +21,25 @@ fn library_window(h: &H) -> egui::Rect {
 }
 
 /// The tool library is its own window: (#3897) the Cutting tools | Holders
-/// switch first, then the file buttons, the source row, then the Document
-/// list with the categories on its left. It floats beside the dock and
-/// leaves the Properties pane free, so both can be used at once. #4334:
-/// the header row holds the title, the tabs and the close button; the
-/// footer (the hint, then Close at the right) stands under the rows.
+/// switch first, then (#4335) the one header row of the list - the source
+/// tabs, the search box, New tool…, Import… and Export… - then "N of M
+/// tools", the column heads and the rows with the categories on their
+/// left. It floats beside the dock and leaves the Properties pane free, so
+/// both can be used at once. #4334: the header row holds the title, the
+/// tabs and the close button; the footer (the hint, then Close at the
+/// right) stands under the rows.
 #[test]
 fn layout_window_tool_library() {
+    use crate::egui_app::tool_library_dialog::list::{self, RECIPES};
+    use crate::egui_app::tool_library_dialog::list_header::{CATALOG, DOCUMENT, EXPORT, IMPORT, NEW, SEARCH};
     let _g = snapshot_guard();
     let mut h = shell_harness();
     h.run_steps(2);
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(3);
-    assert_window_layout(
-        &h,
-        "Tool library",
-        &[TOOLS_PAGE, "New tool…", "Import tool holders", "Document", "Recipes"],
-    );
+    let n = h.state().state.tool_names().len();
+    let count = list::count_text(n, n);
+    assert_window_layout(&h, "Tool library", &[TOOLS_PAGE, DOCUMENT, &count, RECIPES, frame::HINT_TOOLS]);
     let win = library_window(&h);
     // #3897: the switch heads the window; the categories stand left of the rows.
     let node = h
@@ -48,7 +50,20 @@ fn layout_window_tool_library() {
     let (tools, holders) = (rect(TOOLS_PAGE), rect(HOLDERS_PAGE));
     assert!((tools.top() - holders.top()).abs() < 2.0 && tools.right() <= holders.left() + 1.0, "Cutting tools {tools:?} | Holders {holders:?}");
     let all = rect(categories::ALL);
-    assert!(all.right() < rect("Recipes").left(), "the categories {all:?} stand left of the rows");
+    assert!(all.right() < rect(RECIPES).left(), "the categories {all:?} stand left of the rows");
+    // #4335: one header row, from left to right.
+    let row = [DOCUMENT, crate::egui_app::tool_library_dialog::components::SOURCE, CATALOG, SEARCH, NEW, IMPORT, EXPORT].map(rect);
+    for pair in row.windows(2) {
+        assert!(pair[0].right() <= pair[1].left() + 1.0, "the header row runs left to right: {pair:?}");
+        assert!((pair[0].center().y - pair[1].center().y).abs() < 4.0, "one header row: {pair:?}");
+    }
+    assert!(win.expand(1.0).contains_rect(row[6]), "Export {:?} stays in the window {win:?}", row[6]);
+    assert!(row[0].bottom() <= rect(&count).top() + 1.0 && rect(&count).bottom() <= rect(RECIPES).top() + 1.0, "the count stands between the header row and the column heads");
+    // #4335: the column heads, from left to right.
+    let heads: Vec<egui::Rect> = list::heads(h.state().state.units()).iter().filter(|t| !t.is_empty()).map(|t| rect(t)).collect();
+    for pair in heads.windows(2) {
+        assert!(pair[0].right() <= pair[1].left() + 1.0 && (pair[0].center().y - pair[1].center().y).abs() < 4.0, "the heads run left to right: {pair:?}");
+    }
     // #4334: the header: the title, the tabs, the close button on one row.
     let title = node
         .query_all_by_label(crate::egui_app::tool_library_dialog::TITLE)
@@ -58,10 +73,10 @@ fn layout_window_tool_library() {
     let x = rect(frame::CLOSE_WINDOW);
     assert!(title.right() <= tools.left() + 1.0 && (title.center().y - tools.center().y).abs() < 4.0, "the title {title:?} heads the tabs {tools:?}");
     assert!(x.left() > holders.right() && (x.center().y - holders.center().y).abs() < 4.0, "the close button {x:?} ends the header row");
-    assert!(title.bottom() <= rect("New tool…").top() + 1.0, "the header {title:?} stands above the page");
+    assert!(title.bottom() <= rect(NEW).top() + 1.0, "the header {title:?} stands above the page");
     // #4334: the footer under the rows: the hint at the left, Close at the right.
     let (hint, close) = (rect(frame::HINT_TOOLS), rect(frame::CLOSE));
-    assert!(close.top() > rect("Recipes").bottom(), "Close {close:?} stands under the rows");
+    assert!(close.top() > rect(RECIPES).bottom(), "Close {close:?} stands under the rows");
     assert!(hint.right() < close.left() && (hint.center().y - close.center().y).abs() < 4.0, "the hint {hint:?} and Close {close:?} share the footer row");
     assert!(win.expand(1.0).contains_rect(close), "Close {close:?} stays in the window {win:?}");
     let Some(props) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
@@ -178,7 +193,7 @@ fn layout_window_tool_editor() {
         .max_by(|a, b| a.top().total_cmp(&b.top()))
         .unwrap_or_else(|| panic!("the rail has no row {name}"));
     assert!(rail.right() < rect("Diameter").left() && row.top() > rect(&heading).bottom(), "the rail {rail:?} stands left of the editor, under the header");
-    assert!(node.query_all_by_label("Import library…").next().is_none(), "the file row folds away with the list");
+    assert!(node.query_all_by_label(crate::egui_app::tool_library_dialog::list_header::IMPORT).next().is_none(), "the header row folds away with the list");
     let Some(props) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
         panic!("the Properties leaf is not laid out");
     };
@@ -240,8 +255,8 @@ fn layout_window_holders() {
 }
 
 /// #3898 (U7): the "My library" source. The component groups stand left
-/// of the rows; the filter and the buttons of a picked row head the rows;
-/// the document's component table follows them.
+/// of the rows; (#4335) the list's search box and the buttons of a picked
+/// row head the rows; the document's component table follows them.
 #[test]
 fn layout_window_my_library() {
     use crate::egui_app::tool_library_dialog::components;
@@ -251,11 +266,12 @@ fn layout_window_my_library() {
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(2);
     super::tool_library_editor::click_window_button(&mut h, components::SOURCE);
-    assert_window_layout(&h, "Tool library", &[components::SOURCE, "Component filter", components::ADD, components::DOCUMENT]);
+    use crate::egui_app::tool_library_dialog::list_header::SEARCH;
+    assert_window_layout(&h, "Tool library", &[components::SOURCE, components::ADD, components::DOCUMENT]);
     let win = library_window(&h);
     let node = super::tool_library_editor::library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
-    let (all, filter, add, doc) = (rect(components::ALL), rect("Component filter"), rect(components::ADD), rect(components::DOCUMENT));
+    let (all, filter, add, doc) = (rect(components::ALL), rect(SEARCH), rect(components::ADD), rect(components::DOCUMENT));
     assert!(all.right() < filter.left(), "the group column {all:?} stands left of the rows {filter:?}");
     assert!(filter.top() < add.top(), "the filter heads the buttons");
     assert!(add.top() < doc.top(), "the document's table follows the library rows");
