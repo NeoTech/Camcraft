@@ -2,8 +2,9 @@
 
 The dependency decision of the new edges (`camcraft-pathkernel` ->
 `camcraft-geometry`, `camcraft-motion` -> `camcraft-pathkernel`) is the
-record `docs/decisions/4024-path-kernel-design.md` ("Dependency
-decision"). This file holds only the choices that the record left open
+record of #4024 in `RECOMMENDED.md` (heading `## #4024`, "Dependency
+decision"; the imported items of each edge are in
+`docs/decisions/4407-pathkernel-dependency-edges.md`). This file holds only the choices that the record left open
 for this step.
 
 **What was decided**
