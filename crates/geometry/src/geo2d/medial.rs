@@ -115,9 +115,14 @@ struct Graph {
 fn circumcenter(a: Point2, b: Point2, c: Point2) -> Option<Point2> {
     let (bx, by, cx, cy) = (b.x - a.x, b.y - a.y, c.x - a.x, c.y - a.y);
     let d = 2.0 * (bx * cy - by * cx);
+    // A flat triangle (or a value that is not finite) has no centre:
+    // checked before the division, not after it (#4407).
+    if !(d.is_finite() && d.abs() > 0.0) {
+        return None;
+    }
     let (b2, c2) = (bx * bx + by * by, cx * cx + cy * cy);
     let p = Point2::new(a.x + (cy * b2 - by * c2) / d, a.y + (bx * c2 - cx * b2) / d);
-    (d.abs() > 0.0 && p.x.is_finite() && p.y.is_finite()).then_some(p)
+    (p.x.is_finite() && p.y.is_finite()).then_some(p)
 }
 
 fn find(uf: &mut [usize], mut i: usize) -> usize {

@@ -3,7 +3,7 @@
 //! selection (`region_build.rs`); the checks between the parts of a value
 //! are in `region_check.rs`. The stage takes no start side: that is law 2
 //! in the type system.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region"; the cutter-centre offset of a pocket boundary as in
 //! Held, "On the Computational Geometry of Pocket Machining" (1991).
 
@@ -14,7 +14,7 @@ use crate::verdict::{Refusal, Stage};
 use crate::{Loop, Region, finite, region_finite};
 
 pub use crate::region_build::{
-    BAD_LEAVE, EMPTY_MATERIAL, NEEDS_STOCK, OFF_STOCK, OPEN_NEEDS_SIDE, REGION_GEOMETRY, region,
+    BAD_LEAVE, EMPTY_MATERIAL, NEEDS_STOCK, OFF_STOCK, OPEN_NEEDS_SIDE, REGION_GEOMETRY, REGION_GEOMETRY_INVALID, region,
 };
 pub use crate::region_check::{NOT_ORIENTED, NOT_A_PARTITION};
 

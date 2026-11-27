@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-# docs/decisions/4024-path-kernel-design.md "Dependencies": geometry only -
+# RECOMMENDED.md `## #4024` ("Dependencies") and
+# docs/decisions/4407-pathkernel-dependency-edges.md: geometry only -
 # no cl, tools or sim edge (the tool and the stock are passed in).
 camcraft-geometry = { workspace = true }

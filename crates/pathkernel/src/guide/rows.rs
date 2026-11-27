@@ -6,7 +6,7 @@
 //! the Computational Geometry of Pocket Machining" (1991); the clip of a
 //! line by a polygon from the published computer-graphics literature
 //! (`Region::clip_polyline` of `camcraft-geometry`); our own design record
-//! `docs/decisions/4024-path-kernel-design.md` "Stage 2" and
+//! (`RECOMMENDED.md`, `## #4024`) "Stage 2" and
 //! `docs/decisions/4176-kernel-guides-rings-rows.md`. Written new: no code
 //! path of the old Face and Zigzag planners of `camcraft-motion` is ported.
 

@@ -8,7 +8,7 @@
 //! Automation", 2000, ch. 2; Stori & Wright 2000, the engagement on the
 //! in-process stock); the stock as a raster of material cells, read at
 //! the rim of the swept disc, as in Choy & Chan (Computer-Aided Design 35,
-//! 2003) and our own design record `docs/decisions/4024-path-kernel-design.md`.
+//! 2003) and our own design record (`RECOMMENDED.md`, `## #4024`).
 
 use crate::guide::Curve;
 use crate::load::StockRead;

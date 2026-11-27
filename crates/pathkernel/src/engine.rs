@@ -2,7 +2,7 @@
 //! "The one switch"). This module only parses the value; the one place
 //! that reads the process setting is in `camcraft-app` (the generate
 //! dispatch), so that no other code reads it.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`;
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`);
 //! the same switch form as `CAMCRAFT_CARRY_ENGINE` (#1168) and
 //! `CAMCRAFT_GPU_COMPUTE`.
 

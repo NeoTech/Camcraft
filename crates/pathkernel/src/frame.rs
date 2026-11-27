@@ -2,7 +2,7 @@
 //! shape, a point with a depth along the plane normal, and the validated
 //! scalars and spots that the enum variants of the crate carry (record
 //! "What phase 1 keeps open", points 1, 2, 3 and 8).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`;
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`);
 //! right-handed orthonormal frames as in any machine-tool handbook (ISO 841
 //! axis naming).
 

@@ -1,6 +1,6 @@
 //! The guide stage as one planner (#4176): each guide choice goes to the
 //! planner of its family, never to the planner of another family (law 4).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2: Guide curves" and law 4.
 
 use super::{GuideChoice, GuidePlanner, GuideSet, HelixPlanner, MedialPlanner, RingPlanner, RowPlanner, TracePlanner};

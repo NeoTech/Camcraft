@@ -6,7 +6,7 @@
 //! (`trochoid.rs`). Each mode reads with the one engagement law
 //! (`law.rs`), and each cut that stays above the limit is named on the
 //! status line (the maintainer's answer 4 of the K0 record).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 3: Load control" and `docs/decisions/4026-kernel-load-control.md`.
 
 use super::law::{Read, Stock, read};

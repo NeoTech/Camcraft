@@ -3,7 +3,7 @@
 //! list of points that straight lines join all become a [`Chain`]: a
 //! polyline that is open or closed. A [`Selection`] holds one or more chains
 //! that do not cross themselves or each other.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region"; the segment intersection test is the orientation
 //! predicate of de Berg et al., "Computational Geometry" (3rd ed., 2008),
 //! section 2.1, with a sweep over the x-sorted segment boxes.

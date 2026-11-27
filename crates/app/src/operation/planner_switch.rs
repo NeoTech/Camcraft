@@ -3,7 +3,7 @@
 //! process setting `CAMCRAFT_PLANNER`. The default is the old planners.
 //! A phase-1 kind that the path kernel does not plan yet is refused by
 //! name under "new": never a silent fallback to the old planner (law 4).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "The one switch".
 
 use std::sync::OnceLock;
@@ -35,6 +35,11 @@ pub const PHASE1_KINDS: [OpType; 16] = [
 
 /// The planner engine of this process, read from `CAMCRAFT_PLANNER` one
 /// time. A bad value gives the old planner and one diagnostic in the log.
+///
+/// The value is kept in a `OnceLock` for the life of the process (#4407):
+/// a change of the variable after the first call has no effect until the
+/// process starts again. A test that needs the other engine passes it to
+/// [`check_engine`] directly; it never sets the variable.
 pub fn planner_engine() -> PlannerEngine {
     static ENGINE: OnceLock<PlannerEngine> = OnceLock::new();
     *ENGINE.get_or_init(|| {

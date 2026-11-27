@@ -1,7 +1,7 @@
 //! Stage 5, Link (K4): a hop between two cuts stays at depth only with a
 //! proof, else it lifts with a named reason that the tally counts. The
 //! proofs are in `link/` (#4177).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 5: Link"; stay-down linking as in the published high-speed
 //! machining literature (Held & Spielberger 2009).
 

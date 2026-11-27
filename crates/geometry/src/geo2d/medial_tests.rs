@@ -114,3 +114,15 @@ fn a_neck_that_touches_gives_an_axis_with_no_crash() {
     let ax = r.medial_axis(TOL, ANGLE).unwrap();
     assert!(!ax.curves.is_empty());
 }
+
+/// #4407: the circumcentre checks its denominator before the division: a
+/// flat triangle or a value that is not finite has no centre.
+#[test]
+fn a_flat_or_not_finite_triangle_has_no_circumcentre() {
+    let p = Point2::new;
+    assert_eq!(circumcenter(p(0.0, 0.0), p(1.0, 0.0), p(2.0, 0.0)), None, "three points on a line");
+    assert_eq!(circumcenter(p(0.0, 0.0), p(f64::NAN, 0.0), p(0.0, 1.0)), None, "a point that is not finite");
+    assert_eq!(circumcenter(p(0.0, 0.0), p(f64::INFINITY, 0.0), p(0.0, 1.0)), None, "a point at infinity");
+    let c = circumcenter(p(0.0, 0.0), p(2.0, 0.0), p(0.0, 2.0)).unwrap();
+    assert!((c.x - 1.0).abs() < 1e-12 && (c.y - 1.0).abs() < 1e-12, "{c:?}");
+}

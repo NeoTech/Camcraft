@@ -1,6 +1,6 @@
 //! The entry and exit planner of the 2D kinds (K5): the order of tries of
 //! the record, the named fallback, the refusals, and the exit.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 6: Entry and exit"; the entry order of #3743 and #3746.
 
 use super::room::Ctx;
@@ -21,6 +21,9 @@ pub const NO_MATERIAL_ENTRY: &str =
     "no entry in air, in a pre-drilled hole or in a cleared column fits, and no helix, ramp or plunge fits in the cutter-centre area";
 /// Refusal reason: the entry geometry cannot be computed.
 pub const ENTRY_GEOMETRY: &str = "the entry geometry cannot be computed: a value is out of range";
+/// Refusal reason: the geometry refused an input of the entry stage as not
+/// valid (#4407: the kind of the geometry error is kept).
+pub const ENTRY_GEOMETRY_INVALID: &str = "the entry geometry cannot be computed: the geometry refused its input as not valid";
 /// Refusal reason: a region that is not planar.
 pub const NOT_PLANAR: &str = "the entry stage plans only a planar region";
 /// Refusal reason: bad heights.
@@ -28,8 +31,26 @@ pub const BAD_HEIGHTS: &str = "the heights need a finite material top, a clearan
 /// Refusal reason: a bad arc lead choice.
 pub const BAD_ARC: &str = "the arc lead needs a positive radius and a sweep above 0 and up to 180 degrees";
 
-/// The fallback reason when the cut starts above the material top.
-const ABOVE: &str = "the cut starts above the material top";
+/// The fallback reason when the cut starts above the material top: the
+/// tool goes straight down to the cut in air. It is the reason of the named
+/// fallback where one is due ([`super::needs_fallback`]), and of a note on
+/// the status line where the asked kind was not an air entry (#4407).
+pub const ABOVE: &str = "the cut starts above the material top";
+
+/// The notes of an entry above the material top: none for an asked air
+/// entry, else one that says why the asked kind is not flown (#4407).
+fn above_notes(asked: EntryKind) -> Result<Vec<Note>, Refusal> {
+    if asked == EntryKind::Air || super::needs_fallback(asked, EntryKind::Air) {
+        return Ok(Vec::new());
+    }
+    Ok(vec![Note::new(Stage::Entry, format!("entry: {ABOVE} - the tool goes straight down to it in air, with no {}", asked.name()))?])
+}
+
+/// The notes of the checks that refused a try before the entry that fits
+/// (#4407): one for each kind and reason.
+fn rejected_notes(rejected: &[(EntryKind, &'static str)]) -> Result<Vec<Note>, Refusal> {
+    rejected.iter().map(|(k, why)| Note::new(Stage::Entry, format!("entry: a try of the {} was refused by its check - {why}", k.name()))).collect()
+}
 
 /// The heights of one level along the plane normal, in the depth units of
 /// the plan (0 = the level): the material top, the clearance above it where
@@ -179,21 +200,26 @@ impl EntryPlanner for EntryStage {
             let at = ctx.start.at();
             let proof = super::Proof::InAir(super::room::disc(at, super::ROOM_TOL)?);
             let entry = Entry::new(EntryKind::Air, vec![ctx.above(at)?], vec![ctx.start], proof, e, ctx.tool())?;
-            return named(entry, e, ABOVE, Vec::new());
+            return named(entry, e, ABOVE, above_notes(e.asked())?);
         }
         for k in order(e.asked()) {
             if let Some(entry) = attempt(k, &mut ctx)? {
-                let notes: Vec<Note> = std::mem::take(&mut ctx.notes);
+                let mut notes = rejected_notes(&ctx.rejected)?;
+                notes.append(&mut ctx.notes);
                 return named(entry, e, missed(e.asked()), notes);
             }
+            // The notes of a try that gave no entry describe that entry
+            // only; the refused checks stay in `ctx.rejected`.
             ctx.notes.clear();
         }
         let at = ctx.start.at();
+        let tried: Vec<&'static str> = ctx.rejected.iter().map(|(_, why)| *why).collect();
         Err(if e.asked().into_material() {
             Refusal::new(Stage::Entry, NO_MATERIAL_ENTRY).at(at).fix("use a smaller helix radius or a larger ramp angle, or pre-drill a hole")
         } else {
             Refusal::new(Stage::Entry, NO_SAFE_ENTRY).at(at).fix("pre-drill a hole at the start of the cut, or select a helix or ramp entry")
-        })
+        }
+        .after(&tried))
     }
 
     fn exit(&self, last: &Cut, r: &KernelRegion, cleared: &Region) -> Result<Exit, Refusal> {

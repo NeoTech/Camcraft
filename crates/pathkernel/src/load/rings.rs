@@ -19,7 +19,7 @@ use super::law::{Read, Stock, read};
 use super::stage::{FRESH_CUT, Outcome, beside, finish, on_span, poly_dist};
 use super::{Controlled, OrderedSet, PLAN_TOL};
 use crate::frame::PlanePoint;
-use crate::guide::{Curve, Family, MarkKind};
+use crate::guide::{BAD_CURVE, Curve, Family, MarkKind, ZERO_LENGTH};
 use crate::region::PlanarRegion;
 use crate::verdict::{Refusal, Stage, Verdict};
 use crate::{Loop, Point2, Region, to_loops};
@@ -34,6 +34,9 @@ pub const AT_FLOOR: &str = "the passes are at the smallest step and this cut is 
 pub const TOO_MANY_PASSES: &str = "the load stage inserted the most passes that it makes; this cut is still above the load limit";
 /// Refusal reason: a polygon operation of the stage failed.
 pub const LOAD_GEOMETRY: &str = "the load stage geometry cannot be computed: a value is out of range";
+/// Refusal reason: a polygon offset or a boolean refused its input as not
+/// valid geometry (#4407: the kind of the geometry error is kept).
+pub const LOAD_GEOMETRY_INVALID: &str = "the load stage geometry cannot be computed: the geometry refused its input as not valid";
 
 /// The most read-and-insert rounds.
 const MAX_ROUNDS: usize = 12;
@@ -52,8 +55,8 @@ enum Field {
     Part,
 }
 
-fn geo<T, E>(r: Result<T, E>) -> Result<T, Refusal> {
-    r.map_err(|_| Refusal::new(Stage::Load, LOAD_GEOMETRY))
+fn geo<T>(r: Result<T, camcraft_geometry::geo2d::GeoError>) -> Result<T, Refusal> {
+    r.map_err(|e| crate::geo_refusal(Stage::Load, &e, LOAD_GEOMETRY, LOAD_GEOMETRY_INVALID))
 }
 
 fn refs(p: &PlanarRegion, f: Field) -> &[Loop] {
@@ -102,8 +105,12 @@ fn between(p: &PlanarRegion, f: Field, d: f64, near: &Curve, gap: f64, tol: f64)
             }
             orient(&mut piece, closed, near);
             let pp: Result<Vec<PlanePoint>, Refusal> = piece.into_iter().map(|q| PlanePoint::new(q, z)).collect();
-            if let Ok(c) = Curve::new(pp?, None, closed, near.k(), Family::Ring) {
-                out.push(c);
+            // A piece too short to be a curve is no ring there; each other
+            // refusal of the curve is a fault, refused by name (#4407).
+            match Curve::new(pp?, None, closed, near.k(), Family::Ring) {
+                Ok(c) => out.push(c),
+                Err(e) if [BAD_CURVE, ZERO_LENGTH].contains(&e.reason()) => {}
+                Err(e) => return Err(e),
             }
         }
     }

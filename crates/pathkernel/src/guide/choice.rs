@@ -1,7 +1,7 @@
 //! The guide choices of stage 2 (#4176): what a strategy asks of the guide
 //! stage, each a checked value. Moved out of `guide.rs` (first part) with
 //! no change; the helix choice is new (second part).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2: Guide curves"; the helix of a thread or a helical bore as in
 //! the machine-tool handbooks (one turn for each pitch of descent).
 

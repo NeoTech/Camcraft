@@ -5,7 +5,7 @@
 //! the planner switch at its default, the output does not change. A kind
 //! PR of K6 calls it on its kernel route; until then only the pins build a
 //! kernel region beside the old path.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region" (the three material-side carriers map onto
 //! `MaterialSide`) and `docs/decisions/4025-kernel-region.md`.
 

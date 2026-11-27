@@ -20,7 +20,7 @@
 //! chord proof of the ring links (`machining2d/ring_links.rs`, #3747,
 //! #3822) and the chain link of the Adaptive air plan
 //! (`machining2d/adaptive/air_chain.rs`, `link`; the #3934 decision of our
-//! design record `docs/decisions/4024-path-kernel-design.md`); stay-down
+//! design record (`RECOMMENDED.md`, `## #4024`)); stay-down
 //! linking as in Held & Spielberger (2009).
 
 use camcraft_geometry::geo2d::{point_segment_distance, segment_gap, segments_cross};

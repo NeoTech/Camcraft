@@ -3,7 +3,7 @@
 //! stock edge), and the side of each curve where the deeper curves lie, so
 //! that the direction choice can put the uncut material on the right
 //! (climb) or on the left (conventional) of the travel.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 4: Order" and "#3934" (Outside walks from the stock edge, Inside
 //! from the part wall); climb milling with the material on the right of a
 //! clockwise spindle, as in any machining handbook.

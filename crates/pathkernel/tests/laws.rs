@@ -70,6 +70,12 @@ mod link_rule;
 mod load;
 #[path = "laws/load_stage.rs"]
 mod load_stage;
+// #4407: the pins of "no silent recovery", outside `laws/` (another PR
+// edits that directory at the same time).
+#[path = "no_silent/entry.rs"]
+mod no_silent_entry;
+#[path = "no_silent/exit.rs"]
+mod no_silent_exit;
 #[path = "laws/order.rs"]
 mod order;
 #[path = "laws/order_link.rs"]
