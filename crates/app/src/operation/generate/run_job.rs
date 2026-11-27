@@ -2,13 +2,20 @@
 //! Provenance: standard axial tool-stack clearance; issue #1844.
 
 use super::*;
+use camcraft_motion::pathkernel::PlannerEngine;
 
 /// Run a fully-collected job: every world read happened in
 /// [`collect_job`], on the caller's thread, and nothing here names a
 /// `World`. Batch jobs run on worker threads, where a `&World` cannot
 /// exist. The reach preflight refuses unsupported depths before any
 /// generator builds a path.
-pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
+pub fn run_job(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    run_job_on(job, crate::operation::planner_engine())
+}
+
+/// [`run_job`] with the planner engine given (#4055: a test passes it
+/// directly; [`run_job`] passes the one reading of the process setting).
+pub fn run_job_on(mut job: GenJob, engine: PlannerEngine) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // The spindle law's set-aside note (issue #71 review) rides the
     // path whichever arm cut it: a note, never a warning - the post
     // is not held for features the op honestly leaves standing.
@@ -38,9 +45,9 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     tracing::debug!(kind = %kind, "generation started");
     // #4055: the one planner switch - the old planners unless
     // CAMCRAFT_PLANNER=new, which refuses a phase-1 kind by name.
-    let (mut path, warns) = crate::operation::check_engine(kind, crate::operation::planner_engine())
+    let (mut path, warns) = crate::operation::check_engine(kind, engine)
         .and_then(|()| pocket_reach(&job))
-        .and_then(|()| run_job_arms(job))
+        .and_then(|()| run_job_arms(job, engine))
         .map_err(|e| match stock_band { Some(band) => band.name(e), None => e })
         .map_err(|e| name_outside_entry_refusal(e, outside_clearing))
         .map_err(|e| crate::operation::body_judged::name_enclosure(e, &judged_tool, body.as_ref()))

@@ -8,6 +8,7 @@
 use camcraft_pathkernel::order::StartSide;
 use camcraft_pathkernel::{Refusal, Stage};
 
+use super::kind_pocket::pocket_kind;
 use super::kit::{Case, Law, LawVerdict, NO_OUTPUT, Planners, plan_cuts, refused_held, run};
 use super::l1_guide::check_l1;
 use super::l2_sides::check_l2;
@@ -47,7 +48,7 @@ const fn not_yet(name: &'static str) -> Kind {
 pub const KINDS: [Kind; 16] = [
     not_yet("Face"),
     not_yet("2D Contour"),
-    not_yet("2D Pocket"),
+    Kind { name: "2D Pocket", state: State::Moved, recipe: Some(pocket_kind) },
     not_yet("2D Adaptive"),
     not_yet("2D Offset"),
     not_yet("Engrave"),

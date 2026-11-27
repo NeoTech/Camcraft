@@ -41,17 +41,38 @@ pub fn contour_material(side: Side) -> Option<MaterialSide> {
     }
 }
 
+/// The width (mm) under which a loop of a pocket-family area is a sliver
+/// of the polygon clipping (#3752: the stock less a band can leave a loop
+/// with all its points on one line): its area is less than this width times
+/// its length, and it holds no material to cut.
+pub const SLIVER_WIDTH: f64 = 1e-4;
+
+/// `r` without its sliver loops (each loop whose area is under
+/// [`SLIVER_WIDTH`] times its perimeter).
+pub fn without_slivers(r: &Region) -> Result<Region, Refusal> {
+    let perimeter = |l: &Loop| {
+        let pts = l.points();
+        pts.iter().zip(pts.iter().cycle().skip(1)).map(|(a, b)| (b.x - a.x).hypot(b.y - a.y)).sum::<f64>()
+    };
+    let kept: Vec<Loop> = r.loops().iter().filter(|l| l.area().abs() >= SLIVER_WIDTH * perimeter(l)).cloned().collect();
+    if kept.len() == r.loops().len() {
+        return Ok(r.clone());
+    }
+    Region::new(kept).map_err(|_| Refusal::new(Stage::Region, REGION_GEOMETRY))
+}
+
 /// The selection and the material side of a pocket-family area. A band
 /// round a part (`around_part`, with the stock known) is the part, cut on
 /// its Outside; each other area is cut on its Inside. The start side is not
-/// read: it never changes the region.
+/// read: it never changes the region. A sliver loop (no material) is not
+/// selected.
 pub fn pocket_selection(area: &Region, side: &StartSide) -> Result<(Selection, MaterialSide), Refusal> {
     match side.stock.as_ref().filter(|_| side.around_part) {
         Some(stock) => {
             let part = stock.difference(area).map_err(|_| Refusal::new(Stage::Region, REGION_GEOMETRY))?;
-            Ok((selection_of_area(&part)?, MaterialSide::Outside))
+            Ok((selection_of_area(&without_slivers(&part)?)?, MaterialSide::Outside))
         }
-        None => Ok((selection_of_area(area)?, MaterialSide::Inside)),
+        None => Ok((selection_of_area(&without_slivers(area)?)?, MaterialSide::Inside)),
     }
 }
 

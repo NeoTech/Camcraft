@@ -9,7 +9,8 @@
 //! are posted):
 //! - A lateral rapid only at or above the clearance height. A rapid along
 //!   the tool axis goes only up (the retract of a lift or an exit).
-//! - Below the stock top only the moves of a step that the plan proved: a
+//! - Below the stock top (or the level's proved material top) only the
+//!   moves of a step that the plan proved: a
 //!   cut, a stay-down link, the descent and lead of an entry, the lead-out
 //!   of an exit. Each step must start where the tool stands.
 //! - A lift is a retract to the clearance height. Its named reason goes to
@@ -43,6 +44,8 @@ pub const NOT_SETUP_XY: &str =
     "the converter emits only plans in the setup's XY plane with the tool along +Z (a tilted or lathe plane is not supported yet)";
 /// Refusal reason: a cut with a tool axis other than the plane normal.
 pub const AXIS_NOT_NORMAL: &str = "the converter emits only cuts with the tool along the plane normal";
+/// Refusal reason: a level material top above the stock top or not finite.
+pub const BAD_LEVEL_TOP: &str = "the material top of a level must be a finite height at or under the stock top";
 /// Refusal reason: a step kind that this converter does not know.
 pub const UNKNOWN_STEP: &str = "the plan has a step kind that the converter cannot emit";
 /// Refusal reason: an entry while the tool is not at the clearance height.
@@ -117,10 +120,17 @@ impl EmitFeeds {
 
 /// One level: the plan that the caller made for it and the work plane of
 /// that level (its origin is on the level; a plan depth of 0 is the level).
+/// `top_z` is the material top over the approach of each entry of the
+/// level, in setup Z, when the caller proved it lower than the stock top
+/// (#3752: the entry of a lower level starts over the floor of the level
+/// above, where that level cut the column of the entry). `None` is the
+/// stock top of [`EmitHeights`]. A value above the stock top or not finite
+/// is refused (`BAD_LEVEL_TOP`).
 #[derive(Clone, Copy, Debug)]
 pub struct LevelPlan<'a> {
     pub plan: &'a Plan,
     pub plane: WorkPlane,
+    pub top_z: Option<f64>,
 }
 
 /// Why the converter refused, with the level and the step where it did.
@@ -185,7 +195,7 @@ pub struct Emitted {
 
 /// The toolpath of one level's plan. See [`emit_levels`].
 pub fn emit_plan(plan: &Plan, plane: WorkPlane, h: EmitHeights, f: EmitFeeds) -> Result<Emitted, EmitRefusal> {
-    emit_levels(&[LevelPlan { plan, plane }], h, f)
+    emit_levels(&[LevelPlan { plan, plane, top_z: None }], h, f)
 }
 
 /// The toolpath of the plans of each level, in the order given (the level
@@ -197,6 +207,7 @@ pub fn emit_levels(levels: &[LevelPlan<'_>], h: EmitHeights, f: EmitFeeds) -> Re
     let mut pen = Pen::new(h, f);
     for (li, level) in levels.iter().enumerate() {
         pen.set_plane(level.plane).map_err(|e| e.at(li, None))?;
+        pen.set_top(level.top_z).map_err(|e| e.at(li, None))?;
         for (si, step) in level.plan.steps().iter().enumerate() {
             let done = match step {
                 Step::Entry(e) => pen.entry(e),

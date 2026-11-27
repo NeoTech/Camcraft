@@ -6,7 +6,7 @@
 
 use super::arcs::arc_runs;
 use super::{
-    APPROACH_IN_MATERIAL, AXIS_NOT_NORMAL, CUT_DROPPED, ENDS_DOWN, ENTRY_NOT_CLEAR, EmitFeeds, EmitHeights, EmitRefusal,
+    APPROACH_IN_MATERIAL, AXIS_NOT_NORMAL, BAD_LEVEL_TOP, CUT_DROPPED, ENDS_DOWN, ENTRY_NOT_CLEAR, EmitFeeds, EmitHeights, EmitRefusal,
     Emitted, NOT_FINITE, NOT_SETUP_XY, STEP_NOT_DOWN, STEP_OFF_TOOL,
 };
 use crate::cl::{MoveKind, PathBuilder};
@@ -64,6 +64,8 @@ impl Frame {
 
 pub(super) struct Pen {
     h: EmitHeights,
+    /// The material top of the level (setup Z): the approach floor.
+    top: f64,
     f: EmitFeeds,
     frame: Option<Frame>,
     b: Option<PathBuilder>,
@@ -78,11 +80,21 @@ fn near3(a: Point3, b: Point3) -> bool {
 
 impl Pen {
     pub(super) fn new(h: EmitHeights, f: EmitFeeds) -> Self {
-        Self { h, f, frame: None, b: None, state: State::Clear, tally: LinkTally::default(), out: Emitted::default() }
+        Self { h, top: h.top_z(), f, frame: None, b: None, state: State::Clear, tally: LinkTally::default(), out: Emitted::default() }
     }
 
     pub(super) fn set_plane(&mut self, plane: WorkPlane) -> Result<(), EmitRefusal> {
         self.frame = Some(Frame::of(plane)?);
+        Ok(())
+    }
+
+    /// The material top of the level: `None` is the stock top.
+    pub(super) fn set_top(&mut self, top: Option<f64>) -> Result<(), EmitRefusal> {
+        let t = top.unwrap_or(self.h.top_z());
+        if !(t.is_finite() && t <= self.h.top_z()) {
+            return Err(EmitRefusal::new(BAD_LEVEL_TOP));
+        }
+        self.top = t;
         Ok(())
     }
 
@@ -156,7 +168,7 @@ impl Pen {
             return Err(EmitRefusal::new(ENTRY_NOT_CLEAR));
         }
         let approach = e.approach().iter().map(|p| self.xyz(p)).collect::<Result<Vec<_>, _>>()?;
-        if approach.iter().any(|p| p.z < self.h.top_z() - EMIT_TOL) {
+        if approach.iter().any(|p| p.z < self.top - EMIT_TOL) {
             return Err(EmitRefusal::new(APPROACH_IN_MATERIAL));
         }
         let descent = e.descent().iter().map(|p| self.xyz(p)).collect::<Result<Vec<_>, _>>()?;
