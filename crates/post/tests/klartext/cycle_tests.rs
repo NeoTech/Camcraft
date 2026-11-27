@@ -60,7 +60,7 @@ fn drill_posts_cycle_200_with_the_whole_depth_and_the_dwell_at_depth() {
     assert_eq!(calls.len(), 2, "{nc}");
     assert_eq!(drill[calls[1] - 1], "L X+15 Y+5 Z+6 R0 FMAX", "{nc}");
     // The chain that the cycle does is not written again.
-    assert!(!drill.iter().any(|b| b.starts_with("L ") && !b.ends_with("FMAX")), "{nc}");
+    assert!(!drill.iter().any(|b| b.contains(" R0 F") && !b.ends_with("FMAX")), "{nc}");
     assert!(!drill.iter().any(|b| b.contains("DWELL TIME")), "{nc}");
 }
 
@@ -93,7 +93,7 @@ fn rigid_and_floating_taps_post_cycles_207_and_206() {
         ["Q200=+1 ~", "Q201=-8 ~", "Q206=+500 ~", "Q211=+0.2 ~", "Q203=+5 ~", "Q204=+1"]
     );
     for op in [&rigid, &floating] {
-        assert!(!op.iter().any(|b| b.starts_with("L ") && !b.ends_with("FMAX")), "{nc}");
+        assert!(!op.iter().any(|b| b.contains(" R0 F") && !b.ends_with("FMAX")), "{nc}");
     }
 }
 

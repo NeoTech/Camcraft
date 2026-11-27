@@ -294,9 +294,14 @@ fn milling_cutter_kinds_are_explicit_and_incompatible_tools_refuse_the_cli_save(
         let stream = STREAM.replace("Flat end mill", kind);
         assert!(post(MCH, &stream, &Value::Null).is_ok(), "{kind}");
     }
-    for kind in ["wire", "turning insert", "tap", "touch probe"] {
+    for kind in ["wire", "turning insert", "touch probe"] {
         let stream = STREAM.replace("Flat end mill", kind);
-        assert_cli_keeps_destination("non-mill", &stream, "unsupported milling tool kind");
+        assert_cli_keeps_destination("non-mill", &stream, "unsupported tool kind");
+    }
+    // #4227: a drill or a tap is a tool of this post, but only in a drilling cycle.
+    for kind in ["drill", "tap"] {
+        let stream = STREAM.replace("Flat end mill", kind);
+        assert_cli_keeps_destination("axial", &stream, "tool cuts only inside its drilling cycle");
     }
 }
 
