@@ -20,10 +20,13 @@ use crate::geometry::revision::{self, FeatureChanges, IdDiff};
 use crate::model;
 use crate::script::Env;
 
-/// Each model's facets and revision counter before an import: the side of
-/// the diff that an update replaces. The facets are shared (`Arc`), so the
-/// snapshot copies no triangles.
-pub(super) struct Before(HashMap<String, (Option<Arc<[Triangle]>>, u64)>);
+/// One model's facets (shared, so no triangle is copied) and its revision
+/// counter, as they stood.
+type Snapshot = (Option<Arc<[Triangle]>>, u64);
+
+/// Each model's snapshot before an import: the side of the diff that an
+/// update replaces.
+pub(super) struct Before(HashMap<String, Snapshot>);
 
 /// Snapshot every model now. The import names its model only when it runs
 /// (the given name, or the file stem), so the answer's own `model` selects
