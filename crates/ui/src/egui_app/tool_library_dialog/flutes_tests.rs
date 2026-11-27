@@ -186,9 +186,22 @@ fn each_fluted_kind_shows_its_flutes() {
         let land = |z: f64| radius_at(&prof, z).unwrap_or(0.0);
         let cut = m.iter().flat_map(|q| [q.a, q.b, q.c]).any(|p| p.z < t.flute_len && p.x.hypot(p.y) < land(p.z) * 0.9);
         assert!(cut, "{name}: a groove cuts into the cutting part");
-        let shank = ring(&m, t.flute_len + t.shank_len * 0.5);
-        assert_eq!(grooves(&shank, t.shank_d * 0.5), 0, "{name}: the shank is plain");
+        let above = m.iter().flat_map(|q| [q.a, q.b, q.c]).filter(|p| p.z > t.flute_len + 1e-9);
+        for p in above {
+            assert!(on_meridian(&prof, p.z, p.x.hypot(p.y)), "{name}: {p:?} above the cutting part is plain");
+        }
     }
+}
+
+/// `(z, r)` lies on the meridian polyline `prof`.
+fn on_meridian(prof: &[(f64, f64)], z: f64, r: f64) -> bool {
+    prof.windows(2).any(|w| {
+        let ((z0, r0), (z1, r1)) = (w[0], w[1]);
+        let (dz, dr) = (z1 - z0, r1 - r0);
+        let len2 = dz * dz + dr * dr;
+        let s = if len2 > 1e-18 { (((z - z0) * dz + (r - r0) * dr) / len2).clamp(0.0, 1.0) } else { 0.0 };
+        (z0 + dz * s - z).hypot(r0 + dr * s - r) < 1e-6
+    })
 }
 
 /// #4452: a twist drill or a tap that states no count draws the kind's
