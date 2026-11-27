@@ -77,8 +77,9 @@ fn strip(p: &PlanarRegion) -> Result<Region, Refusal> {
 
 /// The legal room of the tool centre at the depth of the cut: the centre,
 /// the air and the band at the stock edge, less the keep-out grown by the
-/// tool radius, grown by [`ROOM_TOL`].
-pub(super) fn legal_room(p: &PlanarRegion) -> Result<Region, Refusal> {
+/// tool radius, grown by [`ROOM_TOL`]. The link stage reads the same room
+/// for its links outside the stock (#4241).
+pub(crate) fn legal_room(p: &PlanarRegion) -> Result<Region, Refusal> {
     let mut legal = p.center().clone();
     if !p.air().is_empty() {
         legal = geo(legal.union(p.air()))?;
