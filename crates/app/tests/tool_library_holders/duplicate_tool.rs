@@ -8,7 +8,7 @@
 //! refused by name and changes nothing.
 //! Provenance: our own tests over our own commands.
 
-use camcraft_app::commands::{DuplicateTool, History};
+use camcraft_app::commands::DuplicateTool;
 use camcraft_app::model;
 use camcraft_app::tool_assembly::assembly_of;
 use camcraft_app::tool_body::body_of;
