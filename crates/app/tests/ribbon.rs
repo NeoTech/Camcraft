@@ -66,6 +66,8 @@ fn family_is_derived_not_forked() {
             Section::Sinker => Family::Sinker,
             // #1883: the Waterjet section is the waterjet family's.
             Section::Waterjet => Family::Waterjet,
+            // #4081: the Laser section is the laser family's.
+            Section::Laser => Family::Laser,
             _ => Family::Mill,
         };
         assert_eq!(k.family(), want, "row {i} ({}) family drifted", k.label);
@@ -325,8 +327,10 @@ fn the_probe_appends_its_id_and_lists_in_drilling() {
     // #1883 appended the waterjet profile behind it (46).
     assert_eq!(KindInfo::ALL[46].ty, operation::OpType::WaterjetProfile);
     // #1894 appended the multi-axis deburr behind it (47); #2826 the
-    // Rotary Flow band behind that (48).
-    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::RotaryFlow);
+    // Rotary Flow band behind that (48); #4081 the laser profile
+    // behind that (49).
+    assert_eq!(KindInfo::ALL[48].ty, operation::OpType::RotaryFlow);
+    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::LaserProfile);
     assert_eq!(KindInfo::ALL[13].ty, operation::OpType::Pocket3D, "Pocket3D keeps id 13");
     assert_eq!(KindInfo::ALL[37].ty, operation::OpType::BoringTurning, "the turning tail keeps 37");
     let drilling: Vec<operation::OpType> = Section::Drilling.kinds().into_iter().map(|i| KindInfo::ALL[i].ty).collect();

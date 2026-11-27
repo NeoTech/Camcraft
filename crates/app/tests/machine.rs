@@ -39,6 +39,9 @@ mod axis_rows;
 // #4081: the laser machine kind and the laser head at the app doors.
 #[path = "machine/laser_kind.rs"]
 mod laser_kind;
+// #4081: the Laser Profile operation.
+#[path = "machine/laser_profile.rs"]
+mod laser_profile;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()

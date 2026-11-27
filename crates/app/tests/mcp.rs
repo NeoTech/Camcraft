@@ -26,6 +26,9 @@ mod mcp_open;
 // #3449: every accepted field of a kind, optional ones and enum words.
 #[path = "mcp/op_type_fields.rs"]
 mod op_type_fields;
+// #4081: the Laser Profile over MCP.
+#[path = "mcp/laser_profile.rs"]
+mod laser_profile;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;

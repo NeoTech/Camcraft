@@ -79,6 +79,8 @@ pub mod program_entry;
 pub use camcraft_motion::plasma;
 // #1883: the waterjet profile and the 2D sheet kernel it shares.
 pub use camcraft_motion::{sheet, waterjet};
+// #4081: the laser profile generator (the waterjet's laws, its own voice).
+pub use camcraft_motion::laser;
 pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.

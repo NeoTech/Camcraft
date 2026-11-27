@@ -6,7 +6,7 @@
 use crate::catalog_asset::{CATALOG_JSON, parse_catalog};
 use crate::tools::{Tool, ToolKind, ToolMaterial, catalog, probe_tool, torch_tool};
 
-const ORDER: [&str; 63] = [
+const ORDER: [&str; 64] = [
     "EM-0200-2FL", "EM-0300-2FL", "EM-0400-2FL", "EM-0600-4FL", "EM-0800-4FL", "EM-1000-4FL", "EM-1200-2FL",
     // #3036: BN-0300, BB-0600-R1 and the metric tap-drill and clearance drills sit in their families.
     "BN-0300", "BN-0600", "BN-1000", "BB-0600-R1", "BB-1000-R1",
@@ -23,6 +23,8 @@ const ORDER: [&str; 63] = [
     "WJ-KERF-080",
     // #3369: roundover, cove and V-groove form mills, in mm and inch.
     "FM-RO-R6", "FM-RO-R0250IN", "FM-CV-R6", "FM-CV-R0250IN", "FM-VG-90-12", "FM-VG-90-0500IN",
+    // #4081: the laser head.
+    "LZ-KERF-020",
 ];
 
 fn tool(name: &str) -> Tool {
@@ -119,6 +121,8 @@ fn the_json_catalog_keeps_the_old_tables_values() {
     assert_eq!(format!("{:?}", tool("EDM-W025")), format!("{:?}", crate::wire::wire_tool(0.25)));
     // #1883: the nozzle row is waterjet_tool(0.8), the kerf the golden plate cuts with.
     assert_eq!(format!("{:?}", tool("WJ-KERF-080")), format!("{:?}", crate::waterjet::waterjet_tool(0.8)));
+    // #4081: the laser head row is laser_tool(0.2).
+    assert_eq!(format!("{:?}", tool("LZ-KERF-020")), format!("{:?}", crate::laser::laser_tool(0.2)));
 }
 
 /// #3036: the small ball, the small bull nose, and a tap drill and a

@@ -2,16 +2,19 @@
 
 use crate::{model, operation::Family, schema::Operation};
 
-/// Waterjet removal has no validated stock model or waterjet laws yet.
+/// Waterjet and laser removal (#4081) have no validated stock model or
+/// sheet laws yet.
 #[must_use]
 pub fn skips(op: &Operation) -> bool {
-    op.params.kind().info().family() == Family::Waterjet
+    matches!(op.params.kind().info().family(), Family::Waterjet | Family::Laser)
 }
 
 pub(crate) fn refuse_waterjet_cuts(world: &flecs_ecs::prelude::World) -> Result<(), String> {
     for (name, entity) in crate::posting::program_ops(world)? {
-        if model::operation_of(world, &entity).is_some_and(|op| skips(&op)) {
-            return Err(format!("{name}: waterjet stock removal is not judged: the stock sim has no waterjet model"));
+        let Some(op) = model::operation_of(world, &entity) else { continue };
+        if skips(&op) {
+            let w = if op.params.kind().info().family() == Family::Laser { "laser" } else { "waterjet" };
+            return Err(format!("{name}: {w} stock removal is not judged: the stock sim has no {w} model"));
         }
     }
     Ok(())

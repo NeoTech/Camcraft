@@ -166,11 +166,10 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             family.work(),
         )));
     }
-    // #4081: a laser cutter cuts only laser work; no laser operation
-    // ships before the Laser Profile slice, so each kind is refused here.
+    // #4081: a laser cutter cuts only laser work (a Laser Profile).
     if machine == crate::machine::Kind::Laser {
         return Err(CommandError::Invalid(format!(
-            "a {} operation is {} work; the setup's machine is a laser cutter, which cuts only laser operations",
+            "a {} operation is {} work; the setup's machine is a laser cutter, which cuts only laser operations (a Laser Profile)",
             params.kind(),
             family.work(),
         )));
@@ -205,6 +204,14 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
     if family == Family::Waterjet {
         return Err(CommandError::Invalid(format!(
             "a {} operation is waterjet work; {clause} - mount a waterjet first",
+            params.kind(),
+        )));
+    }
+    // #4081: laser work needs a laser cutter - no mill-turn carries a
+    // beam.
+    if family == Family::Laser {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is laser cutting work; {clause} - mount a laser cutter first",
             params.kind(),
         )));
     }

@@ -129,7 +129,7 @@ fn source_region(
         OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => Err(GenError::Invalid("a sinker burn has no machining region".into())),
         // The plasma cut goes THROUGH the plate (#670): what it can cut
         // is the through-silhouette - a blind pocket is no torch's work.
-        OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) => {
+        OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::LaserProfile(_) => {
             slice::project(&material.facets, FOOTPRINT_SAMPLES).map_err(from_slice)
         }
         // The wire cuts THROUGH the workpiece too (#532): its profile

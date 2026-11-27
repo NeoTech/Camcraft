@@ -164,6 +164,7 @@ impl OpParams {
             OpParams::PlasmaProfile(p) => p.is_sane(),
             // The waterjet door (#1883).
             OpParams::WaterjetProfile(p) => p.is_sane(),
+            OpParams::LaserProfile(p) => p.is_sane(),
             // The wire door (#532): the parameter set's own sanity; the
             // condition is the command door's world question.
             OpParams::WireContour(p) => p.is_sane(),

@@ -299,7 +299,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
                         params,
                         OpParams::Contour { .. }
                             | OpParams::PlasmaProfile(_)
-                            | OpParams::WaterjetProfile(_)
+                            | OpParams::WaterjetProfile(_) | OpParams::LaserProfile(_)
                             | OpParams::WireContour(_)
                             | OpParams::Chamfer2D { .. }
                     ) =>
@@ -329,7 +329,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         (
             OpParams::Contour { .. }
                 | OpParams::PlasmaProfile(_)
-                | OpParams::WaterjetProfile(_)
+                | OpParams::WaterjetProfile(_) | OpParams::LaserProfile(_)
                 | OpParams::WireContour(_)
                 | OpParams::Chamfer2D { .. },
             SrcRef::Selection(items),

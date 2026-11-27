@@ -362,6 +362,10 @@ pub enum OpType {
     /// rotation axis (see [`crate::multiaxis::rotary_flow`]).
     /// Appended: stored kind ids never move.
     RotaryFlow,
+    /// Laser profile (#4081): the beam's 2D through-cut of picked
+    /// contours - the laser cutter's family (see [`crate::laser`]).
+    /// Appended: stored kind ids never move.
+    LaserProfile,
 }
 
 impl core::fmt::Display for OpType {

@@ -1465,6 +1465,8 @@ pub enum ParamsDto {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stated_axis: Option<[f64; 3]>,
     },
+    /// The laser profile (#4081): additive - no older file names it.
+    LaserProfile(LaserDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

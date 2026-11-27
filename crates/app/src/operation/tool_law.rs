@@ -110,6 +110,10 @@ pub const TORCH: &[ToolKind] = &[ToolKind::Torch];
 /// else, and no cutting kind mounts a nozzle.
 pub const NOZZLE: &[ToolKind] = &[ToolKind::Waterjet];
 
+/// The laser head (#4081): the laser operations mount nothing else,
+/// and no cutting kind mounts a laser head.
+pub const LASER: &[ToolKind] = &[ToolKind::Laser];
+
 /// No library tool (#532): a wire EDM kind mounts none - the wire's
 /// diameter and spark gap are the machine's condition (#531), and a
 /// tool beside it would be a second source for the same number. The

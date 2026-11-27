@@ -54,6 +54,8 @@ enum KindWord {
     Probe,
     Torch,
     Waterjet,
+    // #4081: the laser head.
+    Laser,
     Electrode,
     ThreadMill,
     ThreadMillSingle,
@@ -152,6 +154,7 @@ impl Def {
                 KindWord::Probe => ToolKind::Probe,
                 KindWord::Torch => ToolKind::Torch,
                 KindWord::Waterjet => ToolKind::Waterjet,
+                KindWord::Laser => ToolKind::Laser,
                 KindWord::Electrode => ToolKind::Electrode,
                 KindWord::ThreadMill => ToolKind::ThreadMill,
                 KindWord::ThreadMillSingle => ToolKind::ThreadMillSingle,
