@@ -31,7 +31,10 @@ fn klartext_rnd_rounds_a_right_angle_with_its_own_feed() {
     assert_to(m[3], 20.0, 20.0, -1.0);
     // F50 acts only on the rounding arc; the modal F100 stays.
     let feeds: Vec<_> = m.iter().map(|m| m.feed).collect();
-    assert_eq!(feeds, vec![Some(100.0), Some(100.0), Some(50.0), Some(100.0)]);
+    assert_eq!(
+        feeds,
+        vec![Some(100.0), Some(100.0), Some(50.0), Some(100.0)]
+    );
     // Each move maps to the block that programmed it.
     let lines: Vec<_> = (0..4).map(|i| p.line_for_move(0, i)).collect();
     assert_eq!(lines, vec![Some(2), Some(3), Some(4), Some(5)]);
@@ -78,12 +81,18 @@ fn klartext_rnd_on_an_obtuse_corner_is_tangent_to_both_lines() {
     let a = m[2].arc.expect("arc");
     assert!(a.ccw);
     for p in [m[1].to, m[2].to] {
-        assert!(near((p.x - a.center.x).hypot(p.y - a.center.y), 4.0), "radius at {p:?}");
+        assert!(
+            near((p.x - a.center.x).hypot(p.y - a.center.y), 4.0),
+            "radius at {p:?}"
+        );
     }
     // Tangency: the radius at each end is normal to its line.
     assert!(near(m[1].to.x - a.center.x, 0.0));
     let (rx, ry) = (m[2].to.x - a.center.x, m[2].to.y - a.center.y);
-    assert!(near(rx * s + ry * s, 0.0), "radius is normal to the line after");
+    assert!(
+        near(rx * s + ry * s, 0.0),
+        "radius is normal to the line after"
+    );
 }
 
 #[test]
@@ -111,15 +120,27 @@ fn klartext_transition_elements_refuse_what_is_not_exact() {
     // (body, line of the refused block, code)
     let cases: [(&[&str], usize, &str); 11] = [
         // After an arc, before an arc, at the program end.
-        (&[base, "CC X+0 Y+5", "C X+5 Y+5 DR-", "RND R2", "L X+5 Y+20"], 5, "RND"),
-        (&[base, "L X+10", "RND R2", "CR X+20 Y+10 R+10 DR+"], 4, "RND"),
+        (
+            &[base, "CC X+0 Y+5", "C X+5 Y+5 DR-", "RND R2", "L X+5 Y+20"],
+            5,
+            "RND",
+        ),
+        (
+            &[base, "L X+10", "RND R2", "CR X+20 Y+10 R+10 DR+"],
+            4,
+            "RND",
+        ),
         (&[base, "L X+10", "CHF 2"], 4, "CHF"),
         // Too large for the line, on a straight run, two in a row.
         (&[base, "L X+5", "RND R10", "L X+5 Y+20"], 4, "RND"),
         (&[base, "L X+10", "CHF 2", "L X+20"], 4, "CHF"),
         (&[base, "L X+10", "RND R2", "RND R3", "L Y+10"], 4, "RND"),
         // The middle line is 5 mm, but the two roundings need 3 mm each.
-        (&[base, "L X+10", "RND R3", "L Y+5", "RND R3", "L X+0"], 6, "RND"),
+        (
+            &[base, "L X+10", "RND R3", "L Y+5", "RND R3", "L X+0"],
+            6,
+            "RND",
+        ),
         // A Z change, FMAX, an M function at the block end before, an M function after.
         (&[base, "L X+10", "RND R2", "L Y+10 Z-2"], 5, "RND"),
         (&[base, "L X+10 FMAX", "RND R2", "L Y+10"], 3, "RND"),
@@ -133,7 +154,10 @@ fn klartext_transition_elements_refuse_what_is_not_exact() {
             other => panic!("{body:?}: expected an unsupported-code refusal, got {other}"),
         }
         assert_eq!(e.line(), line, "{body:?}: {e}");
-        assert!(e.to_string().contains(&format!("block {}:", line - 1)), "{e}");
+        assert!(
+            e.to_string().contains(&format!("block {}:", line - 1)),
+            "{e}"
+        );
     }
     for bad in ["RND R0", "RND R-2", "RND", "CHF", "CHF 2 3", "RND R2 X+1"] {
         let e = refusal(&pgm(&[base, "L X+10", bad, "L Y+10"]));

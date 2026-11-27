@@ -269,10 +269,14 @@ pub fn line_feed(
 ) -> Result<(MoveKind, Option<f64>), GcodeError> {
     Ok(match w.feed {
         Some(Feed::Max) => (MoveKind::Rapid, None),
-        _ => (
-            MoveKind::Feed,
-            Some(rate.ok_or_else(|| b.invalid_modal(&format!("{what} needs a feed rate F or FMAX")))?),
-        ),
+        _ => {
+            (
+                MoveKind::Feed,
+                Some(rate.ok_or_else(|| {
+                    b.invalid_modal(&format!("{what} needs a feed rate F or FMAX"))
+                })?),
+            )
+        }
     })
 }
 

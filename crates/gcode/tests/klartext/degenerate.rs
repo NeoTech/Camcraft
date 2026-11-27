@@ -56,7 +56,10 @@ fn klartext_every_truncation_of_the_golden_is_refused_without_a_panic() {
             }
             (refused, end)
         });
-        assert_eq!(n.0, n.1, "{name}: a program cut before END PGM must be refused");
+        assert_eq!(
+            n.0, n.1,
+            "{name}: a program cut before END PGM must be refused"
+        );
     }
 }
 

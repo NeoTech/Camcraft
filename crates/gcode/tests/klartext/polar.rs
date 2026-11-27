@@ -28,7 +28,11 @@ fn klartext_lp_reaches_polar_points_about_the_pole() {
     // PA alone keeps the polar radius (6); FMAX is a rapid.
     assert_to(m[5], 0.0, -6.0, 2.0);
     assert_eq!((m[5].kind, m[5].feed), (MoveKind::Rapid, None));
-    assert!(m[1..5].iter().all(|m| m.arc.is_none() && m.feed == Some(100.0)));
+    assert!(
+        m[1..5]
+            .iter()
+            .all(|m| m.arc.is_none() && m.feed == Some(100.0))
+    );
 }
 
 #[test]
@@ -49,13 +53,23 @@ fn klartext_cp_arcs_about_the_pole_in_both_directions() {
     assert_to(m[4], 10.0, 0.0, -1.0);
     for (mv, ccw) in [(m[1], true), (m[2], false), (m[3], false), (m[4], true)] {
         let a = mv.arc.expect("arc");
-        assert!(near(a.center.x, 0.0) && near(a.center.y, 0.0) && a.ccw == ccw, "{a:?}");
+        assert!(
+            near(a.center.x, 0.0) && near(a.center.y, 0.0) && a.ccw == ccw,
+            "{a:?}"
+        );
     }
     assert_eq!(m[4].feed, Some(300.0));
     // CT continues the tangent at the end of the CP arc: same circle.
     let a = m[5].arc.expect("CT arc");
-    assert!(a.ccw && near(a.center.x, 0.0) && near(a.center.y, 0.0), "{a:?}");
-    assert_eq!(p.line_for_move(0, 3), Some(5), "both pieces map to the CP block");
+    assert!(
+        a.ccw && near(a.center.x, 0.0) && near(a.center.y, 0.0),
+        "{a:?}"
+    );
+    assert_eq!(
+        p.line_for_move(0, 3),
+        Some(5),
+        "both pieces map to the CP block"
+    );
 }
 
 #[test]
@@ -78,15 +92,30 @@ fn klartext_polar_blocks_refuse_what_is_not_exact() {
     let base = "L X+10 Y+0 Z-1 R0 F100";
     let kind = |body: &[&str]| refusal(&pgm(body));
     let e = kind(&[base, "LP PR+5 PA+0"]);
-    assert!(matches!(e, GcodeError::InvalidModal { line: 3, .. }), "no pole: {e}");
+    assert!(
+        matches!(e, GcodeError::InvalidModal { line: 3, .. }),
+        "no pole: {e}"
+    );
     let e = kind(&["CC X+0 Y+0", base, "LP X+5 PA+0"]);
-    assert!(matches!(e, GcodeError::Syntax { line: 4, .. }), "X in LP: {e}");
+    assert!(
+        matches!(e, GcodeError::Syntax { line: 4, .. }),
+        "X in LP: {e}"
+    );
     let e = kind(&["CC X+0 Y+0", base, "LP PR+5 IPR+1"]);
-    assert!(matches!(e, GcodeError::Syntax { line: 4, .. }), "PR and IPR: {e}");
+    assert!(
+        matches!(e, GcodeError::Syntax { line: 4, .. }),
+        "PR and IPR: {e}"
+    );
     let e = kind(&["CC X+0 Y+0", base, "LP PR-5 PA+0"]);
-    assert!(matches!(e, GcodeError::InvalidModal { line: 4, .. }), "negative PR: {e}");
+    assert!(
+        matches!(e, GcodeError::InvalidModal { line: 4, .. }),
+        "negative PR: {e}"
+    );
     let e = kind(&["CC X+10 Y+0", base, "LP PR+5"]);
-    assert!(matches!(e, GcodeError::InvalidModal { line: 4, .. }), "angle at the pole: {e}");
+    assert!(
+        matches!(e, GcodeError::InvalidModal { line: 4, .. }),
+        "angle at the pole: {e}"
+    );
     for cp in [
         "CP IPA+90 DR-",
         "CP IPA-90 DR+",
@@ -98,12 +127,21 @@ fn klartext_polar_blocks_refuse_what_is_not_exact() {
         "CP PA+90 DR+ FMAX",
     ] {
         let e = kind(&["CC X+0 Y+0", base, cp]);
-        assert!(matches!(e, GcodeError::InvalidArc { line: 4, .. }), "{cp}: {e}");
+        assert!(
+            matches!(e, GcodeError::InvalidArc { line: 4, .. }),
+            "{cp}: {e}"
+        );
     }
     let e = kind(&["CC X+10 Y+0", base, "CP IPA+90 DR+"]);
-    assert!(matches!(e, GcodeError::InvalidArc { line: 4, .. }), "CP at the pole: {e}");
+    assert!(
+        matches!(e, GcodeError::InvalidArc { line: 4, .. }),
+        "CP at the pole: {e}"
+    );
     let e = kind(&["CC X+0 Y+0", base, "CP PR+5 PA+90 DR+"]);
-    assert!(matches!(e, GcodeError::Syntax { line: 4, .. }), "PR in CP: {e}");
+    assert!(
+        matches!(e, GcodeError::Syntax { line: 4, .. }),
+        "PR in CP: {e}"
+    );
     for (line, code) in [("LP PR+5 PA+0 RL", "RL"), ("CP IPA+90 DR+ RR", "RR")] {
         let e = kind(&["CC X+0 Y+0", base, line]);
         assert!(

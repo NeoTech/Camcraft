@@ -118,21 +118,24 @@ fn polar_one(b: &Block, w: &mut Words, t: &str, q: &QTable) -> Result<bool, Gcod
             continue;
         };
         let v = value(b, name, rest, q)?;
-        let slot = match (name.ends_with('R'), slot_inc) {
-            (true, true) => &mut w.ipr,
-            (true, false) => &mut w.pr,
-            (false, true) => &mut w.ipa,
-            (false, false) => &mut w.pa,
-        };
-        let other = match (name.ends_with('R'), slot_inc) {
+        let radius = name.ends_with('R');
+        let pair = match (radius, slot_inc) {
             (true, true) => w.pr,
             (true, false) => w.ipr,
             (false, true) => w.pa,
             (false, false) => w.ipa,
         };
-        if other.is_some() {
-            return Err(b.syntax(&format!("{name} and its absolute/incremental pair in one block")));
+        if pair.is_some() {
+            return Err(b.syntax(&format!(
+                "{name} and its absolute/incremental pair in one block"
+            )));
         }
+        let slot = match (radius, slot_inc) {
+            (true, true) => &mut w.ipr,
+            (true, false) => &mut w.pr,
+            (false, true) => &mut w.ipa,
+            (false, false) => &mut w.pa,
+        };
         set(b, slot, v, name)?;
         return Ok(true);
     }

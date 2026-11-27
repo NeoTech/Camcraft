@@ -84,7 +84,10 @@ impl Machine<'_> {
                 if v == "MAX" {
                     return Err(b.unsupported(name, "FMAX on a transition element is not read"));
                 }
-                if feed.replace(check_feed(b.line, value(b, "F", v, &self.q)?)?).is_some() {
+                if feed
+                    .replace(check_feed(b.line, value(b, "F", v, &self.q)?)?)
+                    .is_some()
+                {
                     return Err(b.syntax("F appears twice"));
                 }
                 continue;
@@ -135,12 +138,7 @@ impl Machine<'_> {
     /// Word checks for a straight-line block next to an `RND` / `CHF`: the line
     /// must move, the line after a transition takes no M function, and the line
     /// before it takes only M functions that act at the block start.
-    pub fn corner_words_check(
-        &self,
-        b: &Block,
-        w: &Words,
-        moves: bool,
-    ) -> Result<(), GcodeError> {
+    pub fn corner_words_check(&self, b: &Block, w: &Words, moves: bool) -> Result<(), GcodeError> {
         let Some(name) = self.corner_name() else {
             return Ok(());
         };
@@ -184,13 +182,24 @@ impl Machine<'_> {
         let len = dx.hypot(dy);
         let feed = match (kind, feed) {
             (MoveKind::Feed, Some(f)) => f,
-            _ => return Err(b.unsupported(name, "the straight line next to it must be a feed move, not FMAX")),
+            _ => {
+                return Err(b.unsupported(
+                    name,
+                    "the straight line next to it must be a feed move, not FMAX",
+                ));
+            }
         };
         if (to.z - from.z).abs() > 1e-9 {
-            return Err(b.unsupported(name, "the straight line next to it must stay in the working plane (no Z change)"));
+            return Err(b.unsupported(
+                name,
+                "the straight line next to it must stay in the working plane (no Z change)",
+            ));
         }
         if len <= 1e-6 {
-            return Err(b.unsupported(name, "the straight line next to it has no length in the working plane"));
+            return Err(b.unsupported(
+                name,
+                "the straight line next to it has no length in the working plane",
+            ));
         }
         let mut start = from;
         if let Some(c) = self.corner.take() {
@@ -227,7 +236,8 @@ impl Machine<'_> {
                 feed,
             });
         } else {
-            self.current.push_move(b.line, MoveKind::Feed, to, Some(feed));
+            self.current
+                .push_move(b.line, MoveKind::Feed, to, Some(feed));
         }
         self.pos = to;
         Ok(())

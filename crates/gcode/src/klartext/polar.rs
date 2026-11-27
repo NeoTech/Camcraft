@@ -124,7 +124,8 @@ impl Machine<'_> {
                 "arc point",
                 Point3::new(pole.x + r * c, pole.y + r * s, z0 + (z1 - z0) * f),
             )?;
-            self.current.push_arc(b.line, to, feed, pole, ccw, ArcPlane::Xy);
+            self.current
+                .push_arc(b.line, to, feed, pole, ccw, ArcPlane::Xy);
         }
         let (rx, ry) = ((to.x - pole.x) / r, (to.y - pole.y) / r);
         self.tangent = Some(if ccw {
