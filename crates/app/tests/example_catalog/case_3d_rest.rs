@@ -31,8 +31,10 @@ mod catalog_3d_rest {
 
     /// #2867: the 12 mm pocket roughs down to the plate (Z4 + 0.2 mm stock
     /// to leave), and the 6 mm pocket after it cuts only the rest region:
-    /// the 8 mm channel between the ribs (X -4..4, Y -15..15) and its two
-    /// mouths. Between the ribs the 6 mm centre keeps 3 mm + 0.2 mm off
+    /// the 8 mm channel between the ribs (X -4..4, Y -15..15). The 6 mm
+    /// tool enters at the two mouths through space that the 12 mm tool
+    /// cleared, so its centre goes to |Y| <= 18, but it cuts only in the
+    /// channel. Between the ribs the 6 mm centre keeps 3 mm + 0.2 mm off
     /// each wall (|X| <= 0.8).
     #[test]
     fn the_small_tool_cuts_only_the_rest_region() {

@@ -8,7 +8,8 @@
   where material still stands. No new parameter or code was needed.
 - The part is a plate with two ribs and an 8 mm channel between them. The
   walls are vertical, so the 12 mm tool leaves a rest region with a clear
-  shape (the channel and its two mouths), and the 6 mm tool leaves no
+  shape (the channel only: the rib ends are convex, so no rest material
+  stands at the two mouths), and the 6 mm tool leaves no
   thin skims on the outer walls.
 - The README shows the rest region as a text top view with coordinates.
 - The test `catalog_3d_rest::the_small_tool_cuts_only_the_rest_region` pins

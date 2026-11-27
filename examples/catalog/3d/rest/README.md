@@ -37,11 +37,14 @@ is the rest region):
     -30    -17       -4   0   4        17       30  X
 ```
 
-- In the channel: `X-4..4`, `Y-15..15`, from `Z14.2` down to the plate.
-- At the two mouths of the channel (`Y` near `-15` and `15`): the corners
-  next to the rib ends that the 12 mm radius cannot reach.
+The rest region is the channel: `X-4..4`, `Y-15..15`, from `Z14.2` down to
+the plate. At each end the 12 mm tool reaches a short distance into the
+channel (to `Y±13.75` on the centre line). The rib ends are convex corners,
+so the 12 mm tool leaves no rest material outside the channel. The 6 mm tool
+enters at the two mouths, through space that the 12 mm tool cleared. Thus
+its centre goes to `Y±17.7`, but it cuts only in the channel.
 
-The 6 mm operation cuts only there. All its feed moves have the tool centre
+All feed moves of the 6 mm operation have the tool centre
 inside `X-2.2..2.2`, `Y-17.7..17.7`. Between the ribs the centre stays inside
 `X-0.79..0.79`: 3 mm tool radius plus 0.2 mm stock to leave from each wall.
 The test `catalog_3d_rest::the_small_tool_cuts_only_the_rest_region` pins
