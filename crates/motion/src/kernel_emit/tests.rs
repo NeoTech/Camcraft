@@ -55,8 +55,10 @@ fn exit() -> Step {
     exit_to(CLEAR - LEVEL)
 }
 
+/// An exit to `retract` above the level; the stock top (Z 0) is 2 above
+/// the level Z -2.
 fn exit_to(retract: f64) -> Step {
-    Step::Exit(Exit::new(None, retract).unwrap())
+    Step::Exit(Exit::new(None, retract, -LEVEL).unwrap())
 }
 
 fn run(steps: Vec<Step>) -> Result<Emitted, EmitRefusal> {
@@ -247,7 +249,7 @@ fn an_exit_under_the_clearance_height_is_refused_by_name() {
 #[test]
 fn an_exit_fallback_goes_to_the_notes() {
     use camcraft_pathkernel::entry::NO_LEAD_OUT_ROOM;
-    let x = Exit::new(None, CLEAR - LEVEL).unwrap().without_lead_out(NO_LEAD_OUT_ROOM).unwrap();
+    let x = Exit::new(None, CLEAR - LEVEL, -LEVEL).unwrap().without_lead_out(NO_LEAD_OUT_ROOM).unwrap();
     let out = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), Step::Exit(x)]).unwrap();
     assert_eq!(out.path.notes, vec![format!("exit: straight retract instead of the arc lead-out - {NO_LEAD_OUT_ROOM}")]);
     let plain = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();

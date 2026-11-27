@@ -26,16 +26,21 @@ fn an_exit_with_no_room_for_its_lead_out_names_the_fallback() {
 /// reason; the retract check is the same in both constructors.
 #[test]
 fn the_exit_constructors_share_one_checked_path() {
-    let x = Exit::new(None, 5.0).unwrap();
+    let x = Exit::new(None, 5.0, 0.0).unwrap();
     assert_eq!(x.clone().without_lead_out(" ").unwrap_err().reason(), NO_REASON);
     assert!(x.without_lead_out(NO_LEAD_OUT_ROOM).unwrap().fallback().is_some());
     let s: &dyn EntryPlanner = &stage();
     let led = s.exit(&edge_ring(), &band(Region::empty()), &Region::empty()).unwrap();
     assert_eq!(led.without_lead_out(NO_LEAD_OUT_ROOM).unwrap_err().reason(), BAD_EXIT);
     for bad in [-1.0, f64::NAN, f64::INFINITY] {
-        assert_eq!(Exit::new(None, bad).unwrap_err().reason(), BAD_EXIT, "{bad}");
+        assert_eq!(Exit::new(None, bad, 0.0).unwrap_err().reason(), BAD_EXIT, "{bad}");
         assert_eq!(Exit::proved(&pocket_ring(), None, bad, 0.0).unwrap_err().reason(), BAD_EXIT, "{bad}");
     }
     assert_eq!(Exit::proved(&pocket_ring(), None, 5.0, f64::NAN).unwrap_err().reason(), BAD_EXIT);
     assert_eq!(Exit::proved(&pocket_ring(), None, 4.0, 5.0).unwrap_err().reason(), RAPID_IN_MATERIAL);
+    // #4415: `Exit::new` gets the material top and refuses a retract under
+    // it, as `Exit::proved` does.
+    assert_eq!(Exit::new(None, 4.0, 5.0).unwrap_err().reason(), RAPID_IN_MATERIAL);
+    assert_eq!(Exit::new(None, 5.0, f64::NAN).unwrap_err().reason(), BAD_EXIT);
+    assert!(Exit::new(None, 5.0, 5.0).is_ok(), "a retract at the top is out of the material");
 }

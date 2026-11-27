@@ -50,12 +50,12 @@ pub const LEAD_OUT_NAME: &str = "arc lead-out";
 pub const STRAIGHT_UP_NAME: &str = "straight retract";
 
 /// The one check of the retract of each constructor (#4407): finite and 0
-/// or more, and at or above the material `top` where the caller knows it.
-fn check_retract(retract: f64, top: Option<f64>) -> Result<(), Refusal> {
-    if !(retract.is_finite() && retract >= 0.0 && top.is_none_or(f64::is_finite)) {
+/// or more, and at or above the finite material `top`.
+fn check_retract(retract: f64, top: f64) -> Result<(), Refusal> {
+    if !(retract.is_finite() && retract >= 0.0 && top.is_finite()) {
         return Err(Refusal::new(Stage::Exit, BAD_EXIT));
     }
-    if top.is_some_and(|t| retract < t) {
+    if retract < top {
         return Err(Refusal::new(Stage::Exit, RAPID_IN_MATERIAL));
     }
     Ok(())
@@ -72,18 +72,16 @@ fn end_of(last: &Cut) -> Option<(PlanePoint, Point2)> {
 }
 
 impl Exit {
-    /// An exit with no lead-out: the tool goes straight up to `retract`. A
-    /// lead-out needs its proof: `Some` is refused here ([`BAD_EXIT`] when
-    /// empty, else [`UNPROVED_LEAD_OUT`]); use [`Exit::proved`]. The
-    /// retract goes through the same check as in [`Exit::proved`]; this
-    /// constructor does not know the material top, so the converter of
-    /// `camcraft-motion` refuses an exit whose retract is under its
-    /// clearance height (which is at or above the stock top).
-    pub fn new(lead_out: Option<Vec<PlanePoint>>, retract: f64) -> Result<Self, Refusal> {
+    /// An exit with no lead-out: the tool goes straight up to `retract`,
+    /// which must be at or above the material `top` (the same check as
+    /// [`Exit::proved`]: [`BAD_EXIT`], [`RAPID_IN_MATERIAL`]). A lead-out
+    /// needs its proof: `Some` is refused here ([`BAD_EXIT`] when empty,
+    /// else [`UNPROVED_LEAD_OUT`]); use [`Exit::proved`].
+    pub fn new(lead_out: Option<Vec<PlanePoint>>, retract: f64, top: f64) -> Result<Self, Refusal> {
         if lead_out.as_ref().is_some_and(Vec::is_empty) {
             return Err(Refusal::new(Stage::Exit, BAD_EXIT));
         }
-        check_retract(retract, None)?;
+        check_retract(retract, top)?;
         if lead_out.is_some() {
             return Err(Refusal::new(Stage::Exit, UNPROVED_LEAD_OUT));
         }
@@ -94,7 +92,7 @@ impl Exit {
     /// [`Lead::new`]) starts at the end of the cut, in place and depth, and
     /// the retract is finite and at or above the material `top`.
     pub fn proved(last: &Cut, lead_out: Option<Lead>, retract: f64, top: f64) -> Result<Self, Refusal> {
-        check_retract(retract, Some(top))?;
+        check_retract(retract, top)?;
         if let Some(l) = &lead_out {
             let ok = end_of(last).zip(l.pts().first()).is_some_and(|((end, _), p)| p.near(&end));
             if !ok {

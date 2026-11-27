@@ -42,16 +42,14 @@ fallback with a note (or a named `Fallback`) that names the failed check.
    entry into material, because law 4 (`needs_fallback`) says that an
    entry outside material in its place is not a fallback.
 3. **One checked path for the retract of an exit** (`entry/exit.rs`).
-   `Exit::new` and `Exit::proved` call the same `check_retract`. The
-   check refuses a retract that is not finite or under 0 (`BAD_EXIT`), and
-   a retract under the material top where the top is known
-   (`RAPID_IN_MATERIAL`). `Exit::new` does not get the material top: its
-   callers are the law suite in `crates/pathkernel/tests/laws/`, which
-   another PR (#4406) edits now, so its signature stays. The converter
-   closes the gap (item 4): its clearance height is at or above the stock
-   top (`EmitHeights::new`), so no exit with a retract in material can
-   reach the moves. Follow-up #4415: give `Exit::new` the top when #4406
-   has merged.
+   `Exit::new(lead_out, retract, top)` and `Exit::proved` call the same
+   `check_retract`. The check refuses a retract or a top that is not
+   finite, a retract under 0 (`BAD_EXIT`), and a retract under the
+   material top (`RAPID_IN_MATERIAL`). `Exit::new` gets the material top
+   as a new argument (the work of #4415, done here after #4406 merged);
+   its callers in the law suite and in the converter's tests pass the top
+   of their fixtures. The converter refuses an exit under its clearance
+   height as well (item 4).
 4. **The converter refuses a retract under the clearance height**
    (`kernel_emit/pen.rs`, `EXIT_UNDER_CLEARANCE`). It moved the retract
    up to the clearance height in silence. Now `retract` returns a
