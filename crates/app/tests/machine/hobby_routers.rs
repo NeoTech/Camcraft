@@ -9,9 +9,6 @@
 //! figures are from the makers' public pages (Carbide 3D "Shapeoko 5.1
 //! Pro Specifications", carbide3d.com; Inventables' machine pages on
 //! easel.com; read 2026-11-26). See docs/decisions/3071-hobby-routers.md.
-//!
-//! Gate map (#3071): covers app::posting (MACHINES registry),
-//! post::machine (units, spindle range), camcraft_post::post (grbl.cps).
 
 use camcraft_app::machine::{Machine, parse_mch};
 use camcraft_app::post::{engine, machine};
@@ -111,7 +108,7 @@ fn every_tool_change_is_a_stop_after_a_lift_in_the_work_offset() {
         assert!(nc.lines().any(|l| l.starts_with("G21 ")), "mm\n{nc}");
         let stop = lines.iter().position(|l| *l == "M0").unwrap_or_else(|| panic!("{}: no M0 stop\n{nc}", s.name));
         assert!(lines[..stop].iter().rev().take(3).any(|l| l.contains("LOAD T4")), "{}: the stop names T4\n{nc}", s.name);
-        assert!(lines[..stop].iter().any(|l| *l == "G0 Z15"), "{}: Z goes up first\n{nc}", s.name);
+        assert!(lines[..stop].contains(&"G0 Z15"), "{}: Z goes up first\n{nc}", s.name);
         assert_eq!(nc.matches("\nM0\n").count(), 1, "one change between two tools\n{nc}");
         for w in nc.split_whitespace() {
             assert!(!["M6", "G53", "G28", "G30"].contains(&w), "{}: {w} is not written\n{nc}", s.name);

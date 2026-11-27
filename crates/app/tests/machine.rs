@@ -36,6 +36,9 @@ mod axis_support;
 mod axis_chain;
 #[path = "machine/axis_rows.rs"]
 mod axis_rows;
+// #3071: the hobby router frames on the Grbl 1.1 post.
+#[path = "machine/hobby_routers.rs"]
+mod hobby_routers;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()
