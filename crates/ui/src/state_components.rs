@@ -24,7 +24,7 @@ use camcraft_app::component::{ADAPTIVE_PORT, ComponentKind, CuttingItem, ToolCom
 use camcraft_app::connection_code::ConnectionCode;
 use camcraft_app::component_geometry::ComponentGeometry;
 use camcraft_app::component_library::{self, BUILTIN_PREFIX, LibraryComponent, store};
-use camcraft_app::holder_library::{self, HolderEntry};
+use camcraft_app::holder_library::{self, HolderEntry, HolderShape};
 use camcraft_app::schema::{AssemblyLink, DocumentComponent};
 use camcraft_app::tool_assembly as ta;
 
@@ -62,13 +62,15 @@ pub struct ComponentsView {
 
 /// The editor draft of one document component: what the user typed,
 /// before Apply. `gauge` is `Some` for a holder whose built-in shape is
-/// known; `code` is the ISO 1832 text of an insert.
+/// known; `code` is the ISO 1832 text of an insert. #4338: `shape` is
+/// `Some` for a spindle holder the holder form edits (`shape_of`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComponentDraft {
     pub id: String,
     pub name: String,
     pub code: String,
     pub gauge: Option<f64>,
+    pub shape: Option<HolderShape>,
 }
 
 /// The component stack draft of the tool open in the editor. `synced` is
@@ -397,7 +399,9 @@ pub fn draft_of(row: &DocumentComponent) -> ComponentDraft {
         ComponentKind::CuttingItem(CuttingItem::Insert(spec)) => spec.to_string(),
         _ => String::new(),
     };
-    let gauge = holder_entry(row).and_then(|_| gauge_of(row));
-    ComponentDraft { id: row.component.id().to_owned(), name: row.component.name().to_owned(), code, gauge }
+    // #4338: a holder the holder form edits keeps its gauge in its shape.
+    let shape = super::shape_of(row);
+    let gauge = if shape.is_some() { None } else { holder_entry(row).and_then(|_| gauge_of(row)) };
+    ComponentDraft { id: row.component.id().to_owned(), name: row.component.name().to_owned(), code, gauge, shape }
 }
 

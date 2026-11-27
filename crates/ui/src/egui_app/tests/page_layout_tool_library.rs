@@ -261,7 +261,8 @@ fn layout_window_tool_editor() {
 }
 
 /// #3897 (U6): the Holders page. The taper column stands left of the
-/// holder rows; the filter and the read-only note head the rows. A holder
+/// holder rows; #4338 (U12): one header row - the search, then New holder,
+/// Import and Export at its right - heads the rows. A holder
 /// opens in its view: the way back and the name first, the facts on the
 /// left, the drawing's Dimensions toggle right of them.
 #[test]
@@ -272,12 +273,16 @@ fn layout_window_holders() {
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(2);
     super::tool_library_editor::click_window_button(&mut h, HOLDERS_PAGE);
-    assert_window_layout(&h, "Tool library", &[HOLDERS_PAGE, "Holder filter", holders::READ_ONLY, "Used by"]);
+    assert_window_layout(&h, "Tool library", &[HOLDERS_PAGE, holders::SEARCH, "Used by"]);
     let win = library_window(&h);
     let node = super::tool_library_editor::library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
     let (all, name) = (rect(holders::ALL), rect("Name"));
     assert!(all.right() < name.left(), "the taper column {all:?} stands left of the rows {name:?}");
+    let (search, new, export) = (rect(holders::SEARCH), rect(holders::NEW), rect(holders::EXPORT));
+    assert!(search.right() <= new.left() && (search.center().y - new.center().y).abs() < 8.0, "New holder {new:?} stands right of the search {search:?}, in one row");
+    assert!(new.right() <= export.left() && search.bottom() < name.top(), "Export ends the row, and the row heads the table");
+    assert!(win.expand(1.0).contains_rect(export), "the header row stays in the window");
     assert!(win.expand(1.0).contains_rect(rect("Used by")), "the last head stays in the window");
     let Some(props) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
         panic!("the Properties leaf is not laid out");
@@ -291,6 +296,35 @@ fn layout_window_holders() {
     assert!(back.top() < taper.top(), "the way back {back:?} heads the view");
     assert!(dims.left() > taper.right(), "the drawing's toggle {dims:?} stands right of the facts {taper:?}");
     assert!(win.expand(1.0).contains_rect(dims), "the toggle stays in the window {win:?}");
+}
+
+/// #4338 (U12): the holder form of a user holder. The way back and the
+/// name head it; the fields stand left of the drawing, the taper above
+/// the clamp above the shape; the footer has Apply, Cancel and Duplicate
+/// below the fields, in the window.
+#[test]
+fn layout_window_holder_form() {
+    use crate::egui_app::tool_library_dialog::holder_form;
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.run_steps(2);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
+    h.run_steps(2);
+    super::tool_library_editor::click_window_button(&mut h, HOLDERS_PAGE);
+    super::tool_library_editor::click_window_button(&mut h, holders::NEW);
+    let win = library_window(&h);
+    let node = super::tool_library_editor::library_window(&h);
+    let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the holder form")).rect();
+    let (back, taper, clamp, nose) = (rect(frame::BACK), rect(holder_form::TAPER), rect(holder_form::CLAMP), rect(holder_form::NOSE));
+    assert!(back.top() < taper.top() && taper.top() < clamp.top() && clamp.top() < nose.top(), "back, taper, clamp, shape from the top");
+    let scale = rect("to scale · mm");
+    assert!(scale.left() > nose.right(), "the drawing {scale:?} stands right of the fields {nose:?}");
+    let (apply, cancel, dup) = (rect(frame::APPLY), rect(frame::CANCEL), rect(frame::DUPLICATE));
+    assert!(dup.right() <= cancel.left() && cancel.right() <= apply.left(), "Duplicate, Cancel, Apply from the left");
+    assert!(apply.top() > nose.bottom(), "the footer stands below the fields");
+    for r in [apply, scale, nose] {
+        assert!(win.expand(1.0).contains_rect(r), "{r:?} stays in the window {win:?}");
+    }
 }
 
 /// #3898 (U7): the "My library" source. The component groups stand left
