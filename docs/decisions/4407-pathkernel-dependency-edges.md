@@ -50,8 +50,8 @@ fallback with a note (or a named `Fallback`) that names the failed check.
    another PR (#4406) edits now, so its signature stays. The converter
    closes the gap (item 4): its clearance height is at or above the stock
    top (`EmitHeights::new`), so no exit with a retract in material can
-   reach the moves. Follow-up: give `Exit::new` the top when #4406 has
-   merged (named in the PR body).
+   reach the moves. Follow-up #4415: give `Exit::new` the top when #4406
+   has merged.
 4. **The converter refuses a retract under the clearance height**
    (`kernel_emit/pen.rs`, `EXIT_UNDER_CLEARANCE`). It moved the retract
    up to the clearance height in silence. Now `retract` returns a
