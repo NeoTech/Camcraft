@@ -47,7 +47,7 @@ pub(crate) struct Read {
 /// A count of cells along one side, or `None` when it is not finite or too large.
 fn count(span: f64, h: f64) -> Option<usize> {
     let n = (span / h).ceil() + 1.0;
-    (n.is_finite() && n >= 1.0 && n <= MAX_CELLS).then_some(n as usize)
+    (n.is_finite() && (1.0..=MAX_CELLS).contains(&n)).then_some(n as usize)
 }
 
 impl Stock {

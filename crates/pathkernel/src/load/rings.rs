@@ -134,7 +134,7 @@ fn runs(pts: &[Point2], on: &[bool]) -> Vec<(Vec<Point2>, bool)> {
 
 /// Turns `piece` to run as `near` runs beside it; a closed piece starts at
 /// its point nearest the start of `near`.
-fn orient(piece: &mut Vec<Point2>, closed: bool, near: &Curve) {
+fn orient(piece: &mut [Point2], closed: bool, near: &Curve) {
     let line: Vec<Point2> = near.pts().iter().map(PlanePoint::at).collect();
     let dir = |q: Point2| -> Point2 {
         let best = line.windows(2).min_by(|a, b| crate::seg_dist(q, a[0], a[1]).total_cmp(&crate::seg_dist(q, b[0], b[1])));

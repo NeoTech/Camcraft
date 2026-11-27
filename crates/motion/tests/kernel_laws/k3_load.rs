@@ -54,7 +54,7 @@ fn kernel_load_control_round_the_disc_and_the_dog_bone() {
                 let r = measure(&path, &spec).unwrap();
                 let ctl = v.as_ref().and_then(|v| v.out()).unwrap();
                 eprintln!("{pname} {sname} {lc:?}: {}", r.row());
-                eprintln!("  {} curves, {} named places; notes {:?}", ctl.set().curves().len(), ctl.over().len(), &path.notes);
+                eprintln!("  {} curves, {} named places; notes {:?}", ctl.set().curves().len(), ctl.over().len(), path.notes);
                 assert_eq!(r.crossings.count, 0, "{pname} {sname}: no feed crosses another");
                 assert_eq!(r.leaves.count, 0, "{pname} {sname}: each feed stays in the reach");
                 assert_eq!(r.named_lifts, r.lifts.count, "{pname} {sname}: each lift has a named reason");
