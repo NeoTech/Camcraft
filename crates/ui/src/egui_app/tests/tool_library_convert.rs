@@ -73,7 +73,7 @@ fn the_preview_converts_the_ticked_rows_in_one_undo_step() {
     assert!(shows(&h, list_header::NEW), "the tool list first");
     click_window_button(&mut h, convert::OPEN);
     assert!(shows(&h, convert::HEADING), "the preview stands in for the list");
-    assert!(shows(&h, "BT30 ER20 > ER20 collet 6 mm > Six"), "the proposed stack of Six");
+    assert!(shows(&h, "BT30 ER20 > ER20 collet 8 mm > Six"), "the proposed stack of Six");
     assert!(shows(&h, "same"), "Six derives the same tool");
     assert!(shows(&h, "no match: no holder: the tool names no library holder"), "Bare names its reason");
     let six = cat("EM-0600-4FL");

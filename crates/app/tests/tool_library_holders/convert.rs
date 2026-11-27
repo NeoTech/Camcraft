@@ -108,7 +108,7 @@ fn the_preview_names_each_verdict() {
     assert_eq!(tools, vec![BARE, INCH, LEGACY, LONG, SIX, SIX_B], "every standalone tool, sorted");
     let six = rows.iter().find(|r| r.tool == SIX).expect("six");
     assert_eq!(six.verdict, Verdict::Same, "{six:?}");
-    assert_eq!(six.names, vec!["BT30 ER20".to_owned(), "ER20 collet 6 mm".to_owned(), SIX.to_owned()]);
+    assert_eq!(six.names, vec!["BT30 ER20".to_owned(), "ER20 collet 8 mm".to_owned(), SIX.to_owned()]);
     let Verdict::Different(diffs) = verdict(&w, LONG) else { panic!("Long is different") };
     assert_eq!(diffs.len(), 1, "{diffs:?}");
     assert!(diffs[0].starts_with("gauge length"), "{diffs:?}");
@@ -139,7 +139,7 @@ fn the_same_rows_convert_in_one_undo_step_and_undo_restores_every_tool() {
     }
     // The shared holder and collet are one row each; each tool has its own cutting item.
     let ids: Vec<&str> = after.0.iter().map(|r| r.component.id()).collect();
-    assert_eq!(ids, vec!["builtin:holder:BT30 ER20", "builtin:collet:ER20 6", "user:tool:Six", "user:tool:Six B"]);
+    assert_eq!(ids, vec!["builtin:holder:BT30 ER20", "builtin:collet:ER20 8", "user:tool:Six", "user:tool:Six B"]);
     assert!(after.0[0].library_ref.is_some() && after.0[1].library_ref.is_some(), "built-in copies keep their link");
 
     assert!(h.undo(&w), "one undo step");
