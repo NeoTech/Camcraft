@@ -120,7 +120,7 @@ fn mcp_edit_user_holder_refuses_by_name_and_changes_nothing() {
     assert!(e.contains("widens from its nose"), "{e}");
     let e = m.refused("edit_user_holder", json!({ "id": ID, "gauge_len": -1.0 }));
     assert!(e.contains("the gauge length must be a positive number"), "{e}");
-    let e = m.refused("edit_user_holder", json!({ "id": ID, "bore": 25.0, "nose_d": 40.0 }));
+    let e = m.refused("edit_user_holder", json!({ "id": ID, "bore": 25.0, "nose_d": 40.0, "largest_d": 50.0 }));
     assert!(e.contains(ID) && e.contains(A) && e.contains("does not fit"), "a broken fit names the tool: {e}");
     let e = m.refused("edit_user_holder", json!({ "id": "bt40-cyl20", "gauge_len": 60.0 }));
     assert!(e.contains("'bt40-cyl20'") && e.contains("upsert_tool_component"), "{e}");
