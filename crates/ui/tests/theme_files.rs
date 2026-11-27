@@ -25,8 +25,12 @@ mod colour_literals;
 mod colour_scan;
 #[path = "theme_files/dropdown.rs"]
 mod dropdown;
+#[path = "theme_files/tool_inks.rs"]
+mod tool_inks;
 #[path = "theme_files/viewport_inks.rs"]
 mod viewport_inks;
+#[path = "theme_files/verdict_inks.rs"]
+mod verdict_inks;
 
 fn tmp_dir(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("camcraft_ui_theme_{tag}_{}", std::process::id()));

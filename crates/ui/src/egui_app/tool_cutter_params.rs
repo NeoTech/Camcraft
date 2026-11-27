@@ -16,7 +16,7 @@ use camcraft_app::cutter_fit::Neck;
 use camcraft_app::tools::ToolKind;
 use camcraft_app::units::{self, Unit};
 
-use super::tool_profile_page::{BAD, len_cell};
+use super::tool_profile_page::{bad_ink, len_cell};
 use crate::state::State;
 
 /// The parameters grid and the neck row, above the points table.
@@ -93,7 +93,7 @@ fn neck_row(ui: &mut Ui, state: &mut State, u: Unit) {
         }
     });
     if let Some(why) = &state.tool_cutter_ui.neck_refusal {
-        ui.colored_label(BAD, why);
+        ui.colored_label(bad_ink(), why);
     }
 }
 

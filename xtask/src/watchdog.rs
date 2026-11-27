@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 pub const ENV: &str = "CAMCRAFT_GATE_STALL_MIN";
 /// The stall time of a debug step, in minutes, when the environment does not set one.
 pub const DEFAULT_MIN: u64 = 15;
-/// A `--release` or `--ignored` step (a release link, a heavy test) may be quiet longer: this many times the stall time.
+/// A `--release` or `--ignored` step (a release link, a heavy test) and a build step (`--no-run` or
+/// `cargo build`: a cold link of a large test binary writes nothing for minutes, #4101) may be quiet
+/// longer: this many times the stall time.
 pub const SLOW_FACTOR: u64 = 4;
 /// The start of the log line that the watchdog writes when it kills a step. It starts with `error:`, so
 /// `--failed` selects the step again (`select::log_failed`).
@@ -23,7 +25,7 @@ pub const EXIT: i32 = 3;
 /// The stall time in minutes from the environment value, and a line for the plan output. A bad value
 /// uses the default and says so, as `budget::from_cpu_value` does for `CAMCRAFT_GATE_JOBS`.
 pub fn from_value(v: Option<&str>) -> (u64, String) {
-    let tail = format!("({}x for --release and --ignored steps)", SLOW_FACTOR);
+    let tail = format!("({}x for --release, --ignored and build steps)", SLOW_FACTOR);
     match v.map(str::trim) {
         None | Some("") => (DEFAULT_MIN, format!("gate stall watchdog: {DEFAULT_MIN} min with no step output {tail}; source: default")),
         Some(s) => match s.parse::<u64>() {
@@ -41,9 +43,11 @@ pub fn from_env() -> (u64, String) {
     from_value(std::env::var(ENV).ok().as_deref())
 }
 
-/// The stall time of a step with `args` when the base stall time is `minutes`.
+/// The stall time of a step with `args` when the base stall time is `minutes`. A build step is a
+/// build, not a test: its links can be silent longer than a debug test step (#4101).
 pub fn limit_for(args: &[String], minutes: u64) -> Duration {
-    let slow = args.iter().any(|a| a == "--release" || a == "--ignored");
+    let build = args.first().is_some_and(|a| a == "build") || args.iter().any(|a| a == "--no-run");
+    let slow = build || args.iter().any(|a| a == "--release" || a == "--ignored");
     let m = if slow { minutes.saturating_mul(SLOW_FACTOR) } else { minutes };
     Duration::from_secs(m.saturating_mul(60))
 }

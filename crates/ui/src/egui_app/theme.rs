@@ -11,6 +11,10 @@ pub use camcraft_ui_kit::theme::*;
 mod live;
 pub use live::{current, set_current};
 
+// The light-ground verdict palettes and text inks (#1120): impls on the
+// shell's colour-vision types, so they stay in this crate, not the kit.
+mod verdict;
+
 /// Install the live theme. Called per Context (windowed); the switcher
 /// re-calls it on change (M6.1 C).
 pub fn apply(ctx: &egui::Context) {
