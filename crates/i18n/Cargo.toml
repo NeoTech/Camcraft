@@ -1,0 +1,14 @@
+[package]
+name = "camcraft-i18n"
+description = "Interface languages: the catalogue, its parser and the lookup seam."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# No dependencies on purpose (#853 open question 2 is not answered yet): the
+# catalogue is a `"English source" = "translation"` file, parsed here by a
+# reader that refuses a malformed line by name. Swapping in Fluent or gettext
+# later touches this crate alone - every call site already says `tr!`.
+[dependencies]
+
+[dev-dependencies]
