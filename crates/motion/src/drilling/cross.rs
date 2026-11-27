@@ -231,12 +231,15 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
                 h.origin,
             ));
         }
-        let depth = p.r_d - bottom;
+        // #2443: the depth in material, from the mouth (d = 0) - the R
+        // standoff outside it is air.
+        let depth = p.r_d.min(0.0) - bottom;
         let kind = match p.cycle {
             CycleChoice::Auto => auto_kind(p.tool.kind, depth, d),
             CycleChoice::Spot => CycleKind::Spot,
             CycleChoice::Drill => CycleKind::Drill,
             CycleChoice::Peck => CycleKind::Peck,
+            CycleChoice::Deep => CycleKind::Deep,
             _ => unreachable!("rejected by the v1 cycle door above"),
         };
         if matches!(kind, CycleKind::Tap | CycleKind::FloatingTap | CycleKind::Bore | CycleKind::BackBore | CycleKind::Ream | CycleKind::FineBore) {

@@ -56,6 +56,8 @@ mod tests_backbore;
 mod tests_fine_bore;
 #[cfg(test)]
 mod tests_ream;
+#[cfg(test)]
+mod tests_auto_depth;
 
 pub use axial::{axial_doors, axial_warnings, AXIAL_TOL};
 pub use boss::recognize_bosses;

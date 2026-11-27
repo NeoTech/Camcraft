@@ -87,7 +87,9 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
             ));
         }
         let kind = match p.cycle {
-            CycleChoice::Auto => auto_kind(p.tool.kind, p.r_z - bottom, d),
+            // #2443: the depth in material, from the hole's mouth (or the
+            // R plane when it stands lower) - never the air above the mouth.
+            CycleChoice::Auto => auto_kind(p.tool.kind, h.entry_z.min(p.r_z) - bottom, d),
             _ => resolve_choice(p),
         };
         refuse_solid_cycle(p.tool, kind, mouth)?;
@@ -263,6 +265,7 @@ pub(super) fn resolve_choice(p: &CycleParams) -> CycleKind {
         CycleChoice::Spot => CycleKind::Spot,
         CycleChoice::Drill => CycleKind::Drill,
         CycleChoice::Peck => CycleKind::Peck,
+        CycleChoice::Deep => CycleKind::Deep,
         CycleChoice::Tap => CycleKind::Tap,
         CycleChoice::FloatingTap => CycleKind::FloatingTap,
         CycleChoice::Bore => CycleKind::Bore,

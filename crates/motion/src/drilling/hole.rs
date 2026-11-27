@@ -101,6 +101,10 @@ pub enum CycleChoice {
     Spot,
     Drill,
     Peck,
+    /// Full-retract pecking (#2443): the tool leaves the hole after each
+    /// peck ([`CycleKind::Deep`], G83). Auto reaches it only past four
+    /// diameters; this is the user's word for a deep or gummy hole.
+    Deep,
     Tap,
 
     Bore,

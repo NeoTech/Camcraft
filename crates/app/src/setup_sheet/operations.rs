@@ -121,8 +121,9 @@ fn render_cycles(
         let bottom = override_z.unwrap_or(h.floor_z);
         let kind = match cycle {
             CycleChoice::Auto => match (&tool, r_z) {
-                (Some(t), Some(r)) if (r - bottom).is_finite() && t.diameter.is_finite() => {
-                    kind_label(drilling::auto_kind(t.kind, r - bottom, t.diameter))
+                // #2443: generation's depth - from the mouth, not the R plane.
+                (Some(t), Some(r)) if (h.entry_z.min(r) - bottom).is_finite() && t.diameter.is_finite() => {
+                    kind_label(drilling::auto_kind(t.kind, h.entry_z.min(r) - bottom, t.diameter))
                 }
                 _ => "auto".to_string(),
             },
@@ -216,6 +217,7 @@ fn choice_label(c: CycleChoice) -> &'static str {
         CycleChoice::Spot => "Spot",
         CycleChoice::Drill => "Drill",
         CycleChoice::Peck => "Peck",
+        CycleChoice::Deep => "Deep",
         CycleChoice::Tap => "Tap",
         CycleChoice::FloatingTap => "Tap (floating holder)",
         CycleChoice::Bore => "Bore",
