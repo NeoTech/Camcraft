@@ -241,6 +241,7 @@ fn bore(w: &World, tool: &str, radius: f64) -> Result<Toolpath, String> {
     let params = OpParams::Bore {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
+        strategy: Default::default(),
         break_through: None,
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(25.0),
