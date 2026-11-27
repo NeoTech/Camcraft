@@ -150,8 +150,8 @@ fn levels_are_emitted_in_the_given_order() {
     let upper = Plan::new(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
     let lower = Plan::new(vec![entry_at(0.0, 0.0, 5.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
     let levels = [
-        LevelPlan { plan: &upper, plane: WorkPlane::setup_xy(-2.0).unwrap() },
-        LevelPlan { plan: &lower, plane: WorkPlane::setup_xy(-4.0).unwrap() },
+        LevelPlan { plan: &upper, plane: WorkPlane::setup_xy(-2.0).unwrap(), top_z: None },
+        LevelPlan { plan: &lower, plane: WorkPlane::setup_xy(-4.0).unwrap(), top_z: None },
     ];
     let out = emit_levels(&levels, EmitHeights::new(CLEAR, 0.0).unwrap(), EmitFeeds::new(1000.0, 300.0).unwrap()).unwrap();
     assert_move_rules(&out.path.moves);
@@ -224,3 +224,25 @@ fn an_empty_plan_gives_an_empty_path() {
     let out = run(vec![]).unwrap();
     assert!(out.path.moves.is_empty() && out.cut_moves.is_empty());
 }
+
+#[test]
+fn a_level_top_lets_the_approach_start_over_the_floor_above() {
+    // #3752: the lower level's approach is 1 over the floor of the upper
+    // level (Z -1), under the stock top (Z 0).
+    let upper = Plan::new(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
+    let lower = Plan::new(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
+    let (h, f) = (EmitHeights::new(CLEAR, 0.0).unwrap(), EmitFeeds::new(1000.0, 300.0).unwrap());
+    let level = |top_z| {
+        [
+            LevelPlan { plan: &upper, plane: WorkPlane::setup_xy(-3.0).unwrap(), top_z: None },
+            LevelPlan { plan: &lower, plane: WorkPlane::setup_xy(-4.0).unwrap(), top_z },
+        ]
+    };
+    let e = emit_levels(&level(None), h, f).unwrap_err();
+    assert_eq!((e.reason(), e.level()), (APPROACH_IN_MATERIAL, Some(1)));
+    let out = emit_levels(&level(Some(-3.0)), h, f).unwrap();
+    assert_move_rules(&out.path.moves);
+    assert_eq!(emit_levels(&level(Some(1.0)), h, f).unwrap_err().reason(), BAD_LEVEL_TOP);
+    assert_eq!(emit_levels(&level(Some(f64::NAN)), h, f).unwrap_err().reason(), BAD_LEVEL_TOP);
+}
+

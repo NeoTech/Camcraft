@@ -898,7 +898,8 @@ fn run_job_arms(job: GenJob, engine: camcraft_motion::pathkernel::PlannerEngine)
                     path = machining2d::pocket_on_kernel(&region, &pp, &holes, &side)?;
                 }
                 super::predrilled_entry::say(&mut path, hole_notes);
-                break 'pocket (region, path);
+                // The verifier reads the air round the stock as no wall.
+                break 'pocket (machining2d::kernel_pocket_reach(&region, &pp, &side)?, path);
             }
             let (relieved_region, zones) = super::corner_relief::check_op_relief(
                 &region,

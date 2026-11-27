@@ -75,14 +75,14 @@ type Planned = (Vec<Plan>, Vec<String>, u32, Vec<(&'static str, u32)>);
 
 fn plans_of(area: &Region, p: &PocketParams, s: &StartSide) -> Planned {
     let k = pocket_kernel_plans(area, p, &[], s).unwrap_or_else(|e| panic!("the kernel plans the pocket: {e}"));
-    let lifts = k.levels.iter().map(|(l, _)| l.tally.lifts()).sum();
+    let lifts = k.levels.iter().map(|(l, _, _)| l.tally.lifts()).sum();
     let mut why: Vec<(&'static str, u32)> = Vec::new();
-    for (l, _) in &k.levels {
+    for (l, _, _) in &k.levels {
         for (r, n) in l.tally.by_reason() {
             why.push((r, *n));
         }
     }
-    (k.levels.iter().map(|(l, _)| l.plan.clone()).collect(), k.notes, lifts, why)
+    (k.levels.iter().map(|(l, _, _)| l.plan.clone()).collect(), k.notes, lifts, why)
 }
 
 /// True when the two multisets of curves are the same cuts: each curve of

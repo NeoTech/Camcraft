@@ -30,6 +30,7 @@ use crate::links::Link;
 use camcraft_pathkernel::entry::{ArcChoice, EntryChoice, EntryKind, EntryStage, Heights, Hole, MaterialChoice};
 use camcraft_pathkernel::guide::{GuideChoice, RingRef, RingsChoice};
 use camcraft_pathkernel::link::LinkPolicy;
+use camcraft_pathkernel::plan::{Plan, Step};
 use camcraft_pathkernel::load::{LoadControl, LoadStage, Reach, StockRead};
 use camcraft_pathkernel::order::{Direction, OrderChoice, StartSide as KernelSide};
 use camcraft_pathkernel::{AxisControl, Recipe, Refusal, ToolShape, WorkPlane};
@@ -182,11 +183,71 @@ fn entry_choice(e: Entry3D, p: &PocketParams, holes: &[PreHole], z: f64) -> Resu
     Ok(EntryChoice::new(asked, p.links.approach.approach_distance.max(0.0), open)?.with_material(material))
 }
 
+/// The area that the tool disc of a kernel pocket may sweep, for the
+/// verifier: the pocket area, and round a part (`around_part`, the stock
+/// known) also the air round the stock where the entry stage plans its air
+/// entries, arc leads and exits. The part stays out of it, so each part
+/// wall is still judged; the stock edge is no wall (no material stands
+/// beyond it).
+pub fn kernel_pocket_reach(region: &Region, p: &PocketParams, side: &StartSide) -> Result<Region, GenError> {
+    let Some(stock) = side.stock.as_ref().filter(|_| side.around_part) else {
+        return Ok(region.clone());
+    };
+    let a = &p.links.approach;
+    let arc_r = if a.arc_radius > 0.0 { a.arc_radius } else { 0.5 * p.tool_diameter };
+    let margin = a.approach_distance.max(0.0) + arc_r + 2.0 * p.tool_diameter;
+    let air = stock.offset(margin)?.difference(stock)?;
+    Ok(region.union(&air)?)
+}
+
+/// The tolerance (mm) of an approach point on a cut of the level above.
+const ON_CUT_TOL: f64 = 1e-3;
+
+/// True when the approach of each entry of `plan` stands over a cut of
+/// each level above (`uppers`: the tool disc cut that column down to the
+/// floor of each of them), or in the air round the stock (outside
+/// `air_out`, the stock grown by the tool radius). Then the entries of the
+/// level can start over the floor of the level above.
+fn approach_proved(plan: &Plan, uppers: &[&Plan], air_out: Option<&Region>) -> bool {
+    let polylines = |above: &Plan| -> Vec<Vec<Point2>> {
+        above
+            .steps()
+            .iter()
+            .filter_map(|s| match s {
+                Step::Cut(c) => {
+                    let mut pts: Vec<Point2> = c.curve().pts().iter().map(|q| q.at()).collect();
+                    if c.curve().closed() {
+                        pts.extend(pts.first().copied());
+                    }
+                    Some(pts)
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let levels: Vec<Vec<Vec<Point2>>> = uppers.iter().map(|u| polylines(u)).collect();
+    let on_cut = |cuts: &[Vec<Point2>], q: Point2| cuts.iter().any(|c| c.windows(2).any(|w| seg_dist(q, w[0], w[1]) <= ON_CUT_TOL));
+    let cleared = |q: Point2| !levels.is_empty() && levels.iter().all(|cuts| on_cut(cuts, q));
+    let in_air = |q: Point2| air_out.is_some_and(|a| !a.contains(q));
+    plan.steps().iter().all(|s| match s {
+        Step::Entry(e) => e.approach().iter().all(|q| cleared(q.at()) || in_air(q.at())),
+        _ => true,
+    })
+}
+
+fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+    (p.x - (a.x + t * dx)).hypot(p.y - (a.y + t * dy))
+}
+
 /// The plans of a 2D Pocket on the path kernel: one for each Z level with
-/// its work plane, and the status line notes of the recipe and the stages.
+/// its work plane and its proved material top (`None`: the stock top), and
+/// the status line notes of the recipe and the stages.
 #[derive(Clone, Debug)]
 pub struct KernelPocketPlan {
-    pub levels: Vec<(PlannedLevel, WorkPlane)>,
+    pub levels: Vec<(PlannedLevel, WorkPlane, Option<f64>)>,
     pub notes: Vec<String>,
     pub strategy: PocketStrategy,
     heights: EmitHeights,
@@ -199,7 +260,7 @@ pub struct KernelPocketPlan {
 /// op asks for pre-drilled entries).
 pub fn pocket_on_kernel(region: &Region, p: &PocketParams, holes: &[PreHole], side: &StartSide) -> Result<Toolpath, GenError> {
     let plan = pocket_kernel_plans(region, p, holes, side)?;
-    let levels: Vec<LevelPlan<'_>> = plan.levels.iter().map(|(l, plane)| LevelPlan { plan: &l.plan, plane: *plane }).collect();
+    let levels: Vec<LevelPlan<'_>> = plan.levels.iter().map(|(l, plane, top_z)| LevelPlan { plan: &l.plan, plane: *plane, top_z: *top_z }).collect();
     let mut path = emit_levels(&levels, plan.heights, plan.feeds)
         .map_err(|e| GenError::Invalid(format!("2D Pocket on the path kernel: {e}")))?
         .path;
@@ -234,7 +295,13 @@ pub fn pocket_kernel_plans(region: &Region, p: &PocketParams, holes: &[PreHole],
     let stock = AreaStock(region);
     let cleared = Region::empty();
     let zs = cut_levels_for(p.top_z, a, p.bottom_z, p.stepdown)?;
-    let mut planned: Vec<(PlannedLevel, WorkPlane)> = Vec::with_capacity(zs.len());
+    // The air round the stock (no stock within one tool radius), when the
+    // stock is known round a part.
+    let air_out = match side.stock.as_ref().filter(|_| side.around_part) {
+        Some(st) => Some(st.offset(r)?),
+        None => None,
+    };
+    let mut planned: Vec<(PlannedLevel, WorkPlane, Option<f64>)> = Vec::with_capacity(zs.len());
     for (i, &z) in zs.iter().enumerate() {
         let kz = |e: Refusal| refusal(&e, z);
         let plane = WorkPlane::setup_xy(z).map_err(kz)?;
@@ -242,9 +309,25 @@ pub fn pocket_kernel_plans(region: &Region, p: &PocketParams, holes: &[PreHole],
         let asked = if i == 0 { p.entry } else { p.links.transition.unwrap_or(p.entry) };
         let entry = entry_choice(asked, p, holes, z).map_err(kz)?;
         let recipe = Recipe::new(plane, AxisControl::Normal, guide, load, order, link_policy(p.links.pass), entry).map_err(kz)?;
-        let heights = Heights::new(top - z, clear, retract - z).map_err(kz)?;
-        let es = EntryStage::new(heights, arc, ENTRY_CHORD_TOL).map_err(kz)?;
-        let level = plan_level(&kr, &recipe, &LevelStages { entry: &es, load: &stage_load, stock: &stock, cleared: &cleared }).map_err(kz)?;
+        let plan_at = |material_top: f64| -> Result<PlannedLevel, GenError> {
+            let heights = Heights::new(material_top - z, clear, retract - z).map_err(kz)?;
+            let es = EntryStage::new(heights, arc, ENTRY_CHORD_TOL).map_err(kz)?;
+            plan_level(&kr, &recipe, &LevelStages { entry: &es, load: &stage_load, stock: &stock, cleared: &cleared }).map_err(kz)
+        };
+        // A lower level enters over the floor of the level above where that
+        // level cut the column of each entry; else from over the stock top.
+        let uppers: Vec<&Plan> = planned.iter().map(|(l, _, _)| &l.plan).collect();
+        let floor = match i.checked_sub(1).and_then(|j| zs.get(j)).copied() {
+            Some(zu) if zu < top => {
+                let level = plan_at(zu)?;
+                approach_proved(&level.plan, &uppers, air_out.as_ref()).then_some((level, zu))
+            }
+            _ => None,
+        };
+        let (level, level_top) = match floor {
+            Some((level, zu)) => (level, Some(zu)),
+            None => (plan_at(top)?, None),
+        };
         if let Some(g) = level.gaps.iter().max_by(|a, b| a.area_mm2().total_cmp(&b.area_mm2())) {
             let msg = format!(
                 "{KERNEL_POCKET_INCOMPLETE} ({} gap(s), the largest {:.3} mm2) at Z {z:.3}",
@@ -253,7 +336,7 @@ pub fn pocket_kernel_plans(region: &Region, p: &PocketParams, holes: &[PreHole],
             );
             return Err(GenError::invalid_at(msg, Point3::new(g.at().x, g.at().y, z)));
         }
-        planned.push((level, plane));
+        planned.push((level, plane, level_top));
     }
     let heights = EmitHeights::new(p.clearance_z, top).map_err(|e| GenError::Invalid(e.to_string()))?;
     let feeds = EmitFeeds::new(p.feed, p.plunge_feed).map_err(|e| GenError::Invalid(e.to_string()))?;
@@ -267,7 +350,7 @@ pub fn pocket_kernel_plans(region: &Region, p: &PocketParams, holes: &[PreHole],
             p.links.max_stay_down
         ));
     }
-    for n in planned.iter().flat_map(|(l, _)| l.notes.iter()) {
+    for n in planned.iter().flat_map(|(l, _, _)| l.notes.iter()) {
         if !notes.contains(n) {
             notes.push(n.clone());
         }

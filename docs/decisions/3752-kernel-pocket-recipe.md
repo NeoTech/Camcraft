@@ -75,17 +75,25 @@ not change: the old Pocket arm runs byte for byte. Under
    limit (`max_stay_down`) is not planned by the link stage yet: the path
    says so by name ("instead of the limit").
 7. **Each level is planned with its own heights.** The entry heights of a
-   level are along the normal above that level: the material top (the
-   highest of Top Z, the stock top and the carried material top) less the
-   level Z. The descent of each level starts above the stock top, because
-   the converter accepts no approach under the stock top (#4269 decision
-   3). So the helix of a deeper level descends through the levels already
-   cut, at the helix pitch. That costs time in air, not safety. Dropped: a
-   per-level material top (it needs the converter to accept an approach
-   under the stock top where an upper level cleared the column: a
-   converter change, follow-up). The stock reader of each level is the
-   pocket area (a 2D pocket has vertical walls), and no column is cleared
-   down to a lower level, so the cleared area is empty.
+   level are along the normal above that level. The first level enters
+   from over the material top (the highest of Top Z, the stock top and the
+   carried material top). A lower level is planned first with the floor
+   of the level above as its material top. That plan is kept only when the
+   approach of each of its entries stands on a cut of every level above
+   (1 um: the tool disc cut that column down to each floor), or in the air
+   round the stock. Else the level is planned again from over the stock
+   top. The converter takes the proved top of each level
+   (`LevelPlan::top_z`, new; `None` is the stock top) and still refuses an
+   approach under it (`APPROACH_IN_MATERIAL`), and a level top above the
+   stock top (`BAD_LEVEL_TOP`). Why: a fig8 trial with each descent from
+   over the stock top gave a helix through the levels already cut, and its
+   chords crossed the cuts of the upper levels at their depth: 6 blocking
+   `Crossing` findings, and a long helix in air on each level. Dropped: a
+   retract plane under the clearance height (the converter's decision 3
+   stays: the move down from the clearance height is a plunge-feed move).
+   The stock reader of each level is the pocket area (a 2D pocket has
+   vertical walls), and no column is cleared down to a lower level, so the
+   cleared area of the entry stage is empty.
 8. **Incomplete and refused verdicts.** A refusal of a stage is the op's
    error, with its stage, its reason, its fix and its place (the place
    goes to the UI as the refusal spot). An incomplete verdict is refused
@@ -95,7 +103,20 @@ not change: the old Pocket arm runs byte for byte. Under
    path note, once.
 9. **The status line names the kernel** (`KERNEL_POCKET_NOTE`), so that a
    user who set the switch sees which planner cut the op.
-10. **The registry.** `crates/pathkernel/tests/laws/kind_pocket.rs`
+10. **The verifier reach.** Round a part, the entry stage plans air
+   entries, arc leads and exits outside the stock. The arm gives the
+   verifier the pocket area joined with the air round the stock
+   (`kernel_pocket_reach`: the stock grown by the approach distance, the
+   arc radius and two tool diameters, less the stock), so the stock edge
+   is no wall. The part stays out of it: each part wall is still judged.
+   Without it the verifier read each air lead as a `Gouge` of the stock
+   edge (as #4269 found with the band of its fixture).
+11. **Sliver loops.** The stock less a band on fig8 left a loop with all
+   its points on one line; the selection refused it ("a selected closed
+   chain has no area"). The K1 adapter (`kernel_region::pocket_selection`)
+   now drops each loop whose area is under 0.1 um times its perimeter
+   (`without_slivers`). Such a loop holds no material.
+12. **The registry.** `crates/pathkernel/tests/laws/kind_pocket.rs`
    registers the 2D Pocket as `Moved` with the real stage planners and the
    pocket's Waterline choices, on a closed square pocket and on a pocket
    with a round island made by the kernel's region stage. Its L7 record
@@ -104,7 +125,7 @@ not change: the old Pocket arm runs byte for byte. Under
    changed programs at the switch-over, proof item 3). The whole-program
    proof is in motion (`kernel_laws/k6_pocket.rs`) and app
    (`pocket_pass_start/kernel_route.rs`).
-11. **Changelog: none.** The default stays `old`, so no user sees a
+13. **Changelog: none.** The default stays `old`, so no user sees a
    change. The switch-over PR writes the row.
 
 **Cost to change later**: low. The recipe is one function per strategy

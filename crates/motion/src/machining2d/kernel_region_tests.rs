@@ -204,3 +204,18 @@ fn kernel_bounds_check() -> Bounds {
     let side = StartSide { start: PassStart::Auto, stock: Some(stock()), around_part: false };
     bounds_of(&side, Region::empty(), 0.0, -5.0).expect("bounds")
 }
+
+/// #3752: a sliver loop of the clipping (all its points nearly on one
+/// line) is not selected; the other loops stay as they are.
+#[test]
+fn kernel_pocket_selection_drops_a_sliver_loop() {
+    let sliver = Loop::new(vec![p(20.0, 0.0), p(80.0, 0.0), p(50.0, 5e-7)]).expect("sliver");
+    let area = Region::new(vec![sq(0.0, 0.0, 10.0), sliver]).expect("area");
+    let kept = without_slivers(&area).expect("kept");
+    assert_eq!(kept.loops().len(), 1, "the sliver is dropped");
+    assert!((kept.area() - 100.0).abs() < 1e-9, "the square stays");
+    let side = StartSide { start: PassStart::Auto, stock: None, around_part: false };
+    let (sel, m) = pocket_selection(&area, &side).expect("the selection refuses no sliver");
+    assert_eq!(m, MaterialSide::Inside);
+    assert_eq!(sel.chains().len(), 1);
+}

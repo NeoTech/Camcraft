@@ -191,7 +191,7 @@ pub use corner_relief_spur::pocket_relief_plan;
 pub use level_rings::level_ring_plan;
 pub use kernel_level::{GUIDE_TOL as KERNEL_GUIDE_TOL, LevelStages, PlannedLevel, fallback_text, plan_level};
 pub use kernel_pocket::{
-    KERNEL_NO_BLEND, KERNEL_POCKET_ADAPTIVE, KERNEL_POCKET_INCOMPLETE, KERNEL_POCKET_NOTE, KERNEL_POCKET_ZIGZAG, KernelPocketPlan, kernel_side, link_policy, pocket_kernel_plans, pocket_on_kernel,
+    KERNEL_NO_BLEND, KERNEL_POCKET_ADAPTIVE, KERNEL_POCKET_INCOMPLETE, KERNEL_POCKET_NOTE, KERNEL_POCKET_ZIGZAG, KernelPocketPlan, kernel_pocket_reach, kernel_side, link_policy, pocket_kernel_plans, pocket_on_kernel,
     resolved_strategy,
 };
 pub use kernel_region::{
