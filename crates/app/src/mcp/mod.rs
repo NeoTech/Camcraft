@@ -60,6 +60,8 @@ mod outline_text_tools;
 // #45: an operation's display name and its place in its setup.
 mod machine_tools;
 mod order_tools;
+// #3012: pattern folders (linear and grid copies at the post).
+mod pattern_tools;
 mod pick;
 // #979: the box pick, the viewport's Ctrl+drag box select headless.
 mod box_pick;
@@ -68,9 +70,13 @@ mod pockets;
 mod agie_inspection;
 mod post_options_tools;
 mod post_offer_view;
+// #3915: what a re-import moved, in the `import_model` answer.
+mod reimport_changes;
 mod render;
 mod selection;
 mod setup_tools;
+// #3915: SolidCraft face names on features and picks.
+mod source_names;
 mod tool_delete;
 mod tool_edit;
 mod tools;
@@ -105,6 +111,8 @@ mod recipe_tools;
 mod assembly_tools;
 mod component_library_tools;
 mod component_tools;
+// #4391: edit a user holder by its shape fields (the holder form's door).
+mod holder_shape_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

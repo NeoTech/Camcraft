@@ -714,6 +714,10 @@ pub struct EntityDto {
     /// `kind == Some(Entry)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<super::program_entry_dto::ProgramEntryDto>,
+    /// A pattern folder (#3012); present exactly when
+    /// `kind == Some(Pattern)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<super::pattern_dto::PatternDto>,
     /// A DXF profile's drawing (#1862); present exactly when
     /// `kind == Some(Sketch)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]

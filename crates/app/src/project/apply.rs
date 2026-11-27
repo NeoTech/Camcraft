@@ -656,6 +656,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     for dto in &file.entities {
         validate_kind(dto, dto.kind.unwrap_or(EntityKind::Model))?;
     }
+    super::pattern_dto::validate_members(&file.entities)?; // #3012
     // #3645: the component table and every tool's stack, read whole.
     let (components, mut assemblies) = super::assembly_wire::read_all(&file).map_err(corrupt)?;
     freeze_legacy_tool_numbers(&mut file.entities);
@@ -863,6 +864,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 }
             }
             EntityKind::Entry => super::program_entry_dto::apply(world, &entity, dto.entry)?,
+            EntityKind::Pattern => super::pattern_dto::apply(world, &entity, dto.pattern)?,
             EntityKind::Sketch => match sketches.remove(&dto.name) {
                 Some(sketch) => {
                     entity.entity_view(world).set(sketch);

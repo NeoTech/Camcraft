@@ -26,10 +26,14 @@ pub(crate) const PREVIEW_GAP: f64 = 0.005;
 /// The work quality that a Wire Contour machine condition requests (#2966).
 /// `AGIE_QN2` requests CCB030 (Ra 0.30 µm) for every qualified job.
 /// `AGIE_BERCO_RA035` requests CCB035 (Ra 0.35 µm) for one 20 mm polygon punch.
+/// `AGIE_COBRA_RA030` and `AGIE_COBRA_RA070` request CCD030 and CCD070 (Ra 0.30
+/// and 0.70 µm) with Cobra Cut D 0.25 wire for one 40 mm polygon punch (#2986).
 pub(crate) fn quality_of(condition: &str) -> Option<Quality> {
     match condition {
         "AGIE_QN2" => Some(Quality::Ccb030),
         "AGIE_BERCO_RA035" => Some(Quality::Ccb035),
+        "AGIE_COBRA_RA030" => Some(Quality::Ccd030),
+        "AGIE_COBRA_RA070" => Some(Quality::Ccd070),
         _ => None,
     }
 }
@@ -39,6 +43,8 @@ fn condition_name(quality: Quality) -> &'static str {
     match quality {
         Quality::Ccb030 => "AGIE_QN2",
         Quality::Ccb035 => "AGIE_BERCO_RA035",
+        Quality::Ccd030 => "AGIE_COBRA_RA030",
+        Quality::Ccd070 => "AGIE_COBRA_RA070",
     }
 }
 
@@ -133,7 +139,8 @@ pub(super) fn post(
         _ => None,
     };
     let jobs = if round.is_some() { Vec::new() } else { group::jobs(world, &operations)? };
-    // The control checked CCB035 on one 20 mm polygon punch only (#2966).
+    // The control checked CCB035 on one 20 mm polygon punch only (#2966), and
+    // CCD030 and CCD070 on one 40 mm polygon punch only (#2986).
     let qualities = operations
         .iter()
         .map(|(_, op)| crate::operation::agie_quality(world, op))
@@ -152,9 +159,14 @@ pub(super) fn post(
     let quality = match qualities.as_slice() {
         [quality] if round.is_none() => *quality,
         _ if qualities.iter().all(|q| *q == Quality::Ccb030) => Quality::Ccb030,
-        _ => {
-            return Err("AGIE_BERCO_RA035 is qualified for one closed polygon punch on a 20 mm plate only. Select AGIE_QN2 for a punch group or a DXF arc punch".into());
+        [quality, ..] => {
+            let height = if *quality == Quality::Ccb035 { 20 } else { 40 };
+            return Err(format!(
+                "{} is qualified for one closed polygon punch on a {height} mm plate only. Select AGIE_QN2 for a punch group or a DXF arc punch",
+                condition_name(*quality)
+            ));
         }
+        [] => return Err("An Agie Wire EDM job requires an active Wire Contour operation".into()),
     };
     let options = super::program_options_for_script(
         world,
@@ -175,7 +187,7 @@ pub(super) fn post(
             (camcraft_post::agie::export_opening_with_review(job, walls, dest, name, separation)?, 1)
         }
         None => match (quality, jobs.as_slice()) {
-            (Quality::Ccb035, [job]) => (
+            (Quality::Ccb035 | Quality::Ccd030 | Quality::Ccd070, [job]) => (
                 camcraft_post::agie::export_punch_with_review(
                     job, quality, dest, name, separation,
                 )?,

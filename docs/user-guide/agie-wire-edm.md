@@ -55,6 +55,19 @@ CamCraft refuses AGIE_BERCO_RA035 for other stock thicknesses, a die opening, an
 
 Run `cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/fine-punch.camscript` into a fresh `FINE20` directory.
 
+### Request Cobra Cut D 0.25 mm for one 40 mm punch
+
+For one closed polygon punch in 40 mm cold die steel, you can use Cobra Cut D 0.25 mm wire. Add a mounted machine condition with role **rough**, wire diameter **0.25 mm** and preview gap **0.005 mm**, and select it in the Wire Contour condition field. Each condition requests its own quality name:
+
+| Condition | Quality | Request | Passes | Offsets in mm |
+|---|---|---|---|---|
+| **AGIE_COBRA_RA030** | **CCD030** | Ra 0.30, Te 1.50, Tkm 1.00, three options disabled | 4 | 0.250, 0.170, 0.145, 0.135 |
+| **AGIE_COBRA_RA070** | **CCD070** | Ra 0.70, Te 1.50, Tkm 1.00, three options disabled | 3 | 0.245, 0.165, 0.140 |
+
+The piece and the work both set the wire **Cobra Cut D 0.25**. The job keeps the 1 mm separation. CamCraft uses the first offset of the quality for its rough clearance checks. The offsets come from two synthetic offline jobs. They are motion values; only a physical part can measure the surface. Before you assign TECCUT, check that the control shows Cobra Cut D 0.25, the requested quality and the number of passes. If one differs, stop and do not cut.
+
+CamCraft refuses AGIE_COBRA_RA030 and AGIE_COBRA_RA070 for other stock thicknesses, a die opening, an open cutoff, a punch group and a DXF circle or racetrack. No file is written.
+
 ## Try the synthetic punch
 
 From the project root, run the supplied script with a local CamCraft desktop CLI build.
