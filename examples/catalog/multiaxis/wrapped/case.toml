@@ -1,0 +1,3 @@
+kinds = ["Rotary Offset", "Rotary Parallel", "Rotary Contour"]
+machine = "Tormach 770MX + microARC 4"
+expect = "post"
