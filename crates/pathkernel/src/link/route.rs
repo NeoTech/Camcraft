@@ -23,7 +23,7 @@ fn dist(a: Point2, b: Point2) -> f64 {
 /// The nearest place of the closed loop `pts` to `q`: the index of its
 /// segment (from `pts[i]` to the next point), the place along it (0 to 1)
 /// and the distance.
-fn project(pts: &[Point2], q: Point2) -> Option<(usize, f64, Point2, f64)> {
+pub(super) fn project(pts: &[Point2], q: Point2) -> Option<(usize, f64, Point2, f64)> {
     let n = pts.len();
     let mut best: Option<(usize, f64, Point2, f64)> = None;
     for i in 0..n {

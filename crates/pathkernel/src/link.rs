@@ -5,6 +5,7 @@
 //! "Stage 5: Link"; stay-down linking as in the published high-speed
 //! machining literature (Held & Spielberger 2009).
 
+mod approach;
 mod proof;
 mod route;
 

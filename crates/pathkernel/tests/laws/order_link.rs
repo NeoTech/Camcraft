@@ -102,16 +102,16 @@ fn k4_order_obeys_l3_with_the_ring_planner() {
 /// island pocket Inside starts in the four separate deepest corners and
 /// crosses the strips between them, and Outside must cross the rings still
 /// planned between the wall and the island. The bands round a part,
-/// Outside (and Auto), lift between the pieces at the stock edge: the
-/// strip along the edge is uncut stock until a cut clears it (#4234). A
-/// link may leave the stock through the edge band into the air (#4241),
-/// but the way back in to the start of the next piece runs over stock that
-/// no cut has cleared, so no path is proved there
-/// (`docs/decisions/4241-kernel-link-edge-band.md`).
+/// Outside (and Auto), do not lift: a link leaves a piece at the stock
+/// edge through the edge band into the air (#4241), and comes back in to
+/// the start of the next piece with an approach from the air whose disc
+/// cuts only the swath of that piece (#4254,
+/// `docs/decisions/4254-kernel-air-approach.md`). The strip along the edge
+/// is not open ground by itself (#4234).
 const LIFTS: [(&str, [u32; 3]); 4] = [
     ("disc pocket", [0, 0, 0]),
-    ("disc, material round it", [13, 0, 13]),
-    ("dog bone, material round it", [15, 0, 15]),
+    ("disc, material round it", [0, 0, 0]),
+    ("dog bone, material round it", [0, 0, 0]),
     ("pocket with an island", [7, 7, 5]),
 ];
 

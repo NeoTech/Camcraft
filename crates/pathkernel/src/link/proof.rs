@@ -111,6 +111,9 @@ pub(super) struct Proof<'a> {
     /// the first sample outside the centre area and the air. `None` when
     /// its geometry cannot be computed: then no sample is in the band.
     room: OnceCell<Option<Region>>,
+    /// The ground outside the stock round the air (`approach.rs`), built
+    /// at the first approach.
+    pub(super) outside: OnceCell<Option<Region>>,
 }
 
 impl Proof<'_> {
@@ -119,12 +122,12 @@ impl Proof<'_> {
     /// no part, also a part that reaches out of the stock), and more than a
     /// tool radius from each keep-out area. A region with no part zone (not
     /// made by the region builder) or with no air has no band.
-    fn in_band(&self, q: Point2) -> bool {
+    pub(super) fn in_band(&self, q: Point2) -> bool {
         let zone = self.p.part_zone();
         if zone.is_empty() || self.p.air().is_empty() {
             return false;
         }
-        let Some(room) = self.room.get_or_init(|| legal_room(self.p).ok()) else {
+        let Some(room) = self.legal() else {
             return false;
         };
         let in_zone = zone.contains(q) && to_loops(q, zone.loops()) > KERNEL_TOL;
@@ -134,7 +137,7 @@ impl Proof<'_> {
     }
 
     /// The samples of the chord `a`-`b`, both ends included.
-    fn samples(&self, a: Point2, b: Point2) -> Vec<Point2> {
+    pub(super) fn samples(&self, a: Point2, b: Point2) -> Vec<Point2> {
         let len = (b.x - a.x).hypot(b.y - a.y);
         let step = STEP * self.r;
         let n = if len.is_finite() && step > 0.0 { (len / step).ceil().clamp(1.0, 1e6) } else { 1.0 };
@@ -162,21 +165,43 @@ impl Proof<'_> {
             return Ok(());
         }
         let pts = self.samples(a, b);
-        let air = self.p.air();
-        if !pts.iter().all(|&q| in_area(self.p.center(), q) || in_area(air, q) || self.in_band(q)) {
-            let keep = self.p.keep_out();
-            let fixture = !keep.is_empty() && pts.iter().any(|&q| in_area(keep, q) || to_loops(q, keep.loops()) <= self.r);
-            return Err(LiftReason(if fixture { HITS_FIXTURE } else { CUTS_PART }));
-        }
-        let made = self.made.iter().enumerate().filter(|(i, _)| Some(*i) != skip).chain(self.links.iter().enumerate()).any(|(_, l)| l.meets(a, b, self.ends, true));
-        if made || self.planned.iter().any(|l| l.meets(a, b, self.ends, false)) {
-            return Err(LiftReason(CROSSES_CUT));
-        }
-        let reach = SWATH * self.r;
+        self.room(&pts)?;
+        self.crossing(a, b, skip)?;
+        let (air, reach) = (self.p.air(), SWATH * self.r);
         if !pts.iter().all(|&q| in_area(air, q) || self.made.iter().any(|l| l.dist(q, reach) <= reach)) {
             return Err(LiftReason(UNCUT_STOCK));
         }
         Ok(())
+    }
+
+    /// The room test of a chord's samples: each in the centre area, the
+    /// air or the edge band, else `HITS_FIXTURE` (within a tool radius of
+    /// a keep-out area) or `CUTS_PART`.
+    pub(super) fn room(&self, pts: &[Point2]) -> Result<(), LiftReason> {
+        let air = self.p.air();
+        if pts.iter().all(|&q| in_area(self.p.center(), q) || in_area(air, q) || self.in_band(q)) {
+            return Ok(());
+        }
+        let keep = self.p.keep_out();
+        let fixture = !keep.is_empty() && pts.iter().any(|&q| in_area(keep, q) || to_loops(q, keep.loops()) <= self.r);
+        Err(LiftReason(if fixture { HITS_FIXTURE } else { CUTS_PART }))
+    }
+
+    /// The crossing test of the chord `a`-`b`: it crosses no made cut (but
+    /// the one of index `skip`), no stay-down link before it, and touches
+    /// no planned cut away from the two ends of the link (`CROSSES_CUT`).
+    pub(super) fn crossing(&self, a: Point2, b: Point2, skip: Option<usize>) -> Result<(), LiftReason> {
+        let made = self.made.iter().enumerate().filter(|(i, _)| Some(*i) != skip).chain(self.links.iter().enumerate()).any(|(_, l)| l.meets(a, b, self.ends, true));
+        if made || self.planned.iter().any(|l| l.meets(a, b, self.ends, false)) {
+            return Err(LiftReason(CROSSES_CUT));
+        }
+        Ok(())
+    }
+
+    /// The legal room of the tool centre (`entry::legal_room`), built once;
+    /// `None` when its geometry cannot be computed.
+    pub(super) fn legal(&self) -> Option<&Region> {
+        self.room.get_or_init(|| legal_room(self.p).ok()).as_ref()
     }
 
     /// The proof of a path: each chord.
@@ -214,26 +239,43 @@ fn stay_path(from: &Cut, to: &Cut, p: &PlanarRegion, level: Level<'_>) -> Result
         links: level.links().iter().map(|l| Line::path(l.clone())).collect(),
         ends: (a, b),
         room: OnceCell::new(),
+        outside: OnceCell::new(),
     };
-    let why = match proof.chord(a, b, None) {
-        Ok(()) => return Ok(vec![a, b]),
+    let why = match tries(&mut proof, from, a, b) {
+        Ok(path) => return Ok(path),
         Err(why) => why,
     };
-    // Back along the open cut just made, then a chord to the next start
-    // (the chain link of the air plan). The cut just made is the last one
-    // made; the chord may start on it.
+    // The approach from the air (#4254): out to the air and along it as
+    // above, then in to the start of an open piece at the stock edge with
+    // a stretch that cuts no stock off the planned curve.
+    super::approach::from_air(&mut proof, from, to, a, b).ok_or(why)
+}
+
+/// The tries of a path from `a` (the end of `from`) to `target`: the
+/// straight chord; back along the open cut just made, then a chord; a walk
+/// along a loop of the centre area or of the air. The reason is the one of
+/// the straight chord.
+pub(super) fn tries(proof: &mut Proof<'_>, from: &Cut, a: Point2, target: Point2) -> Result<Vec<Point2>, LiftReason> {
+    let why = match proof.chord(a, target, None) {
+        Ok(()) => return Ok(vec![a, target]),
+        Err(why) => why,
+    };
+    // Back along the open cut just made, then a chord to the target (the
+    // chain link of the air plan). The cut just made is the last one made;
+    // the chord may start on it.
     let back: Vec<Point2> = from.curve().pts().iter().rev().map(|q| q.at()).collect();
     if let (false, Some(&s), Some(last)) = (from.curve().closed(), back.last(), proof.made.len().checked_sub(1)) {
-        proof.ends = (s, b);
-        let ok = proof.chord(s, b, Some(last)).is_ok();
-        proof.ends = (a, b);
+        let ends = proof.ends;
+        proof.ends = (s, ends.1);
+        let ok = proof.chord(s, target, Some(last)).is_ok();
+        proof.ends = ends;
         if ok {
             let mut out = back;
-            out.push(b);
+            out.push(target);
             return Ok(out);
         }
     }
-    super::route::edge_route(&proof, a, b).ok_or(why)
+    super::route::edge_route(proof, a, target).ok_or(why)
 }
 
 /// The in-plane path that the link stage proves from `from` to `to`, if
