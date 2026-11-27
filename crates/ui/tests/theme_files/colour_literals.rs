@@ -17,8 +17,8 @@
 //! The theme columns and the contrast maths moved to the UI kit crate
 //! with the theme (#4394), so they are no longer rows here. The
 //! permanent rows are the verdict palettes and a colour that only
-//! measures text. Each other row is a site
-//! family that a later #1120 PR moves to tokens.
+//! measures text. Each row is permanent: the draw sites of #1120 all
+//! read tokens, so a new row needs a reason that is not a theme choice.
 //! Provenance: our own test over our own source tree.
 //!
 //! A module of the `theme_files` suite (#3187: no new test binary). Its
@@ -30,14 +30,12 @@ use std::path::{Path, PathBuf};
 use super::colour_scan::count;
 
 /// `(path under crates/ui/src, literal count, why)`. Keep it sorted by
-/// path. A `keep:` row is not a colour choice for a theme; a `move`
-/// row names the #1120 family PR that moves it to tokens and lowers it.
+/// path. Each row is a `keep:` row: a colour that is not a choice for
+/// a theme, with the reason.
 #[rustfmt::skip]
 const ALLOWED: &[(&str, usize, &str)] = &[
-    ("egui_app/error_text.rs", 1, "move (#1120 status inks): the red fallback of an error line"),
     ("egui_app/theme/verdict.rs", 15, "keep: the verdict palette table (#1120: ours, held to the colour-vision gate, no theme key)"),
     ("egui_app/viewport_layout.rs", 1, "keep: the colour only measures text, it is not drawn"),
-    ("egui_app/window_chrome.rs", 2, "move (#1120 window chrome): the close button hover and its ink"),
 ];
 
 fn src_root() -> PathBuf {

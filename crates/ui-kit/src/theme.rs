@@ -116,6 +116,9 @@ pub struct Tokens {
     pub mount_tip: Color32,
     pub mount_origin: Color32,
     pub mount_hint: Color32,
+    /// A floating window's close button: its hover fill and the cross on it.
+    pub close_hover: Color32,
+    pub close_ink: Color32,
     // -- geometry: the Phase-6 complaint made themeable - ribbon size,
     // input fields and button size are tokens, not literals.
     /// Corner radius of widget rects and painted cells/rows.
@@ -243,6 +246,7 @@ impl Tokens {
             cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
             overlay_panel: _, overlay_edge: _, overlay_text: _, overlay_track: _, drop_veil: _, empty_hint: _, pick_halo: _, plate_hole: _, plate_dowel: _, gcode_line: _,
             tool_ground: _, tool_axis: _, tool_grid: _, tool_flute: _, tool_shank: _, tool_body: _, tool_edge: _, tool_holder: _, tool_note: _, tool_dim: _, thumb_flute: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
+            close_hover: _, close_ink: _,
             radius_widget, radius_window, radius_menu,
             item_spacing_x: _, item_spacing_y: _,
             button_padding_x: _, button_padding_y: _,

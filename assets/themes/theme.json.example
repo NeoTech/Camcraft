@@ -65,7 +65,9 @@
     "mount_radial": "#F0B43C",
     "mount_tip": "#F09628",
     "mount_origin": "#A0A0AA",
-    "mount_hint": "#F0C878"
+    "mount_hint": "#F0C878",
+    "close_hover": "#C42B1C",
+    "close_ink": "#FFFFFF"
   },
   "geometry": {
     "radius_widget": 2,

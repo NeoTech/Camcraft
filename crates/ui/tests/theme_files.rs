@@ -19,6 +19,8 @@ use camcraft_ui::egui_app::theme::Tokens;
 use camcraft_ui::egui_app::theme_files as tf;
 use egui::Color32;
 
+#[path = "theme_files/chrome_inks.rs"]
+mod chrome_inks;
 #[path = "theme_files/colour_literals.rs"]
 mod colour_literals;
 #[path = "theme_files/colour_scan.rs"]

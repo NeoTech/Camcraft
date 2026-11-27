@@ -77,6 +77,8 @@ pub const MOUNT_RADIAL: &str = "mount_radial";
 pub const MOUNT_TIP: &str = "mount_tip";
 pub const MOUNT_ORIGIN: &str = "mount_origin";
 pub const MOUNT_HINT: &str = "mount_hint";
+pub const CLOSE_HOVER: &str = "close_hover";
+pub const CLOSE_INK: &str = "close_ink";
 pub const RIBBON_TAB_H: &str = "ribbon_tab_h";
 pub const RIBBON_CELL_TOP_GAP: &str = "ribbon_cell_top_gap";
 pub const RIBBON_CAPTION_GAP: &str = "ribbon_caption_gap";
@@ -122,6 +124,7 @@ pub const COLOR_NAMES: &[&str] = &[
     TOOL_GROUND, TOOL_AXIS, TOOL_GRID, TOOL_FLUTE, TOOL_SHANK, TOOL_BODY,
     TOOL_EDGE, TOOL_HOLDER, TOOL_NOTE, TOOL_DIM, THUMB_FLUTE, BAD_INK,
     WARN_INK, MOUNT_AXIS, MOUNT_RADIAL, MOUNT_TIP, MOUNT_ORIGIN, MOUNT_HINT,
+    CLOSE_HOVER, CLOSE_INK,
 ];
 
 /// The geometry vocabulary (every override is clamped through the
