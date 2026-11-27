@@ -193,7 +193,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         || (condition.wire_diameter - 0.25).abs() > 1e-9
         || (condition.gap - agie::PREVIEW_GAP).abs() > 1e-9
     {
-        return Err("Select AGIE_QN2 (Fine Ra 0.30 µm) or AGIE_BERCO_RA035 (Fine+ Ra 0.35 µm, one 20 mm punch) with its unmodified preview gap for cold die steel 0001 and Berco Cut 0.25 mm".into());
+        return Err("Select AGIE_QN2 (Fine Ra 0.30 µm) or AGIE_BERCO_RA035 (Fine+ Ra 0.35 µm, one 20 mm punch) with its unmodified preview gap for cold die steel 0001 and Berco Cut 0.25 mm, or AGIE_COBRA_RA030 or AGIE_COBRA_RA070 (Ra 0.30 or 0.70 µm, one 40 mm punch) for Cobra Cut D 0.25 mm".into());
     }
     if crate::stock_material::in_force(world, setup).is_some() {
         return Err("The stated stock material conflicts with AGIE_QN2 cold die steel 0001".into());

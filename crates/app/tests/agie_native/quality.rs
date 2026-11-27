@@ -7,7 +7,7 @@ const FINE: &str = include_str!("../../../../examples/agie/fine-punch.camscript"
 const PUNCH_OBJ: &str = include_str!("../../../../examples/agie/punch.obj");
 
 /// Copy `assets` into `examples/agie` of `dir`, write `script` there and run it.
-fn run(dir: &Path, name: &str, script: &str, assets: &[(&str, &str)]) -> std::process::Output {
+pub(super) fn run(dir: &Path, name: &str, script: &str, assets: &[(&str, &str)]) -> std::process::Output {
     let examples = dir.join("examples/agie");
     fs::create_dir_all(&examples).unwrap();
     for (file, text) in assets {
@@ -117,7 +117,7 @@ fn ra035_refuses_unmeasured_heights_without_a_directory() {
 }
 
 /// Script name, script, assets, job directory and the expected refusal text.
-type Case = (
+pub(super) type Case = (
     &'static str,
     &'static str,
     &'static [(&'static str, &'static str)],
