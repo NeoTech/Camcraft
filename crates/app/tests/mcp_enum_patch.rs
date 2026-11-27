@@ -1,4 +1,4 @@
-//! #2876: enum merge-patch refusals name the field and retained shapes.
+//! #2876, #3476: merge-patch refusals explain retained shapes and kind wrappers.
 //! Gate map (M4.4): covers app::mcp::edit, app::mcp, app::project::json.
 //! Provenance: our own MCP contract and RFC 7386 merge-patch semantics.
 
@@ -60,6 +60,84 @@ impl Client {
 
     fn params(&mut self) -> Value {
         self.ok("get_job", json!({}))["operations"][0]["params"].clone()
+    }
+}
+
+#[test]
+#[ignore = "known-fail #3476 | mcp_enum_patch | nested_job_params_refusal_supplies_a_usable_flat_call | nested kind refusal must include the corrected edit_operation call"]
+fn nested_job_params_refusal_supplies_a_usable_flat_call() {
+    let mut client = Client::new();
+    client.ok(
+        "add_operation",
+        json!({ "kind": "2D Pocket", "tool": "EM-0600-4FL", "name": "Pocket" }),
+    );
+    let name = "Pocket \"finish\" \\ pass";
+    client.ok(
+        "rename_operation",
+        json!({ "name": "Pocket", "new_name": name }),
+    );
+    // Keep a redo entry. A refused edit must not replace it or add an undo step.
+    client.ok(
+        "edit_operation",
+        json!({ "name": name, "params": { "stepdown": 1.25 } }),
+    );
+    client.ok("undo", json!({}));
+    let before = client.ok("get_job", json!({}));
+    assert_eq!(before["can_redo"], json!(true));
+    let mut nested = before["operations"][0]["params"].clone();
+    assert!(nested["pocket"].is_object(), "get_job kind wrapper: {nested}");
+    assert_ne!(nested["pocket"]["stepdown"], json!(0.75));
+    nested["pocket"]["stepdown"] = json!(0.75);
+    let result = client.call(
+        "edit_operation",
+        json!({ "name": name, "params": nested }),
+    );
+    assert_eq!(result["isError"], json!(true), "nested edit: {result}");
+    assert_eq!(client.ok("get_job", json!({})), before);
+    let text = result["content"][0]["text"].as_str().expect("refusal text");
+    // known-fail-assert
+    assert!(
+        text.contains("Corrected call: edit_operation "),
+        "nested kind refusal must include the corrected edit_operation call: {text}"
+    );
+    let (_, call) = text.split_once("Corrected call: edit_operation ").expect("corrected call");
+    let arguments: Value = serde_json::from_str(call).expect("corrected arguments are JSON");
+    assert_eq!(arguments, json!({ "name": name, "params": nested["pocket"] }));
+    // The old redo still works. Then retry the actual call from the refusal.
+    client.ok("redo", json!({}));
+    assert_eq!(client.params()["pocket"]["stepdown"], json!(1.25));
+    client.ok("undo", json!({}));
+    assert_eq!(client.ok("get_job", json!({})), before);
+    client.ok("edit_operation", arguments);
+    assert_eq!(client.params(), nested);
+    client.ok("undo", json!({}));
+    assert_eq!(client.params(), before["operations"][0]["params"]);
+    client.ok("redo", json!({}));
+    assert_eq!(client.params(), nested);
+}
+
+#[test]
+fn invalid_kind_wrappers_and_unknown_fields_remain_refused() {
+    let mut client = Client::new();
+    client.contour(json!({}));
+    let before = client.ok("get_job", json!({}));
+    for patch in [
+        json!({ "pocket": { "stepdown": 0.75 } }),
+        json!({ "contour": { "unknown_field": 0.75 } }),
+        json!({ "contour": { "stepdown": 0.75 }, "unknown_field": 1.0 }),
+        json!({ "unknown_field": 0.75 }),
+        json!({ "clearance_z": { "ofset": 1.0 } }),
+        json!({ "contour": 0.75 }),
+        json!([]),
+    ] {
+        let result = client.call(
+            "edit_operation",
+            json!({ "name": "Contour", "params": patch }),
+        );
+        assert_eq!(result["isError"], json!(true), "invalid patch: {patch}: {result}");
+        let text = result["content"][0]["text"].as_str().expect("refusal text");
+        assert!(!text.contains("Corrected call:"), "do not suggest a lossy call: {text}");
+        assert_eq!(client.ok("get_job", json!({})), before);
     }
 }
 
