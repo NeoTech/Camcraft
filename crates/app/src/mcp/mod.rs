@@ -101,6 +101,10 @@ mod workholding_tools;
 mod sheet_job_tools;
 // #3073: saved cut recipes.
 mod recipe_tools;
+// #3647: tool components, assemblies and the component library.
+mod assembly_tools;
+mod component_library_tools;
+mod component_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

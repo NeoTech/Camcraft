@@ -43,6 +43,8 @@ pub mod plasma;
 // #1883: the 2D sheet kernel shared by plasma, wire EDM and waterjet.
 pub mod sheet;
 pub mod waterjet;
+// #4081: the laser profile, on the waterjet generator under its own voice.
+pub mod laser;
 pub mod wire_edm;
 pub mod probing;
 // #541: sinker EDM burn to depth.

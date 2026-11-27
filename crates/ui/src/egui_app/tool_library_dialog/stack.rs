@@ -8,10 +8,14 @@
 //! own draft (`StackDraft`); "Apply stack" lands them as one undoable
 //! `SetToolAssembly`, which derives the tool's record and body in the
 //! same step; "Detach to standalone tool" clears the stack and keeps the
-//! tool as it is. A lathe tool's stack waits for the lathe side of the
-//! resolver (#3643). Under the rows the group shows, read-only, what the
-//! resolver gives for the shown stack: the gauge length, the cutting
-//! diameter and the corner radius, or its refusal by name. "Swap" on an
+//! tool as it is. A lathe tool (turning, groove, thread, form) has the
+//! same group: its empty stack offers only a lathe holder or a boring
+//! bar, then the inserts that fit the holder's seat, and the lathe side
+//! of the resolver (#3643, #4278) builds it. Under the rows the group
+//! shows, read-only, what the resolver gives for the shown stack: the
+//! gauge length, the cutting diameter and the corner radius (for a lathe
+//! tool: gauge length 0, the insert's inscribed circle as the diameter,
+//! the nose radius and the orientation), or its refusal by name. "Swap" on an
 //! applied stack offers, for one row, only the parts with which the whole
 //! stack still resolves, and lands the new stack as one undoable
 //! `SetToolAssembly`. Frame cost: State keeps the offer, the values, the
@@ -29,7 +33,7 @@ use camcraft_app::tool_assembly as ta;
 
 #[cfg(test)]
 pub(crate) use crate::state::candidates;
-use crate::state::{ComponentAction, StackDraft, StackValues, State, SwapOffer, is_spun_kind};
+use crate::state::{ComponentAction, StackDraft, StackValues, State, SwapOffer};
 
 pub(crate) const HEADING: &str = "Component stack";
 pub(crate) const ADD: &str = "Add component";
@@ -40,6 +44,10 @@ pub(crate) const DETACH: &str = "Detach to standalone tool";
 pub(crate) const GAUGE: &str = "Gauge length";
 pub(crate) const DIAMETER: &str = "Cutting diameter";
 pub(crate) const CORNER: &str = "Corner radius";
+/// The labels of a lathe stack's derived values (#3643).
+pub(crate) const INSCRIBED: &str = "Inscribed circle (diameter)";
+pub(crate) const NOSE: &str = "Nose radius";
+pub(crate) const ORIENTATION: &str = "Orientation";
 
 /// The label of row `name`'s swap menu.
 #[must_use]
@@ -56,10 +64,6 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     let Some(entity) = model::find_by_name(&state.world, &name) else {
         return;
     };
-    if !is_spun_kind(state.tool_ui.tool_kind()) {
-        ui.label("A lathe tool's component stack is not resolved yet (#3643).");
-        return;
-    }
     let stored = ta::assembly_of(&state.world, &entity).map(|a| a.0);
     let doc = state.doc_version;
     let mut draft = match state.tool_library.as_ref().and_then(|v| v.stack.clone()) {
@@ -198,8 +202,14 @@ fn values_row(ui: &mut Ui, values: Option<&Result<StackValues, String>>, applied
         Some(Ok(v)) => {
             ui.horizontal_wrapped(|ui| {
                 ui.label(format!("{GAUGE}: {:.3} mm", v.gauge_len));
-                ui.label(format!("{DIAMETER}: {:.3} mm", v.diameter));
-                ui.label(format!("{CORNER}: {:.3} mm", v.corner_r));
+                if let Some(l) = v.lathe {
+                    ui.label(format!("{INSCRIBED}: {:.3} mm", v.diameter));
+                    ui.label(format!("{NOSE}: {:.3} mm", l.nose_radius));
+                    ui.label(format!("{ORIENTATION}: {}", l.orientation.map_or_else(|| "-".to_owned(), |q| q.to_string())));
+                } else {
+                    ui.label(format!("{DIAMETER}: {:.3} mm", v.diameter));
+                    ui.label(format!("{CORNER}: {:.3} mm", v.corner_r));
+                }
                 if !applied {
                     ui.weak("(from the stack edits; not applied)");
                 }

@@ -723,6 +723,7 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             // #669: a plasma table cuts 2D profiles - the contour glyph.
             camcraft_app::machine::Kind::Plasma => Icon::Contour,
             camcraft_app::machine::Kind::Waterjet => Icon::ToolWaterjet,
+            camcraft_app::machine::Kind::Laser => Icon::ToolLaser,
         }),
         Cmd::Undo => Some(Icon::Undo),
         Cmd::Redo => Some(Icon::Redo),

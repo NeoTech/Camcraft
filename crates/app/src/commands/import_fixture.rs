@@ -68,7 +68,8 @@ impl ImportFixture {
                     .with_hole(import.hole.clone())
                     .with_budget(import.facet_budget)
                     .with_step_source(import.step_source.clone())
-                    .with_source(import.source.clone()),
+                    .with_source(import.source.clone())
+                    .with_source_faces(import.source_faces.clone()),
             )),
             None => Landing::Fresh(Box::new(import)),
         };
@@ -99,12 +100,13 @@ impl ImportFixture {
         &self.name
     }
 
-    /// What an update changed (`None` for a fresh import).
+    /// What an update changed (`None` for a fresh import), with the picks
+    /// that followed their SolidCraft names and each that could not (#3915).
     #[must_use]
     pub fn update_summary(&self) -> Option<String> {
         match &self.landing {
             Landing::Fresh(_) => None,
-            Landing::Update(u) => Some(u.changes().describe()),
+            Landing::Update(u) => Some(u.summary()),
         }
     }
 }

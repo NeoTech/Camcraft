@@ -197,6 +197,47 @@ SECTION END
     assert!(out_r8.program.contains("G5.1 Q1 R8"), "G5.1 Q1 R8 must be emitted:\n{}", out_r8.program);
 }
 
+// #4347: the hole chain (plunge, retract to R) inside an open canned-cycle
+// group writes no G5.1 word, and a section that ends inside the group
+// writes G80 before any G5.1 Q0 (B-64604EN-2/01, 3.3.2).
+#[test]
+fn doosan_dnm_smoothing_stays_out_of_open_cycle_group() {
+    let cps = dnm_post();
+    let mch = dnm_machine();
+    let stream = r#"; HSMW-CL v1 scale=0.001mm moves=7
+PARAM WorkOffset G54
+PARAM ClearancePlane 50
+PARAM RetractPlane 10
+TOOL 1 "6mm Drill"
+PARAM SpindleSpeed 3000
+SECTION Drill
+Rapid 20000 10000 2000
+CYCLE DRILL X20000 Y10000 Z-5000 R2000 F200000
+Plunge 20000 10000 -5000 F200000
+Rapid 20000 10000 2000
+CYCLE DRILL X20000 Y10000 Z-5000 R2000 F200000
+Plunge 20000 10000 -5000 F200000
+Rapid 20000 10000 2000
+SECTION END
+"#;
+    let options = serde_json::json!({ "smoothing": true });
+    let out = engine::run_with(&cps, &mch, stream, &options).expect("posts smoothed drilling");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let lines: Vec<&str> = out.program.lines().collect();
+    let open = lines.iter().position(|l| l.contains("G81")).expect("cycle present");
+    let close = open + lines[open..].iter().position(|l| l.contains("G80")).expect("G80 closes the cycle group");
+    assert!(
+        !lines[open..close].iter().any(|l| l.contains("G5.1")),
+        "no G5.1 word inside the open cycle group:\n{}",
+        out.program
+    );
+    assert!(
+        !lines[open..].iter().any(|l| l.contains("G5.1 Q1")),
+        "no G5.1 Q1 after the cycle in a section with no cut outside it:\n{}",
+        out.program
+    );
+}
+
 #[test]
 fn doosan_dnm_chip_conveyor() {
     let cps = dnm_post();

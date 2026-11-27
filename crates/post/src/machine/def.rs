@@ -345,6 +345,7 @@ impl Machine {
             && self.controller_identity.as_ref().is_none_or(|c| c.validate().is_ok())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.waterjet_sane()
+            && self.laser_sane()
             && self.plasma_sane()
             && self.edm_sane()
             && self.axes.iter().all(|a| {
@@ -380,6 +381,8 @@ impl Machine {
             "torch, no spindle".to_owned()
         } else if kind(Some(self)) == Kind::Waterjet {
             "waterjet nozzle, no spindle".to_owned()
+        } else if kind(Some(self)) == Kind::Laser {
+            "laser head, no spindle".to_owned()
         } else {
             format!(
                 "spindle {}-{} rpm",

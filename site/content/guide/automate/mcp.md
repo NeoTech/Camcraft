@@ -283,6 +283,7 @@ time. The current, authoritative tool list is whatever the client's
 | Tools and holders | `list_tool_catalog`, `add_tool`, `set_tool`, `import_tool_library`, `export_tool_library`, `list_holder_library`, `set_tool_holder`, `get_tool_cutter_profile`, `set_tool_cutter_profile`, `set_tool_cutter_params`, `edit_tool`, `delete_tool`, `import_tool_holder_dxf`, `export_tool_holder_dxf`, `convert_tool_step_to_profile` |
 | Materials and cutting data | `set_work_material`, `set_stock_material`, `suggest_cutting_data`, `apply_cutting_data` |
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
+| Tool components and assemblies | `list_tool_components`, `get_tool_assembly`, `set_tool_assembly`, `upsert_tool_component`, `delete_tool_component`, `sync_tool_component`, `save_library_component`, `delete_library_component` |
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
 | Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
@@ -351,6 +352,23 @@ Hurco WinMax `.TCM` libraries. Pass optional `format` (`"auto"`,
 `"inch"`, defaulting to document units for controller tables). See
 [Tools and tool libraries](@/guide/set-up/tools.md#machine-tool-tables-tormach-pathpilot-and-hurco-winmax)
 for field mapping and refusals.
+
+### Tool components and assemblies
+
+An indexable tool can be built from components: a holder or adapter, a
+cutter body with insert seats, and an insert. `list_tool_components`
+lists the built-in components, your component library and the
+components of the document. With `compatible_with` it keeps only the
+components that fit a given one, for example the cutter bodies that
+take an insert. `set_tool_assembly` stacks document components on a
+tool, and the tool's diameter, corner radius and holder body follow
+from the stack. `get_tool_assembly` reads the stack back.
+`upsert_tool_component` edits a shared component, and every tool built
+from it changes in the same undo step. `sync_tool_component` takes the
+library copy of a component into the document.
+`save_library_component` and `delete_library_component` change your
+component library file. They are file edits and have no undo. Built-in
+components are read only.
 
 ## Example session
 
