@@ -9,13 +9,18 @@
 //! #3943 review: the dimension room gives way before the drawing - a thin
 //! border without the lines, and a room that shrinks on a narrow preview,
 //! so the drawing keeps [`MIN_DRAW`] ([`margins`]).
+//! #4336 (U10): the side view is the editor's default view. It draws the
+//! flutes as the visible groove lines (`ToolModel::flute_lines`, the
+//! Flutes toggle), the spindle nose as a dashed outline above the gauge
+//! line with the holder's name, and states that it is to scale. All of it
+//! comes from the cached model: a still frame builds nothing.
 //! Provenance: our own drawing after general technical-drawing practice
 //! (extension lines, a dimension line with end ticks, the value beside
 //! it); no HSMWorks material involved.
 
 use std::cell::Cell;
 
-use egui::{Align2, Color32, FontId, Painter, Pos2, Sense, Stroke, Ui, Vec2};
+use egui::{Align2, Color32, FontId, Painter, Pos2, Sense, Shape, Stroke, Ui, Vec2};
 
 use camcraft_app::units::{self, Unit};
 
@@ -37,12 +42,21 @@ pub(crate) const MIN_DRAW: f32 = 96.0;
 const BARE: f32 = 8.0;
 /// The gap between the drawing and a dimension line, and between two lines.
 const GAP: f32 = 12.0;
+/// #4336: the room above the gauge line for the spindle nose outline.
+const NOSE_H: f32 = 30.0;
+/// #4336: the spindle nose outline is this much wider than the holder.
+const NOSE_W: f64 = 1.6;
+/// #4336: the corner note, and the spindle nose's label.
+pub(crate) const TO_SCALE: &str = "to scale";
+pub(crate) const NOSE: &str = "spindle nose";
 
 /// What the side view draws besides the steel (#3897).
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Show {
     pub dims: bool,
     pub holder: bool,
+    /// #4336: the flute lines on the cutter.
+    pub flutes: bool,
 }
 
 thread_local! {
@@ -63,7 +77,12 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
     let rect = resp.rect;
     painter.rect_filled(rect, 4.0, BG);
     let (lo, hi) = margins(rect.size(), show.dims);
-    let inner = egui::Rect::from_min_max(rect.min + lo, rect.max - hi);
+    let mut inner = egui::Rect::from_min_max(rect.min + lo, rect.max - hi);
+    // #4336: room for the spindle nose above the holder, when it fits.
+    let nose = show.holder && m.dims.holder.is_some() && inner.height() > 4.0 * NOSE_H;
+    if nose {
+        inner.min.y += NOSE_H;
+    }
     if inner.width() < 20.0 || inner.height() < 20.0 {
         return;
     }
@@ -72,9 +91,48 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
         return;
     };
     DRAWN.with(|d| d.set((d.get().0.saturating_add(1), inner.size())));
+    painter.text(rect.right_top() + Vec2::new(-6.0, 6.0), Align2::RIGHT_TOP, format!("{TO_SCALE} · {}", u.suffix()), font(), NOTE);
+    if show.flutes {
+        flutes(&painter, &s, m);
+    }
+    if nose {
+        spindle_nose(&painter, &s, m, rect.top() + 4.0);
+    }
     if show.dims {
         painter.text(rect.min + Vec2::new(6.0, 6.0), Align2::LEFT_TOP, format!("dimensions in {}", u.suffix()), font(), NOTE);
         dims(&painter, &s, m, u, show.holder);
+    }
+}
+
+/// #4336: the visible groove lines of the flutes, thin, in the note ink.
+fn flutes(p: &Painter, s: &Scale, m: &ToolModel) {
+    let stroke = Stroke::new(1.0, NOTE);
+    for line in &m.flute_lines {
+        let pts: Vec<Pos2> = line.iter().map(|&(z, x)| s.at(z, x)).filter(|q| q.x.is_finite() && q.y.is_finite()).collect();
+        if pts.len() > 1 {
+            p.add(Shape::line(pts, stroke));
+        }
+    }
+}
+
+/// #4336: the spindle nose as a dashed outline above the gauge line (not
+/// to scale: only its face is), with its label and the holder's name.
+fn spindle_nose(p: &Painter, s: &Scale, m: &ToolModel, top: f32) {
+    let Some((hd, _)) = m.dims.holder else {
+        return;
+    };
+    let face = s.at(m.dims.gauge, 0.0).y;
+    let hw = hd.max(0.0) * 0.5 * NOSE_W;
+    let (l, r) = (s.at(m.dims.gauge, -hw).x, s.at(m.dims.gauge, hw).x);
+    let top = top.min(face - 8.0);
+    if ![face, l, r, top].iter().all(|v| v.is_finite()) || r - l < 4.0 {
+        return;
+    }
+    let corners = [Pos2::new(l, face), Pos2::new(l, top), Pos2::new(r, top), Pos2::new(r, face), Pos2::new(l, face)];
+    p.extend(Shape::dashed_line(&corners, Stroke::new(1.0, NOTE), 4.0, 3.0));
+    p.text(Pos2::new(r + 4.0, (top + face) * 0.5), Align2::LEFT_CENTER, NOSE, font(), NOTE);
+    if let Some(name) = &m.holder_name {
+        p.text(Pos2::new(l - 4.0, (top + face) * 0.5), Align2::RIGHT_CENTER, name, font(), NOTE);
     }
 }
 
@@ -126,7 +184,7 @@ fn dims(p: &Painter, s: &Scale, m: &ToolModel, u: Unit, holder: bool) {
     if let Some((hd, hl)) = d.holder.filter(|_| holder) {
         if vertical(p, s, xl - GAP, 0.0, d.gauge, false).is_some() {
             let y = s.at(d.gauge, 0.0).y + 8.0;
-            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge {}", len(d.gauge)), font(), NOTE);
+            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge length {}", len(d.gauge)), font(), NOTE);
         }
         let hr = hd.max(0.0) * 0.5;
         let y = s.at(d.gauge, 0.0).y - GAP * 0.5;
