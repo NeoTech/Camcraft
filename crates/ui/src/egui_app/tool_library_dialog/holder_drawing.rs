@@ -26,7 +26,6 @@ const BODY: Color32 = Color32::from_rgb(86, 92, 104);
 const EDGE: Color32 = Color32::from_rgb(214, 220, 228);
 const DIM: Color32 = Color32::from_rgb(0x7F, 0xB4, 0xD8);
 const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const GHOST: Color32 = Color32::from_rgb(0x8A, 0x92, 0xA0);
 /// The room (px) the labels keep at the right and the left of the outline.
 const LABEL_R: f32 = 150.0;
 const LABEL_L: f32 = 40.0;
@@ -128,7 +127,7 @@ fn build(e: &HolderEntry, clamps: (f64, f64), rect: Rect, u: Unit, dims: bool) -
     let mut edge: Vec<Pos2> = pts.iter().map(|&(z, r)| at(z, r)).collect();
     edge.extend(pts.iter().filter(|p| p.1 > 0.0).rev().map(|&(z, r)| at(z, -r)));
     d.shapes.push(Shape::closed_line(edge, Stroke::new(1.0, EDGE)));
-    let ghost = Stroke::new(1.0, GHOST);
+    let ghost = Stroke::new(1.0, NOTE);
     let dashed = |d: &mut Drawing, pts: &[Pos2]| d.shapes.extend(Shape::dashed_line(pts, ghost, 5.0, 4.0));
     // The spindle nose above the gauge line.
     let sp = [at(z_max, -r_box), at(top, -r_box), at(top, r_box), at(z_max, r_box), at(z_max, -r_box)];

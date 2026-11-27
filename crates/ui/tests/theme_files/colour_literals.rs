@@ -40,7 +40,7 @@ const ALLOWED: &[(&str, usize, &str)] = &[
     ("egui_app/tool_body_page.rs", 4, "move (#1120 tool drawings): tool, holder and profile previews"),
     ("egui_app/tool_holder_picker.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
     ("egui_app/tool_library_dialog/assembly_group.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_library_dialog/holder_view.rs", 5, "move (#1120 tool drawings): tool, holder and profile previews"),
+    ("egui_app/tool_library_dialog/holder_drawing.rs", 5, "move (#1120 tool drawings): tool, holder and profile previews"),
     ("egui_app/tool_library_dialog/side_view.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
     ("egui_app/tool_library_dialog/thumbs.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
     ("egui_app/tool_model_view.rs", 1, "move (#1120 tool drawings): tool, holder and profile previews"),
