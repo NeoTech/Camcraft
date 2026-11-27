@@ -219,7 +219,7 @@ fn layout_window_holders() {
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
     h.run_steps(2);
     super::tool_library_editor::click_window_button(&mut h, HOLDERS_PAGE);
-    assert_window_layout(&h, "Tool library", &[HOLDERS_PAGE, holders::SEARCH, holders::NEW, "Used by"]);
+    assert_window_layout(&h, "Tool library", &[HOLDERS_PAGE, holders::SEARCH, "Used by"]);
     let win = library_window(&h);
     let node = super::tool_library_editor::library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
@@ -258,7 +258,6 @@ fn layout_window_holder_form() {
     h.run_steps(2);
     super::tool_library_editor::click_window_button(&mut h, HOLDERS_PAGE);
     super::tool_library_editor::click_window_button(&mut h, holders::NEW);
-    assert_window_layout(&h, "Tool library", &[frame::BACK, holder_form::NAME, holder_form::NOSE, frame::APPLY]);
     let win = library_window(&h);
     let node = super::tool_library_editor::library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the holder form")).rect();

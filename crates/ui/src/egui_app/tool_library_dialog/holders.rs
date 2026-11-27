@@ -251,7 +251,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
 fn header_row(ui: &mut Ui, filter: &mut String, hits: &HolderHits) -> bool {
     let mut new = false;
     ui.horizontal(|ui| {
-        let w = (ui.available_width() - 330.0).max(160.0);
+        let w = (ui.available_width() - 420.0).max(140.0);
         let r = ui.add(egui::TextEdit::singleline(filter).hint_text(SEARCH_HINT).desired_width(w));
         r.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, SEARCH));
         let r = r.on_hover_text("each word must match: the taper, the clamp, a bore or collet size, the name (\"BT40 ER32\", \"shrink 12\"); Esc clears");

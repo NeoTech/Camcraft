@@ -109,6 +109,18 @@ fn grid(v: f64) -> f64 {
     (v * 1e6).round() / 1e6
 }
 
+/// An outline's (z, r) points without the steps shorter than 0.1 µm a
+/// value on the micrometre grid can add or drop.
+pub(crate) fn settled(points: &[crate::spun::SpunPoint]) -> Vec<(f64, f64)> {
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(points.len());
+    for p in points {
+        if out.last().is_none_or(|q: &(f64, f64)| (p.z - q.0).hypot(p.r - q.1) >= 1e-4) {
+            out.push((p.z, p.r));
+        }
+    }
+    out
+}
+
 fn positive(v: f64, what: &'static str) -> Result<f64, ShapeError> {
     if v.is_finite() && v > 0.0 { Ok(v) } else { Err(ShapeError::NotPositive(what)) }
 }
@@ -216,16 +228,19 @@ impl HolderShape {
             ShapeClamp::Weldon => WELDON_SCREW,
             ShapeClamp::Shrink => SHRINK_MARGIN,
         };
+        let want = settled(points);
         let same = |s: &Self| {
-            s.geometry(port).ok().and_then(|g| g.body().map(|b| b.profile().points().to_vec())).is_some_and(|p| {
-                p.len() == points.len() && p.iter().zip(points).all(|(a, b)| (a.z - b.z).abs() < 1e-6 && (a.r - b.r).abs() < 1e-6)
+            s.geometry(port).ok().and_then(|g| g.body().map(|b| settled(b.profile().points()))).is_some_and(|p| {
+                p.len() == want.len() && p.iter().zip(&want).all(|(a, b)| (a.0 - b.0).abs() < 1e-5 && (a.1 - b.1).abs() < 1e-5)
             })
         };
         let base = Self { taper, clamp, bore, gauge_len, nose_d: 0.0, largest_d: 0.0 };
         for &rn in &radii {
             let nose_d = grid(2.0 * (rn - margin));
             if clamp == ShapeClamp::Shrink {
-                for &rb in radii.iter().filter(|r| **r >= rn) {
+                // A radius on the nose cone stands for a body the cone does
+                // not reach: a micrometre more keeps it out of the outline.
+                for rb in radii.iter().filter(|r| **r >= rn).flat_map(|r| [*r, r + 1e-3]) {
                     let s = Self { nose_d, largest_d: grid(2.0 * (rb - margin)), ..base };
                     if same(&s) {
                         return Some(s);

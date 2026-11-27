@@ -19,7 +19,6 @@ use camcraft_app::schema::AssemblyLink;
 use camcraft_app::tool_assembly::{self as ta, Mount};
 use camcraft_app::tools::{Tool, ToolKind};
 use egui::accesskit::Role;
-use egui_kittest::kittest::NodeT;
 
 use super::tool_library_components::{A, B, INSERT, done, fly, insert, lib_dir, shell, shows, undo};
 use super::tool_library_editor::{H, click_window_button, library_window};
@@ -185,7 +184,7 @@ fn each_holder_field_lands_in_one_step_with_its_tools_and_undoes() {
         ("name", |n, _| *n = "Shrink 20 long".into(), false),
         ("taper", |_, s| s.taper = CAT40, true),
         ("gauge length", |_, s| s.gauge_len = 95.0, true),
-        ("largest diameter", |_, s| s.largest_d = 50.0, true),
+        ("largest diameter", |_, s| s.largest_d = 36.0, true),
         ("nose diameter", |_, s| s.nose_d = 36.0, true),
     ];
     for (what, edit, tools_change) in edits {
@@ -196,8 +195,10 @@ fn each_holder_field_lands_in_one_step_with_its_tools_and_undoes() {
                 edit(&mut d.name, s);
             }
         });
+        let why = holder_form::refusal(&mut h.state_mut().state);
         click_window_button(&mut h, frame::APPLY);
-        assert_eq!(done(&h), n0 + 1, "{what}: one undo step");
+        let err = h.state().state.error_for(ErrorScope::Tool).map(str::to_owned);
+        assert_eq!(done(&h), n0 + 1, "{what}: one undo step (refusal {why:?}, error {err:?})");
         let after = row_shape(&h, ID).unwrap_or_else(|| panic!("{what}: the holder still reads back"));
         assert_ne!(after, before, "{what}: the edit lands");
         if tools_change {
@@ -286,7 +287,7 @@ fn an_edit_that_breaks_a_tools_fit_is_refused_by_name() {
             s.largest_d = 10.0;
         }
     });
-    assert!(holder_form::refusal(&h.state().state).is_some_and(|w| w.contains("widens from its nose")));
+    assert!(holder_form::refusal(&mut h.state_mut().state).is_some_and(|w| w.contains("widens from its nose")));
 }
 
 /// A built-in holder opens read-only (no inputs, no Apply); "Copy as user

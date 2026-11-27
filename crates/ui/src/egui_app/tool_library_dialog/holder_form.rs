@@ -19,6 +19,7 @@ use std::cell::{Cell, RefCell};
 use egui::{RichText, Ui, Vec2};
 
 use camcraft_app::component::{ADAPTIVE_PORT, ToolComponent};
+use camcraft_app::component_geometry::ComponentGeometry;
 use camcraft_app::holder_library::{ER_SIZES, HolderEntry, HolderShape, ShapeClamp, tapers};
 
 use super::component_edit::{close, current};
@@ -42,7 +43,7 @@ const WELDON: &str = "Weldon side lock";
 const SHRINK: &str = "shrink fit";
 
 thread_local! {
-    static KEPT: RefCell<Option<(HolderShape, Result<HolderEntry, String>)>> = const { RefCell::new(None) };
+    static KEPT: RefCell<Option<(HolderShape, Checked)>> = const { RefCell::new(None) };
     static CHECKS: Cell<u64> = const { Cell::new(0) };
 }
 
@@ -52,9 +53,14 @@ pub(crate) fn checks() -> u64 {
     CHECKS.with(Cell::get)
 }
 
-/// The library entry the shape draws, or why the shape is refused: the
-/// values and the outline, as Apply will check them. Kept for the shape.
-fn check(shape: &HolderShape) -> Result<HolderEntry, String> {
+/// The library entry and the geometry the shape draws, or why it is
+/// refused.
+type Checked = Result<(HolderEntry, ComponentGeometry), String>;
+
+/// The library entry and the geometry the shape draws, or why the shape is
+/// refused: the values and the outline, as Apply will check them. Kept for
+/// the shape.
+fn check(shape: &HolderShape) -> Checked {
     KEPT.with(|k| {
         let mut k = k.borrow_mut();
         if let Some((s, out)) = k.as_ref()
@@ -63,7 +69,7 @@ fn check(shape: &HolderShape) -> Result<HolderEntry, String> {
             return out.clone();
         }
         CHECKS.with(|c| c.set(c.get().saturating_add(1)));
-        let out = shape.geometry(ADAPTIVE_PORT).and_then(|_| shape.entry()).map_err(|e| e.to_string());
+        let out = shape.geometry(ADAPTIVE_PORT).and_then(|g| Ok((shape.entry()?, g))).map_err(|e| e.to_string());
         *k = Some((*shape, out.clone()));
         out
     })
@@ -85,13 +91,24 @@ fn draft(state: &State) -> Option<(&ComponentDraft, HolderShape)> {
 }
 
 /// Why the holder draft cannot be applied, or `None` (also when no holder
-/// form is open).
-pub(crate) fn refusal(state: &State) -> Option<String> {
-    let (d, shape) = draft(state)?;
+/// form is open, or the draft is the holder as it is).
+pub(crate) fn refusal(state: &mut State) -> Option<String> {
+    let (d, row, _, _) = current(state)?;
+    let shape = d.shape?;
+    if d == crate::state::draft_of(&row) {
+        return None;
+    }
     if d.name.trim().is_empty() {
         return Some("the holder needs a name".to_owned());
     }
-    check(&shape).err()
+    match check(&shape) {
+        Err(why) => Some(why),
+        // A body under the flange's envelope draws no other outline.
+        Ok((_, g)) if g == row.geometry && shape.kind().ok().as_ref() == Some(row.component.kind()) && d.name.trim() == row.component.name() => {
+            Some("the values draw the outline the holder has already (the flange envelope covers the body)".to_owned())
+        }
+        Ok(_) => None,
+    }
 }
 
 /// The tools whose component stack uses the open holder.
@@ -187,7 +204,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
             ui.weak("to scale · mm");
             let size = Vec2::new(ui.available_width().max(200.0), (h - 24.0).max(180.0));
             match &checked {
-                Ok(entry) => super::holder_drawing::outline(ui, entry, s.clamps(), size, camcraft_app::units::Unit::Millimeters, true),
+                Ok((entry, _)) => super::holder_drawing::outline(ui, entry, s.clamps(), size, camcraft_app::units::Unit::Millimeters, true),
                 Err(_) => {
                     ui.weak("The drawing shows when the values describe a holder.");
                 }

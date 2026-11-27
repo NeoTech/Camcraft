@@ -14,7 +14,9 @@ fn zr(g: &ComponentGeometry) -> Vec<(f64, f64)> {
 }
 
 fn close(a: &[(f64, f64)], b: &[(f64, f64)]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9)
+    let pts = |v: &[(f64, f64)]| settled(&v.iter().map(|&(z, r)| SpunPoint::line(z, r)).collect::<Vec<_>>());
+    let (a, b) = (pts(a), pts(b));
+    a.len() == b.len() && a.iter().zip(&b).all(|(p, q)| (p.0 - q.0).abs() < 1e-5 && (p.1 - q.1).abs() < 1e-5)
 }
 
 /// The outline's radius at height `z` (the larger one at a step).
@@ -99,7 +101,7 @@ fn an_edited_outline_is_never_smaller_than_the_steel() {
         }
         // The form reads back what it wrote.
         let kind = s.kind().expect("codes");
-        let back = HolderShape::of(&kind, &g, ADAPTIVE_PORT).expect("reads back");
+        let back = HolderShape::of(&kind, &g, ADAPTIVE_PORT).unwrap_or_else(|| panic!("{s:?} reads back: {pts:?}"));
         assert!(close(&zr(&back.geometry(ADAPTIVE_PORT).expect("draws")), &pts), "{s:?} reads back as {back:?}");
         checked += 1;
     }
