@@ -149,12 +149,22 @@ fn note(ui: &mut Ui, text: &str) {
 /// The tool's edge material and flute count: the inputs of the feed per
 /// tooth and of "Suggest". Draft fields; Apply lands them.
 fn edge_rows(ui: &mut Ui, t: &mut ToolUi) {
+    tool_material_row(ui, t);
+    flutes_row(ui, t);
+}
+
+/// The edge material combo. #4336: the Tool tab's CUTTER group draws it too.
+pub(super) fn tool_material_row(ui: &mut Ui, t: &mut ToolUi) {
     let tm_names = ["Not stated", ToolMaterial::Hss.label(), ToolMaterial::Carbide.label()];
     let mut tm = t.tool_material.map_or(0, |m| m as usize + 1);
     prop_row_hint(ui, "Tool material", "the cutting edge's material; the table's speeds depend on it", |ui| {
         combo(ui, "tool_recipes_tool_material", &mut tm, &tm_names)
     });
     t.tool_material = tm.checked_sub(1).and_then(|i| ToolMaterial::ALL.get(i).copied());
+}
+
+/// The flute count combo. #4336: the Tool tab's CUTTER group draws it too.
+pub(super) fn flutes_row(ui: &mut Ui, t: &mut ToolUi) {
     let odd = t.flutes.filter(|z| !FLUTES.contains(z));
     let names: Vec<String> = std::iter::once("Not stated".to_owned())
         .chain(FLUTES.iter().chain(odd.iter()).map(u32::to_string))

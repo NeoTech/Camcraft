@@ -60,7 +60,7 @@ pub(crate) mod recipes_tab;
 pub(crate) mod side_view;
 pub(crate) mod stack;
 pub(crate) mod thumbs;
-mod tool_tab;
+pub(crate) mod tool_tab;
 
 use egui::{Id, Ui, Window};
 

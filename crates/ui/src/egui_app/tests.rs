@@ -154,6 +154,8 @@ mod tool_library_components;
 mod tool_library_stack;
 mod tool_library_turning_stack;
 mod tool_library_mockup;
+// #4336 (U10 of #3663): the Tool tab, the assembly check and the side drawing.
+mod tool_library_tool_tab;
 mod anchors;
 mod stock_fit;
 mod stock_source_default;
@@ -2084,6 +2086,16 @@ fn egui_shell_snapshot_light() {
     harness.run_steps(1); // leave LIVE dark for whatever frame follows.
 }
 
+/// #4336: the tool library window's Diameter field - the spin button on
+/// the row of the "Diameter" label.
+fn diameter_spin(win: &egui_kittest::Node<'_>) -> egui::Rect {
+    let row = win.query_all_by_label("Diameter").next().expect("the window has a Diameter row").rect();
+    win.query_all_by_role(egui::accesskit::Role::SpinButton)
+        .map(|n| n.rect())
+        .min_by(|a, b| (a.center().y - row.center().y).abs().total_cmp(&(b.center().y - row.center().y).abs()))
+        .expect("the window owns DragValues")
+}
+
 /// #2397: the settings are edited live through the real drain, and the
 /// tool shape editor is its own window. #3930: the edit is in the tool
 /// library window (Properties shows a summary). A drag stages into the
@@ -2113,13 +2125,10 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
     open_in_window(&mut harness, "EM-0600-4FL");
     assert!((draft(&mut harness).diameter - d0).abs() < 1e-12, "the window must open on the world's diameter");
-    // The window owns the DragValues: 30 px at speed 0.1.
-    let c = library_window(&harness)
-        .query_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the window owns DragValues")
-        .rect()
-        .center();
+    // The window owns the DragValues: 30 px at speed 0.1. #4336: the
+    // Diameter's field, on the row of its label (the tool number's field
+    // now stands above it).
+    let c = diameter_spin(&library_window(&harness)).center();
     harness.drag_at(c);
     harness.run();
     harness.hover_at(c + Vec2::new(30.0, 0.0));
@@ -2146,8 +2155,8 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
         harness.state().state.tool_shape_editor.as_deref(),
         Some("EM-0600-4FL")
     );
-    assert!(library_window(&harness).query_by_label("Holder library").is_some(), "the tool library window holds the holder library");
-    assert!(harness.query_all_by_label("Holder library").count() == 1, "the shape window has none");
+    assert!(library_window(&harness).query_by_label("Apply holder").is_some(), "the tool library window holds the holder library");
+    assert!(harness.query_all_by_label("Apply holder").count() == 1, "the shape window has none");
     assert!(harness.query_all_by_label("Diameter").next().is_some(), "the settings stay in view");
     // Ghost law: deleting the tool from the library closes the shape window.
     let pane_top = harness
@@ -3052,13 +3061,7 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
             .map(|t| t.diameter)
     };
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
-    let spin = |h: &Harness<'static, ShellUi>| {
-        tool_library_editor::library_window(h)
-            .query_all_by_role(egui::accesskit::Role::SpinButton)
-            .next()
-            .expect("the window owns DragValues")
-            .rect()
-    };
+    let spin = |h: &Harness<'static, ShellUi>| diameter_spin(&tool_library_editor::library_window(h));
     let c = spin(&harness).center();
     harness.drag_at(c);
     harness.run();
@@ -3081,17 +3084,18 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
         "a drag must not touch the world"
     );
 
-    tool_library_editor::library_window(&harness)
-        .query_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the window owns DragValues")
-        .click();
+    // #4336: the Diameter's field (the tool number's stands above it).
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").click();
+    }
     harness.run();
-    tool_library_editor::library_window(&harness)
-        .query_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the window owns DragValues")
-        .type_text("0.5");
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").type_text("0.5");
+    }
     harness.run();
     assert_eq!(
         tool_library_editor::draft(&mut harness).diameter,

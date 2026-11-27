@@ -202,11 +202,14 @@ fn tool_settings_form_a_label_left_grid_in_the_window_tabs() {
     open_body(&mut h);
     assert!(!in_win(&h, "Holder diameter"), "a folded Body section hides its rows again");
     assert!(in_win(&h, "Diameter"), "the Tool tab's rows stay");
+    // #4336: centre cutting and the tool number moved to the Tool tab.
+    for label in ["Centre cutting (may plunge into solid)", "Tool number"] {
+        assert!(in_win(&h, label), "the Tool tab holds the {label:?} row");
+    }
     click_window_button(&mut h, crate::egui_app::tool_library_dialog::recipes_tab::TAB);
-    assert!(in_win(&h, "Centre cutting (may plunge into solid)"), "the Recipes tab holds centre cutting");
     assert!(in_win(&h, "Spindle rpm"), "the Recipes tab holds the spindle rpm");
     click_window_button(&mut h, "Details");
-    for label in ["Material group", "Part number", "Tool number"] {
+    for label in ["Material group", "Part number"] {
         assert!(in_win(&h, label), "the Details tab holds the {label:?} row");
     }
 }
@@ -219,8 +222,8 @@ fn properties_shows_a_summary_and_the_shape_window_holds_the_shape() {
     let mut h = shell_harness();
     select_tool(&mut h);
     for label in [
-        "Holder library",
-        "Library holder",
+        "Stick-out",
+        "Holder gauge length",
         "Apply holder",
         "Apply profile",
         "Import body…",
@@ -251,7 +254,7 @@ fn properties_shows_a_summary_and_the_shape_window_holds_the_shape() {
     for label in ["Body", "Profile", "Close"] {
         assert!(win.query_by_label(label).is_some(), "the shape window shows {label:?}");
     }
-    for label in ["Holder library", "Library holder", "Apply holder"] {
+    for label in ["Stick-out", "Holder gauge length", "Apply holder"] {
         assert!(win.query_by_label(label).is_none(), "the holder pick left the shape window: {label:?}");
     }
     // The summary stays on the page behind it.

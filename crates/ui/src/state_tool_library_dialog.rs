@@ -62,9 +62,9 @@ pub enum ToolEditorTab {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreviewMode {
     /// The orbitable 3D model: the imported body, or the revolved profile.
-    #[default]
     Model,
-    /// The to-scale side view with dimension lines.
+    /// The to-scale side view with dimension lines (#4336: the default).
+    #[default]
     Side,
 }
 
