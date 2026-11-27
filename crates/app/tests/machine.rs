@@ -761,6 +761,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("TinyG 3-axis", Kind::Mill),
         ("LinuxCNC 3-axis", Kind::Mill),
         ("Grbl 3-axis", Kind::Mill),
+        ("3040 router (FluidNC)", Kind::Mill),
         ("Tormach 24R", Kind::Mill),
         ("Tormach xsTECH Pro", Kind::Mill),
         ("Tormach xsTECH", Kind::Mill),

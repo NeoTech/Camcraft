@@ -153,6 +153,7 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
 const M3_ONLY_POSTS: &[&str] = &[
     "Doosan DNM",
     "Grbl 1.1",
+    "FluidNC",
     "grblHAL",
     "Makera Carvera",
     "Heidenhain",
