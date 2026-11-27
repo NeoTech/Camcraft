@@ -78,6 +78,8 @@ mod posting_family;
 /// Which spindle a lathe post turns for a section, and the door that
 /// keeps a milling operation off the work spindle (#1190).
 pub mod lathe_voice;
+// #2218: simulate and verify an external NC program (camcraft-gcode).
+pub mod nc_sim;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 // #3012: pattern folders - linear and grid copies of member operations.
