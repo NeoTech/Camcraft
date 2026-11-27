@@ -89,9 +89,47 @@ path in the label. Check this path when two scripts have similar names.
   move is not written, including through the standalone post tool.
 - **Wire EDM:** a user post must declare `wireEdm` to serve wire work.
   The generic post uses the machine's EDM code templates. The Sodick
-  post supports 2-axis work only and refuses taper, 4-axis work and
-  control-side G41/G42 H offsets. Set tank and flushing functions at the
-  control; this post does not program them.
+  Mark 21 post supports 2-axis work only and refuses taper, 4-axis work and
+  control-side G41/G42 H offsets. The Sodick LN2W post writes a constant
+  taper and the control-side wire offset (see
+  [Wire and sinker EDM](@/guide/check-and-post/machines.md#wire-and-sinker-edm)).
+  Set tank and flushing functions at the control; these posts do not
+  program them.
+- **Fanuc and Doosan DNM:** the Fanuc mill post writes G17 and G94 in
+  each section preamble, and the Doosan DNM post writes G94. A control
+  left in G18, G19 or G95 then runs the program in the XY plane and in
+  mm/min. When the last tilted section ends at zero angles, both posts
+  write G49 before the program-end reference return, so G43.4 is not
+  active at G28.
+- **Doosan DNM:** the header cleans the machine name (no nested
+  parentheses, no `%`). A program number outside O0001 to O9999 is refused
+  by name; it does not become O9999. With AICC smoothing on, a drilling
+  section does not write G5.1 inside a canned-cycle group, and G80 comes
+  before G5.1 Q0.
+- **Haas:** the safe-start block states G94. The program end restores G90
+  before M30. The G53 retract cancels the tool length offset (G49) and
+  brings Y home. A reverse spindle starts with M4. Each coolant option
+  stops with its own off code (M89, M84, M74).
+- **Siemens 840D:** the opening block states G94. The tool call selects
+  the first cutting edge, for example `T12 D1 M6`. Each G53 retract, the
+  program end included, is `G0 G53 Z.. D0`.
+- **Siemens 810M:** an arc in G18 or G19 writes its plane axes first.
+- **Mach3:** extended work offsets G59 P7 to P254 are written. The
+  sequence numbers stay inside the Mach3 limit, and the header sets the
+  G64 path mode.
+- **Mach4:** a back-bore with a dwell of 0 posts G85. A whole-second dwell
+  has a decimal point, for example `P1.`. The post writes a comment that
+  states the smoothing request.
+- **LinuxCNC:** the header clears G92 offsets and states G97. In preview
+  mode the probe measure check is guarded. The comment guard also finds
+  active comment keywords written with spaces, and PYRELOAD.
+- **LinuxCNC and Tormach:** a small blend tolerance does not write G64 P0.
+- **Tormach milling:** the post writes G54.1 P1 to P500 work offsets, M4
+  reverse spindle, and G41/G42 in control and wear compensation. It
+  refuses G74 tapping by name.
+- **Spindle hand:** a left-hand cutter posts M4. A post that cannot
+  reverse the spindle refuses a left-hand cutter by name (see
+  [Tools](@/guide/set-up/tools.md#create-and-edit-a-tool)).
 - **Fanuc-family numbers:** Fanuc, Haas, Mazak, Doosan DNM and Fanuc
   Lathe write a decimal point on whole-number lengths, angles and
   feed-per-revolution words, for example `Z14.`. This prevents a control
@@ -164,6 +202,34 @@ it preserves a tip already above that height. Sinumerik refuses a missing
 machine retract. This does not establish a safe home position for every
 machine: inspect the retract and the setup before running it.
 
+### Heidenhain DIN/ISO and Klartext
+
+The **Heidenhain** (DIN/ISO) and **Heidenhain Klartext** posts read one
+dialect table for the stated control and NC software. A control or a
+version that the table does not know is refused by name. A control
+without DIN/ISO programs is refused by the DIN/ISO post. G247 is refused
+where cycle 247 does not select a preset-table row.
+
+The DIN/ISO post:
+
+- G62 writes the finish or rough filter mode (P01) where the control
+  takes it. A tolerance T outside the documented range of the control is
+  refused.
+- PECK and DEEP holes post the checked chain as plain moves. The post
+  writes no `G205` and no peck `G200`.
+- G200 and G205 follow the control. The iTNC 530 340 49x and older
+  controls get no Q395 on G200, and no Q208 or Q395 on G205.
+- Each dwell is G04 F.
+- On a machine with a manual tool change at the upper position, the post
+  retracts with M92, writes M6 and stops with M0 at each tool change.
+
+The Klartext post writes drilling (cycle 200), rigid tapping (cycle
+207), floating tapping (cycle 206) and the dwell (cycle 9) for the iTNC
+530 NC 340490-03. Peck and deep holes post as explicit moves. An arc
+whose radii differ inside the arc tolerance of machine parameter MP 7431
+is accepted. Both posts refuse a tool number above the
+`tooling.max_tool_number` of the machine (254 on the Fehlmann Picomax 55).
+
 ### Heidenhain Klartext on the Fehlmann Picomax 55
 
 Select **Fehlmann Picomax 55 (iTNC 530)** as the setup's machine and
@@ -175,8 +241,8 @@ Use one metric setup, a defined stock blank, and one preset row (1–6).
 Place the clearance plane above the stock. Each operation must start and
 finish at or above that plane. The post supports three-axis straight moves, plunges, and constant-height
 XY arcs. It applies the work origin to the blank, points, and arc centers.
-It refuses drilling and tapping cycles, probing, tilted tool axes, helices,
-and control-side cutter compensation. Select Off or the machine's M8
+It writes cycles 200, 206, 207 and 9 (see the section above). It refuses
+probing, tilted tool axes, helices, and control-side cutter compensation. Select Off or the machine's M8
 flood circuit for coolant.
 
 Use a flat, ball-nose, bull-nose, or chamfer mill. Each tool number
