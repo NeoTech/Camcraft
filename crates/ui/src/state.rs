@@ -98,6 +98,8 @@ pub use pockets::PocketScan;
 mod setup_post_options;
 #[path = "state_setup_workholding.rs"]
 mod setup_workholding;
+#[path = "state_face_to_size.rs"]
+mod face_to_size;
 #[path = "state_sheet_job.rs"]
 mod sheet_job;
 #[path = "state_fixture.rs"]
@@ -326,6 +328,8 @@ pub enum CommandKind {
     SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
     /// #3070: set up (`Some`) or clear the setup's sheet job (`SetSheetJob`).
     SetSheetJob { setup: String, job: Option<camcraft_app::sheet_job::SheetJob> },
+    /// #3196: face a block to height from numbers (`FaceToSize`), one undo step.
+    FaceToSize(camcraft_app::commands::FaceToSizeSpec),
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -3699,6 +3703,7 @@ impl State {
             CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::SetSheetJob { setup, job } => self.set_sheet_job(&setup, job),
+            CommandKind::FaceToSize(spec) => self.face_to_size(&spec),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {

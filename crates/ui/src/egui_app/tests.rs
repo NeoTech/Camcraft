@@ -92,6 +92,7 @@ mod stock_size;
 mod dxf_profile;
 mod stock_axis;
 mod stock_material;
+mod stock_face_to_size;
 mod setup_settings_page;
 mod machine_page;
 mod setup_user_machines;

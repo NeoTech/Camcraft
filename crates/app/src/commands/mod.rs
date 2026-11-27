@@ -65,6 +65,8 @@ pub mod setup_post_options;
 pub mod setup_nose;
 pub mod setup_workholding;
 pub mod sheet_job;
+// #3196: face a block to height from numbers, one undo step.
+pub mod face_to_size;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -160,6 +162,7 @@ pub use setup_post_options::SetSetupPostOptions;
 pub use setup_nose::SetSetupNoseToAxis;
 pub use setup_workholding::SetSetupWorkholdingRpm;
 pub use sheet_job::SetSheetJob;
+pub use face_to_size::{FaceToSize, FaceToSizeSpec};
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
