@@ -379,7 +379,7 @@ fn the_g_edm_template_validates_and_states_no_invented_limit() {
 #[test]
 fn the_g_edm_template_refuses_a_cut_until_a_condition_is_stated() {
     let text = posting::builtin_machine_text(TEMPLATE).expect("the template reads");
-    let why = punch_on(text, Vec::new()).err().expect("no condition, no Wire Contour");
+    let Err(why) = punch_on(text, Vec::new()) else { panic!("no condition, no Wire Contour") };
     assert!(why.contains("R1"), "the refusal names the condition: {why}");
 
     let mut v: serde_json::Value = serde_json::from_str(text).expect("json");
