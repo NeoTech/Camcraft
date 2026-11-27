@@ -23,6 +23,7 @@ use camcraft_app::commands::{
 use camcraft_app::geometry::{cube, Mesh, Point3};
 use camcraft_app::operation::{Height, HeightReference, OpParams, SrcRef};
 use camcraft_app::stock::StockShape;
+use camcraft_app::stock_play::FieldPlayWorld;
 use camcraft_app::stock_sim::DEV_TOL;
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;

@@ -11,6 +11,15 @@ pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;
 
+/// The time since this process first read it, on the seam's clock: the
+/// host clock that camcraft-sim's playback worker times itself with
+/// (#2268, `camcraft_sim::play::Clock`).
+#[must_use]
+pub fn monotonic() -> std::time::Duration {
+    static ORIGIN: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    ORIGIN.get_or_init(Instant::now).elapsed()
+}
+
 #[cfg(test)]
 mod tests {
     use super::Instant;

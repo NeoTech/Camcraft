@@ -1,9 +1,9 @@
-//! The cut dispatch of the playback (moved from `stock_play.rs`, the
+//! The cut dispatch of the playback (moved from `play.rs`, the
 //! 400-line law) and its layer mode (#2629, GPU stock sim S3b): the ops
 //! that the f32 twin can cut leave the f64 field and are cut into a dense
 //! display layer by a caller-given cutter (a GPU kernel, or the CPU twin
 //! law); the picture is `max(pack_cut(field), layer)`.
-//! Provenance: our own design (decision 2629) over camcraft-sim's
+//! Provenance: our own design (decision 2629) over this crate's
 //! `layer_play`; nothing from vendor binaries.
 //!
 //! ## The laws here
@@ -24,9 +24,9 @@
 use std::sync::Arc;
 
 use super::{FieldPlay, MAX_CHECKPOINTS};
+use crate::play_keys::Keyframes;
 use crate::stock_sim::preview::LatticeMeta;
-use crate::stock_sim::{layer_tool, LayerCutter, LayerPlay, LayerSpan, SdfTool, SimOp};
-use camcraft_sim::play_keys::Keyframes;
+use crate::stock_sim::{layer_tool, rotary_pose_tol, simulate_rotary_slice, LayerCutter, LayerPlay, LayerSpan, SdfTool, SimOp};
 
 /// The layer mode's state: the layer and each op's twin tool (`None`:
 /// the field cuts that op).
@@ -153,8 +153,8 @@ impl FieldPlay {
                 (_, _, Some((cutter, neck_len))) => self.cur.simulate_undercut(moves, cutter, *neck_len),
                 (_, Some(l), None) => self.cur.simulate_lathe_profile(moves, &l.profile, &l.axis),
                 (Some(ax), None, None) => {
-                    let tol = crate::stock_sim::rotary_pose_tol(self.cur.cell());
-                    crate::stock_sim::simulate_rotary_slice(&mut self.cur, &sim, &op.moves, a - op.start, ax, tol).map(|_| ())
+                    let tol = rotary_pose_tol(self.cur.cell());
+                    simulate_rotary_slice(&mut self.cur, &sim, &op.moves, a - op.start, ax, tol).map(|_| ())
                 }
                 (None, None, None) => {
                     if op.drill {

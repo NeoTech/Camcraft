@@ -22,6 +22,12 @@ pub mod machine_model;
 // #4266: the machine-frame view of the sim playback - the work turn the
 // display draws (pure vector/angle math, no document concern).
 pub mod machine_view;
+// #2268: the stock the eye draws, as plain data (moved from app).
+pub mod field_view;
+// #2268: the playback field and its worker (moved from app; app gathers
+// their inputs from the world).
+pub mod play;
+pub mod play_worker;
 // #2181: the playback keyframes and the calculation before playback.
 pub mod play_keys;
 pub mod play_precalc;

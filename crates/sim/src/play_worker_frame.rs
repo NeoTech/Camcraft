@@ -1,5 +1,5 @@
 //! The packed frame of the playback worker (moved from
-//! `stock_play_worker.rs`, the 400-line law): the patch chain, the whole
+//! `play_worker.rs`, the 400-line law): the patch chain, the whole
 //! or patched cut layer of each picture, and the layer mode's merge
 //! (#2629, GPU stock sim S3b): `max(pack_cut(field), layer)`, always a
 //! whole layer, so no eye ever repacks a layer frame from the field.
@@ -9,11 +9,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::{lock, PlayFrame, Shared};
-use crate::stock_play::FieldPlay;
+use crate::field_view::{CutLayer, Packed, PackedBase};
+use crate::play::FieldPlay;
 use crate::stock_sim::merge_max;
 use crate::stock_sim::preview::{pack_cut, pack_cut_patch, LatticeMeta};
 use crate::stock_sim::LayerCutter;
-use crate::stock_view::{CutLayer, Packed, PackedBase};
 
 /// Cells in a brick (the field's 8^3): the patch-size yardstick.
 const BRICK_TEXELS: usize = 512;

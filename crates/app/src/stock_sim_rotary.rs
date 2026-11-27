@@ -34,21 +34,15 @@
 //!   prepends a standing rapid at the pose the program held before the
 //!   slice, so the turn is chorded, and the rapid cuts nothing.
 
-use crate::cl::{Move, MoveKind};
 use crate::operation::OpParams;
-use crate::stock_sim::{RotaryChordStats, SimOp, Stock, StockError};
 use crate::verify::RotaryAxis;
+
+// #2268: the slice cut and its pose tolerance are plain data work, so
+// they live in camcraft-sim, where the playback reaches them.
+pub use camcraft_sim::stock_sim::{rotary_pose_tol, simulate_rotary_slice};
 
 /// The column verdict's refusal of a rotary program, said once.
 pub const ROTARY_VERDICT_REFUSAL: &str = "a rotary program turns the part under a posed tool: the column verdict's height field is blind under the equator (a gouge there sits beneath an untouched top and would read clean), so it is not judged here - the radial verdict at generation stands; the field eye chords the turn at its chord class (the flute above the ball rides each sub-chord's mid pose, a chord-class flank error, not the verdict's 1e-5 class)";
-
-/// The chord sag the eye allows at the tool's farthest point from the
-/// rotary axis: a quarter cell, the same sagitta law the field chords
-/// every arc at - the picture is one chord class throughout.
-#[must_use]
-pub fn rotary_pose_tol(cell: f64) -> f64 {
-    (cell * 0.25).max(1e-9)
-}
 
 /// The refusal of a rotary kind whose chord-pass parity and cost are
 /// not proved on the field (the heavy lane of
@@ -103,28 +97,4 @@ pub(crate) fn rotary_plan(
     crate::fixture::rotary_axis_of(world, op)
         .map(Some)
         .ok_or_else(|| format!("{name}: a rotary cut needs its body's fitted axis to chord the turn, and none fits - not judged"))
-}
-
-/// Cut `op`'s moves `[a, a + moves.len())` of a rotary program through
-/// the chord pre-pass, turning from the pose held before `a` (see the
-/// module law). `all` is the op's whole program, `moves` the slice.
-pub fn simulate_rotary_slice(
-    stock: &mut Stock,
-    op: &SimOp,
-    all: &[Move],
-    a: usize,
-    ax: &RotaryAxis,
-    pose_tol: f64,
-) -> Result<RotaryChordStats, StockError> {
-    let held = all.get(..a).and_then(|before| before.iter().rev().find_map(|m| m.axis));
-    let first = op.moves.first();
-    match (held, first) {
-        (Some(axis), Some(m0)) if m0.axis != Some(axis) => {
-            let mut v: Vec<Move> = Vec::with_capacity(op.moves.len() + 1);
-            v.push(Move { rotary: None, kind: MoveKind::Rapid, from: m0.from, to: m0.from, feed: None, arc: None, axis: Some(axis) });
-            v.extend_from_slice(op.moves);
-            stock.simulate_rotary(&[SimOp { moves: &v, ..*op }], ax, pose_tol)
-        }
-        _ => stock.simulate_rotary(std::slice::from_ref(op), ax, pose_tol),
-    }
 }

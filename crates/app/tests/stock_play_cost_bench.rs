@@ -34,7 +34,7 @@ use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 
-/// The worker's chunk law (`stock_play_worker.rs`: `CHUNK_TARGET` 15 ms,
+/// The worker's chunk law (`camcraft_sim::play_worker`: `CHUNK_TARGET` 15 ms,
 /// `CHUNK_MIN` 1, `CHUNK_MAX` 1024, first chunk 64), copied so the bench
 /// cuts the same chunks as a playing worker.
 const CHUNK_TARGET: Duration = Duration::from_millis(15);

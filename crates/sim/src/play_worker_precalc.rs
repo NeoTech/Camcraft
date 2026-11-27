@@ -1,11 +1,11 @@
 //! The playback worker's side of the calculation before playback
 //! (#2181): thread bindings only. The mailbox (progress, cancel, a lost
-//! state by name), the loop, its ends and the keyframe store are the
-//! sim crate's (`play_precalc_mailbox`, `play_precalc`, `play_keys`);
-//! here the worker binds its stop flag, its clock, its wakeup and its
-//! frame publication (#2192 review). Provenance: the worker's own
-//! latest-wins mailbox (`stock_play_worker`); nothing from vendor
-//! binaries.
+//! state by name), the loop, its ends and the keyframe store are
+//! `play_precalc_mailbox`, `play_precalc` and `play_keys`; here the
+//! worker binds its stop flag, its clock, its wakeup and its frame
+//! publication (#2192 review; moved from app, #2268). Provenance: the
+//! worker's own latest-wins mailbox (`play_worker`); nothing from
+//! vendor binaries.
 //!
 //! A worker started with `spawn_precalc` first cuts the whole program
 //! once, keeping keyframes; its progress is `precalc()` and the UI may
@@ -14,11 +14,10 @@
 //! keyframe are cut live, within the same byte budget.
 
 use super::{lock, publish, PlayWorker, Shared};
-use crate::clock::Instant;
-use crate::stock_play::{FieldPlay, PlaySeed, Precalc, MAX_KEYFRAMES, MIN_STRIDE};
+use crate::play::{Clock, FieldPlay, PlayInputs, Precalc, MAX_KEYFRAMES, MIN_STRIDE};
+use crate::play_precalc::{drive, Calc, PrecalcEnd};
+use crate::play_precalc_mailbox::MailboxOwner;
 use crate::stock_sim::LayerCutter;
-use camcraft_sim::play_precalc::{drive, Calc, PrecalcEnd};
-use camcraft_sim::play_precalc_mailbox::MailboxOwner;
 use std::sync::Arc;
 
 impl PlayWorker {
@@ -38,7 +37,7 @@ impl PlayWorker {
 
     /// `spawn`, but the worker first calculates the whole removal with
     /// keyframes held to `budget` bytes (the sim crate's law).
-    pub fn spawn_precalc(seed: PlaySeed, budget: usize) -> Result<Self, String> {
+    pub fn spawn_precalc(seed: impl Into<PlayInputs>, budget: usize) -> Result<Self, String> {
         Self::start(seed, Some(budget), None)
     }
 
@@ -46,7 +45,7 @@ impl PlayWorker {
     /// stock sim S3c): the calculation before playback cuts the field's
     /// own ops, and `cutter` cuts the layer ops for each picture. For an
     /// eye that reads the packed frame alone.
-    pub fn spawn_layered_precalc(seed: PlaySeed, budget: usize, cutter: Arc<LayerCutter>) -> Result<Self, String> {
+    pub fn spawn_layered_precalc(seed: impl Into<PlayInputs>, budget: usize, cutter: Arc<LayerCutter>) -> Result<Self, String> {
         Self::start(seed, Some(budget), Some(cutter))
     }
 }
@@ -62,12 +61,12 @@ pub(super) fn refuse(shared: &Shared, budget: Option<usize>, e: String) {
 
 /// Run the calculation on the worker: `false` when the worker must end
 /// (stopped, or a cut refused and published).
-pub(super) fn precalc(shared: &Shared, play: &mut FieldPlay, budget: usize) -> bool {
-    let t0 = Instant::now();
+pub(super) fn precalc(shared: &Shared, play: &mut FieldPlay, budget: usize, now: Clock) -> bool {
+    let t0 = now();
     let owner = MailboxOwner {
         mailbox: &shared.precalc,
         stopped: || lock(&shared.req).is_none_or(|g| g.stop),
-        elapsed: || t0.elapsed().as_secs_f64(),
+        elapsed: || now().saturating_sub(t0).as_secs_f64(),
     };
     let end = drive(&mut Calc { play: &mut *play, keys: MAX_KEYFRAMES, min_stride: MIN_STRIDE, budget }, &owner);
     match end {
