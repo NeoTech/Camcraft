@@ -6,9 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use crate::plan::{ALL_CRATES, HEAVY_CRATES, Plan, heavy_steps_where};
+use crate::plan::{ALL_CRATES, HEAVY_CRATES, Plan, SHARED, heavy_steps_where};
 use crate::heavy_files::{self, Seen};
-use crate::{assets, fixture_inputs, suites};
+use crate::{assets, fixture_inputs, quick, suites};
 
 /// For each crate dir, the crate dirs that a change in it reaches: itself and every crate that depends on
 /// it, directly or through others, by normal, dev or build dependency. An unreadable manifest is an
@@ -70,12 +70,15 @@ fn is_heavy(dir: &str) -> bool {
 /// - other files under `crates/<d>/tests/`: the heavy lanes of `d` (shared test code or input);
 /// - a `#[cfg(test)]` module of `d` (`heavy_files::seen_by`): `d:lib` only (#3560);
 /// - `src/main.rs` or `src/bin/..` of `d`: `d:bins` and the integration binaries of `d` (#3560);
+/// - a library module of `d` that a Gate map names: `d:lib`, `d:bins`, `d:doc` and the heavy binaries
+///   whose Gate map names it (`gate_map_reach`, #3560);
 /// - any other file of crate `d` that is not Markdown: the heavy lanes of each crate that `d` reaches;
 /// - a post script, machine file, catalog case or fixture: the heavy binaries that read it (as quick does).
 pub fn reached(root: &Path, changed: &[String]) -> Result<Reached, String> {
     let reach = reach(root)?;
     let mut r = Reached::default();
     let (mut libs, mut whole, mut why) = (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+    let mut maps = None;
     for f in changed {
         let workspace = matches!(f.as_str(), "Cargo.toml" | "Cargo.lock") || f.starts_with(".cargo/") || f.starts_with("rust-toolchain");
         if workspace {
@@ -120,6 +123,14 @@ pub fn reached(root: &Path, changed: &[String]) -> Result<Reached, String> {
                 }
                 Seen::UnitTestsOnly(_) | Seen::BinsOnly(_) => {}
                 Seen::Library => {
+                    // #3560: a library module that a Gate map names reaches its own crate's targets
+                    // and the heavy binaries whose Gate map names it (the seam that quick uses).
+                    if let Some(hits) = gate_map_reach(root, &mut maps, d, rest)? {
+                        for (k, how) in hits {
+                            r.targets.entry(k).or_insert_with(|| format!("{f} changed: {how}"));
+                        }
+                        continue;
+                    }
                     for c in reach.get(d).into_iter().flatten().filter(|c| is_heavy(c)) {
                         let how = if c == d { format!("{f} changed") } else { format!("depends on {d} ({f} changed)") };
                         r.crates.entry(c.clone()).or_insert(how);
@@ -146,6 +157,49 @@ pub fn reached(root: &Path, changed: &[String]) -> Result<Reached, String> {
         }
     }
     Ok(r)
+}
+
+/// The narrow reach of a library file `crates/<d>/<rest>` (#3560), each target with its reason: the
+/// `lib`, `bins` and `doc` targets of `d` (they compile the file with its own tests) and each heavy
+/// binary whose Gate map names a module of the file (`quick::suites_naming`, the seam of the quick
+/// plan). `None` keeps the crate reach: a shared crate (quick runs batch for it), a file outside
+/// `src/` or a crate root, or a file that no Gate map names under any of its module names.
+fn gate_map_reach(
+    root: &Path,
+    maps: &mut Option<Vec<(String, String, String)>>,
+    d: &str,
+    rest: &str,
+) -> Result<Option<BTreeMap<String, String>>, String> {
+    if SHARED.contains(&d) || !rest.starts_with("src/") || !rest.ends_with(".rs") {
+        return Ok(None);
+    }
+    let mods = quick::src_modules(root, d, rest)?;
+    if mods.is_empty() {
+        return Ok(None);
+    }
+    if maps.is_none() {
+        *maps = Some(quick::gate_maps(root)?);
+    }
+    let maps = maps.as_deref().unwrap_or_default();
+    let (mut out, mut named) = (BTreeMap::new(), false);
+    for (md, m, sub) in &mods {
+        let (pick, use_sub) = quick::suites_naming(maps, md, m, sub)?;
+        // A `#[path]` file has two names (its includer's and its own); one Gate map is enough, as in quick.
+        named |= !pick.is_empty();
+        let name = if use_sub { format!("{md}::{m}::{sub}") } else { format!("{md}::{m}") };
+        for k in pick.into_iter().filter(|k| k.split(':').next().is_some_and(is_heavy)) {
+            out.entry(k).or_insert_with(|| format!("the gate map names {name}"));
+        }
+    }
+    if !named {
+        return Ok(None); // no suite claims this file: the crate reach stays
+    }
+    if is_heavy(d) {
+        for label in ["lib", "bins", "doc"] {
+            out.insert(format!("{d}:{label}"), format!("the {label} target of {d} compiles it"));
+        }
+    }
+    Ok(Some(out))
 }
 
 /// The plan of `cargo xtask gate heavy`: one release build of the reached heavy crates, then one

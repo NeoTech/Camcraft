@@ -262,10 +262,12 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/posts");
     let mut text_posts = 0;
     let mut native_refusals = 0;
+    let mut shipped = Vec::new();
     for entry in std::fs::read_dir(dir).expect("shipped posts").flatten() {
         let p = entry.path();
         if p.extension().and_then(|s| s.to_str()) != Some("cps") { continue; }
         let stem = p.file_stem().and_then(|s| s.to_str()).expect("post name");
+        shipped.push(stem.to_owned());
         if stem == "heidenhain-klartext" {
             assert_klartext_header_notes(&std::fs::read_to_string(&p).unwrap(), &id, note);
             text_posts += 1;
@@ -319,6 +321,10 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         }
         text_posts += 1;
     }
-    assert_eq!(text_posts, 26, "every shipped text post writes both notes");
+    // #3461: the count comes from the folder, not from a number that each
+    // new post must raise. Two new-post branches that each raised a fixed
+    // count merged with no conflict to a count one too low.
+    assert!(shipped.iter().any(|s| s == "fanuc"), "the read found the shipped posts folder: {shipped:?}");
     assert_eq!(native_refusals, 1, "the native Agie dispatcher refused the notes");
+    assert_eq!(text_posts, shipped.len() - native_refusals, "every shipped text post writes both notes: {shipped:?}");
 }

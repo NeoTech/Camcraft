@@ -68,7 +68,8 @@ impl ImportFixture {
                     .with_hole(import.hole.clone())
                     .with_budget(import.facet_budget)
                     .with_step_source(import.step_source.clone())
-                    .with_source(import.source.clone()),
+                    .with_source(import.source.clone())
+                    .with_source_faces(import.source_faces.clone()),
             )),
             None => Landing::Fresh(Box::new(import)),
         };

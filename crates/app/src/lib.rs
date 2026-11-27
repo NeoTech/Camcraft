@@ -63,6 +63,8 @@ pub mod model_fidelity;
 pub mod fidelity_note;
 pub mod mesh_open;
 pub mod mesh_solids;
+// #3915: the SolidCraft face names of a model's facets (in memory only).
+pub mod source_faces;
 pub mod model_vouch;
 pub mod operation;
 pub mod pick;

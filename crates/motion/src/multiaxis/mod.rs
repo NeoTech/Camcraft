@@ -57,6 +57,9 @@ pub mod parallel5d;
 pub mod rough;
 pub mod rotary;
 pub mod rotary_offset;
+pub mod radial_drop;
+#[cfg(test)]
+mod radial_drop_tests;
 mod rotary_seam;
 mod rotary_seam_angle;
 mod rotary_sheet;

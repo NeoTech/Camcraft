@@ -4607,7 +4607,7 @@ impl State {
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
                     let (coarse, budget, hole) = (command.coarse_mm, command.facet_budget, command.hole);
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source).with_source_faces(command.source_faces)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);

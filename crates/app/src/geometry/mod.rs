@@ -6,6 +6,7 @@
 
 pub use camcraft_geometry::geometry::*;
 pub use camcraft_geometry::solidcraft;
+pub use camcraft_geometry::source_faces;
 pub use camcraft_geometry::{dxf, geo2d, sketch_chains, sketch_data};
 
 pub mod import;

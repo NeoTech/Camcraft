@@ -76,7 +76,7 @@ fn reads(world: &World, name: &str) -> String {
 fn shank_for(e: &HolderEntry) -> f64 {
     match e.clamp {
         Clamp::Er(er) => er.max_bore.min(er.min_bore.max(6.0)),
-        Clamp::Weldon { bore, .. } => bore,
+        Clamp::Weldon { bore, .. } | Clamp::Shrink { bore, .. } => bore,
     }
 }
 

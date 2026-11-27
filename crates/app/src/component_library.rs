@@ -139,7 +139,11 @@ pub fn to_text(entries: &[LibraryComponent]) -> Result<String, String> {
 /// The holder library's entries that have a taper, as adaptive items
 /// (machine side the taper, workpiece side the collet or the bore). A
 /// standalone straight-shank chuck states no shank size, so it is not
-/// a built-in component.
+/// a built-in component. A shrink-fit chuck holds a plain shank of its
+/// bore directly, with no collet: its workpiece side is a plain bore
+/// (`CYL <bore>`), which takes a plain or a Weldon shank of that size
+/// and no other. Its body is the holder library's own conservative
+/// outline, as for the other clamps.
 fn builtin_holders() -> Vec<LibraryComponent> {
     let mut out = Vec::new();
     for entry in holder_library::library() {
@@ -147,6 +151,7 @@ fn builtin_holders() -> Vec<LibraryComponent> {
         let csw = match entry.clamp {
             Clamp::Er(er) => ConnectionCode::parse(er.name),
             Clamp::Weldon { bore, .. } => ConnectionCode::parse(&format!("WELDON {bore}")),
+            Clamp::Shrink { bore, .. } => ConnectionCode::parse(&format!("CYL {bore}")),
         };
         let (Ok(mcs), Ok(csw)) = (ConnectionCode::parse(taper.name), csw) else { continue };
         let name = entry.name();

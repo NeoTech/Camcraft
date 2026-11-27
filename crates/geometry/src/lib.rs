@@ -29,6 +29,8 @@ pub mod sketch_chains;
 pub mod wire_round_profile;
 pub mod die_opening;
 pub mod solidcraft;
+// #3915: the SolidCraft face names beside an imported mesh.
+pub mod source_faces;
 #[cfg(not(target_arch = "wasm32"))]
 mod kernel_import;
 pub mod step;

@@ -165,6 +165,19 @@ pub struct SolidRanges {
     pub ranges: std::sync::Arc<[std::ops::Range<usize>]>,
 }
 
+/// The SolidCraft source faces of a model's facets (#3915): the name of
+/// each face of the design's body and the facets it became. Valid only at
+/// the `Revision` and the facet count it was landed with (`rev`, `len`);
+/// any other landing makes it stale. In memory only: not saved. Written by
+/// the import, update and delete commands, read and written only through
+/// `source_faces::{of, set}`.
+#[derive(Component, Debug, Clone)]
+pub struct SourceFaces {
+    pub rev: u64,
+    pub len: usize,
+    pub record: std::sync::Arc<crate::geometry::source_faces::SourceFaces>,
+}
+
 /// Selection marker (tag). Only `SelectEntity` writes it (AGENTS.md: changes
 /// go through commands); the tree and viewport read it to highlight.
 #[derive(Component, Debug)]
@@ -1002,6 +1015,7 @@ pub fn register_schema(world: &World) {
     world.component::<ModelSource>();
     world.component::<MeshOpen>();
     world.component::<SolidRanges>();
+    world.component::<SourceFaces>();
     world.component::<Selected>();
     world.component::<StockDef>();
     world.component::<StockSourceOnly>();
