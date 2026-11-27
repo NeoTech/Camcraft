@@ -119,6 +119,11 @@ the ball off its dead centre on flat-ish ground.
 A stated stepover is the flat-ground spacing; on a slope it follows the
 terrain's cosine.
 
+5-Axis Parallel takes a start point and an exit point. The cut starts at
+the raster corner nearest the start point. The last pass ends at the
+corner nearest the exit point. A pick that no corner is near is refused
+by name.
+
 ## 5-Axis Flow
 
 <!-- catalog:examples:start -->
@@ -217,6 +222,10 @@ direction follows it; split the ruled faces or finish with 5-Axis
 Parallel"; "the mesh is too coarse for the ruling to be seen anywhere:
 refine it or finish with 5-Axis Parallel".
 
+Each exit rise under a lying tool is proved with an exact swept-tool
+distance. A retract rapid that cannot rise straight up first leaves along
+the contact normal.
+
 ## Advanced Swarf
 
 <!-- catalog:examples:start -->
@@ -248,6 +257,8 @@ No catalog case yet.
 **For:** finishing a turned workpiece in rings around its axis, the tool
 posed off the radial. The axis is fitted to the model, not set. Choose it
 for a part standing on its axis; a bar lying flat is Rotary Parallel work.
+The Rotary Contour and Rotary Parallel toolbar icons show this difference:
+an upright Z part axis and a horizontal X part axis.
 
 **Picks:** none.
 
@@ -341,9 +352,21 @@ passes blend from one picked guide edge to the next, so each pass follows
 the helix. Choose it when rings (Rotary Contour) or straight passes
 (Rotary Parallel) cross the band at a bad angle.
 
-**Picks:** two or more edge chains on the Geometry tab: the edges of the
-band. All chains must run the same way along the band. There is no Top Z
-or Bottom Z: the picked chains bound the band.
+**Picks:** one or more edge chains on the Geometry tab: the edges of the
+band. There is no Top Z or Bottom Z: the picked chains bound the band.
+The picked chains read as one ordered set:
+
+- Two chains machine one band between them.
+- Three or more chains machine one band for each adjacent pair. A shared
+  boundary chain is cut once, not twice.
+- A single helical chain machines the full revolution: its second edge is
+  the next lap of the same chain.
+- A chain that runs against its pair is walked backwards, and the notes
+  say so. You do not have to reverse a pick.
+
+Rotary Flow refuses a guide set where any two guide chains meet or cross,
+not only adjacent ones. The refusal names the two guides and the crossing
+point.
 
 **Rotation axis.** The axis is stated, not only fitted: the operation's
 own axis, else the machine's rotary axis through the work offset. With
@@ -359,10 +382,11 @@ neither, the axis is fitted to the model as for Rotary Contour.
 | Passes | Tolerance | 0.05: the scallop budget between passes |
 | Feeds | Feed / Plunge feed / Climb milling | 1200 / 300 / on |
 
-**Common refusals:** "Rotary Flow needs at least two picked guide chains
-to span a band; got ... - pick the two edges of the helical band";
-"Rotary Flow: guide chains ... and ... advance about the axis in opposite
-senses - reverse one pick so both run the same way along the band";
+**Common refusals:** "Rotary Flow needs at least one picked guide chain;
+got 0 - pick one helical edge for a full revolution, or the two edges that
+bound the band"; "Rotary Flow: the bands between chains ... advance in
+opposite directions - pick the guide chains in band order along the
+surface";
 "Rotary Flow reads its clearance height as a ball-center radius about the
 stated ... - raise it"; "Rotary Flow needs a ball-nose tool, ...".
 
