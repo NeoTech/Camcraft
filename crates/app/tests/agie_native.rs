@@ -16,6 +16,8 @@ use camcraft_app::stock::StockShape;
 use flecs_ecs::prelude::World;
 use std::{collections::BTreeMap, fs};
 
+#[path = "agie_native/cobra.rs"]
+mod cobra;
 #[path = "agie_native/cutoff.rs"]
 mod cutoff;
 #[path = "agie_native/die.rs"]

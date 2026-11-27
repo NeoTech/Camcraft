@@ -117,8 +117,10 @@ pub fn export_with_review(
 
 /// Publish one closed punch with the requested work quality (#2966).
 /// [`Quality::Ccb030`] writes the bytes of [`export_with_review`].
-/// [`Quality::Ccb035`] is qualified for one polygon punch on a 20 mm plate only:
-/// a die, an open cut, a group and a DXF arc punch keep CCB030.
+/// [`Quality::Ccb035`] is qualified for one polygon punch on a 20 mm plate only,
+/// and the Cobra Cut D qualities [`Quality::Ccd030`] and [`Quality::Ccd070`] for
+/// one polygon punch on a 40 mm plate only (#2986): a die, an open cut, a group
+/// and a DXF arc punch keep CCB030.
 ///
 /// # Errors
 /// The errors of [`export_with_review`], a side other than a punch, and a
@@ -280,6 +282,8 @@ fn publish(_: &Path, _: &[(String, String)]) -> Result<Vec<PathBuf>, String> {
     Err("Job bundle output requires a local filesystem".into())
 }
 
+#[cfg(test)]
+mod cobra_tests;
 #[cfg(test)]
 mod cutoff_tests;
 #[cfg(test)]

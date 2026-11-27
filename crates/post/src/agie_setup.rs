@@ -12,7 +12,8 @@
 //! The piece uses stock top Z0, steel 0001, Berco Cut 0.25 and a 1 mm separation.
 //! The stock thickness must be one of the measured QN2 heights in [`QN2_OFFSETS_UM`].
 //! A punch can request [`Quality::Ccb035`] instead ([`PunchSetup20::encode_quality`]),
-//! on a 20 mm plate only.
+//! on a 20 mm plate only, or [`Quality::Ccd030`] or [`Quality::Ccd070`] with
+//! Cobra Cut D 0.25 wire, on a 40 mm plate only (#2986).
 //!
 //! Place the SBL script and SBR resource manifest beside the ISO, with the same
 //! stem and their respective extensions. Import the ISO geometry into ISO Sys.
@@ -42,7 +43,7 @@ mod inspection;
 mod publish;
 mod quality;
 pub use inspection::{INSPECTION_RECEIPT, InspectionProfile, InspectionSegment};
-pub use quality::{CCB035_OFFSETS_UM, CCB035_TECHNOLOGY, Quality};
+pub use quality::{CCB035_OFFSETS_UM, CCB035_TECHNOLOGY, CCD030_OFFSETS_UM, CCD070_OFFSETS_UM, Quality};
 
 /// Wire-centre offsets in µm of the rough pass and the three trims on a
 /// straight outside face, for each measured stock thickness in mm. Offline
@@ -110,6 +111,10 @@ pub enum SetupError {
         "Use a 20 mm plate for quality CCB035. The control checked CCB035 on one 20 mm punch only."
     )]
     UnqualifiedQualityHeight,
+    #[error(
+        "Use a 40 mm plate for quality CCD030 or CCD070. The control checked the Cobra Cut D 0.25 qualities on one 40 mm punch only."
+    )]
+    UnqualifiedCobraHeight,
     #[error(
         "Use a 20 mm plate for a die opening. The control checked the die cycle at 20 mm only."
     )]
@@ -203,6 +208,7 @@ impl PunchSetup20<'_> {
         let offsets = quality.offsets_um(self.height_um).ok_or(match quality {
             Quality::Ccb030 => SetupError::UnqualifiedHeight,
             Quality::Ccb035 => SetupError::UnqualifiedQualityHeight,
+            Quality::Ccd030 | Quality::Ccd070 => SetupError::UnqualifiedCobraHeight,
         })?;
         for (axis, stroke_um) in [350_000, 250_000].into_iter().enumerate() {
             let min = i64::from(self.stock_min_um[axis]);
@@ -262,12 +268,13 @@ fn setup_files(
                 "Import the ISO into ISO Sys and keep its SBR beside the SBL during script import. ",
                 "Select the newly created piece. Earlier pieces can retain their steps on repeat import. ",
                 "Match this work's ISO resource, {points} to the setup. Confirm zero steps. ",
-                "Verify steel 0001, Berco Cut 0.25 and {height} mm. {quality} requests Ra {ra}, Te 1.50, ",
+                "Verify steel 0001, {wire} and {height} mm. {quality} requests Ra {ra}, Te 1.50, ",
                 "Tkm 1.00 and {options}. Check the effective values and both visible options ",
                 "on this work. {teccut} Check offsets of {offsets} ",
                 "µm in order before GRAFICHECK and FORMALCHECK.{side_check}",
             ),
             points = points,
+            wire = piece.quality.wire(),
             height = piece.height_um / 1000,
             quality = piece.quality.name(),
             ra = piece.quality.ra(),
