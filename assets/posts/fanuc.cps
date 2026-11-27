@@ -327,12 +327,21 @@ function missingLetter(p) {  // the first turning letter no rotary is named for,
 // stream zeros an unstated letter, and missingLetter has refused one
 // that turns, so a letter with no rotary here is a stated zero - a word
 // for it (C0 on an A/B head) is an address the control has no axis for.
-function angleWord(letter, v) { return statesRotary(letter) ? wa(letter, v) : ""; }  // degrees: never the document unit
+function angleWord(letter, v) {  // degrees: never the document unit
+  var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  for (var j = 0; j < rs.length; j++) {
+    if (String(rs[j].name || "").toUpperCase() === letter) {
+      // #4436: the table turns opposite to the tool-relative angle.
+      return wa(letter, rs[j].signConvention === "table_rh" ? -v : v);
+    }
+  }
+  return "";
+}
 // #797 review: the machine check judges a lone rotary about X by the
 // angle the table must hold, signed by its stated direction - a [-1,0,0]
 // table holds the negated angle (`judge.rs` `x_rotary_problem`). This
-// dialect writes the stream's A as it comes and never negates it, so on
-// such a table the check's number and the posted one would differ: the
+// dialect applies the sign convention but not a reversed axis direction,
+// so on such a table the check's number and the posted one would differ: the
 // pose it passed against the travel is not the word this post writes.
 // Refused by name rather than posted outside the judged travel. A0 is
 // the same word on either sign, so an upright A0 still posts.
@@ -363,7 +372,7 @@ function tilt(p) {  // words to append, [] if none, null if refused
   }
   var rev = reversedLoneXRotary();
   if (rev && Math.abs(p.A) > 1e-9) {
-    if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect posts the stream's angle unnegated, so it would leave the travel the machine check judged"); }
+    if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect does not reverse its angle for the stated axis direction, so it would leave the travel the machine check judged"); }
     return null;
   }
   if (!tcpmOn) {

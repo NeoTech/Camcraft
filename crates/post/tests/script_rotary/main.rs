@@ -10,6 +10,7 @@ mod ac_trunnion_path_safety;
 mod g93_feed;
 mod mach4_trunnion;
 mod opening_rotary_pose;
+mod rotary_sign;
 mod tormach_no_a_word;
 mod tormach_rotary_travel;
 mod trunnion_schema;
