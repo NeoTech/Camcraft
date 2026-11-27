@@ -13,10 +13,11 @@
 //! Provenance: our own fixtures (common::solid_part); the drilling depth
 //! rules of machining handbooks (peck beyond about one diameter). No vendor
 //! material.
+//!
+//! A submodule of the `drill_prior` suite (#3187: tests join a directory
+//! suite): it reads the stock that the program ahead leaves.
 
-mod common;
-
-use common::solid_part::{circle, plate, rect};
+use crate::common::solid_part::{circle, plate, rect};
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::CycleKind;
