@@ -2,7 +2,7 @@
 //! that a later stage must act on, in place of a silent choice. The ring
 //! planner names a full-width stretch (#3788, the merge of two lobes) and
 //! a clean-up ring; the row planner names its closing ring.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2: Guide curves" and the Prime Directive (a full-width cut is
 //! named, not hidden); `docs/decisions/4176-kernel-guides-rings-rows.md`.
 

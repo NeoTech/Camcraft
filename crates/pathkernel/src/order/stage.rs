@@ -3,7 +3,7 @@
 //! the start point of each closed curve. It changes nothing else (law 3):
 //! the ordered set refuses any other change, and the marks go with their
 //! curves.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 4: Order" and `docs/decisions/4177-kernel-order-link.md`; the
 //! nearest-start sequence of contour-parallel pocketing (Held 1991); the
 //! chain order of split pieces as ported in `chain.rs`.

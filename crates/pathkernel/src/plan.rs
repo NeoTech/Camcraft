@@ -1,7 +1,7 @@
 //! The plan output of one level: a list of steps - cut, link, entry, exit
 //! (record "What phase 1 keeps open", point 5). The constructor checks the
 //! step law as a transition table (see [`Plan::new`]).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`.
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`).
 
 use crate::entry::{Entry, Exit};
 use crate::frame::unit;

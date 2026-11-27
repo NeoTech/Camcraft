@@ -6,7 +6,7 @@
 //! Provenance: contour-parallel pocketing as level sets of the distance to
 //! the boundary, Held, "On the Computational Geometry of Pocket Machining"
 //! (1991), computed by the polygon offset of `camcraft-geometry`; our own
-//! design record `docs/decisions/4024-path-kernel-design.md` "Stage 2" and
+//! design record (`RECOMMENDED.md`, `## #4024`) "Stage 2" and
 //! `docs/decisions/4176-kernel-guides-rings-rows.md`. Written new: no code
 //! path of the old ring planners of `camcraft-motion` is ported.
 

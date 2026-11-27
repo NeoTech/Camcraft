@@ -2,7 +2,7 @@
 //! made (record "The strategy is a recipe"; the Prime Directive's
 //! "validate early"). A malformed choice is refused here, never inside a
 //! stage.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`.
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`).
 
 use crate::entry::EntryChoice;
 use crate::frame::{AxisControl, WorkPlane};

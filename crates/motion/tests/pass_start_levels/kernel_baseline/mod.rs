@@ -1,5 +1,5 @@
 //! #4153: the old-planner baseline of each phase-1 kind of the path kernel
-//! (#4023, `docs/decisions/4024-path-kernel-design.md`). Each pin records
+//! (#4023, `RECOMMENDED.md` `## #4024`). Each pin records
 //! the output of the planner that is on `side/path-kernel` before the
 //! kernel takes the kind over: the CL text at 1 um and one `; note:` line
 //! for each note, the form of the #3750 baseline. The switch-over proof

@@ -4,7 +4,7 @@
 //! a plunge needs the user's choice and a tool that can plunge.
 //! [`Entry::led`] is the single gate: every entry of the crate is built
 //! through it.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 6: Entry and exit"; #4055 review finding 4.
 
 use super::{EntryChoice, EntryKind};

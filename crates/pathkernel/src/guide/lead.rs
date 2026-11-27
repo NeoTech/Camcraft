@@ -3,7 +3,7 @@
 //! construction (its points on its circle, its depth along its pitch).
 //! Provenance: the circular helix of the machine-tool handbooks (one turn
 //! for each pitch along the axis); our own design record
-//! `docs/decisions/4024-path-kernel-design.md` "Stage 2: Guide curves".
+//! (`RECOMMENDED.md`, `## #4024`) "Stage 2: Guide curves".
 
 use std::cmp::Ordering;
 

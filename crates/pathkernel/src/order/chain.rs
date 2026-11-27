@@ -8,7 +8,7 @@
 //! the design record decided for #3934; it is the return pass of
 //! contour-parallel pocketing (Held, "On the Computational Geometry of
 //! Pocket Machining", 1991). Our own design record
-//! `docs/decisions/4024-path-kernel-design.md` "Stage 4: Order".
+//! (`RECOMMENDED.md`, `## #4024`) "Stage 4: Order".
 
 use crate::guide::Curve;
 use crate::{Point2, seg_dist};

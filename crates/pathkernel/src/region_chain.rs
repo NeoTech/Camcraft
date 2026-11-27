@@ -2,7 +2,7 @@
 //! Engrave on a line, 2D Contour on an open chain, 2D Chamfer): the picked
 //! chains, open or closed, with no material side. The region of an area
 //! (`region.rs`) refuses an open chain; this region holds it.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region" ("a later phase adds a region that is not a planar
 //! area as a new variant") and `docs/decisions/4176-kernel-guides-medial-trace-helix.md`.
 

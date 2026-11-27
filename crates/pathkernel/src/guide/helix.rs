@@ -8,7 +8,7 @@
 //! of Pocket Machining", 1991); the chord count of a circle from its sagitta
 //! (`r (1 - cos(pi / n)) <= tol`, elementary geometry); the helix of a
 //! thread mill as in the machine-tool handbooks (one turn for each pitch);
-//! our own design record `docs/decisions/4024-path-kernel-design.md`
+//! our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2" and `docs/decisions/4176-kernel-guides-medial-trace-helix.md`.
 //! Written new: no code path of the old Bore, Circular or Thread planners
 //! of `camcraft-motion` is ported.
