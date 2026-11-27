@@ -64,7 +64,6 @@ impl Client {
 }
 
 #[test]
-#[ignore = "known-fail #3476 | mcp_enum_patch | nested_job_params_refusal_supplies_a_usable_flat_call | nested kind refusal must include the corrected edit_operation call"]
 fn nested_job_params_refusal_supplies_a_usable_flat_call() {
     let mut client = Client::new();
     client.ok(
@@ -95,7 +94,6 @@ fn nested_job_params_refusal_supplies_a_usable_flat_call() {
     assert_eq!(result["isError"], json!(true), "nested edit: {result}");
     assert_eq!(client.ok("get_job", json!({})), before);
     let text = result["content"][0]["text"].as_str().expect("refusal text");
-    // known-fail-assert
     assert!(
         text.contains("Corrected call: edit_operation "),
         "nested kind refusal must include the corrected edit_operation call: {text}"
@@ -125,6 +123,11 @@ fn invalid_kind_wrappers_and_unknown_fields_remain_refused() {
         json!({ "pocket": { "stepdown": 0.75 } }),
         json!({ "contour": { "unknown_field": 0.75 } }),
         json!({ "contour": { "stepdown": 0.75 }, "unknown_field": 1.0 }),
+        json!({ "contour": { "stepdown": 0.75 }, "stepover": 0.25 }),
+        json!({ "contour": { "stepdown": 0.75 }, "pocket": {} }),
+        json!({ "contour": { "stepdown": -0.75 } }),
+        json!({ "contour": { "stepdown": "not a number" } }),
+        json!({ "contour": { "clearance_z": { "ofset": 1.0 } } }),
         json!({ "unknown_field": 0.75 }),
         json!({ "clearance_z": { "ofset": 1.0 } }),
         json!({ "contour": 0.75 }),
@@ -139,6 +142,32 @@ fn invalid_kind_wrappers_and_unknown_fields_remain_refused() {
         assert!(!text.contains("Corrected call:"), "do not suggest a lossy call: {text}");
         assert_eq!(client.ok("get_job", json!({})), before);
     }
+}
+
+#[test]
+fn corrected_contour_call_preserves_nested_fields_and_null_removal() {
+    let mut client = Client::new();
+    client.contour(json!({}));
+    let before = client.ok("get_job", json!({}));
+    let fields = json!({
+        "stepdown": 0.75,
+        "lead": { "linear": null, "arc": { "radius": 3.0 } }
+    });
+    let result = client.call(
+        "edit_operation",
+        json!({ "name": "Contour", "params": { "contour": fields } }),
+    );
+    assert_eq!(result["isError"], json!(true), "nested edit: {result}");
+    assert_eq!(client.ok("get_job", json!({})), before);
+    let text = result["content"][0]["text"].as_str().expect("refusal text");
+    let (_, call) = text.split_once("Corrected call: edit_operation ").expect("corrected call");
+    let arguments: Value = serde_json::from_str(call).expect("corrected arguments are JSON");
+    assert_eq!(arguments, json!({ "name": "Contour", "params": fields }));
+    client.ok("edit_operation", arguments);
+    assert_eq!(client.params()["contour"]["stepdown"], json!(0.75));
+    assert_eq!(client.params()["contour"]["lead"], json!({ "arc": { "radius": 3.0 } }));
+    client.ok("undo", json!({}));
+    assert_eq!(client.params(), before["operations"][0]["params"]);
 }
 
 #[test]
