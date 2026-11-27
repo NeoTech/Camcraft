@@ -228,4 +228,7 @@ mod tool_body_wire;
 pub use tool_body_wire::{body_to_dto, stated_body, HolderRefDto, ToolBodyDto};
 // #155: Pause / Home entries of the operation list.
 mod program_entry_dto;
+// #3012: pattern folders of the operation list.
+mod pattern_dto;
 pub use program_entry_dto::ProgramEntryDto;
+pub use pattern_dto::{PatternDto, PatternLayoutDto, PatternOrderDto};

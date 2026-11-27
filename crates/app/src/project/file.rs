@@ -438,6 +438,8 @@ pub enum EntityKind {
     Setup,
     /// A Pause / Home entry of the operation list (#155).
     Entry,
+    /// A pattern folder of the operation list (#3012).
+    Pattern,
     /// A DXF profile placed on a setup's stock (#1862).
     Sketch,
 }
