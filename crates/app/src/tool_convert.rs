@@ -131,7 +131,17 @@ fn row(world: &World, name: &str, entity: Entity, table: &[DocumentComponent], l
     let Some(holder) = pick(&holder_id) else {
         return ConvertRow::no(name, format!("no holder: '{}' has no built-in holder component", href.entry));
     };
-    let cutting = match cutting_row(name, &current, table) {
+    // A record whose holder nose sits at or above the shank's end holds
+    // no shank in the holder, which a stack refuses: the cutting item
+    // takes one shank diameter more of shank, in the bore, and the gauge
+    // length stays. The longer shank shows as a difference.
+    let full = current.flute_len + current.shank_len;
+    let item = if href.projection >= full {
+        Tool { shank_len: href.projection - current.flute_len + current.shank_d.max(1.0), ..current.clone() }
+    } else {
+        current.clone()
+    };
+    let cutting = match cutting_row(name, &item, table) {
         Ok(c) => c,
         Err(why) => return ConvertRow::no(name, why),
     };

@@ -153,6 +153,8 @@ mod tool_library_holders_ui;
 mod tool_library_holder_form;
 // #3898 (U7 of #3663): My library, the component editor and the stack.
 mod tool_library_components;
+// #4339: the "Convert to components" preview.
+mod tool_library_convert;
 mod tool_library_stack;
 mod tool_library_turning_stack;
 mod tool_library_mockup;

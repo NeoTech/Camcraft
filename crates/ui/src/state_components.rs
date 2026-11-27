@@ -133,6 +133,8 @@ pub enum ComponentAction {
     /// Land (`Some`) or clear (`None`, the tool keeps its records) the
     /// component stack of `tool`.
     SetStack { tool: String, links: Option<Vec<AssemblyLink>> },
+    /// #4339: convert these standalone tools to stacks (one undo step).
+    Convert { tools: Vec<String> },
 }
 
 impl State {
@@ -188,6 +190,7 @@ impl State {
             ComponentAction::SaveToLibrary { id } => self.save_to_library(&id),
             ComponentAction::DeleteFromLibrary { id } => self.delete_from_library(&id),
             ComponentAction::SetStack { tool, links } => self.set_stack(&tool, links),
+            ComponentAction::Convert { tools } => self.convert_tools(&tools),
         };
         if self.history.done_len() != done {
             self.doc_version += 1;

@@ -1,7 +1,8 @@
 //! #4339: standalone tools converted to component stacks in one step.
-//! A document of standalone end mills: two on a BT30 ER20 holder as the
-//! library states it, one with a longer gauge length than the built-in
-//! holder, one with no holder, and one with a 6.35 mm shank that no
+//! A document of standalone end mills: two on a BT30 ER20 holder with
+//! 10 mm of shank in the holder, one with a longer gauge length than the
+//! built-in holder, one with the old default stick-out (no shank in the
+//! holder), one with no holder, and one with a 6.35 mm shank that no
 //! whole-millimetre collet takes. Pinned: the preview names each verdict
 //! (same, different with its differences, no match with its reason); the
 //! "same" rows convert in one undo step, and undo restores every tool and
@@ -33,7 +34,8 @@ const SIX_B: &str = "Six B";
 const LONG: &str = "Long";
 const BARE: &str = "Bare";
 const INCH: &str = "Inch";
-const ALL: [&str; 5] = [SIX, SIX_B, LONG, BARE, INCH];
+const LEGACY: &str = "Legacy";
+const ALL: [&str; 6] = [SIX, SIX_B, LONG, BARE, INCH, LEGACY];
 const HOLDER: &str = "BT30 ER20";
 
 fn face() -> OpParams {
@@ -62,14 +64,19 @@ fn shop() -> (World, History) {
     let stock = camcraft_app::stock::StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 };
     h.execute(&w, SetStock::new(&w, stock, Default::default()).expect("stock"));
     let inch = Tool { shank_d: 6.35, ..cat("EM-0600-4FL") };
-    for (name, tool) in [(SIX, cat("EM-0600-4FL")), (SIX_B, cat("EM-0600-4FL")), (LONG, cat("EM-0600-4FL")), (BARE, cat("EM-0800-4FL")), (INCH, inch)] {
+    let six = cat("EM-0600-4FL");
+    for (name, tool) in [(SIX, six.clone()), (SIX_B, six.clone()), (LONG, six.clone()), (LEGACY, six.clone()), (BARE, cat("EM-0800-4FL")), (INCH, inch)] {
         h.execute(&w, AddTool::new(&w, name, tool).expect("tool"));
     }
-    for name in [SIX, SIX_B, INCH] {
-        h.execute(&w, SetToolBody::library(&w, name, HOLDER, None, None).expect("holder"));
+    let held = Some(six.flute_len + six.shank_len - 10.0);
+    for name in [SIX, SIX_B] {
+        h.execute(&w, SetToolBody::library(&w, name, HOLDER, None, held).expect("holder"));
+    }
+    for name in [INCH, LEGACY] {
+        h.execute(&w, SetToolBody::library(&w, name, HOLDER, None, None).expect("default holder"));
     }
     let gauge = camcraft_app::holder_library::find(HOLDER).expect("entry").gauge_len;
-    h.execute(&w, SetToolBody::library(&w, LONG, HOLDER, Some(gauge + 5.0), None).expect("long holder"));
+    h.execute(&w, SetToolBody::library(&w, LONG, HOLDER, Some(gauge + 5.0), held).expect("long holder"));
     h.execute(&w, CreateOperation::new(&w, "FaceSix", SIX, SrcRef::Stock, face()).expect("op"));
     h.execute(&w, GenerateOperation::new(&w, "FaceSix").expect("generate"));
     (w, h)
@@ -98,13 +105,18 @@ fn the_preview_names_each_verdict() {
     let (w, _) = shop();
     let rows = plan(&w, &[]).expect("plan");
     let tools: Vec<&str> = rows.iter().map(|r| r.tool.as_str()).collect();
-    assert_eq!(tools, vec![BARE, INCH, LONG, SIX, SIX_B], "every standalone tool, sorted");
+    assert_eq!(tools, vec![BARE, INCH, LEGACY, LONG, SIX, SIX_B], "every standalone tool, sorted");
     let six = rows.iter().find(|r| r.tool == SIX).expect("six");
     assert_eq!(six.verdict, Verdict::Same, "{six:?}");
     assert_eq!(six.names, vec!["BT30 ER20".to_owned(), "ER20 collet 6 mm".to_owned(), SIX.to_owned()]);
     let Verdict::Different(diffs) = verdict(&w, LONG) else { panic!("Long is different") };
     assert_eq!(diffs.len(), 1, "{diffs:?}");
     assert!(diffs[0].starts_with("gauge length"), "{diffs:?}");
+    // The old default stick-out holds no shank: one shank diameter more, the same gauge.
+    let Verdict::Different(diffs) = verdict(&w, LEGACY) else { panic!("Legacy is different") };
+    let six = cat("EM-0600-4FL");
+    let want = format!("shank length {:.3} -> {:.3} mm", six.shank_len, six.shank_len + six.shank_d);
+    assert_eq!(diffs, vec![want], "only the shank, never the gauge length");
     let Verdict::NoMatch(why) = verdict(&w, BARE) else { panic!("Bare has no holder") };
     assert!(why.contains("no holder"), "{why}");
     let Verdict::NoMatch(why) = verdict(&w, INCH) else { panic!("Inch has no collet") };
@@ -140,10 +152,14 @@ fn the_same_rows_convert_in_one_undo_step_and_undo_restores_every_tool() {
 fn a_different_row_converts_only_when_it_is_named() {
     let (w, mut h) = shop();
     h.execute(&w, ConvertToComponents::same_rows(&w).expect("same rows"));
-    assert!(stack_of(&w, LONG).is_none(), "the default selection leaves a different row");
-    let cmd = ConvertToComponents::new(&w, &[LONG.to_owned()]).expect("named");
+    assert!(stack_of(&w, LONG).is_none() && stack_of(&w, LEGACY).is_none(), "the default selection leaves the different rows");
+    let cmd = ConvertToComponents::new(&w, &[LONG.to_owned(), LEGACY.to_owned()]).expect("named");
     h.execute(&w, cmd);
-    assert!(stack_of(&w, LONG).is_some(), "a named different row converts");
+    assert!(stack_of(&w, LONG).is_some() && stack_of(&w, LEGACY).is_some(), "named different rows convert");
+    let e = model::find_by_name(&w, LEGACY).expect("tool");
+    let six = cat("EM-0600-4FL");
+    let shank = model::tool_of(&w, &e).expect("tool").shank_len;
+    assert!((shank - (six.shank_len + six.shank_d)).abs() < 1e-9, "the shown difference lands: {shank}");
 }
 
 #[test]
@@ -180,7 +196,7 @@ fn the_posted_program_of_a_converted_tool_does_not_change() {
 }
 
 #[test]
-fn mcp_dry_run_returns_the_preview_and_apply_converts_the_same_rows() {
+fn mcp_dry_run_returns_the_preview_and_apply_converts_the_named_rows() {
     let mut s = Server::new();
     s.handle(&json!({ "jsonrpc": "2.0", "id": 0, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } }));
     let mut id = 0;
@@ -202,13 +218,15 @@ fn mcp_dry_run_returns_the_preview_and_apply_converts_the_same_rows() {
         .iter()
         .map(|r| (r["tool"].as_str().unwrap_or("").to_owned(), r["result"].as_str().unwrap_or("").to_owned()))
         .collect();
-    assert_eq!(results, vec![(BARE.to_owned(), "no match".to_owned()), (SIX.to_owned(), "same".to_owned())], "{body}");
+    assert_eq!(results, vec![(BARE.to_owned(), "no match".to_owned()), (SIX.to_owned(), "different".to_owned())], "{body}");
     let (err, body) = ok(&mut s, "get_tool_assembly", json!({ "tool": SIX }));
     assert!(err, "the dry run changes nothing: {body}");
 
     let (err, body) = ok(&mut s, "convert_tools_to_components", json!({ "tools": [BARE] }));
     assert!(err && body.as_str().unwrap_or("").contains("no holder"), "{body}");
     let (err, body) = ok(&mut s, "convert_tools_to_components", json!({}));
+    assert!(err, "no 'same' row: the default converts nothing: {body}");
+    let (err, body) = ok(&mut s, "convert_tools_to_components", json!({ "tools": [SIX] }));
     assert!(!err, "{body}");
     assert_eq!(body["converted"], json!([SIX]), "{body}");
     let (err, body) = ok(&mut s, "get_tool_assembly", json!({ "tool": SIX }));
