@@ -1,0 +1,19 @@
+[package]
+name = "camcraft-simview"
+description = "The stand-alone camcraft-sim program: replays a CLFile or a posted 3-axis G-code file against stock, tools, a machine file and a post manifest, headless. No world, no entities, no UI. Clean-room implementation, public sources only."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# One binary, two subcommands (`cl`, `check`). The name is the one the
+# sim crate's binary had: two binaries with one name collide in target/.
+[[bin]]
+name = "camcraft-sim"
+path = "src/main.rs"
+
+[dependencies]
+# Edges and their imported items: docs/decisions/2574-standalone-camcraft-sim.md.
+camcraft-gcode = { workspace = true }
+camcraft-post = { workspace = true }
+camcraft-sim = { workspace = true }
+tracing-subscriber = { workspace = true }

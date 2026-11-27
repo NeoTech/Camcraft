@@ -13,6 +13,7 @@ CamCraft is a Cargo workspace. Each crate holds one concern.
 | `crates/tools` | `camcraft-tools` | Tool library and tool laws |
 | `crates/motion` | `camcraft-motion` | Toolpath generators: 2D, 3D, drilling, multi-axis, turning |
 | `crates/sim` | `camcraft-sim` | Stock simulation and the verifier |
+| `crates/simview` | `camcraft-simview` | The stand-alone `camcraft-sim` binary: `cl` cuts a CLFile in a stock box; `check` judges a posted 3-axis G-code file against a machine file, a post and the stock |
 | `crates/post` | `camcraft-post` | The `.cps` post-processor engine and the standalone `post` binary |
 | `crates/kernel` | `camcraft-kernel` | The B-rep kernel seam: a thin `Kernel` trait (primitives, booleans, offset, blends, measure) and the bench that compares candidate engines |
 | `crates/app` | `camcraft-app` | Document model on a Flecs ECS world, commands with undo/redo, operations, posting, the `camcraft-cli` binary and its MCP server |
