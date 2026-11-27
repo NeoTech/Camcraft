@@ -264,6 +264,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
     super::probe_page::fields(ui, world, params, &mut cx);
     super::plasma_page::fields(ui, world, params, &mut cx);
     super::waterjet_page::fields(ui, world, params, &mut cx);
+    super::laser_page::fields(ui, world, params, &mut cx);
     super::wire_page::fields(ui, world, params, &mut cx);
     super::sinker_page::fields(ui, world, params, &mut cx);
     super::trochoid_page::fields(ui, world, params, &mut cx);

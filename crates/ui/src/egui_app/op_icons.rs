@@ -40,6 +40,7 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::SlotUndercut => Icon::SlotUndercut,
         // #1883: the nozzle and its jet - its own glyph.
         OpType::WaterjetProfile => Icon::WaterjetProfile,
+        OpType::LaserProfile => Icon::LaserProfile,
         OpType::Drill => Icon::Drill,
         OpType::Bore => Icon::Bore,
         OpType::Thread => Icon::Thread,

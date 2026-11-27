@@ -57,7 +57,7 @@ pub fn laser_params(op: &LaserOp, tool: &Tool, hs: &ResolvedHeights, model_exces
             tool.kind
         )));
     }
-    if let Some(why) = camcraft_tools::laser::refusal(tool) {
+    if let Some(why) = crate::laser_tools::refusal(tool) {
         return Err(GenError::Invalid(format!("laser profile: {why}")));
     }
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {

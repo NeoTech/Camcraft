@@ -1385,7 +1385,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::Probe { .. }
         | operation::OpParams::PlasmaProfile(_)
         // The jet travels at its clearance plane only too (#1883).
-        | operation::OpParams::WaterjetProfile(_) | OpParams::LaserProfile(_)
+        | operation::OpParams::WaterjetProfile(_) | operation::OpParams::LaserProfile(_)
         // The wire never lifts out of the work (#532): no hop plane.
         | operation::OpParams::WireContour(_) => None,
         // The electrode retracts to its approach plane only (#541).

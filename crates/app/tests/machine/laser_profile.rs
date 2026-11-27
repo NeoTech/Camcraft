@@ -207,6 +207,8 @@ fn the_post_and_the_stock_sim_refuse_laser_work_by_name() {
     for missing in ["beam on/off", "power records", "pierce dwell"] {
         assert!(refusal.contains(missing), "{refusal}");
     }
-    let sim = camcraft_app::stock_sim::simulate_document(&world).err().expect("the sim refuses laser removal");
+    let Err(sim) = camcraft_app::stock_sim::simulate_document(&world) else {
+        panic!("the sim refuses laser removal");
+    };
     assert!(sim.contains("Laser1: laser stock removal is not judged"), "{sim}");
 }

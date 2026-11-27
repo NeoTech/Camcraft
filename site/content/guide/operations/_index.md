@@ -139,10 +139,11 @@ can be clicked to frame it.
   material is left or where the program cut into the part. **Frame rest**
   and **Frame gouge** take the view to the worst spot of each.
 
-The multi-axis kinds, Probe, Plasma Profile, Waterjet Profile and the EDM kinds (Wire
+The multi-axis kinds, Probe, Plasma Profile, Waterjet Profile, Laser Profile and the EDM kinds (Wire
 Contour, Sinker Burn, Sinker Side Burn) each have their own reference, with settings, defaults and common refusals:
 [Multi-axis operations](@/guide/multi-axis/operations-multiaxis.md),
 [Probing](@/guide/operations/operations-probing.md),
 [Plasma cutting](@/guide/operations/operations-plasma.md),
-[Waterjet cutting](@/guide/operations/operations-waterjet.md) and
+[Waterjet cutting](@/guide/operations/operations-waterjet.md),
+[Laser cutting](@/guide/operations/operations-laser.md) and
 [Wire and sinker EDM](@/guide/operations/operations-edm.md).

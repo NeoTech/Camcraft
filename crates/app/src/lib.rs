@@ -188,6 +188,8 @@ pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;
 pub use camcraft_tools::cutting_rows as tool_cutting_rows;
 pub use camcraft_tools::waterjet as waterjet_tools;
+// #4081: the laser head's constructor and door.
+pub use camcraft_tools::laser as laser_tools;
 // #1521: a torch's cut-data recipe per material and plate thickness.
 pub use camcraft_tools::plasma_cut as plasma_cut_tools;
 pub use camcraft_tools::wire as wire_tools;
