@@ -59,13 +59,17 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
         return Ok(None);
     }
     let (zone, capped) = air_zone(p, ctx.choice.approach())?;
-    let Ok(zone_area) = Area::new(zone.clone()) else {
+    if zone.is_empty() {
+        return Ok(None);
+    }
+    let Some(zone_area) = ctx.checked(EntryKind::ArcLead, Area::new(zone.clone())) else {
         return Ok(None);
     };
     let inner = geo(p.center().offset(-ROOM_TOL))?;
-    let into_center = |a: Point2, b: Point2| match inner.clip_polyline(&[a, b], true) {
-        Ok(pieces) => pieces.iter().any(|s| s.windows(2).any(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y) > ROOM_TOL)),
-        Err(_) => true,
+    // A geometry error of the clip is a refusal, not "into the centre" (#4407).
+    let into_center = |a: Point2, b: Point2| -> Result<bool, crate::Refusal> {
+        let pieces = geo(inner.clip_polyline(&[a, b], true))?;
+        Ok(pieces.iter().any(|s| s.windows(2).any(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y) > ROOM_TOL)))
     };
     let (s, u, arc, tol) = (ctx.start.at(), ctx.dir, ctx.stage.arc(), ctx.stage.chord_tol());
     let reach = 3.0 * ctx.r() + ctx.choice.approach() + 2.0 * arc.radius();
@@ -74,7 +78,7 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
     for _ in 0..RADIUS_TRIES {
         for ccw in [true, false] {
             let (a, c, pts) = arc_onto(s, u, radius, arc.sweep(), ccw, tol)?;
-            if !ctx.holds(&pts) {
+            if !ctx.holds(&pts)? {
                 continue;
             }
             if zone.contains(a) {
@@ -84,7 +88,7 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
                 continue;
             }
             let Some(q) = tangent(a, c, ccw).and_then(|t| march(&zone, a, t, reach)) else { continue };
-            if ctx.holds(&[q, a]) && !into_center(q, a) {
+            if ctx.holds(&[q, a])? && !into_center(q, a)? {
                 let mut lead = vec![q];
                 lead.extend(pts);
                 with_line = Some((q, lead, radius));
@@ -100,7 +104,7 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
     }
     if zone.contains(s) {
         let entry = Entry::new(EntryKind::Air, vec![ctx.above(s)?], vec![ctx.start], Proof::InAir(zone_area), ctx.choice, ctx.tool());
-        return Ok(entry.ok());
+        return Ok(ctx.checked(EntryKind::Air, entry));
     }
     Ok(None)
 }
@@ -108,11 +112,13 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
 /// The arc-lead entry: down at `at` in the air zone, then the lead `xy`.
 fn found(ctx: &mut Ctx<'_>, at: Point2, xy: Vec<Point2>, radius: f64, capped: Option<f64>, zone: Area) -> Result<Option<Entry>, crate::Refusal> {
     let pts = xy.iter().map(|q| ctx.at_depth(*q)).collect::<Result<Vec<_>, _>>()?;
-    let Ok(lead) = Lead::new(pts, &ctx.legal_area) else {
+    let made = Lead::new(pts, &ctx.legal_area);
+    let Some(lead) = ctx.checked(EntryKind::ArcLead, made) else {
         return Ok(None);
     };
     let (approach, descent) = (vec![ctx.above(at)?], vec![ctx.at_depth(at)?]);
-    let Ok(entry) = Entry::led(EntryKind::ArcLead, approach, descent, Some(lead), Proof::InAir(zone), ctx.choice, ctx.tool()) else {
+    let made = Entry::led(EntryKind::ArcLead, approach, descent, Some(lead), Proof::InAir(zone), ctx.choice, ctx.tool());
+    let Some(entry) = ctx.checked(EntryKind::ArcLead, made) else {
         return Ok(None);
     };
     if let Some(a) = capped {

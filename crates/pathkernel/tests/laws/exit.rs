@@ -45,7 +45,7 @@ fn an_exit_is_refused_off_its_cut_or_below_the_top() {
     assert_eq!(Exit::proved(&pocket_ring(), None, 4.0, 5.0).unwrap_err().reason(), RAPID_IN_MATERIAL);
     assert_eq!(Exit::proved(&pocket_ring(), None, f64::NAN, 5.0).unwrap_err().reason(), BAD_EXIT);
     assert!(Exit::proved(&pocket_ring(), None, 5.0, 5.0).is_ok());
-    assert_eq!(Exit::new(Some(pts(&[(1.0, 1.0)])), 5.0).unwrap_err().reason(), UNPROVED_LEAD_OUT);
+    assert_eq!(Exit::new(Some(pts(&[(1.0, 1.0)])), 5.0, 0.0).unwrap_err().reason(), UNPROVED_LEAD_OUT);
 }
 
 #[test]

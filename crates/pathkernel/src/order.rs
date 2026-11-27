@@ -3,7 +3,7 @@
 //! input curves, permuted, with a start point and a direction. Nothing else
 //! changes. The marks of the guide set go with their curves. The planner
 //! is in `order/` (#4177).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 4: Order"; climb and conventional milling as in any machining
 //! handbook.
 

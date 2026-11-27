@@ -19,7 +19,7 @@ fn entry() -> Step {
     Step::Entry(Entry::new(EntryKind::Air, vec![], pts(&[(0.0, 0.0)]), proof, &c, tool(3.0, false)).unwrap())
 }
 fn exit() -> Step {
-    Step::Exit(Exit::new(None, 5.0).unwrap())
+    Step::Exit(Exit::new(None, 5.0, 0.0).unwrap())
 }
 fn stay() -> Step {
     Step::Link(Hop::stay(vec![Point2::new(5.0, 1.0)]).unwrap())

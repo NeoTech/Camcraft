@@ -7,7 +7,7 @@
 //! another kind than the asked one carries a named [`Fallback`] (law 4).
 //! The exit is a lead-out in the plane where there is room, then the retract.
 //!
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 6: Entry and exit"; helical, ramp and tangential arc lead-in and
 //! lead-out entries as in public machining handbooks (Machinery's Handbook,
 //! milling entry practice; RS-274 / ISO 6983 G17 arcs). No vendor material
@@ -22,7 +22,9 @@ mod proof;
 mod room;
 mod stage;
 
-pub use exit::{BAD_EXIT, EXIT_OFF_CUT, Exit, RAPID_IN_MATERIAL, UNPROVED_LEAD_OUT};
+pub use exit::{
+    BAD_EXIT, EXIT_OFF_CUT, Exit, LEAD_OUT_NAME, NO_END_DIRECTION, NO_LEAD_OUT_ROOM, RAPID_IN_MATERIAL, STRAIGHT_UP_NAME, UNPROVED_LEAD_OUT,
+};
 pub use proof::{
     Area, BAD_AREA, Entry, Hole, LEAD_GAP, LEAD_NOT_FLAT, LEAD_OFF_ROOM, LEAD_SHORT, Lead, NO_DESCENT, NO_HOLE, OFF_PROOF,
     PLUNGE_NOT_ALLOWED, Proof, WRONG_PROOF,
@@ -30,7 +32,7 @@ pub use proof::{
 pub use room::{NO_DIRECTION, ROOM_TOL};
 pub(crate) use room::legal_room;
 pub use stage::{
-    ArcChoice, BAD_ARC, BAD_HEIGHTS, ENTRY_GEOMETRY, EntryStage, Heights, NO_MATERIAL_ENTRY, NO_SAFE_ENTRY, NOT_PLANAR,
+    ABOVE, ArcChoice, BAD_ARC, BAD_HEIGHTS, ENTRY_GEOMETRY, ENTRY_GEOMETRY_INVALID, EntryStage, Heights, NO_MATERIAL_ENTRY, NO_SAFE_ENTRY, NOT_PLANAR,
 };
 
 use crate::frame::Positive;

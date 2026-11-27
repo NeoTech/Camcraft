@@ -1,7 +1,7 @@
 //! The checks between the parts of a planar region (K1, #4025): the loops
 //! of the cutter-centre area are oriented by their nesting, and the part
 //! walls and the stock edges partition its boundary.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region" (the invariants); the crossing-parity point-in-polygon
 //! test of Shimrat, "Algorithm 112: Position of point relative to polygon"
 //! (CACM 5(8), 1962).
@@ -46,7 +46,12 @@ fn nested_in(inner: &Loop, outer: &Loop) -> bool {
 /// The first vertex of the first loop of `r` whose direction disagrees with
 /// its nesting depth, or `None` when every loop is oriented.
 pub(crate) fn oriented(r: &Region) -> Option<Point2> {
-    let loops = r.loops();
+    oriented_loops(r.loops())
+}
+
+/// [`oriented`] on a list of loops: the first vertex of the first loop
+/// whose direction disagrees with its nesting depth.
+fn oriented_loops(loops: &[Loop]) -> Option<Point2> {
     loops.iter().enumerate().find_map(|(i, l)| {
         let depth = loops.iter().enumerate().filter(|(j, o)| *j != i && nested_in(l, o)).count();
         let want_ccw = depth % 2 == 0;
@@ -85,4 +90,28 @@ pub(crate) fn partition(center: &Region, walls: &[Loop], edge: &[Loop]) -> Optio
         }
     }
     used.iter().position(|u| !u).and_then(|i| loops.get(i)).and_then(|l| l.points().first().copied())
+}
+
+#[cfg(test)]
+mod tests {
+    //! #4407: the orientation guard of `PlanarRegion::new` on loops that
+    //! `camcraft-geometry` cannot give (it gives only normal regions), so
+    //! the guard is pinned here on the loops themselves.
+    use super::*;
+
+    fn sq(x0: f64, s: f64, ccw: bool) -> Result<Loop, camcraft_geometry::geo2d::GeoError> {
+        let mut pts = vec![Point2::new(x0, x0), Point2::new(x0 + s, x0), Point2::new(x0 + s, x0 + s), Point2::new(x0, x0 + s)];
+        if !ccw {
+            pts.reverse();
+        }
+        Loop::new(pts)
+    }
+
+    #[test]
+    fn a_loop_against_its_nesting_is_found() -> Result<(), camcraft_geometry::geo2d::GeoError> {
+        assert_eq!(oriented_loops(&[sq(0.0, 10.0, true)?, sq(2.0, 4.0, false)?]), None, "outer ccw, hole cw");
+        assert_eq!(oriented_loops(&[sq(0.0, 10.0, false)?]), Some(Point2::new(0.0, 10.0)), "an outer loop clockwise");
+        assert_eq!(oriented_loops(&[sq(0.0, 10.0, true)?, sq(2.0, 4.0, true)?]), Some(Point2::new(2.0, 2.0)), "a hole counter-clockwise");
+        Ok(())
+    }
 }

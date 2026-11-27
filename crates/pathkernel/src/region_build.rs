@@ -1,7 +1,7 @@
 //! Stage 1 builder (K1, #4025): one region value from a selection, the
 //! material side and the bounds. Each planner reads this value; the
 //! material side is an input of its own, and no start side reaches it.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 1: Region"; the cutter-centre area as the Minkowski erosion of the
 //! machinable area by the tool disc (Held, "On the Computational Geometry of
 //! Pocket Machining", 1991, ch. 2), computed with the polygon offset and the
@@ -9,10 +9,10 @@
 
 use crate::frame::{ToolShape, WorkPlane};
 use crate::region::{Bounds, KernelRegion, MaterialSide, PlanarRegion};
-use crate::region_check::oriented;
 use crate::selection::Selection;
 use crate::verdict::{Refusal, Stage};
-use crate::{KERNEL_TOL, Loop, Point2, Region, seg_dist};
+use crate::{KERNEL_TOL, Loop, Point2, Region, geo_refusal, seg_dist};
+use camcraft_geometry::geo2d::GeoError;
 
 /// Refusal reason: an open chain, which encloses no area and so has no
 /// inside or outside.
@@ -29,13 +29,16 @@ pub const OFF_STOCK: &str = "the selection is outside the stock: there is no mat
 pub const EMPTY_MATERIAL: &str = "the material side of the selection has no area";
 /// Refusal reason: the polygon offset or a boolean refused its input.
 pub const REGION_GEOMETRY: &str = "the region geometry cannot be computed: a value is out of range";
+/// Refusal reason: the polygon offset or a boolean refused its input as
+/// not valid geometry (#4407: the kind of the geometry error is kept).
+pub const REGION_GEOMETRY_INVALID: &str = "the region geometry cannot be computed: the polygon offset or a boolean refused its input as not valid";
 
 /// The distance (mm) within which a boundary vertex of the cutter-centre
 /// area counts as a vertex of the stock outline: the 1 um of the K0 laws.
 const ON_STOCK_TOL: f64 = 1e-3;
 
-fn geo<T, E>(r: Result<T, E>) -> Result<T, Refusal> {
-    r.map_err(|_| Refusal::new(Stage::Region, REGION_GEOMETRY))
+fn geo<T>(r: Result<T, GeoError>) -> Result<T, Refusal> {
+    r.map_err(|e| geo_refusal(Stage::Region, &e, REGION_GEOMETRY, REGION_GEOMETRY_INVALID))
 }
 
 /// True when `p` is on a loop of `r` within `tol`.
@@ -125,13 +128,13 @@ pub fn region(
             (geo(s.difference(&part_zone))?, air)
         }
     };
-    let mut center = if keep.is_empty() { center } else { geo(center.difference(&keep))? };
+    let center = if keep.is_empty() { center } else { geo(center.difference(&keep))? };
     if !has_area(&center) {
         return Err(Refusal::new(Stage::Region, crate::region::EMPTY_CENTER).fix("use a smaller tool or a larger selection"));
     }
-    if oriented(&center).is_some() {
-        center = geo(Region::new(center.loops().to_vec()))?;
-    }
+    // #4407: a centre that the booleans give with a loop against its
+    // nesting is refused by `PlanarRegion::new` (NOT_ORIENTED). It is not
+    // made normal again here: that would hide a fault of the geometry.
     let (mut walls, mut edge) = (Vec::new(), Vec::new());
     for l in center.loops() {
         let on_stock = match (material, stock) {

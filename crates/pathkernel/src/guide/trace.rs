@@ -6,7 +6,7 @@
 //! area (Held, "On the Computational Geometry of Pocket Machining", 1991),
 //! the offset of an open chain as the trimmed boundary of its Minkowski sum
 //! with a disc (Tiller and Hanson, 1984), both in `camcraft-geometry`; our
-//! own design record `docs/decisions/4024-path-kernel-design.md` "Stage 2"
+//! own design record (`RECOMMENDED.md`, `## #4024`) "Stage 2"
 //! and `docs/decisions/4176-kernel-guides-medial-trace-helix.md`. Written
 //! new: no code path of the old Trace, Contour or Chamfer planners of
 //! `camcraft-motion` is ported.

@@ -292,7 +292,7 @@ impl EntryPlanner for ProvedEntry {
         proved_entry(first, r, cleared, e).map(Verdict::done)
     }
     fn exit(&self, _last: &Cut, _r: &KernelRegion, _cleared: &Region) -> Result<Exit, Refusal> {
-        Exit::new(None, 5.0)
+        Exit::new(None, 5.0, 0.0)
     }
 }
 

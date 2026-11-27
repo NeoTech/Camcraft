@@ -159,8 +159,8 @@ fn hops_and_exits_are_checked_and_lifts_counted() {
     t.record(Hop::lift(USER_RETRACT).unwrap());
     t.record(Hop::stay(vec![Point2::new(0.0, 0.0)]).unwrap());
     assert_eq!((t.lifts(), t.by_reason()[USER_RETRACT]), (3, 2));
-    assert!(Exit::new(None, 5.0).is_ok());
-    assert_eq!(Exit::new(None, -1.0).unwrap_err().reason(), BAD_EXIT);
-    assert_eq!(Exit::new(None, NAN).unwrap_err().reason(), BAD_EXIT);
-    assert_eq!(Exit::new(Some(vec![]), 1.0).unwrap_err().reason(), BAD_EXIT);
+    assert!(Exit::new(None, 5.0, 0.0).is_ok());
+    assert_eq!(Exit::new(None, -1.0, 0.0).unwrap_err().reason(), BAD_EXIT);
+    assert_eq!(Exit::new(None, NAN, 0.0).unwrap_err().reason(), BAD_EXIT);
+    assert_eq!(Exit::new(Some(vec![]), 1.0, 0.0).unwrap_err().reason(), BAD_EXIT);
 }

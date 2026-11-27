@@ -13,7 +13,7 @@
 //! Provenance: the tangential approach from outside the stock of public
 //! machining handbooks; the swept disc as the Minkowski sum of the path
 //! and the tool disc (Held 1991); our own design record
-//! `docs/decisions/4024-path-kernel-design.md` (#3934: the split pieces of
+//! (`RECOMMENDED.md`, `## #4024`) (#3934: the split pieces of
 //! a band are joined from the air) and `docs/decisions/4254-kernel-air-approach.md`.
 
 use super::proof::{Proof, tries};

@@ -6,7 +6,7 @@
 //! Provenance: Blum, "A transformation for extracting new descriptors of
 //! shape" (1967); Brandt and Algazi (1992); Foskey, Lin and Manocha (2003),
 //! as cited in `camcraft-geometry`'s `geo2d/medial.rs`; our own design
-//! record `docs/decisions/4024-path-kernel-design.md` "Stage 2" and
+//! record (`RECOMMENDED.md`, `## #4024`) "Stage 2" and
 //! `docs/decisions/4176-kernel-guides-medial-trace-helix.md`. Written new:
 //! no code path of the old spine of `camcraft-motion` is ported.
 

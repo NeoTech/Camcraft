@@ -80,6 +80,6 @@ pub use camcraft_geometry::{geo2d, geometry};
 pub use camcraft_geometry::geometry::{stock, units};
 pub use camcraft_sim::{fixture, stock_sim, verify};
 pub use camcraft_tools::tools;
-/// #4055: the path kernel (record docs/decisions/4024-path-kernel-design.md);
+/// #4055: the path kernel (record RECOMMENDED.md `## #4024`);
 /// the app reaches it through this re-export, with no direct edge.
 pub use camcraft_pathkernel as pathkernel;

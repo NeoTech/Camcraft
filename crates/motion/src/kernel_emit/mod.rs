@@ -14,10 +14,13 @@
 //!   of an exit. Each step must start where the tool stands.
 //! - A lift is a retract to the clearance height. Its named reason goes to
 //!   the notes in the text form of the old links (`links.rs`).
+//! - An exit retracts to its own height, which must be at or above the
+//!   clearance height; an exit with a named fallback (no lead-out) writes
+//!   that fallback to the notes.
 //! - A cut whose curve holds an exact circle becomes arcs (G2/G3); each other
 //!   cut, lead and descent is the plan's chords, as feeds.
 //!
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! (K6, the converter in motion) and `docs/decisions/4269-kernel-plan-converter.md`;
 //! the G0/G1/G2/G3 vocabulary of RS-274 / ISO 6983. No vendor material consulted.
 
@@ -59,6 +62,12 @@ pub const ENDS_DOWN: &str = "a plan must end with the tool at the clearance heig
 pub const ARC_OFF_CIRCLE: &str = "a cut with an exact circle must have its points on that circle, at one depth";
 /// Refusal reason: a cut with a circle whose points do not turn one way round it.
 pub const ARC_NOT_MONOTONE: &str = "a cut with an exact circle must turn one way round its centre";
+/// Refusal reason: a cut with a circle whose chords are all shorter than
+/// the tolerance, so there is no arc to emit (#4407: not a turn fault).
+pub const ARC_EMPTY: &str = "a cut with an exact circle has no chord above the tolerance: there is no arc to emit";
+/// Refusal reason: an exit whose retract is under the clearance height
+/// (#4407: the converter does not raise it in silence).
+pub const EXIT_UNDER_CLEARANCE: &str = "the retract of an exit must be at or above the clearance height";
 /// Refusal reason: a cut that gave no move.
 pub const CUT_DROPPED: &str = "a cut gave no move: the converter never drops a cut";
 /// Refusal reason: a point that is not a finite number after the mapping to XYZ.

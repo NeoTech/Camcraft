@@ -6,8 +6,8 @@
 
 use super::arcs::arc_runs;
 use super::{
-    APPROACH_IN_MATERIAL, AXIS_NOT_NORMAL, CUT_DROPPED, ENDS_DOWN, ENTRY_NOT_CLEAR, EmitFeeds, EmitHeights, EmitRefusal,
-    Emitted, NOT_FINITE, NOT_SETUP_XY, STEP_NOT_DOWN, STEP_OFF_TOOL,
+    APPROACH_IN_MATERIAL, AXIS_NOT_NORMAL, CUT_DROPPED, ENDS_DOWN, ENTRY_NOT_CLEAR, EXIT_UNDER_CLEARANCE, EmitFeeds, EmitHeights,
+    EmitRefusal, Emitted, NOT_FINITE, NOT_SETUP_XY, STEP_NOT_DOWN, STEP_OFF_TOOL,
 };
 use crate::cl::{MoveKind, PathBuilder};
 use crate::geo2d::Point2;
@@ -136,9 +136,15 @@ impl Pen {
         self.builder(to).push(kind, to, Some(rate));
     }
 
-    /// Straight up along the tool axis to `z` (at least the clearance height).
-    fn retract(&mut self, z: f64) {
-        let z = z.max(self.h.clearance_z());
+    /// Straight up along the tool axis to `z`. A `z` under the clearance
+    /// height is refused by name (#4407), never raised in silence.
+    fn retract(&mut self, z: f64) -> Result<(), EmitRefusal> {
+        if !z.is_finite() {
+            return Err(EmitRefusal::new(NOT_FINITE));
+        }
+        if z < self.h.clearance_z() - EMIT_TOL {
+            return Err(EmitRefusal::new(EXIT_UNDER_CLEARANCE));
+        }
         if let Some(b) = self.b.as_mut() {
             let at = b.at();
             if at.z < z {
@@ -146,6 +152,7 @@ impl Pen {
             }
         }
         self.state = State::Clear;
+        Ok(())
     }
 
     /// An entry: a rapid at the clearance height over the first point, the
@@ -245,7 +252,7 @@ impl Pen {
                     return Err(EmitRefusal::new(STEP_NOT_DOWN));
                 }
                 self.tally.lift_to(reason.get(), CLEARANCE_PLANE, Point2::new(at.x, at.y), at.z);
-                self.retract(self.h.clearance_z());
+                self.retract(self.h.clearance_z())?;
                 self.out.lifts = self.out.lifts.saturating_add(1);
             }
         }
@@ -253,7 +260,8 @@ impl Pen {
     }
 
     /// An exit: the proved lead-out at the cut feed, then the retract to the
-    /// exit's height or the clearance height, whichever is higher.
+    /// exit's height, which must be at or above the clearance height. The
+    /// named fallback of an exit with no lead-out goes to the notes.
     pub(super) fn exit(&mut self, x: &Exit) -> Result<(), EmitRefusal> {
         let at = self.at().ok_or(EmitRefusal::new(STEP_NOT_DOWN))?;
         if let Some(lead) = x.lead_out() {
@@ -266,10 +274,10 @@ impl Pen {
             return Err(EmitRefusal::new(STEP_NOT_DOWN));
         }
         let z = self.frame()?.z0 + x.retract();
-        if !z.is_finite() {
-            return Err(EmitRefusal::new(NOT_FINITE));
+        self.retract(z)?;
+        if let (Some(fb), Some(b)) = (x.fallback(), self.b.as_mut()) {
+            b.note(format!("exit: {} instead of the {} - {}", fb.used(), fb.asked(), fb.reason()));
         }
-        self.retract(z);
         self.out.exits = self.out.exits.saturating_add(1);
         Ok(())
     }

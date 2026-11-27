@@ -10,7 +10,7 @@ use super::common::law_measure::measure;
 use super::fixture::{R, STEP, parts, planned_deg, spec_round, stock};
 use super::k4_order_link::cuts_path_with;
 use camcraft_motion::geo2d::{Point2, Region};
-use camcraft_pathkernel::load::{LoadControl, LoadStage, Reach, StockRead};
+use camcraft_pathkernel::load::{LoadControl, LoadStage, Reach, StockRead, Trochoid};
 use camcraft_pathkernel::order::StartSide;
 
 /// The material that the tool can cut: the stock box less the part.
@@ -75,4 +75,25 @@ fn kernel_load_control_round_the_disc_and_the_dog_bone() {
         }
     }
     assert_eq!(got, READ.to_vec(), "the load readings of the kernel");
+}
+
+/// #4407: the trochoidal pitch is limited by the engagement limit of the
+/// stage (the limit times the tool diameter: 0.25 x 8 = 2 mm). A larger
+/// asked pitch is not cut down in silence: the load verdict says it.
+#[test]
+fn a_trochoidal_pitch_above_the_limit_is_said_on_the_status_line() {
+    let load = STEP / (2.0 * R);
+    let stage = LoadStage::new(load).unwrap();
+    let (_, part) = &parts()[0];
+    let reader = Left(stock(), part.clone());
+    let said = |pitch: f64| {
+        let lc = LoadControl::Trochoidal(Trochoid::new(6.0, pitch).unwrap());
+        let (path, _, v) = cuts_path_with(part, StartSide::Inside, Some((&stage, lc, &reader)));
+        assert!(v.is_some_and(|v| v.out().is_some()), "the load stage gives its curves");
+        path.notes.into_iter().filter(|n| n.contains("trochoidal pitch is limited")).collect::<Vec<_>>()
+    };
+    let limited = said(3.0);
+    assert_eq!(limited.len(), 1, "{limited:?}");
+    assert!(limited[0].contains("limited to 2.000 mm") && limited[0].contains("asked 3.000 mm"), "{limited:?}");
+    assert!(said(1.5).is_empty(), "a pitch within the limit is flown as asked");
 }

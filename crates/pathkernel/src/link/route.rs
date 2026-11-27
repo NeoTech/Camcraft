@@ -9,7 +9,7 @@
 //! the air, and back in; the proof of each chord decides if it holds.
 //! Provenance: ported from the edge route of the ring links of
 //! `camcraft-motion` (`machining2d/ring_links.rs`, `edge_route`, #3824);
-//! our own design record `docs/decisions/4024-path-kernel-design.md`
+//! our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 5: Link".
 
 use super::proof::Proof;

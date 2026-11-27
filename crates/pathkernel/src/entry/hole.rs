@@ -5,7 +5,7 @@
 //! cuts the ring between the hole and its own radius.
 //! Provenance: pre-drilled entry holes as in public machining handbooks
 //! (Machinery's Handbook, milling entry practice); our own design record
-//! `docs/decisions/4024-path-kernel-design.md` "Stage 6: Entry and exit".
+//! (`RECOMMENDED.md`, `## #4024`) "Stage 6: Entry and exit".
 
 use super::proof::{Entry, Proof};
 use super::room::Ctx;
@@ -23,9 +23,13 @@ pub(super) fn enter(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
         if (h.radius() < r && !plunges) || !ctx.legal.contains(c) {
             continue;
         }
-        let Ok(lead) = ctx.straight_lead(c) else { continue };
+        // A refused lead or entry is kept with its reason (#4407); the
+        // next hole is tried.
+        let made = ctx.straight_lead(c);
+        let Some(lead) = ctx.checked(EntryKind::Predrilled, made) else { continue };
         let (approach, descent) = (vec![ctx.above(c)?], vec![ctx.at_depth(c)?]);
-        if let Ok(e) = Entry::led(EntryKind::Predrilled, approach, descent, lead, Proof::InHole(h), ctx.choice, ctx.tool()) {
+        let made = Entry::led(EntryKind::Predrilled, approach, descent, lead, Proof::InHole(h), ctx.choice, ctx.tool());
+        if let Some(e) = ctx.checked(EntryKind::Predrilled, made) {
             return Ok(Some(e));
         }
     }
