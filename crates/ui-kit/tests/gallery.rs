@@ -56,8 +56,11 @@ fn both_themes_lay_out_in_a_headless_context() {
         screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960.0, 900.0))),
         ..Default::default()
     };
-    let out = ctx.run_ui(input, |ui| {
+    let mut out = ctx.run_ui(input, |ui| {
         egui::ScrollArea::vertical().show(ui, gallery::show);
     });
     assert!(!out.shapes.is_empty(), "the gallery paints");
+    // No renderer takes the font atlas here; egui asks that an unused
+    // texture delta is cleared on purpose before it drops.
+    out.textures_delta.clear();
 }
