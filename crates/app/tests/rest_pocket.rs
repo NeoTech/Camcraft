@@ -59,7 +59,7 @@ fn prev() -> RestParams {
 }
 
 fn pocket(stepover: f64, entry: Entry3D, strategy: PocketStrategy, rest: Option<RestParams>) -> OpParams {
-    OpParams::Pocket {
+    OpParams::Pocket { pass_start: Default::default(),
         rest,
         blend_radius: None,
         links: Links::PLANAR,
@@ -80,6 +80,7 @@ fn pocket(stepover: f64, entry: Entry3D, strategy: PocketStrategy, rest: Option<
         blend_turns: false,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

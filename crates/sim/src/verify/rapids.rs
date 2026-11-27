@@ -109,8 +109,9 @@ pub(super) fn rapids_in_stock(
             // #904: the footprint gives a coarse model's excess back.
             let d = cx.tool.radius - cx.tightened(cx.gouge_tol);
             if dx * dx + dy * dy <= cx.z_tol * cx.z_tol {
-                // Issue #96: a vertical retract rides the tool's own
-                // kerf, but a vertical rapid DOWN is judged by its
+                // Issue #96: do not judge an upward retract by a stock
+                // column. The finished-part sweep judges modeled
+                // vertical rapids separately (#4062). A rapid DOWN is judged by its
                 // column - below the surface the cuts before it left
                 // (a drill's R plane under unfaced stock) it is a
                 // rapid in stock. A peck's re-entry stays above its
@@ -173,8 +174,9 @@ const RINGS: usize = 8;
 /// with `RIM k / RINGS` points, read at `d (k - 1) / RINGS`. A `d`
 /// that is not a finite positive radius (a tool no wider than the
 /// gouge tolerance) is the centre alone - the column reading the law
-/// had before #106.
-fn footprint(c: Point2, d: f64) -> impl Iterator<Item = (Point2, f64)> {
+/// had before #106. Shared with law (d3) (#3679's plunge depth law
+/// reads the same disc).
+pub(super) fn footprint(c: Point2, d: f64) -> impl Iterator<Item = (Point2, f64)> {
     let d = if d.is_finite() && d > 0.0 { d } else { 0.0 };
     let rings = if d > 0.0 { RINGS } else { 0 };
     std::iter::once((c, 0.0)).chain((1..=rings).flat_map(move |k| {

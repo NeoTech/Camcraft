@@ -32,7 +32,8 @@ use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 
 use super::adaptive::{Spine, medial_spine, widest_point};
-use super::adaptive_troch_clean::{emit_cleanup, plan_cleanup};
+use super::adaptive_troch_check::{cleanup_engagement_note, plan_cleanup_checked};
+use super::adaptive_troch_clean::emit_cleanup;
 use super::adaptive_troch_lanes::{clearance, narrow_err, plan_all_lanes, rest_share, straightened, trochoid_params};
 use super::face::GenError;
 use super::pocket::{PocketParams, PocketStrategy};
@@ -129,6 +130,19 @@ pub fn adaptive_trochoidal(region: &Region, p: &PocketParams) -> Result<Toolpath
 /// 2D Adaptive's trochoidal planner with explicit engagement, return,
 /// return-feed, and loop-width controls (#1588).
 pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveTrochParams) -> Result<Toolpath, GenError> {
+    trochoidal_inside(region, p, t, None)
+}
+
+/// [`adaptive_trochoidal_with`] whose cutter-centre area is cut back by
+/// `keepout` before the lanes are planned ("Do not touch", #3346). The
+/// final move check reads the reduced area, so no loop, clean-up chain or
+/// entry stands in the keep-out.
+pub(super) fn trochoidal_inside(
+    region: &Region,
+    p: &PocketParams,
+    t: &AdaptiveTrochParams,
+    keepout: Option<&Region>,
+) -> Result<Toolpath, GenError> {
     // The Adaptive doors (finite numbers, the load in (0, 50] % of D).
     let p = &PocketParams { strategy: PocketStrategy::Adaptive, ..*p };
     p.validate()?;
@@ -149,10 +163,18 @@ pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveT
             p.tool_diameter, p.stock_to_leave
         )));
     }
+    let center = match keepout {
+        Some(ko) if !ko.is_empty() => center.difference(ko)?,
+        _ => center,
+    };
+    if center.is_empty() {
+        return Err(GenError::Invalid(format!("{WHO}: no cutter position stays clear of the protected items")));
+    }
     let planned = plan_all_lanes(region, &center, p, t)?;
     let reach = if p.stock_to_leave > 0.0 { region.offset(-p.stock_to_leave)? } else { region.clone() };
-    let (clean, final_cleared) =
-        plan_cleanup(&center, &reach, &planned.used_center, &planned.cleared, p.tool_diameter, p.optimal_load, p.climb, t)?;
+    let clean =
+        plan_cleanup_checked(region, &center, &reach, &planned.layouts, &planned.used_center, &planned.cleared, p, t)?;
+    let final_cleared = clean.cleared;
 
     let zs = super::equal_steps::cut_levels_for(p.top_z, &p.links.approach,p.bottom_z, p.stepdown)?;
     let hop = p.retract_z.unwrap_or(p.clearance_z);
@@ -176,7 +198,7 @@ pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveT
             bld.push(MoveKind::Rapid, p3(lay.entry, from), None);
             emit_level(&mut bld, &lay.lay, &lay.tp, z, from, true, lay.open).map_err(|e| renamed(e).with_ghost_moves(bld.moves()))?;
         }
-        emit_cleanup(&mut bld, &clean, p, z, above, hop);
+        emit_cleanup(&mut bld, &clean.chains, p, z, above, hop);
         above = z;
     }
     let at = bld.at();
@@ -203,8 +225,17 @@ pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveT
             t.max_engagement
         ));
     }
-    if !clean.is_empty() {
-        bld.note(format!("{WHO}: {} corner/wall clean-up pass(es) emitted", clean.len()));
+    if !clean.chains.is_empty() {
+        bld.note(format!("{WHO}: {} corner/wall clean-up pass(es) emitted", clean.chains.len()));
+    }
+    if clean.step_reduced {
+        bld.note(format!(
+            "{WHO}: clean-up peel step was reduced to hold the {:.1} deg engagement limit (measured {:.1} deg)",
+            t.max_engagement, clean.max_deg
+        ));
+    }
+    if let Some((deg, at)) = clean.exceeded {
+        bld.note(cleanup_engagement_note(deg, at, t.max_engagement));
     }
     let rest = rest_share(&reach, &final_cleared);
     if rest > REST_NOTE {
@@ -220,6 +251,9 @@ pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveT
 
     let path = bld.finish();
     check_path(&path, &center)?;
+    // A custom limit is held by the WHOLE path - lanes, links, clean-up,
+    // every level - or the path is refused (#3849 keeps this refusal; the
+    // clean-up check above only steps the peel down first).
     if t.max_engagement != DEFAULT_MAX_ENGAGEMENT {
         let spec = crate::quality::QualitySpec::new(p.tool_diameter);
         let mut stock = crate::quality::stock_for(region, p.top_z, p.bottom_z, p.tool_diameter, &spec)

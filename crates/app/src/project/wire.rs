@@ -37,7 +37,7 @@ pub(super) fn dto_to_facets(v: Vec<[[f64; 3]; 3]>) -> Vec<Triangle> {
 }
 
 pub fn collect(world: &World) -> ProjectFile {
-    let entities = model::named_entities(world)
+    let entities: Vec<EntityDto> = model::named_entities(world)
         .into_iter()
         .map(|(name, entity)| {
             let loc = model::transform_of(world, &entity).unwrap_or_default();
@@ -68,6 +68,9 @@ pub fn collect(world: &World) -> ProjectFile {
                 holder,
                 cutter: crate::tool_cutter::cutter_of(world, &entity)
                     .map(|c| super::tool_body_wire::spun_to_dto(&c)),
+                // #3645: the tool's component stack, by row id.
+                assembly: crate::tool_assembly::assembly_of(world, &entity)
+                    .map(|a| super::assembly_wire::assembly_to_dto(&a)),
                 ..ToolDto::from_tool(&t)
             });
             // The setup payload only ever rides a setup row (the kind test
@@ -90,6 +93,7 @@ pub fn collect(world: &World) -> ProjectFile {
                         nose_to_axis: d.nose_to_axis.filter(|v| v.is_finite()),
                         workholding_max_rpm: d.workholding_max_rpm,
                         sheet_job: d.sheet_job,
+                        order: d.order,
                     })
             } else {
                 None
@@ -181,6 +185,7 @@ pub fn collect(world: &World) -> ProjectFile {
                     .then(|| crate::model_source::of(world, &entity))
                     .flatten()
                     .map(|s| super::SourceDto::of(&s)),
+                source_faces: kind.is_none().then(|| super::source_faces_dto::collect(world, &entity)).flatten(),
                 kind,
                 raw_stock_only: mark.is_some(),
                 raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),
@@ -203,7 +208,10 @@ pub fn collect(world: &World) -> ProjectFile {
         })
         .collect();
     ProjectFile {
-        version: PROJECT_VERSION,
+        // #3368: a flat or ball taper tip steps the version (file.rs).
+        version: super::written_project_version(
+            entities.iter().filter_map(|e| e.tool.as_ref()).any(|t| !t.tip_form.is_sharp()),
+        ),
         // mm omits the field (the default); only an inch document pays
         // for saying so.
         units: match units::of(world) {
@@ -280,6 +288,11 @@ pub fn collect(world: &World) -> ProjectFile {
         smoothing: crate::setup_post_options::document(world).smoothing,
         // Off writes no key (#1386).
         explain: crate::setup_post_options::document(world).explain,
+        // #3645: an empty table writes no key.
+        components: crate::tool_assembly::components(world)
+            .iter()
+            .map(super::component_wire::component_to_dto)
+            .collect(),
         entities,
     }
 }
@@ -293,14 +306,55 @@ pub fn save_text(world: &World) -> Result<String, ProjectError> {
     })
 }
 
+/// Write the project to `path` through a temp file in the same folder and
+/// a rename, so a save that fails keeps the old file whole and no other
+/// program reads half a project. A missing folder and a project file that
+/// this process cannot write are refused, as the plain write that this
+/// replaces refused them.
 pub fn save(world: &World, path: &Path) -> Result<(), ProjectError> {
     let text = save_text(world)?;
-    if let Err(e) = std::fs::write(path, &text) {
+    if let Err(e) = write_project(path, &text) {
         tracing::warn!(file = %crate::logging::file_name(path), "project not saved: {e}");
         return Err(e.into());
     }
     tracing::info!(file = %crate::logging::file_name(path), bytes = text.len(), "project saved");
     Ok(())
+}
+
+/// The checks and the atomic write of [`save`]. The shared writer creates
+/// a missing folder and, on Linux and macOS, its rename replaces any file
+/// that the folder allows, a read-only one included: a project save does
+/// neither, so both are checked first.
+fn write_project(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    let folder = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    if !folder.is_dir() {
+        return Err(Error::new(ErrorKind::NotFound, format!("folder {} does not exist", folder.display())));
+    }
+    if std::fs::metadata(path).is_ok_and(|m| m.permissions().readonly()) {
+        return Err(Error::new(ErrorKind::PermissionDenied, format!("{} is read-only", path.display())));
+    }
+    // The mode alone does not say that this process may write the file.
+    // On Unix a file that another user owns can have mode 0644 and still
+    // refuse a write with EACCES; `rename(2)` would replace it, because
+    // the rename needs write permission on the folder only. Open the file
+    // for writing, as the plain write that this save replaces did, with
+    // no truncate and no create. A path that does not exist is made by
+    // the temp file and the rename.
+    let unwritable = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .is_err_and(|e| e.kind() != ErrorKind::NotFound);
+    if unwritable {
+        return Err(Error::new(ErrorKind::PermissionDenied, format!("{} is read-only", path.display())));
+    }
+    crate::machine::store::write_atomic(path, text).map_err(|e| match e {
+        crate::machine::store::SaveError::Io(why) => Error::other(why),
+        other => Error::other(other.to_string()),
+    })
 }
 
 /// Rebuild world content from a project file. Not a command: opening a

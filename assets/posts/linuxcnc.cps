@@ -33,7 +33,8 @@ explainWords = {
   "G38.3": "PROBE TOWARD CONTACT, NO ERROR", // LinuxCNC G-code reference, G38.2-G38.5
   "G59.1": "WORK OFFSET 7", // LinuxCNC G-code reference, G54-G59.3: coordinate system 7
   "G59.2": "WORK OFFSET 8", // LinuxCNC G-code reference, G54-G59.3: coordinate system 8
-  "G59.3": "WORK OFFSET 9"  // LinuxCNC G-code reference, G54-G59.3: coordinate system 9
+  "G59.3": "WORK OFFSET 9", // LinuxCNC G-code reference, G54-G59.3: coordinate system 9
+  "G92.1": "CLEAR G92 OFFSETS" // LinuxCNC G-code reference, G92.1: reset G92 offsets
 };
 
 declaredOptions = {
@@ -94,6 +95,13 @@ declaredOptions = {
   writeToolList: { type: "boolean", title: "Write tool list", group: "Header & comments", description: "Emit a summary comment per tool at program start", default: false },
   optionalStop: { type: "boolean", title: "Optional stop (M1)", group: "Behavior", description: "Write M1 before tool changes after the first operation", default: false },
   useRadiusArcs: { type: "boolean", title: "Use radius (R) arcs", group: "Cycles & arcs", description: "Write R word instead of I/J/K arc centers", default: false },
+  clearG92: {
+    type: "boolean",
+    title: "Clear G92 offsets (G92.1)",
+    group: "Machine",
+    description: "Write G92.1 in the header to clear any G92 offset left on the control",
+    default: true,
+  },
 };
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -145,6 +153,23 @@ function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+// #3699: a tap feed is pitch x rpm, kept at 0.001 mm/min by the stream, and
+// the floating G84 cuts the pitch F / S. G84 writes the feed at three mm or
+// four inch decimals; a tap whose written F and S do not hold the pitch to
+// 0.01 percent is refused by name.
+function tapFeed(v) { return fu(v); }
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var written = Number(fu(feed)) * (inch ? 25.4 : 1);
+  var want = sRpm > 0 ? feed / sRpm : 0;
+  var got = speed > 0 ? written / speed : 0;
+  if (!(want > 0 && Math.abs(got - want) / want <= 1e-4)) {
+    msg("canned cycle G84 (tap)" + inOp() + " feed " + feed + " mm/min at " + sRpm +
+      " rpm posts as F" + tapFeed(feed) + " S" + speed + " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 var seqNum = 0;
 var seqNextForce = false;
 var secStarted = 0;
@@ -204,6 +229,7 @@ function writeHeaderExtras() {
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
 }
@@ -338,7 +364,7 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // keyword in any case ("Comments", "Messages", "Probe Logging",
 // "Logging", "Debug Messages"). A comment whose text would open with one
 // is led by "- ", so user text stays inert.
-var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
+var ACTIVE = /^\s*(M\s*S\s*G|D\s*E\s*B\s*U\s*G|P\s*R\s*I\s*N\s*T|L\s*O\s*G\s*O\s*P\s*E\s*N|L\s*O\s*G\s*A\s*P\s*P\s*E\s*N\s*D|L\s*O\s*G\s*C\s*L\s*O\s*S\s*E|L\s*O\s*G|P\s*R\s*O\s*B\s*E\s*O\s*P\s*E\s*N|P\s*R\s*O\s*B\s*E\s*C\s*L\s*O\s*S\s*E|A\s*B\s*O\s*R\s*T|A\s*X\s*I\s*S|P\s*Y\s*R\s*E\s*L\s*O\s*A\s*D|P\s*Y\s*R\s*U\s*N|P\s*Y)\b/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
@@ -373,9 +399,17 @@ function toolNote() {  // just before the tool change it describes
 // feed per minute, compensation, tool length and cycle cancelled. Path
 // control on its own line: G64 with a stated P (a bare G64 is "best
 // possible speed, no tolerance"), or G61 exact path.
+// #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
+// Clamp positive tolerances that round to zero under fu() to the smallest
+// positive value (0.001 mm, 0.0001 in). Never write P0.
+function tolP(tol) {
+  var s = fu(tol);
+  return (s === "0" || s === "-0") ? (inch ? "P0.0001" : "P0.001") : "P" + s;
+}
+
 function pathWords() {
   if (optStr("pathControl", "blend") === "exact") return ["G61"];
-  return ["G64", "P" + fu(optNum("blendTolerance", 0.025))];
+  return ["G64", tolP(optNum("blendTolerance", 0.025))];
 }
 // The machine's inverted linear axes (#375): the engine has mirrored the
 // stream into the controller's frame, and the header says so, one note
@@ -396,7 +430,8 @@ function onOpen() {
   note(headTitle(nm));
   invertedNotes();
   writeHeaderExtras();
-  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
+  var clearG92 = optBool("clearG92", true);
+  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80", clearG92 ? "G92.1" : "", "G97"]);
   block(pathWords());
   var mode = retractMode();
   if (mode === "g53") {
@@ -519,7 +554,7 @@ function onToolChange(number, name) {
 // tolerance leaks into the next operation.
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G64", "P" + fu(smoothTol)]);
+  block(["G64", tolP(smoothTol)]);
   smoothActive = true;
 }
 function smoothOff() {
@@ -729,6 +764,9 @@ function onLinear() {
 }
 function onCircular() {
   startPreamble();
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (chainCut() || !upright(properties)) return;
   var p = properties;
   var g = p.CircularDirection === "CW" ? "G2" : "G3";
@@ -929,6 +967,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   var traversed = xyUnknown;
   if (!xyFirst(p.X, p.Y)) return;  // a cycle as the first move: its first hole
   if (rigid) { rigidTap(p, traversed); return; }
@@ -945,7 +984,7 @@ function onCycle() {
     // #2362: LinuxCNC requires a non-negative P on the first G86 block of
     // a cycle, even when the dwell is 0 (P0).
     if (g === "G86" || (dwell > 0 && (g === "G82" || g === "G84" || g === "G89"))) words.push("P" + secs(dwell));
-    words.push(fw(p.FeedRate));
+    words.push(g === "G84" ? "F" + tapFeed(p.FeedRate) : fw(p.FeedRate));
     block(words);
     cycleSig = sig;
   }
@@ -1042,7 +1081,7 @@ function onProbeResult() {
     var op = ex < 0 ? "+" : "-";
     block(["#" + (dev + i) + "=[" + mean + op + fu(Math.abs(ex)) + "]"]);
     var o = nextO();
-    block([o, "if", "[ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]"]);
+    block([o, "if", "[[#<_task> EQ 1] AND [ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]]"]);
     block(["(MSG, PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
     block(["M2"]);
     block([o, "endif"]);

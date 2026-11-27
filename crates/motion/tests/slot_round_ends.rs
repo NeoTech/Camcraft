@@ -30,6 +30,8 @@ fn params(climb: bool) -> SlotParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         links: Links::PLANAR,
+        blend_turns: false,
+        blend_radius: None,
     }
 }
 
@@ -70,9 +72,16 @@ fn wall_points(a: Point2, b: Point2, w: f64) -> Vec<Point2> {
 }
 
 fn check(climb: bool, width: f64, stepover: f64) {
+    check_with(climb, width, stepover, false);
+}
+
+fn check_with(climb: bool, width: f64, stepover: f64, blend_turns: bool) {
     let (a, b) = (Point2::new(-25.0, 15.0), Point2::new(25.0, 15.0));
-    let p = SlotParams { width, stepover, ..params(climb) };
+    let p = SlotParams { width, stepover, blend_turns, blend_radius: Some(1.0), ..params(climb) };
     let Ok(path) = slot(a, b, &p) else { panic!("slot path") };
+    if blend_turns {
+        assert!(path.notes.iter().any(|n| n.contains("rounded")), "no row end rounded: {:?}", path.notes);
+    }
     // The verifier's crossing law (a): the lap meets each row join only
     // at the join's own end points, never across a flattened arc chord.
     assert_eq!(crossed_pairs(&path, 0.01), Vec::<[usize; 2]>::new(), "climb={climb} width={width}");
@@ -121,4 +130,14 @@ fn wide_slot_cuts_its_round_ends_conventional() {
 fn wide_slot_with_rows_off_the_tips_cuts_its_round_ends() {
     check(true, 20.0, 4.0);
     check(false, 20.0, 4.0);
+}
+
+/// #1759 with #2906: row ends on arc turns still end in the wall lap, so
+/// the round ends are cut to size and nothing crosses or gouges.
+#[test]
+fn wide_slot_with_arc_turns_still_cuts_its_round_ends() {
+    for climb in [true, false] {
+        check_with(climb, 10.0, 2.0, true);
+        check_with(climb, 20.0, 4.0, true);
+    }
 }

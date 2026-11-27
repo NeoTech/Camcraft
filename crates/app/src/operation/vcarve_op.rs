@@ -36,6 +36,7 @@ pub(super) fn seed_vcarve(c: &Carried) -> OpParams {
         flat_clear: false,
         flat_stepover: 0.25,
         tilt: c.tilt,
+        picks: crate::path_picks::PathPicks::default(),
     }
 }
 

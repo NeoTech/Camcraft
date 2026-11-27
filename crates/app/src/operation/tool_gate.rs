@@ -22,15 +22,20 @@ use flecs_ecs::prelude::{Entity, World};
 
 use crate::model;
 use crate::schema::Operation;
-use crate::tools::{Tool, ToolKind};
+use crate::tools::{CutterHand, Tool, ToolKind};
 
 use super::KindInfo;
+use super::OpParams;
 
 /// The kinds as one phrase: "drill", "flat end mill or bull-nose",
 /// "drill, tap or boring bar".
 #[must_use]
 pub fn kinds_phrase(kinds: &[ToolKind]) -> String {
-    let words: Vec<String> = kinds.iter().map(ToString::to_string).collect();
+    // #3369: a form mill cuts no operation yet, so no refusal offers it
+    // beside a kind that does.
+    let read: Vec<&ToolKind> = kinds.iter().filter(|k| **k != ToolKind::FormMill).collect();
+    let shown = if read.is_empty() { kinds.iter().collect() } else { read };
+    let words: Vec<String> = shown.iter().map(ToString::to_string).collect();
     match words.split_last() {
         None => String::from("tool"),
         Some((last, [])) => last.clone(),
@@ -48,11 +53,15 @@ fn setup_words(world: &World) -> String {
     }
 }
 
-/// The tool library, name-sorted, with each tool's kind.
+/// The tool library, name-sorted, with each tool's kind. #3368: a flat
+/// or ball taper tip fits no operation yet, so it is not offered; nor
+/// is a form mill (#3369).
 fn library(world: &World) -> Vec<(String, ToolKind)> {
     model::named_entities(world)
         .into_iter()
-        .filter_map(|(name, e)| model::tool_of(world, &e).map(|t| (name, t.kind)))
+        .filter_map(|(name, e)| model::tool_of(world, &e).map(|t| (name, t)))
+        .filter(|(_, t)| !camcraft_tools::taper::is_unread_tip(t) && t.kind != ToolKind::FormMill)
+        .map(|(name, t)| (name, t.kind))
         .collect()
 }
 
@@ -115,7 +124,8 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
     let (name, tool) = kinds.iter().find_map(|kind| {
         catalog
             .iter()
-            .filter(|(_, t)| t.kind == *kind && bought_size(t).is_finite())
+            // #3368: never a flat or ball tip the operations refuse.
+            .filter(|(_, t)| t.kind == *kind && bought_size(t).is_finite() && t.tip_form.is_sharp())
             .min_by(|(na, a), (nb, b)| {
                 let (sa, sb) = (bought_size(a), bought_size(b));
                 (sa - SUGGEST_SIZE_MM)
@@ -132,15 +142,81 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
     ))
 }
 
+/// #4031: the built-in posts whose spindle word is a bare M3 - no
+/// reverse path, so not even a Thread operation that asks to reverse
+/// can run a left-hand cutter on them: the ask would reach a post that
+/// cannot answer it with M4. The posts that state the
+/// `millSpindleReverse` manifest flag (Fanuc, Mazak, Mach4, Siemens
+/// 810M, Haas since #1977, Tormach since #4228) are NOT here, and neither is a post of the user's own
+/// (`PostRef::File`) - the post engine refuses a reverse ask its script
+/// cannot voice, so for those only the REQUEST below is checked.
+const M3_ONLY_POSTS: &[&str] = &[
+    "Doosan DNM",
+    "Grbl 1.1",
+    "grblHAL",
+    "Makera Carvera",
+    "Heidenhain",
+    "Heidenhain Klartext",
+];
+
+/// Does the operation ask the spindle to reverse (the M4 ask, #988)?
+/// Today only a Thread operation with `spindle_reverse` asks - it is
+/// the one path that calls `ask_reverse_spindle` and posts M4. The
+/// cutter hand is judged against this REQUEST, never against the post
+/// script alone: a permitted post does not make the operation reverse.
+#[must_use]
+pub fn requests_reverse(params: &OpParams) -> bool {
+    matches!(params, OpParams::Thread { passes, .. } if passes.spindle_reverse)
+}
+
+/// Why a left-hand cutter cannot cut with `info`'s family on the setup
+/// context's post (#4031): a left-hand cutter cuts turning M4, so the
+/// OPERATION must ask the spindle to reverse - and the post must be
+/// able to answer the ask. Refused by name when the operation does not
+/// request reverse rotation (a permitted post reverses nothing on its
+/// own), or when the post writes a bare M3 and never M4 even for a
+/// Thread op that asks. `None` for a right-hand cutter, and for a
+/// left-hand cutter whose operation asks on a post that reverses.
+fn left_cutter_refusal(
+    world: &World,
+    setup: Option<&str>,
+    def: &Tool,
+    tool: &str,
+    info: &KindInfo,
+    asks_reverse: bool,
+) -> Option<String> {
+    if def.cutter_hand != CutterHand::Left {
+        return None;
+    }
+    let post = crate::setup_mount::post_of(world, setup);
+    if let Some(name) = crate::posting::post_name(&post)
+        && M3_ONLY_POSTS.contains(&name)
+    {
+        return Some(format!(
+            "'{tool}' is a left-hand cutter: the {name} post starts its spindle M3 and never reverses it (no M4) - a {} operation with it would cut backwards; use a right-hand cutter, or post with a spindle that reverses",
+            info.label
+        ));
+    }
+    (!asks_reverse).then(|| {
+        format!(
+            "'{tool}' is a left-hand cutter: a {} operation does not ask the spindle to reverse (no M4), so the cutter would turn backwards - use a right-hand cutter, or a Thread operation with 'spindle reverse' set",
+            info.label
+        )
+    })
+}
+
 /// Why the named tool cannot cut this kind. `None` when it can, and
 /// also when the name is not a tool - existence is `check_tool`'s door,
 /// not this one. When the whole setup holds nothing that fits, the
 /// setup-level sentence answers instead (it names the real fix).
 #[must_use]
-pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String> {
-    let kind = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))?.kind;
+pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str, asks_reverse: bool) -> Option<String> {
+    let def = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))?;
+    let kind = def.kind;
     if info.accepts(kind) {
-        return None;
+        return unread_tip_refusal(&def, tool, info).or_else(|| {
+            left_cutter_refusal(world, crate::setup::active(world).as_deref(), &def, tool, info, asks_reverse)
+        });
     }
     if let Some(none_fit) = create_refusal(world, info) {
         return Some(none_fit);
@@ -150,6 +226,35 @@ pub fn tool_refusal(world: &World, info: &KindInfo, tool: &str) -> Option<String
         info.label,
         kinds_phrase(info.tool_kinds)
     ))
+}
+
+/// #3368: a chamfer mill with a flat or ball tip, refused by name for
+/// every operation until its generator, simulation and collision laws
+/// read the tip (the consumer sub-issues of #3351). Read as a sharp cone,
+/// it is a smaller tool than the real one, and its toolpath can gouge.
+/// The creation door ([`tool_refusal`]) and the generation and post door
+/// ([`tool_problem`]) both say it, so a tool edited to such a tip after
+/// its operations exist is refused too.
+fn unread_tip_refusal(def: &Tool, tool: &str, info: &KindInfo) -> Option<String> {
+    // #3369: no generator reads a form mill's outline yet. The 2D
+    // Chamfer names the edge form work that opens it (#896).
+    if def.kind == ToolKind::FormMill {
+        let opens = if info.ty == super::OpType::Chamfer2D {
+            " - the edge form work (#896) opens the 2D Chamfer to it"
+        } else {
+            ""
+        };
+        return Some(format!(
+            "'{tool}' is a form mill: a {} operation does not read its form outline yet{opens}",
+            info.label
+        ));
+    }
+    camcraft_tools::taper::is_unread_tip(def).then(|| {
+        format!(
+            "'{tool}' has a {} tip: the tip form is not read by a {} operation yet - use a chamfer mill with a sharp tip",
+            def.tip_form, info.label
+        )
+    })
 }
 
 /// Why a tool's definition cannot change kind from `prev` to `next`:
@@ -182,6 +287,48 @@ pub fn retype_refusal(world: &World, tool: &str, prev: ToolKind, next: ToolKind)
     ))
 }
 
+/// The slot door's sentence (#3475): both sizes and the largest tool that
+/// fits, in the document's unit, by the slot generator's own rule
+/// (`machining2d::slot_centre_band`). `None` when the tool fits, or when
+/// the numbers are no slot at all (`is_sane` and the generator name those).
+#[must_use]
+pub fn slot_fit_refusal(tool: &str, diameter: f64, width: f64, leave: f64, unit: crate::units::Unit) -> Option<String> {
+    if !matches!(crate::machining2d::slot_centre_band(width, diameter, leave), Ok(None)) {
+        return None;
+    }
+    let l = |v: f64| {
+        let s = crate::units::len(v, unit, 3);
+        let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
+        format!("{s} {}", unit.suffix())
+    };
+    let walls = if leave > 0.0 { format!(" with {} left on each wall", l(leave)) } else { String::new() };
+    let room = width - 2.0 * leave;
+    let fix = if room > 0.0 {
+        format!("choose a tool of {} or less", l(room))
+    } else {
+        String::from("no tool fits - make the stock to leave smaller")
+    };
+    Some(format!("the tool '{tool}' is {} wide and the slot is {} wide{walls}: {fix}", l(diameter), l(width)))
+}
+
+/// Why a tool's diameter cannot change to `diameter` (#3475): a plain
+/// Slot that uses the tool would be left with a tool wider than the slot.
+#[must_use]
+pub fn resize_refusal(world: &World, tool: &str, diameter: f64) -> Option<String> {
+    let unit = crate::units::of(world);
+    model::named_entities(world)
+        .into_iter()
+        .filter_map(|(name, e)| model::operation_of(world, &e).map(|op| (name, op)))
+        .filter(|(_, op)| op.tool == tool)
+        .filter(|(_, op)| super::slot_width_is_stated(world, op.setup.as_deref(), &op.src, &op.params))
+        .find_map(|(name, op)| match op.params {
+            crate::operation::OpParams::Slot { width, stock_to_leave, .. } => {
+                slot_fit_refusal(tool, diameter, width, stock_to_leave, unit).map(|why| format!("{name} uses it: {why}"))
+            }
+            _ => None,
+        })
+}
+
 /// M10.1 C, the honest after-state: why an existing operation cannot be
 /// cut with the tool it names - the tool was deleted (or its name now
 /// belongs to something that is not a tool), or it is a kind the op's
@@ -211,7 +358,19 @@ pub fn tool_problem(world: &World, op_name: &str, op: &Operation) -> Option<Stri
         return Some(format!("{op_name}'s tool '{tool}' is no longer a tool; {wants}"));
     };
     if info.accepts(def.kind) {
-        return None;
+        return unread_tip_refusal(&def, tool, info)
+            .map(|why| format!("{op_name}'s tool {why}"))
+            .or_else(|| {
+                left_cutter_refusal(
+                    world,
+                    op.setup.as_deref(),
+                    &def,
+                    tool,
+                    info,
+                    requests_reverse(&op.params),
+                )
+                .map(|why| format!("{op_name}'s tool {why}"))
+            });
     }
     Some(format!("{op_name}'s tool '{tool}' is a {}; {wants}", def.kind))
 }

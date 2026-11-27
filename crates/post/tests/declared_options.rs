@@ -90,6 +90,7 @@ fn shipped_milling_posts_declare_valid_option_schemas() {
         "assets/posts/doosan-dnm.cps",
         "assets/posts/tormach.cps",
         "assets/posts/grblhal.cps",
+        "assets/posts/mach3.cps",
         "assets/posts/tinyg.cps",
         "assets/posts/grbl.cps",
         "assets/posts/carvera.cps",
@@ -216,7 +217,7 @@ fn fanuc_defaults_are_unchanged_and_declared_options_drive_output() {
     assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
     assert!(out.program.contains("N100 "), "sequence numbers start at 100");
     assert!(out.program.contains("N105 "), "sequence numbers increment by 5");
-    assert!(out.program.contains("G90G54G40G49G80"), "words joined without spaces");
+    assert!(out.program.contains("G90G17G94G54G40G49G80"), "words joined without spaces");
     assert!(out.program.contains("T1") && out.program.contains("10mm Flat Endmill"), "tool list header");
     assert!(out.program.contains("MACHINE:"), "machine header");
     assert!(out.program.contains("POST:"), "post header");

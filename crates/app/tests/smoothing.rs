@@ -14,6 +14,8 @@ use camcraft_app::cl::{Move, MoveKind, Toolpath};
 use camcraft_app::geometry::Point3;
 use camcraft_app::operation::{self, Height, OpParams, OpType};
 use camcraft_app::post::{self, cnc, Dump, Smoothing};
+use camcraft_app::posting;
+use camcraft_app::schema::PostRef;
 use camcraft_app::smoothing::{self, FINISH_SHARE, ROUGH_MAX_MM};
 
 fn script(name: &str) -> &'static str {
@@ -67,6 +69,10 @@ fn off_is_byte_identical_and_writes_no_smoothing_word() {
     // #542: a sinker post serves sinker EDMs only (no smoothing words).
     let sinker = camcraft_app::posting::SINKER_POSTS;
     for (name, _) in camcraft_app::posting::shipped_posts().expect("the shipped posts read").iter().filter(|(n, _)| *n != "Fanuc Lathe" && !sinker.contains(n)) {
+        // agie_native checks the three native files with smoothing off and the refusal with it on.
+        if posting::agie::is_native(&PostRef::Named((*name).to_owned())) {
+            continue;
+        }
         let off = program(name, None);
         for w in ["G5.1", "G187", "CYCLE832", "G62 ", "SMOOTHING"] {
             assert!(!off.contains(w), "{name} wrote {w} with smoothing off:\n{off}");
@@ -166,7 +172,7 @@ fn finish_ops_ask_their_tolerance_and_rough_ops_ask_from_their_stock() {
     // A contour that finishes asks its own tolerance; leaving stock, it roughs.
     let base = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -176,6 +182,7 @@ fn finish_ops_ask_their_tolerance_and_rough_ops_ask_from_their_stock() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let seed = |ty: OpType| operation::retype_params(&base, ty.ordinal());
     let mut contour = seed(OpType::Contour);
@@ -227,4 +234,17 @@ fn the_switch_undoes_redoes_and_round_trips_the_project_file() {
     let off = std::fs::read_to_string(&path).expect("read off");
     assert!(!off.contains("smoothing"), "off writes no key");
     let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn linuxcnc_and_tormach_smoothing_tolerance_never_writes_g64_p0() {
+    // #4147: PathPilot / LinuxCNC reads G64 P0 as G64 with no deviation limit.
+    // When a smoothing tolerance is under the written format resolution,
+    // the post must clamp to the smallest positive value and never write P0.
+    let small_smooth = Some(Smoothing { tol_mm: 0.0001, finish: true });
+    for post in ["Tormach PathPilot", "LinuxCNC"] {
+        let prog = program(post, small_smooth);
+        assert!(prog.contains("\nG64 P0.001\n"), "{post} clamped to smallest positive mm: {prog}");
+        assert!(!prog.contains("G64 P0\n") && !prog.contains("G64 P0.000\n"), "{post} never P0: {prog}");
+    }
 }

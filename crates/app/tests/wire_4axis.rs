@@ -161,19 +161,25 @@ fn arc() -> WireFourAxis {
 
 fn wire_op(four_axis: Option<WireFourAxis>) -> WireContourOp {
     WireContourOp {
+        overlap: 0.0,
+        lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         four_axis,
         skims: Vec::new(),
+        sharp_corners: false,
     }
 }
 
@@ -416,4 +422,42 @@ fn the_four_axis_block_round_trips_and_its_rule_is_never_defaulted() {
     assert_eq!(status(&world), OpStatus::Ok);
     let wild = WireFourAxis { tolerance: f64::NAN, ..arc() };
     assert!(EditOperationParams::new(&world, "Punch1", OpParams::WireContour(wire_op(Some(wild)))).is_err(), "refused at the door");
+}
+
+/// #3216: a closing overlap on a 4-axis cut is refused by name at the
+/// command door - the overlap rides the seam lap of a vertical
+/// one-profile cut, and a 4-axis cut leans its rulings between two
+/// profiles - never generated with the overlap silently dropped, as it
+/// once was (identical moves at overlap 0 and 1 mm).
+#[test]
+fn a_closing_overlap_on_a_four_axis_cut_is_refused_by_name() {
+    let world = new_world();
+    let mut h = History::default();
+    let m = parse_mch(FIXTURE).expect("the fixture parses");
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("mount"));
+    h.execute(
+        &world,
+        camcraft_app::commands::AddTool::new(&world, "EDM-W025", camcraft_app::wire_tools::wire_tool(0.25))
+            .expect("wire"),
+    );
+    h.execute(&world, ImportModel::from_mesh("part", loft(&square(8.0), &circle(9.6))));
+    let src = SrcRef::Selection(vec![face_at(&world, H), face_at(&world, 0.0)]);
+    // The creation door refuses the pair outright.
+    let op = WireContourOp { overlap: 1.0, ..wire_op(Some(arc())) };
+    let why = CreateOperation::new(&world, "Punch1", "EDM-W025", src.clone(), OpParams::WireContour(op))
+        .map(|_| ())
+        .expect_err("refused at creation")
+        .to_string();
+    assert!(
+        why.contains("a closing overlap is stated on a 4-axis cut") && why.contains("set the overlap to 0 or cut the two profiles without it"),
+        "{why}"
+    );
+    // The edit door: the overlap set on an existing 4-axis cut.
+    let c = CreateOperation::new(&world, "Punch1", "EDM-W025", src, OpParams::WireContour(wire_op(Some(arc())))).expect("the plain 4-axis op is admitted");
+    h.execute(&world, c);
+    let why = EditOperationParams::new(&world, "Punch1", OpParams::WireContour(WireContourOp { overlap: 1.0, ..wire_op(Some(arc())) }))
+        .map(|_| ())
+        .expect_err("refused at the edit door")
+        .to_string();
+    assert!(why.contains("a closing overlap is stated on a 4-axis cut"), "{why}");
 }

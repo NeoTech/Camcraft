@@ -40,11 +40,13 @@ fork, `upstream` is NeoTech/Camcraft and `origin` is the fork).
 - Never build in the main checkout. Work in a worktree under
   `.claude/worktrees/` with its own `target/` (the worktree default, no `CARGO_TARGET_DIR` env var - it defeats the shared compile cache); remove both when done.
 - Build cache: Prefer `cargo xtask gate ...` (it turns the compile cache on); for a direct cargo call set `RUSTC_WRAPPER=sccache` only when `sccache` is on PATH (cargo fails if the wrapper is missing), and never export `CARGO_TARGET_DIR`.
-- A PR flagged ready and labelled `merge-ready` takes no pushes (AGENTS.md
-  "Every PR opens as a draft"). A conflicting PR has already lost
-  `merge-ready` (the label is `conflicts`), so pushing a merge to it is
-  allowed. If the PR is still marked ready (ours or a contributor's), run
-  `gh pr ready <N> --undo` before pushing and say why in a PR comment -
+- A push to a ready PR moves its head, so the earlier review and the
+  `merge-ready` label do not count for the new head (AGENTS.md "Every PR
+  opens as a draft", #3727). A conflicting PR has already lost `merge-ready`
+  (the label is `conflicts`), so pushing a merge to it is allowed. An orange
+  `conflicts` verdict makes the PR a draft: if the PR is still marked ready
+  (ours or a contributor's), run `gh pr ready <N> --undo` before pushing and
+  say why in a PR comment -
   except a refresh that is only a merge of main with no hand edits
   (`cargo xtask merge-plan --delta` says SAME; AGENTS.md "Every PR opens as
   a draft", superseded since 2026-11-12 by the decision "Refresh only at
@@ -83,6 +85,10 @@ then merge A's fixed branch into B before main.
 
 ### 1b. For each PR
 
+Read [the ownership guard](../issue-claims/references/ownership.md) before
+dispatch or local refresh. Record the sole writer on the issue and link it
+from the PR. A live writer or reviewer means stand down and name it.
+
 1. **Worktree on the PR branch** (your fork's branch):
    `git fetch upstream` (or `origin` in the canonical repo), then
    `git worktree add .claude/worktrees/rc-<N> <branch>`.
@@ -120,13 +126,30 @@ then merge A's fixed branch into B before main.
    -- -D warnings`. UI tests with CWD `crates/ui`. Run in the foreground
    with timeouts. Red -> fix the resolution if it's yours; if the failure is
    in main's code or the PR's logic, stop and report.
+   **Compile before a refresh push**, also for a clean merge with no hand
+   edits: run `cargo check --tests -p <affected-package>` for each affected
+   code package on the final refreshed tree. Include packages changed by
+   the incoming base, not only the PR diff. Shared build inputs, including
+   `Cargo.lock`, require each affected package, one package at a time with
+   `-p`; never `--workspace` or an unqualified full-workspace build. Record
+   the commands, results and local
+   exact head on the PR. A clean text merge is not a compile check. For a
+   prose-only refresh with no affected code, record that scope and run the
+   focused documentation checks. A failed check stops the push.
 6. **Commit** the merge: `Merge main into <branch> (<files>: keep both
-   sides)` (plus `Co-Authored-By` if an agent did it). **Push** plainly
+   sides)` (plus `Co-Authored-By` if an agent did it). Confirm the checks
+   cover this final committed tree; rerun them after any tree change.
+   Immediately before a
+   push, repeat the ownership guard's pre-push check. A moved remote head
+   or a rejected push is a STOP; do not merge that unexpected head and retry.
+   **Push** plainly
    (`git push origin <branch>` - never `--force`).
 7. **Comment on the PR:** `Merged main to resolve conflicts (<files>: keep
    both sides). Targeted gate: <results>. Ready for a re-check
    (/resolve-conflicts check).` Contributors can't change labels; the
    maintainer's check does that.
+   Record the published exact head and release writer ownership before a
+   re-check or review dispatch.
 8. Remove the worktree and its target (cd out first).
 
 ### 1c. Report
@@ -171,8 +194,16 @@ reports `CONFLICTING` without the label - add the label to those):
    - **DELTA** (a conflict was resolved by hand): a **delta review** - a
      reviewer checks only the remerge-diff of those merges (both sides kept,
      nothing from main dropped, targeted tests; rebuild only if logic was
-     merged by hand). Its labels follow the review-prs table (step 2b):
-     `needs-rework` if the resolution is wrong, `conflicts` if main moved
+     merged by hand). Before dispatch, use the ownership guard to record
+     one collaborator reviewer after the writer releases. Pass the record URL,
+     identity, base and starting exact head in the brief. Require reads before
+     work, a re-read of ownership and head before a verdict or labels, and a
+     release on completion, skip or failure. Contributor pre-checks use no
+     reviewer ownership. Its labels follow
+     the review-prs table (step 2b):
+     `needs-rework` if the resolution is wrong (remove `merge-ready` in the
+     same `gh pr edit` call: the two labels are never on one PR, AGENTS.md
+     "Only collaborators' reviews count", #3382), `conflicts` if main moved
      again, `needs-maintainer` if the merge brought in a dependency,
      `build.rs`, scripts or `.github` change the reviewer only reads.
    - **NEW CODE** or **Rewritten** (new code commits, or the history was

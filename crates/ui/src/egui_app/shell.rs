@@ -48,6 +48,8 @@ pub(crate) enum Tab {
     Properties,
     Machines,
     AiChat,
+    /// #3892: retired - the tool library is its own window now. Kept
+    /// because a saved panel setup can name it; `setups::decode` drops it.
     Tools,
     DebugInfo,
 }
@@ -100,8 +102,11 @@ pub(crate) fn shell_layout(
     state.geo_hover_drawn = state.geo_hover.take();
     state.geo_row_marked.clear();
     panes::shortcuts(ui, state);
-    // #1450: a model file dropped on the window goes through Model's import.
-    super::file_drop::take_drop(ui, state);
+    // #1450: a model file dropped on the window goes through Model's import;
+    // #2950: a drop with a machine or post file goes to those lists instead.
+    if !super::setup_file_drop::take(ui, state) {
+        super::file_drop::take_drop(ui, state);
+    }
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
     // disagree on a retheme (M6.1 A). `ribbon_h` tracks the cell box.
@@ -172,6 +177,8 @@ pub(crate) fn shell_layout(
     // no panel below it ever moves in the snapshot until something opens it.
     let windows = crate::frame_cost::span("ui/windows");
     pages::tool_shape_editor_window(ui.ctx(), state);
+    // #3892: the tool library - same window law, closed on a fresh State.
+    super::tool_library_dialog::tool_library_window(ui.ctx(), state);
     // M1.7d: the G-code viewer - same window law as the tool editor (an
     // in-app egui::Window over the dock; the single-OS-window law
     // stands). None on a fresh State, closed by ✖, reopened by the next
@@ -192,8 +199,12 @@ pub(crate) fn shell_layout(
     super::fixture_library_dialog::window(ui.ctx(), state);
     // #2339: the Panel setups window - same window law, closed by default.
     super::panel_setups::window(ui.ctx(), state);
+    // #1874: the length unit of a STEP file that states none.
+    super::step_units_prompt::window(ui.ctx(), state);
     // #1863: the DXF units prompt (None on a fresh State).
     super::dxf_units_dialog::window(ui.ctx(), state);
+    // #3608: the changed-on-disk prompt of a held Save (None on a fresh State).
+    super::overwrite_prompt::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
     drop(windows);
@@ -277,7 +288,9 @@ impl TabViewer for ShellTabs<'_> {
                 let pal = theme::current();
                 pages::properties(ui, self.state, &pal);
             }
-            Tab::Tools => super::tool_library::draw(ui, self.state),
+            // #3892: the tool library is a window now; a dock that still
+            // holds the old tab (a saved setup) drops it on load.
+            Tab::Tools => {}
             Tab::Machines => {
                 let pal = theme::current();
                 machines_pane::draw(ui, self.state, &pal);
@@ -326,6 +339,7 @@ fn viewport_panel(
         // through material. Held while the stock removal is calculated.
         crate::play_precalc::advance_playhead(state, f64::from(ui.input(|i| i.stable_dt).clamp(0.0, 0.1)), total);
         let held = crate::play_precalc::holds_playhead(state);
+        let starts = super::sim_steps::cached_op_starts(state);
         let mut stop = false;
         ui.horizontal(|ui| {
             let Some(sim) = state.sim.as_mut() else {
@@ -351,6 +365,8 @@ fn viewport_panel(
                 stop = true;
             }
             if total > 0.0 {
+                // #2608: step to an operation's start (sim_steps).
+                super::sim_steps::op_step_buttons(ui, sim, &sc, &starts, held);
                 ui.add_enabled(!held, egui::Slider::new(&mut sim.t, 0.0..=total).show_value(false));
                 egui::ComboBox::from_id_salt("sim_speed")
                     .selected_text(format!("{:.0}x", sim.speed))
@@ -376,8 +392,10 @@ fn viewport_panel(
         } else if !sc.is_empty()
             && let Some(sim) = &state.sim
         {
-            let f = sc.at(sim.t);
-            sim_marker = Some(([f.pos.x, f.pos.y, f.pos.z], f.axis));
+            // #4266: ONE display frame - the marker sits on the carried
+            // tip, the same pose the tool body draws from
+            // (`world::sim_tool_tris`), not the original program point.
+            sim_marker = sim_marker_pose(&sc, sim.t);
         }
         ui.separator();
     }
@@ -657,7 +675,8 @@ fn viewport_panel(
         };
         // #195: the origin triads, chunky - a dark outline, then the axis
         // colour - over the 1 px GPU lines (a wgpu line has no width).
-        let shade = egui::Color32::from_black_alpha(170);
+        let pal = super::theme::current();
+        let shade = pal.handle_shade;
         let segs = crate::frame_cost::time("ui/viewport.gizmos", || interact::gizmo_segments(state, aspect));
         for (a, b, _) in &segs {
             ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::GIZMO_OUTLINE_PX, shade));
@@ -704,7 +723,7 @@ fn viewport_panel(
         // row-hover ink.
         {
             let ink = rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::RowHover));
-            let halo = egui::Color32::from_black_alpha(200);
+            let halo = pal.pick_halo;
             crate::frame_cost::time("ui/viewport.row_hover", || {
                 crate::pick_highlight_mesh::paint_row_hover(
                     ui.painter(),
@@ -726,10 +745,10 @@ fn viewport_panel(
         // The machined mesh's hovered facet (#25): the hover ink's yellow,
         // a veil over the class colour and its outline.
         if let Some(tri) = crate::machined::hover_facet_uv(state, aspect) {
-            let ink = egui::Color32::from_rgb(255, 217, 102);
+            let ink = super::theme::current().viewport_hover;
             ui.painter().add(egui::Shape::convex_polygon(
                 tri.iter().map(|uv| to_px(*uv)).collect(),
-                egui::Color32::from_rgba_unmultiplied(255, 217, 102, 90),
+                super::ground_ink::facet_veil(ink),
                 egui::Stroke::new(1.5, ink),
             ));
         }
@@ -737,11 +756,11 @@ fn viewport_panel(
         // the names along row A and column 1.
         let plates = crate::frame_cost::time("ui/viewport.plates", || crate::plate_viz::plate_marks(state, aspect));
         for (a, b, dowel) in &plates.segs {
-            let ink = if *dowel { egui::Color32::from_rgb(120, 200, 255) } else { egui::Color32::from_rgb(230, 190, 90) };
+            let ink = if *dowel { pal.plate_dowel } else { pal.plate_hole };
             ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(1.5, ink));
         }
         for (uv, text) in plates.labels {
-            ui.painter().text(to_px(uv), egui::Align2::LEFT_BOTTOM, text, font.clone(), egui::Color32::from_rgb(230, 190, 90));
+            ui.painter().text(to_px(uv), egui::Align2::LEFT_BOTTOM, text, font.clone(), pal.plate_hole);
         }
         // The Boundary group's marks (M11.5 UX): role-coloured picked
         // edges, the edge a click would take, chain ends, machined side.
@@ -834,7 +853,7 @@ fn viewport_panel(
                 .map(|u| egui::pos2(rx0 + u[0] * rw, ry0 + u[1] * rh));
             let pb = interact::project_uv(&mvp, b)
                 .map(|u| egui::pos2(rx0 + u[0] * rw, ry0 + u[1] * rh));
-            let amber = egui::Color32::from_rgb(255, 170, 60);
+            let amber = pal.gcode_line;
             if let (Some(pa), Some(pb)) = (pa, pb) {
                 ui.painter()
                     .line_segment([pa, pb], egui::Stroke::new(2.5, amber));
@@ -894,7 +913,7 @@ fn viewport_panel(
             ui.painter().galley_with_override_text_color(
                 r.min,
                 g.clone(),
-                egui::Color32::from_white_alpha(150),
+                super::theme::current().empty_hint,
             );
         }
         // Corner hint: the control legend, or the live mode while dragging.
@@ -990,6 +1009,18 @@ pub(crate) fn cached_script(state: &mut State) -> std::sync::Arc<camcraft_app::s
     sc
 }
 
+/// The playback marker's pose: the frame's program point and axis,
+/// carried by the frame's work turn when it has one (#4266) - the same
+/// pose the tool body draws from, one display frame. `None` past the
+/// timeline (the caller draws no marker).
+pub(crate) fn sim_marker_pose(sc: &camcraft_app::sim::Script, t: f64) -> Option<([f64; 3], [f64; 3])> {
+    let f = sc.at(t);
+    f.work
+        .as_ref()
+        .and_then(|w| camcraft_app::sim_machine_view::posed_tool([f.pos.x, f.pos.y, f.pos.z], f.axis, w))
+        .or(Some(([f.pos.x, f.pos.y, f.pos.z], f.axis)))
+}
+
 /// Rebuild the timeline from the live world (`cached_script` is the
 /// per-frame door): the same
 /// tree-order walk the post takes (hidden paths included - hidden is
@@ -1002,7 +1033,38 @@ pub(crate) fn sim_script(state: &State) -> camcraft_app::sim::Script {
         .into_iter()
         .filter_map(|(n, e)| model::toolpath_of(&state.world, &e).map(|tp| (n, tp.path)))
         .collect();
-    sim::script(paths.iter().map(|(n, t)| (n.as_str(), t)), &tr)
+    let mut sc = sim::script(paths.iter().map(|(n, t)| (n.as_str(), t)), &tr);
+    // #4266, display only: each op's work-turn line, when its machine
+    // turns the work about one the gate would judge. `None` elsewhere.
+    let turns: Vec<Option<sim::WorkTurn>> = sc.ops.iter().map(|name| work_turn_of(state, name)).collect();
+    for seg in &mut sc.segs {
+        seg.work = turns[seg.op];
+    }
+    sc
+}
+
+/// #4266, display only: the rotary axis line the operation's work
+/// turns about - the very line the gate's posed-steel laws judge
+/// (`fixture::rotary_axis_of`: the stated op/machine line through the
+/// WCS origin, else the free fit), and only on a mounted machine that
+/// states a work-turning rotary (`turns_part`, the machine editor's
+/// flag). No machine, no work-turning rotary, a non-rotary kind, or a
+/// degenerate line: `None` - the playback keeps today's tip-relative
+/// draw, nothing guessed.
+fn work_turn_of(state: &State, op_name: &str) -> Option<camcraft_app::sim::WorkTurn> {
+    use camcraft_app::{fixture, machine, model};
+    let e = model::find_by_name(&state.world, op_name)?;
+    let op = model::operation_of(&state.world, &e)?;
+    let (_, m) = machine::of_setup(&state.world, op.setup.as_deref());
+    let turns_work = m.is_some_and(|m| m.axes.iter().any(|a| a.rotary && a.turns_part == Some(true)));
+    if !turns_work {
+        return None;
+    }
+    let ax = fixture::rotary_axis_of(&state.world, &op)?;
+    if !ax.dir.iter().all(|d| d.is_finite()) || ax.dir.iter().map(|d| d.abs()).sum::<f64>() < 1e-12 {
+        return None;
+    }
+    Some(camcraft_app::sim::WorkTurn { origin: [ax.origin.x, ax.origin.y, ax.origin.z], dir: ax.dir })
 }
 
 /// The move the G-code viewer's cursor points at, as the segment that

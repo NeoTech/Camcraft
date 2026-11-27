@@ -63,6 +63,20 @@ pub fn verify_bodies(
     } else if cx.mode == Mode::Undercut {
         // #1444: no region tangency under a roof; the mesh still speaks.
         section::solid(path, cx, &cutter, &mut warns);
+    } else if cx.mode == Mode::Envelope
+        && !(cx.tool.nose_radius.is_finite() && cx.tool.nose_radius > 0.0)
+        && let Some(facets) = cx.model
+    {
+        // #4062: the envelope measures cutting, and (d)'s height field
+        // cannot see an upward rapid crossing a roof. Sweep just the
+        // vertical rapids against the part, in both directions.
+        // Nose-center turning paths stay with the revolved verdict (f).
+        let law = super::SolidLaw {
+            step: 0.0, // only straight rapids enter this check
+            allow: cx.tightened(cx.gouge_tol),
+            hole_walls: false,
+        };
+        warns.extend(super::solid::vertical_rapid_hits(path, facets, &cutter, &law));
     }
 
     // (c) Shank/holder reach and (c3) the mid-turn sweep - [`reach`].
@@ -102,6 +116,11 @@ pub fn verify_bodies(
     if !cx.fixtures.is_empty() {
         warns.extend(rapids_vs_fixtures_spindle(path, cx.tool, cx.fixtures, cx.spindle));
     }
+
+    // (d3) Feed plunge depth (#3679) - [`plunge_depth`]: a feed descent
+    // judged against the floor the cuts before it left under the full
+    // disc, at the op's stated stepdown. Advisory by the #3525 pattern.
+    super::plunge_depth::plunge_depth(path, cx, &rest, &cutter, &mut warns);
 
     // (e) Cycle reach - [`reach::cycle_reach`].
     reach::cycle_reach(path, cx, &mut warns);

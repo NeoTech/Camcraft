@@ -163,6 +163,37 @@ fn plasma_mcp_refuses_a_non_torch_nonzero_rpm_and_a_milling_post() {
 
 /// Corrupt only the saved path cache: keep sane torch spans, but lay the
 /// outline before its hole. This is a post-gate backstop, not an MCP edit.
+/// #3334: `edit_operation` sets the start and the exit pick of a Plasma
+/// Profile, the generation holds them, and a pick that no profile is near
+/// is refused by name.
+#[test]
+fn plasma_mcp_edit_operation_sets_the_start_and_exit_picks() {
+    let dir = tmp_dir("picks");
+    let mut c = plasma_job(&dir);
+    let kinds = c.ok("list_operation_types", json!({}));
+    let rows = kinds["kinds"].as_array().expect("the kinds");
+    let row = rows.iter().find(|k| k.to_string().contains("Plasma Profile")).expect("the plasma row").clone();
+    assert_eq!(row["start_exit"], json!({ "start": true, "exit": true, "field": "picks" }), "{row}");
+    let before = c.params();
+    let picks = json!({ "start": [[20.0, -8.0]], "exit": [[20.0, -14.0]] });
+    c.ok("edit_operation", json!({ "name": "Plasma1", "params": { "picks": picks } }));
+    assert_eq!(c.params()["picks"], picks, "the edited params carry the picks");
+    let generated = c.ok("generate", json!({ "name": "Plasma1" }));
+    assert_eq!(generated["generated"][0]["status"], json!("ok"), "{generated}");
+    let notes = generated.to_string();
+    assert!(notes.contains("start point (20.000, -8.000)") && notes.contains("exit point (20.000, -14.000)"), "{generated}");
+    // Undo the generation and the edit: no pick.
+    c.ok("undo", json!({}));
+    c.ok("undo", json!({}));
+    assert_eq!(c.params(), before);
+    // A pick far from each profile is refused by name, never moved.
+    c.ok("edit_operation", json!({ "name": "Plasma1", "params": { "picks": { "start": [[60.0, 0.0]] } } }));
+    let (_, far) = c.call("generate", json!({ "name": "Plasma1" }));
+    let far = far.to_string();
+    assert!(far.contains("start point (60.000, 0.000)") && far.contains("from the nearest closed profile"), "{far}");
+    std::fs::remove_dir_all(dir).expect("clean temporary files");
+}
+
 fn save_bad_cut_order(path: &Path) {
     let world = camcraft_app::world::new_world();
     project::load(&world, path).expect("load generated document");
@@ -220,5 +251,66 @@ fn plasma_mcp_reports_bad_cut_order_and_refuses_to_write_nc() {
     let why = c.refused("post", json!({ "post": POST, "output": out }));
     assert!(why.contains("Plasma1") && why.contains("plasma cut order") && why.contains("C0 is cut after contour C1"), "{why}");
     assert!(!out.exists(), "a refused post writes no NC file");
+    std::fs::remove_dir_all(dir).expect("clean temporary files");
+}
+
+/// #3456: replace the saved cache with two parts, C0 (0..20) then C1
+/// (40..60), where the rapid into C1 runs over the freed C0 - a tip-up.
+fn save_tip_up(path: &Path) {
+    let world = camcraft_app::world::new_world();
+    project::load(&world, path).expect("load generated document");
+    let entity = model::find_by_name(&world, "Plasma1").expect("operation");
+    let record = model::toolpath_of(&world, &entity).expect("cached path").path.plasma.expect("plasma record");
+    let parts: [(u32, &[(f64, f64)]); 2] = [
+        (0, &[(-3.0, 10.0), (0.0, 10.0), (0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 10.0), (-3.0, 13.0)]),
+        (1, &[(63.0, 15.0), (60.0, 15.0), (60.0, 25.0), (40.0, 25.0), (40.0, 5.0), (60.0, 5.0), (60.0, 15.0), (63.0, 12.0)]),
+    ];
+    let mut b = PathBuilder::new(Point3::new(-3.0, 10.0, 25.0));
+    let mut torches = Vec::new();
+    for (contour, pts) in parts {
+        let (px, py) = pts[0];
+        b.push(MoveKind::Rapid, Point3::new(b.at().x, b.at().y, 25.0), None);
+        b.push(MoveKind::Rapid, Point3::new(px, py, 25.0), None);
+        b.push(MoveKind::Rapid, Point3::new(px, py, 0.0), None);
+        let on = b.moves_len();
+        for &(x, y) in &pts[1..] {
+            b.push(MoveKind::Feed, Point3::new(x, y, 0.0), Some(2500.0));
+        }
+        torches.push(TorchSpan { contour, role: ContourRole::Outer, parent: None, on, off: b.moves_len() - 1, small: None });
+    }
+    b.push(MoveKind::Rapid, Point3::new(b.at().x, b.at().y, 25.0), None);
+    let mut t = b.finish();
+    let rec = camcraft_app::cl::PlasmaCut { torches, ..record };
+    assert!(rec.is_sane(&t.moves), "fixture: a sane record");
+    t.plasma = Some(rec);
+    entity.entity_view(&world).set(camcraft_app::schema::Toolpath::new(t, Vec::new()));
+    project::save(&world, path).expect("save the tip-up cache");
+}
+
+/// #3456: a tip-up the plasma laws find is a finding and an operation
+/// warning, not only a clause inside `gate.not_judged`. The law warns:
+/// it does not block the post, so `ok` stays true.
+#[test]
+fn plasma_mcp_verify_lists_a_tip_up_as_a_finding_and_an_operation_warning() {
+    let dir = tmp_dir("tip-up");
+    let mut c = plasma_job(&dir);
+    c.ok("generate", json!({ "name": "Plasma1" }));
+    let file = dir.join("tip-up.camproj");
+    c.ok("save_project", json!({ "path": file }));
+    save_tip_up(&file);
+    c.ok("open_project", json!({ "path": file }));
+    let verified = c.ok("verify", json!({}));
+    let tip = |s: &str| s.contains("tip-up") && s.contains("contour C1") && s.contains("part C0");
+    let findings = verified["findings"].as_array().expect("findings");
+    let found: Vec<&Value> = findings.iter().filter(|f| f["kind"] == "plasma_tip_up").collect();
+    assert_eq!(found.len(), 1, "one tip-up finding: {verified}");
+    assert_eq!(found[0]["op"], json!("Plasma1"), "{verified}");
+    assert_eq!(found[0]["blocks_post"], json!(false), "the tip-up law warns: {verified}");
+    assert!(found[0]["message"].as_str().is_some_and(tip), "{verified}");
+    let warnings = verified["operations"][0]["warnings"].as_array().expect("operation warnings");
+    assert!(warnings.iter().any(|w| w.as_str().is_some_and(tip)), "the op's own warnings name it: {verified}");
+    assert_eq!(verified["gate"]["problems"], json!([]), "{verified}");
+    assert_eq!(verified["held_by"], json!([]), "a warning holds nothing: {verified}");
+    assert_eq!(verified["ok"], json!(true), "{verified}");
     std::fs::remove_dir_all(dir).expect("clean temporary files");
 }

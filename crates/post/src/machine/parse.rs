@@ -192,17 +192,22 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
         vendor: text_of(general.and_then(|g| g.get("vendor"))),
         controller_identity: super::installation::identity(&v)?,
         tool_change: super::installation::tool_change(&v)?,
+        max_tool_number: super::installation::max_tool_number(&v)?,
+        work_offset_max: super::installation::work_offset_max(&v)?,
+        d_number: super::installation::d_number(&v)?,
         ..Default::default()
     };
 
     // The declared kind (M3.3 C) and its per-kind door rules.
     let declared = super::kind::declared_kind(&v)?;
     m.kind = declared.as_ref().map(|(_, w)| w.clone());
+    m.operator_side = super::operator_side::parse(&v)?; // #2632
 
     // #828: the spindle mount and the default holder, refused by name.
     let (mount, holder) = super::tooling::parse_tooling(&v, holders).map_err(|e| format!("machine file: {e}"))?;
     m.spindle_mount = mount;
     m.default_holder = holder;
+    m.reserved_tools = super::reservations::parse(&v).map_err(|e| format!("machine file: {e}"))?;
 
     // #760: optional controller coordinate rotation capability (`G68` / `ROT`).
     m.coordinate_rotation = match v.pointer("/controller/coordinate_rotation") {
@@ -219,6 +224,12 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
 
     let kine = v.pointer("/kinematics/default/parts");
     let f = mm_factor(v.pointer("/kinematics/default/units")).unwrap_or(1.0);
+    m.arc_tolerance = v.pointer("/controller/arc_tolerance")
+        .and_then(serde_json::Value::as_f64)
+        .or_else(|| v.pointer("/controller/arcTolerance").and_then(serde_json::Value::as_f64))
+        .or_else(|| v.get("arc_tolerance").and_then(serde_json::Value::as_f64))
+        .or_else(|| v.get("arcTolerance").and_then(serde_json::Value::as_f64))
+        .map(|tol| tol * f);
     // #131: keep the stated unit for the posts (the numbers stay mm).
     let length = v.pointer("/kinematics/default/units/length").and_then(|u| u.as_str());
     if matches!(length, Some("inch" | "inches")) {

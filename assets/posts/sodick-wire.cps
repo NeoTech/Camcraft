@@ -42,7 +42,7 @@
 // (G41 / G42, H - the path is the wire-centre path with the kerf in it),
 // G92 and G29, the tank fill / drain, flushing pump and wire-drive T codes
 // (T80-T83, T86 / T87, T96 / T97), M03, M33 / M43.
-description = "Sodick wire EDM, 2-axis (Mark 21 / EX21 words from the 1998 operation manual; not verified on a control)";
+description = "Sodick wire EDM, 2-axis (Mark 21 / EX21 control, words from the 1998 operation manual; not verified on a control). LN1W/LN2W: not supported - G21 alarms (E00170) and the taper words differ - use the Sodick Wire EDM (LN2W) post";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -105,6 +105,7 @@ function fu(v) {
   return (s === "-0." || s === "-.") ? "0." : s;
 }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }
+function arcWord(k, v) { return k === "Z" ? "" : wo(k, v, k === "X" ? orgX : orgY); }  // #3442: a position word as written (no Z), for arcFate
 function block(words) {
   var a = [];
   for (var i = 0; i < words.length; i++) {
@@ -126,6 +127,30 @@ function clean(s) {
 }
 // #3213: the control rejects hashes, brackets and escapes in every comment.
 function note(s) { block(["(" + String(s).replace(/[#\[\]\\]/g, " ") + ")"]); }
+// #3214: the posted condition's row in the machine file. The path's kerf
+// offset used its gap; the program states that gap so the operator can
+// compare it with the control's own row, and says so loudly when the row
+// is an example (notes starting "EXAMPLE"). A note, not a message(): any
+// message blocks the post, and the program itself must carry the warning.
+function conditionRow(id) {
+  var e = typeof machine !== "undefined" && machine ? machine.edm : null;
+  var list = e && e.conditions ? e.conditions : [];
+  var key = String(id).replace(/\s+/g, "").toUpperCase();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && String(list[i].id).replace(/\s+/g, "").toUpperCase() === key) return list[i];
+  }
+  return null;
+}
+function conditionNotes() {
+  var c = conditionRow(condition);
+  if (!c) return;
+  var gap = has(c.gap) ? Number(c.gap).toFixed(3) + " MM" : "NOT STATED";
+  if (/^\s*EXAMPLE/i.test(String(c.notes || ""))) {
+    note("WARNING CONDITION " + condition + " IS AN EXAMPLE ROW - THE KERF USES AN EXAMPLE GAP OF " + gap + " - REPLACE IT BEFORE CUTTING");
+  } else {
+    note("CONDITION " + condition + " KERF GAP " + gap + " - COMPARE WITH THE CONTROL ROW");
+  }
+}
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
 
@@ -208,14 +233,19 @@ function dielectricNotes() {
 
 // -------------------------------------------------------------- header
 // The unit and absolute positions. The program starts with the wire NOT
-// threaded, and it states what it leaves to the operator.
+// threaded, and it states what it leaves to the operator. #4046: it names
+// the control its words are for and warns an LN1W / LN2W owner (G21 is an
+// E00170 alarm there, taper is G50-G52 A; owner report on #4046). #4044:
+// the threading line states the word that threads (T91), or the M00 stop.
+// A comment holds no parenthesis: the first ")" would end it.
 function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   machineGood = machineOk();
   approach = typeof postOptions !== "undefined" && postOptions && postOptions.approachCondition === true;
   note(clean(machineName()));
-  note("SODICK MARK 21 WORDS - NOT VERIFIED ON A CONTROL - CHECK BEFORE CUTTING");
-  note("WIRE NOT THREADED AT START");
+  note("SODICK MARK 21 / EX21 CONTROL WORDS - NOT VERIFIED ON A CONTROL - CHECK BEFORE CUTTING");
+  note("LN1W/LN2W: NOT SUPPORTED - G21 ALARMS E00170 AND THE TAPER WORDS DIFFER - USE THE SODICK WIRE EDM LN2W POST");
+  note(awt ? "PROGRAM THREADS THE WIRE WITH T91 AT START" : "WIRE NOT THREADED AT START - THE OPERATOR THREADS IT AT THE M00");
   note("WORK OFFSET SET AT THE CONTROL - NO G92 IS WRITTEN");
   dielectricNotes();
   note("WIRE-CENTRE PATH - NO WIRE OFFSET G41 G42 IS USED");
@@ -316,6 +346,7 @@ function onSection() {
   // The C word selects a row of the control's own condition table; the
   // program carries no table, so the operator checks the row exists.
   note("CONDITION " + condition + " MUST EXIST IN THE CONTROL CONDITION TABLE - CHECK ITS VALUES");
+  conditionNotes();
   block([wcsWord]);
 }
 
@@ -390,6 +421,7 @@ function startSkim() {
   }
   skim++;
   note("SKIM " + skim + " - CONDITION " + condition + " MUST EXIST IN THE CONTROL CONDITION TABLE");
+  conditionNotes();
   // The skim's flushing, then its condition (the #1499 order: T, then C).
   if (skimFlushWord !== "") block([skimFlushWord]);
   block([condition]);
@@ -466,6 +498,9 @@ function onCircular() {
     return;
   }
   if (!cutOk(p)) return;
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   var c = p.IJKIncrement || {};
   if (!has(c.I) || !has(c.J) || !has(p.StartX) || !has(p.StartY)) {
     refuse("arcc" + opName, who() + "an arc states no centre - refused");

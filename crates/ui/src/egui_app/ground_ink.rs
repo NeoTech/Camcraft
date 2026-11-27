@@ -3,13 +3,14 @@
 //! (WCAG 1.4.11) against the ground, while the dark set stays the house
 //! look byte for byte. The dark values are the consts they already were
 //! (interact.rs, boundary_viz.rs, colorvision's EDGE_WIRE); the light
-//! values are ours, pinned by `viewport_ground_tests`.
+//! values are ours, pinned by `viewport_ground_tests`. The light-ground
+//! palettes are in the token table (`theme/verdict.rs`, #1120).
 //! Provenance: our own palette, specced from the WCAG 2.x contrast
 //! definition `contrast` implements; no HSMWorks material consulted.
 
 use egui::Color32;
 
-use super::colorvision::{EDGE_WIRE, Semantic};
+use super::colorvision::EDGE_WIRE;
 use super::{contrast, theme};
 
 /// The luminance past which a ground counts as light (mid-grey sits at
@@ -31,49 +32,6 @@ const EDGE_WIRE_LIGHT: [f32; 3] = [0.20, 0.23, 0.28];
 #[must_use]
 pub const fn wire_ink(light: bool) -> [f32; 3] {
     if light { EDGE_WIRE_LIGHT } else { EDGE_WIRE }
-}
-
-impl Semantic {
-    /// The house palette on a light viewport: the move kinds and the
-    /// boundary roles as tuned on screen (#698). Verdict and selection
-    /// inks are unchanged: they paint the stock and the selected part,
-    /// not lines on the ground.
-    pub const OFF_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.08, 0.36, 0.12],
-        rapid: [0.01, 0.31, 0.90],
-        plunge: [0.90, 0.13, 0.13],
-        bound_include: [0.10, 0.80, 1.00],
-        bound_exclude: [1.00, 0.20, 0.70],
-        bound_open: [1.00, 0.65, 0.05],
-        ..Semantic::OFF
-    };
-
-    /// Protan/deutan on a light viewport: the same blue-yellow axis as
-    /// `RED_GREEN`, darkened to clear 3:1 - gold feed and exclude against
-    /// the blue rapid and include; plunge and open go near-black, the
-    /// lightness end the dark ground's white open and pale inks held.
-    pub const RED_GREEN_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.55, 0.42, 0.00],
-        rapid: [0.01, 0.31, 0.90],
-        plunge: [0.22, 0.08, 0.00],
-        bound_include: [0.00, 0.30, 0.85],
-        bound_exclude: [0.55, 0.42, 0.00],
-        bound_open: [0.12, 0.12, 0.12],
-        ..Semantic::RED_GREEN
-    };
-
-    /// Tritan on a light viewport: red-cyan survives - the deep green
-    /// feed, red plunge and exclude, a teal include; rapid and open go
-    /// near-black so lightness parts them from the green.
-    pub const TRITAN_LIGHT_GROUND: Semantic = Semantic {
-        feed: [0.08, 0.36, 0.12],
-        rapid: [0.05, 0.05, 0.12],
-        plunge: [0.90, 0.13, 0.13],
-        bound_include: [0.00, 0.40, 0.45],
-        bound_exclude: [0.80, 0.05, 0.10],
-        bound_open: [0.12, 0.12, 0.12],
-        ..Semantic::TRITAN
-    };
 }
 
 /// The viewport overlay inks that were tuned against the dark ground.
@@ -144,46 +102,53 @@ pub struct CubeInk {
     pub triad: [Color32; 3],
 }
 
-/// The cube greys for a ground.
+/// The cube greys for a ground, with the inks of that ground's built-in
+/// table.
 #[must_use]
 pub fn cube_ink(light: bool) -> CubeInk {
-    if light {
-        CubeInk {
-            face_base: 165.0,
-            face_span: 40.0,
-            hover_lift: 30,
-            edge: Color32::from_gray(90),
-            label: Color32::from_gray(20),
-            button: 185,
-            outline_buttons: true,
-            glyph_on: Color32::from_gray(10),
-            glyph_off: Color32::from_gray(60),
-            hint: Color32::from_gray(60),
-            marker: [Color32::from_gray(50), Color32::from_gray(40), Color32::from_gray(20)],
-            triad: [Color32::from_rgb(215, 20, 20), Color32::from_rgb(0, 140, 30), Color32::from_rgb(20, 70, 230)],
-        }
-    } else {
-        CubeInk {
-            face_base: 46.0,
-            face_span: 46.0,
-            hover_lift: 52,
-            edge: Color32::from_white_alpha(170),
-            label: Color32::from_white_alpha(230),
-            button: 46,
-            outline_buttons: false,
-            glyph_on: Color32::WHITE,
-            glyph_off: Color32::from_white_alpha(160),
-            hint: Color32::from_white_alpha(200),
-            marker: [Color32::from_gray(225), Color32::from_gray(240), Color32::WHITE],
-            triad: [Color32::from_rgb(245, 70, 70), Color32::from_rgb(60, 220, 80), Color32::from_rgb(90, 140, 255)],
-        }
+    cube_ink_on(if light { &theme::Tokens::LIGHT } else { &theme::Tokens::DARK }, light)
+}
+
+/// The cube greys for a ground, with the inks of a token table (#1120).
+/// The face and button greys are numbers the shader-like shading spans,
+/// not inks a theme names, so they stay with the ground.
+#[must_use]
+pub fn cube_ink_on(t: &theme::Tokens, light: bool) -> CubeInk {
+    let (face_base, face_span, hover_lift, button) =
+        if light { (165.0, 40.0, 30, 185) } else { (46.0, 46.0, 52, 46) };
+    CubeInk {
+        face_base,
+        face_span,
+        hover_lift,
+        edge: t.cube_edge,
+        label: t.cube_label,
+        button,
+        outline_buttons: light,
+        glyph_on: t.cube_glyph_on,
+        glyph_off: t.cube_glyph_off,
+        hint: t.viewport_hint,
+        marker: [t.marker_stem, t.marker_ring, t.marker_dot],
+        triad: [t.axis_x, t.axis_y, t.axis_z],
     }
 }
 
-/// The cube greys for the live theme's viewport ground.
+/// The cube greys and inks for the live theme's viewport ground.
 #[must_use]
 pub fn cube() -> CubeInk {
-    cube_ink(light_ground(theme::current().viewport))
+    let t = theme::current();
+    cube_ink_on(&t, light_ground(t.viewport))
+}
+
+/// The alpha of the veil over a hovered facet of the machined part.
+const FACET_VEIL_ALPHA: u8 = 90;
+
+/// The veil over a hovered facet: the hover ink's own colour at
+/// `FACET_VEIL_ALPHA`. `Color32` keeps its channels multiplied by alpha,
+/// so the colour is read unmultiplied first: a theme's semi-transparent
+/// `viewport_hover` must not darken twice (#3993 review).
+#[must_use]
+pub fn facet_veil(ink: Color32) -> Color32 {
+    theme::with_alpha(ink, FACET_VEIL_ALPHA)
 }
 
 /// How much of its own colour an unselected path keeps on a light

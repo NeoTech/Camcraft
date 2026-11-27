@@ -180,7 +180,9 @@ fn a_v62_file_steps_up_unchanged() {
 
 #[test]
 fn a_v63_break_through_file_steps_up_without_losing_the_stated_limit() {
-    // Build main's v63 shape: no sketch entity, and a stated zero exit allowance.
+    use camcraft_app::drilling::BreakThroughFrom;
+
+    // A v63 drill has a stated zero exit allowance, but no break_through_from key.
     let world = new_world();
     let mut history = History::default();
     let drill_tool = "DR-0600";
@@ -188,8 +190,9 @@ fn a_v63_break_through_file_steps_up_without_losing_the_stated_limit() {
     run(&world, &mut history, AddTool::new(&world, drill_tool, tool), "tool");
     run(&world, &mut history, SetStock::new(&world, StockShape::Box { dx: 50.0, dy: 40.0, dz: 10.0 }, Location::default()), "stock");
     let mut drill = operation::seed_params(OpType::Drill.ordinal());
-    if let operation::OpParams::Drill { break_through, .. } = &mut drill {
+    if let operation::OpParams::Drill { break_through, break_through_from, .. } = &mut drill {
         *break_through = Some(0.0);
+        *break_through_from = BreakThroughFrom::Tip;
     } else {
         panic!("the drill seed must be a drill");
     }
@@ -199,14 +202,21 @@ fn a_v63_break_through_file_steps_up_without_losing_the_stated_limit() {
     let row = v63["entities"].as_array().expect("entities").iter().position(|e| e["name"] == json!("Drill")).expect("drill row");
     assert_eq!(v63["entities"][row]["operation"]["params"]["drill"]["break_through"], json!(0.0), "the input states the safety limit");
     v63["version"] = json!(63);
+    let params = v63["entities"][row]["operation"]["params"]["drill"].as_object_mut().expect("drill params");
+    assert_eq!(params.remove("break_through_from"), Some(json!("tip")));
+    assert!(!params.contains_key("break_through_from"), "v63 predates the reference key");
 
     let again = reopened(&v63.to_string());
     let op = model::find_by_name(&again, "Drill").and_then(|e| model::operation_of(&again, &e)).expect("the drill loads");
-    assert_eq!(op.params, drill, "migration preserves the stated zero allowance");
+    assert!(matches!(op.params, operation::OpParams::Drill { break_through: Some(0.0), break_through_from: BreakThroughFrom::Tip, .. }), "v63 keeps tip-relative zero allowance: {:?}", op.params);
+    assert_eq!(op.params, drill, "migration preserves all drill parameters");
     let text = saved(&again);
+    let migrated: Value = serde_json::from_str(&text).expect("json");
+    assert_eq!(migrated["entities"][row]["operation"]["params"]["drill"]["break_through_from"], json!("tip"), "the saved file states the migrated reference");
     v63["version"] = json!(PROJECT_VERSION);
-    assert_eq!(serde_json::from_str::<Value>(&text).expect("json"), v63, "only the project version changes");
-    assert_eq!(saved(&reopened(&text)), text, "the v71 file has a byte-stable round trip");
+    v63["entities"][row]["operation"]["params"]["drill"]["break_through_from"] = json!("tip");
+    assert_eq!(migrated, v63, "migration adds the tip reference and updates the version, without other changes");
+    assert_eq!(saved(&reopened(&text)), text, "the current file has a byte-stable round trip");
 }
 
 #[test]

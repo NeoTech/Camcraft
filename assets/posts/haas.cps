@@ -15,6 +15,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+millSpindleReverse = true; // #1977: reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill (Haas Mill NGC Operator's Manual 2025, M03/M04/M05, p. 436)
 fineBoring = true; // #1445: writes G76 with the I and J shift words (Haas Mill Operator's Manual, G76 Fine Boring Canned Cycle)
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
@@ -63,6 +64,15 @@ declaredOptions = {
 explains = "paren";
 commentMax = 60;
 explainBlockMax = 80;
+// #1977: the Haas meanings of the words this post writes where the mill
+// table says another thing or nothing (Haas Mill NGC Operator's Manual
+// 2025: G76 p. 371, M07 p. 438, M73/M74 p. 447, M83/M84 and M88/M89 p. 449).
+explainWords = {
+  G76: "FINE BORE CYCLE", M7: "SHOWER COOLANT ON",
+  M73: "TOOL AIR BLAST ON", M74: "TOOL AIR BLAST OFF",
+  M83: "AUTO AIR GUN ON", M84: "AUTO AIR GUN OFF",
+  M88: "THROUGH-SPINDLE COOLANT ON", M89: "THROUGH-SPINDLE COOLANT OFF"
+};
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -80,6 +90,7 @@ var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world
 var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
 var hopZ = null;           // #1028: the section's RetractPlane (its hop), null when unstated
 var coolant = "";          // the M-code this program started, if any
+var spinRev = false;       // #1977: PARAM MillSpindle reverse (#988): this section's spindle runs M4
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
 var setupNext = null;      // #1647: null means no marker; a cleaned name may be empty
@@ -104,7 +115,7 @@ function has(v) { return v !== null && v !== undefined && isFinite(v); }
 // #902: the program's unit is the document's (postOptions.Units, "mm"
 // or "inch"; absent = mm), never the machine file's. The stream speaks
 // mm and mm/min: an inch program writes every length / 25.4 at four
-// decimals and every feed in in/min at two; angles, seconds and rpm
+// decimals and every feed in in/min at four (#3694); angles, seconds and rpm
 // carry no length and are written as they come.
 var inch = false;
 function trimNum(s) {
@@ -122,9 +133,40 @@ function fn(v) {  // a length as text (comments): mm at three decimals, or inch 
 }
 function fu(v) { return pt(fn(v)); }  // a length word, with its point
 function fa(v) { return pt(has(v) ? trimNum(Number(v).toFixed(3)) : "0"); }  // angle (deg) at 3 decimals with point
-function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
-  if (!(has(v) && v > 0)) return "0";
-  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+// #3681: a feed word always carries its decimal point too (`F600.`, never
+// `F600`). Haas Setting 77 (Scale Integer F; Haas Mill Operator's Manual
+// 96-8000, Settings, "77 - Scale Integer F") scales an F word with no
+// point: at its default an mm control reads F600 as 0.6 mm/min. With the
+// point, every value of Setting 77 reads the same feed.
+// #3694: a feed keeps its fraction - mm/min at three decimals, in/min at
+// four, trailing zeros trimmed (`F600.`, `F34.5`, `F1.3583`). A G84 tap
+// feeds at pitch x rpm, and the control cuts the pitch F / S: a feed
+// rounded to a whole mm/min (34.5 to F35.) cuts a wrong pitch. The stream
+// carries 0.001 mm/min, so an mm feed posts as the stream states it.
+function ff(v) {
+  if (!(has(v) && v > 0)) return "0.";
+  var s = trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+  // A feed below one output step is refused, never written as F0.
+  if (Number(s) === 0) msg("feed rate " + v + " mm/min is below the smallest feed this post writes");
+  return pt(s);
+}
+// #3694: the pitch a G84 block cuts is F / S as written. A feed or a speed
+// that the words cannot hold exactly moves that pitch; more than 0.01
+// percent off the stream's pitch (feed / rpm) is refused by name. Returns
+// false when refused.
+function tapPitchHolds(v) {
+  if (!(sRpm > 0)) return true;   // spindleStopped() refuses this case
+  var sOut = Math.round(sRpm);
+  var fOut = Number(ff(v)) * (inch ? 25.4 : 1);
+  var want = v / sRpm;
+  var got = sOut > 0 ? fOut / sOut : 0;
+  var err = Math.abs(got - want) / want;
+  if (err > 1e-4) {
+    msg("canned cycle G84 (tap) feed " + v + " mm/min at " + sRpm + " rpm posts as F" + ff(v) + " S" + sOut +
+      " - refused: the written pitch is " + (err * 100).toFixed(3) + " percent off the tap pitch (limit 0.01 percent)");
+    return false;
+  }
+  return true;
 }
 function eps() { return inch ? "0.0001" : "0.001"; } // one output step, the probe checks' band
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
@@ -210,14 +252,24 @@ function retractHome(xyToo) {
       }
       return;
     }
-    block(["G53", "G0", w("Z", machine.safeRetractZ)]);
+    // #1977: G49 cancels the tool length offset on the machine-Z block,
+    // and Y0 brings the table to the operator (Haas Mill NGC Operator's
+    // Manual 2025, "Completion" blocks, pp. 202 and 204: G53 G49 Z0, then
+    // G53 Y0). The next section's tool call writes G43 again.
+    block(["G53", "G49", "G0", w("Z", machine.safeRetractZ)]);
+    if (xyToo) block(["G53", "G0", "Y0."]);
     return;
   }
+  // #1977: G91 is modal. G90 follows at once, so no later block and no
+  // M30 reads incremental (Haas Mill NGC Operator's Manual 2025, M88/M89
+  // sample program, p. 449: G91 G28 Z0, then G90, then M30).
   block(["G91", "G28", "Z0"]);
   if (xyToo) block(["G28", "X0", "Y0"]);
+  block(["G90"]);
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
 }
@@ -274,6 +326,19 @@ function coolantCode() {
   if (other || floodNamed) return other;
   if (cs.length > 0) msg(coolantWho() + "the machine states no flood coolant code - pick another coolant for the operation (Off cuts dry) or add a Flood entry to the machine");
   return "";
+}
+
+// #1977: each Haas coolant option has its own off code (Haas Mill NGC
+// Operator's Manual 2025: M88/M89 Through-Spindle Coolant p. 449, M83/M84
+// Auto Air Gun p. 449, M73/M74 Tool Air Blast p. 447). M9 stops flood (M8)
+// and shower (M7, p. 438) and stays the code for any other start code.
+function coolantOff(on) {
+  var n = /^M0*(\d+)$/i.exec(String(on).trim());
+  var k = n ? Number(n[1]) : -1;
+  if (k === 88) return "M89";
+  if (k === 83) return "M84";
+  if (k === 73) return "M74";
+  return "M9";
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
@@ -506,7 +571,8 @@ function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
-  if (name === "OperationName") coolantOp = String(value || "");
+  if (name === "OperationName") { coolantOp = String(value || ""); spinRev = false; }
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "SetupChange") { setupNext = clean(value); return; }
@@ -566,7 +632,10 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
+  // #1977: G94 (feed per minute) joins the safe-start block: a G93 or
+  // G95 that an earlier program left modal never reads this program's F
+  // words (Haas Mill NGC Operator's Manual 2025, G94 p. 386).
+  block(["G17", "G90", "G94", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
@@ -579,7 +648,7 @@ function startPreamble() {
   }
   secStarted += 1;
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["S" + ni(sRpm), "M3"]);
+    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
     spindleOn = true;
     spindleWait = false;
   }
@@ -609,14 +678,12 @@ function afterOp() {
   if (next !== null && (ask === "optional-stop" || ask === "stop")) {
     // #1647: lift Z before inviting the operator to re-clamp the part.
     retractHome(false);
-    if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
     note("SETUP CHANGE - NEXT: " + (next || "UNNAMED SETUP"));
   }
   if (ask === "optional-stop") { block(["M1"]); return; }
   if (ask === "stop") { block(["M0"]); return; }
   if (ask === "home") {
     retractHome(true);
-    if (optStr("safeRetract", "G28") !== "G53") block(["G90"]); // absolute again before the next section
     homedAt = linesWritten();
     return;
   }
@@ -639,7 +706,7 @@ function endPreamble() {
     compG = ""; compD = ""; compOn = false;
   }
   compNoted = false;
-  if (coolant) block(["M9"]);
+  if (coolant) block([coolantOff(coolant)]);
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
@@ -833,6 +900,9 @@ function emitArcWithRadius(p, g, fwd) {
 function onCircular() {
   startPreamble();
   compRefuse("an arc");
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (!tiltOk(properties) || chainCut()) return;
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
@@ -954,6 +1024,14 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  // #1977: Haas G84 is the right-hand tap (Haas Mill NGC Operator's Manual
+  // 2025, Tapping Cycles p. 224; G74 is the left-hand one, p. 371). A section
+  // whose spindle runs M4 does not tap right-hand: refused by name.
+  if (g === "G84" && spinRev) {
+    msg("canned cycle G84 (right-hand tap) in a section whose spindle runs reverse (M4) - refused, not posted");
+    return;
+  }
+  if (g === "G84" && !tapPitchHolds(p.FeedRate)) return;
   if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;

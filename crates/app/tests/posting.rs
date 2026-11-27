@@ -67,9 +67,10 @@ fn contour_params() -> OpParams {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -88,6 +89,7 @@ fn drill_params(hole: camcraft_app::drilling::Hole, top_z: f64, clearance_z: f64
         plunge_feed: 100.0,
         holes: vec![hole],
         cross: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -187,7 +189,7 @@ fn two_ops_post_to_one_program_cycles_stay_in_their_section() {
     // move #0 - inside the contour - and its inCycle flag would
     // swallow the contour's chain: the silent-wrong-answer this
     // pairing exists to catch.
-    let parts: Vec<&str> = text.split("G90 G54 G40 G49 G80").collect();
+    let parts: Vec<&str> = text.split("G90 G17 G94 G54 G40 G49 G80").collect();
     assert_eq!(parts.len(), 3, "one preamble per section: {text}");
     assert!(parts[1].contains("T01 M6"), "EM-0600-4FL was added first (T1)");
     assert!(
@@ -235,7 +237,7 @@ fn an_unborn_toolpath_refuses_to_post() {
 }
 
 fn face_params() -> OpParams {
-    OpParams::Face { holes: Default::default(), blend_turns: false,
+    OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -245,6 +247,7 @@ fn face_params() -> OpParams {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -550,7 +553,7 @@ fn a_moved_wcs_origin_moves_the_posted_numbers() {
     posting::post_setup(&world, &path).expect("still fresh: WCS moved the machine, not the inputs");
     let moved = std::fs::read_to_string(&path).expect("written");
     let _ = std::fs::remove_file(&path);
-    assert!(moved.contains("G90 G54"), "still the G54 word");
+    assert!(moved.contains("G94 G54"), "still the G54 word");
     assert_ne!(moved, plain, "the origin rode the PARAMs into the program");
 }
 
@@ -571,7 +574,7 @@ fn a_non_g54_slot_is_what_the_script_writes() {
         SetWcsOrigin::new(&world, Location::default()).expect("place the WCS"),
     );
     history.execute(&world, SetSetupWorkOffset::new(&world, "Setup1", Some(1)).expect("pick G55"));
-    let params = OpParams::Face { holes: Default::default(), blend_turns: false,
+    let params = OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::of(HeightReference::WorkOffset, 25.0),
@@ -581,6 +584,7 @@ fn a_non_g54_slot_is_what_the_script_writes() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     let cmd = CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, params);
     history.execute(&world, cmd.expect("create"));
@@ -593,7 +597,7 @@ fn a_non_g54_slot_is_what_the_script_writes() {
     let text = std::fs::read_to_string(&path).expect("written");
     let _ = std::fs::remove_file(&path);
     assert!(
-        text.contains("G90 G55"),
+        text.contains("G94 G55"),
         "the script took the slot from the PARAM: {text}"
     );
 }

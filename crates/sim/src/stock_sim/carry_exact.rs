@@ -7,7 +7,7 @@ use super::carry::{Body, LatticeTurn};
 use super::carry_history::{History, Span};
 use super::carry_side::SideTurn;
 use super::dexel::Dexel;
-use super::kernel::MAX_CELLS_PER_AXIS;
+use super::kernel::{cells_across, MAX_CELLS_PER_AXIS};
 use crate::geometry::Point3;
 
 /// A signed permutation and translation, from an object's frame to the reader.
@@ -110,7 +110,8 @@ impl History {
             return Err("exact side-on carry needs a finite stock floor and bounds".into());
         }
         let count = |span: f64| -> Result<usize, String> {
-            let n = (span / self.cell).ceil().max(1.0);
+            // `Dexel::block`'s own count, so the read keeps the block's columns.
+            let n = cells_across(span, self.cell).max(1) as f64;
             if !n.is_finite() || n > MAX_CELLS_PER_AXIS as f64 {
                 return Err(format!(
                     "exact side-on carry lattice limit: the machined stock is {n} cells tall - at most {MAX_CELLS_PER_AXIS} cells on one axis"

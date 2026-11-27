@@ -38,6 +38,7 @@ mod launch_file_tests;
 
 pub mod actions;
 pub mod play_precalc;
+pub mod play_layer;
 pub mod align_pick_viz;
 pub mod avoid_viz;
 pub(crate) mod machine_modes;
@@ -75,14 +76,19 @@ pub mod locate_pick;
 pub mod move_drag;
 pub mod turn_drag;
 pub mod machined;
+// #4266: the playhead's work turn as the display reads it - membership
+// and the one shared transform.
+pub(crate) mod work_turn;
 mod setup_display;
 mod sketch_chip_memo;
 mod sketch_memo;
 mod floor;
 mod work_envelope;
+mod operator_side;
 pub mod view_frame;
 pub mod mcp_host;
 pub mod operations;
+pub mod update_check;
 pub mod path_lines;
 pub(crate) mod path_overlay;
 pub mod pick_line_memo;
@@ -102,12 +108,18 @@ pub mod state;
 pub mod theme_dir;
 pub mod trace;
 pub mod unsaved;
+// #3608: a Save over a project file that changed after the open asks first.
+pub mod save_guard;
+#[cfg(test)]
+mod save_guard_tests;
 pub mod vertex_pick;
 pub mod viewport;
 pub mod wcs_circle_pick;
 
 #[cfg(test)]
 mod file_pick_tests;
+#[cfg(test)]
+mod step_units_tests;
 #[cfg(test)]
 mod law_tests;
 #[cfg(test)]
@@ -124,6 +136,8 @@ mod helix_view_tests;
 mod field_view_tests;
 #[cfg(test)]
 mod play_precalc_tests;
+#[cfg(test)]
+mod play_layer_tests;
 #[cfg(test)]
 mod machined_tests;
 #[cfg(test)]

@@ -133,7 +133,7 @@ const MILL: &[(&str, [&str; 3], &str)] = &[
             "; OPERATION: Contour1 - 2D CONTOUR - G54",
             "; T3 EM-0600 - BULL-NOSE D6 R0.5",
         ],
-        "T3 D3 M6",
+        "T3 D1 M6", // #4143: the first cutting edge, not D = T
     ),
     (
         "heidenhain",
@@ -286,7 +286,7 @@ fn a_document_posts_its_setup_operation_kind_and_tool_kind() {
     );
     let face = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -296,6 +296,7 @@ fn a_document_posts_its_setup_operation_kind_and_tool_kind() {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(
         &world,

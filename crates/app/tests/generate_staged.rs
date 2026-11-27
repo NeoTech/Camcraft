@@ -59,3 +59,36 @@ fn a_result_is_stale_after_an_edit_a_generation_or_a_delete() {
     h.execute(&world, DeleteOperation::new(&world, OP).expect("delete"));
     assert!(!done.still_current(&world), "a deleted operation takes nothing");
 }
+
+/// #3035: staging a 3D Pocket after a cut reads the world only. The
+/// stock simulation of the program ahead runs in `finish`, on the
+/// worker's thread, so an MCP session or the GUI stays free while it
+/// runs. The finished path is the path the one-shot command lands.
+#[test]
+fn a_rest_reading_pocket_simulates_the_program_ahead_in_its_job_not_at_staging() {
+    let (world, mut h) = world_with_face();
+    h.execute(&world, GenerateOperation::new(&world, OP).expect("the face cuts"));
+    let p3d = operation::retype_params(&pocket(10.0, 5.0), OpType::Pocket3D as usize);
+    let src = SrcRef::Entity("part".into());
+    h.execute(&world, CreateOperation::new(&world, "Rough3D", TOOL, src, p3d).expect("create"));
+
+    let before = camcraft_app::rest::prior_simulations();
+    let staged = StagedGeneration::new(&world, "Rough3D").expect("stages");
+    assert_eq!(camcraft_app::rest::prior_simulations(), before, "staging simulates nothing");
+    let (done, simulated) = std::thread::spawn(move || {
+        let n = camcraft_app::rest::prior_simulations();
+        let done = staged.finish();
+        (done, camcraft_app::rest::prior_simulations() - n)
+    })
+    .join()
+    .expect("the worker thread");
+    assert_eq!(simulated, 1, "the job simulates the face ahead once");
+    let done = done.expect("finishes");
+    assert!(done.still_current(&world));
+    h.execute(&world, done);
+    let staged_path = model::find_by_name(&world, "Rough3D").and_then(|e| model::toolpath_of(&world, &e)).expect("a path");
+    assert!(h.undo(&world));
+    h.execute(&world, GenerateOperation::new(&world, "Rough3D").expect("one shot"));
+    let one_shot = model::find_by_name(&world, "Rough3D").and_then(|e| model::toolpath_of(&world, &e)).expect("a path");
+    assert_eq!(staged_path, one_shot, "the same path either way");
+}

@@ -26,12 +26,15 @@ use crate::cl::Toolpath;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::stock_sim::Columns;
 
+use camcraft_sim::verify::AvoidSpec;
+
 use super::adaptive::{RestStock, StockFloor};
 use super::corner_relief::CornerRelief;
 use super::face::GenError;
 use super::levels::cut_levels_under;
 use super::pocket::PocketParams;
-use super::rest2d::{emit_rest, rest_strategy, RestParams, RestPlan, RestSource, REST_REACH};
+use super::pocket_avoid_level::emit_rest_avoid;
+use super::rest2d::{rest_strategy, RestParams, RestPlan, RestSource, REST_REACH};
 
 /// A column whose top is within this much (mm) above a cut depth does
 /// not stand there: float noise of a floor cut at that depth.
@@ -209,6 +212,29 @@ pub fn rest_pocket_previous_with_relief(
     prior: Option<&Columns<'_>>,
     relief: &CornerRelief,
 ) -> Result<Toolpath, GenError> {
+    rest_pocket_previous_inner(region, p, rest, prior, None, relief)
+}
+
+/// [`rest_pocket_previous_with_relief`] keeping the full tool clear of `avoid` (#3345).
+pub fn rest_pocket_previous_avoid_with_relief(
+    region: &Region,
+    p: &PocketParams,
+    rest: &RestParams,
+    prior: Option<&Columns<'_>>,
+    avoid: &AvoidSpec,
+    relief: &CornerRelief,
+) -> Result<Toolpath, GenError> {
+    rest_pocket_previous_inner(region, p, rest, prior, Some(avoid), relief)
+}
+
+fn rest_pocket_previous_inner(
+    region: &Region,
+    p: &PocketParams,
+    rest: &RestParams,
+    prior: Option<&Columns<'_>>,
+    avoid: Option<&AvoidSpec>,
+    relief: &CornerRelief,
+) -> Result<Toolpath, GenError> {
     p.validate()?;
     relief.validate()?;
     if rest.source != RestSource::PreviousOperations {
@@ -250,7 +276,7 @@ pub fn rest_pocket_previous_with_relief(
     if !plan.previous_fits {
         notes.push("the previous operations cleared nothing of this pocket at its cut depths: the whole pocket is cut".into());
     }
-    emit_rest(region, p, &plan, notes, relief)
+    emit_rest_avoid(region, p, &plan, notes, relief, avoid)
 }
 
 #[cfg(test)]

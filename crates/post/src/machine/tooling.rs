@@ -29,10 +29,13 @@ pub struct HolderInfo {
 /// (the refusal text, naming the holder).
 pub type HolderLookup<'a> = &'a dyn Fn(&str) -> Result<HolderInfo, String>;
 
-/// The mounts a machine file may state: the holder library's tapers.
-/// `TTS` names the tooling system an R8 spindle takes on a Tormach
-/// PCNC or M mill (the R8 collet grips the TTS shank).
-pub const SPINDLE_MOUNTS: [&str; 4] = ["BT30", "BT40", "CAT40", "TTS"];
+/// The mounts a machine file may state: the holder library's tapers,
+/// in its order (`camcraft_tools::holder_library`; the app's test
+/// `every_library_taper_is_a_spindle_mount` keeps the two lists equal,
+/// #4239). `TTS` names the tooling system an R8 spindle takes on a
+/// Tormach PCNC or M mill (the R8 collet grips the TTS shank).
+pub const SPINDLE_MOUNTS: [&str; 14] =
+    ["BT30", "BT40", "CAT40", "TTS", "SK30", "SK40", "SK50", "ISO30", "HSK-A63", "HSK-F63", "HSK-E40", "HSK-E32", "BT50", "CAT50"];
 
 const MOUNT_KEY: &str = "tooling.spindle_mount";
 const HOLDER_KEY: &str = "tooling.default_holder";
@@ -106,6 +109,9 @@ fn read(v: &Value, lookup: Option<HolderLookup>) -> Read {
 pub fn tooling_refusals(v: &Value, lookup: Option<HolderLookup>) -> Vec<(String, String)> {
     let (m, h) = read(v, lookup);
     let mut out = Vec::new();
+    if let Err(rule) = super::reservations::parse(v) {
+        out.push(("tooling.reserved".to_owned(), rule));
+    }
     if let Err(rule) = &m {
         out.push((MOUNT_KEY.to_owned(), rule.clone()));
     }

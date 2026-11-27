@@ -52,7 +52,7 @@ pub(super) fn press(h: &mut Harness<'static, ShellUi>, label: &str) {
 
 /// Replace a grid field's text the way a user does: click it, select
 /// all, type.
-fn type_into(h: &mut Harness<'static, ShellUi>, field: &str, text: &str) {
+pub(super) fn type_into(h: &mut Harness<'static, ShellUi>, field: &str, text: &str) {
     h.get_by_role_and_label(Role::TextInput, field).scroll_to_me();
     h.run_steps(6);
     h.get_by_role_and_label(Role::TextInput, field).click();
@@ -71,11 +71,11 @@ fn type_into(h: &mut Harness<'static, ShellUi>, field: &str, text: &str) {
     h.run_steps(3);
 }
 
-fn draft_at(h: &Harness<'static, ShellUi>, pointer: &str) -> Option<serde_json::Value> {
-    h.state().state.machines_pane.editor.as_ref().and_then(|e| e.draft.value.pointer(pointer).cloned())
+pub(super) fn draft_at(h: &Harness<'static, ShellUi>, pointer: &str) -> Option<serde_json::Value> {
+    h.state().state.machines_pane.editor.as_ref().and_then(|e| e.draft.value().pointer(pointer).cloned())
 }
 
-fn prompt(h: &Harness<'static, ShellUi>) -> Option<Prompt> {
+pub(super) fn prompt(h: &Harness<'static, ShellUi>) -> Option<Prompt> {
     h.state().state.machines_pane.editor.as_ref().and_then(|e| e.prompt.clone())
 }
 
@@ -265,6 +265,9 @@ fn new_blank_disabled(h: &Harness<'static, ShellUi>) -> bool {
 /// Open a dropdown (a ComboBox showing `now`) and pick `to`, the kind
 /// dropdown or the editor's Post field (#2374), with real pointer events like a user.
 pub(super) fn pick_kind(h: &mut Harness<'static, ShellUi>, now: &str, to: &str) {
+    // A dropdown below the pane's fold is scrolled into view first.
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now)).scroll_to_me();
+    h.run_steps(6);
     let at = h
         .get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now))
         .rect()

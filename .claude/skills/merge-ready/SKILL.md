@@ -56,6 +56,10 @@ plans compare those.
   rules) and follow them where they differ from this skill.
 - **Never touch another session's checkout.** Run `git fetch` only; the
   planner needs no checkout. Merging happens through `gh pr merge`.
+- Read [the ownership guard](../issue-claims/references/ownership.md) before
+  dispatch of any refresh writer or delta reviewer. Check the public issue
+  and PR records, not only the local review lock. A live owner means stand
+  down and name it; do not push a worker's prepared branch yourself.
 
 ## 1. Collect
 
@@ -112,15 +116,25 @@ Worked examples (#1828; assume the other merge checks pass):
 | Collaborator author; same-account clean review with a named different agent and linked independent review dispatch/result | Keep the PR; record the review URL and head SHA |
 | Clean independent collaborator review in an issue comment; no formal pull review; collaborator-set label | Keep the PR; record the review URL and head SHA |
 
-A PR whose current head carries a collaborator review that requests changes
-and also a `merge-ready` label (or `merge-ready` beside `needs-rework`) is a
-disagreement (AGENTS.md "Only collaborators' reviews count"): report it,
-leave it out, and change neither label.
+`merge-ready` and `needs-rework` are never on the same PR (AGENTS.md
+"Only collaborators' reviews count", #3382). The person or agent that sets
+one of them removes the other in the same `gh pr edit` call
+(`--add-label needs-rework --remove-label merge-ready`, or the reverse),
+then posts one comment that says why. If two collaborators disagree on the
+same head, `needs-rework` stays and `merge-ready` is removed: an open change
+request wins, and the comment goes to the collaborator who set `merge-ready`.
+`conflicts` is not part of this rule: it stays an add-alongside label.
+Never offer a PR that has `needs-rework`. If a PR carries both labels, or a
+`merge-ready` label beside an open collaborator change request on the current
+head, remove `merge-ready` and `needs-rework` stays (`gh pr edit <N>
+--add-label needs-rework --remove-label merge-ready`), post the one comment,
+and leave the PR out.
 
 Drop a PR from the list, with a one-line note to the user, when:
 - it is a **draft** (a ready one is required for merging);
-- it carries **`needs-rework` or `needs-maintainer`** alongside `merge-ready`
-  (contradictory labels): report it rather than ask about it;
+- it carries **`needs-rework`** (never offered; see the rule above), or
+  **`needs-maintainer`** alongside `merge-ready` (contradictory labels):
+  report it rather than ask about it;
 - its **head moved since the collaborator's review** and the move is more than
   a clean merge of main. Use the head from the counted independent review
   recorded above, not a newer author-only marker, and classify the move:
@@ -145,20 +159,42 @@ If nothing is left, say "no PRs are merge-ready" and stop.
 ## 2. Plan the order - simulate, don't guess
 
 File overlap is a poor predictor (two PRs can touch one file without
-conflicting, and `mod.rs` lists conflict all the time). Simulate instead; it
-takes seconds and builds nothing:
+conflicting, and `mod.rs` lists conflict all the time). Simulate text merges,
+then check the merged wave before the first merge:
 
 ```bash
-cargo xtask merge-plan <N> <N> ...      # the PRs left after step 1
-cargo xtask merge-plan --json <N> <N> ...    # the same plan for other tools
+cargo xtask merge-plan --check <N> <N> ...
+cargo xtask merge-plan --check --json <N> <N> ...
 ```
 
 Pass only the explicit PR numbers retained in step 1. Do not use `--label`
 here: it reloads the label list and includes excluded PRs again. The planner
-simulates merge order; it does not validate review independence.
+does not validate review independence.
 
-It fetches each head, merges them in memory with `git merge-tree` (nothing is
-checked out, built or pushed), and prints the base sha, then:
+The `--check` step makes a temporary worktree from the simulated wave-1
+commit. It runs `cargo check --tests` for the touched workspace packages,
+one package at a time. Shared build inputs select all workspace packages.
+It reuses the caller's `target/`: check builds only, no test binaries. It
+removes its own worktree on success and failure. It never changes a real
+branch or the caller's files. The default plan without `--check` checks text
+conflicts only; it is not premerge validation.
+
+Compiler diagnostics name their files and the PRs that change those files.
+The tool removes these PRs and their stacked children, then plans and checks
+the remaining wave again. An error without an identified owner excludes the
+whole wave. `EXCLUDED` entries (JSON `excluded`) are not merge candidates.
+The command returns exit 1 if it excluded a PR, even when the remaining
+wave passes. Report the errors and leave those PRs out. Repeat `--check`
+with only the retained PR numbers before asking for merges. An operational
+error returns exit 2 and gives no validated plan; stop and report it.
+
+Record the base sha and each head sha from this plan. Immediately before
+the first merge, read them again. If the base or any head moved, repeat
+`--check` with the approved PR numbers. A check proves compilation only;
+it does not replace the review or the required runtime tests.
+
+The planner fetches each head and simulates merges with `git merge-tree`.
+It prints the base sha, then:
 
 - **Wave 1** - the largest set it found that merges cleanly one after the
   other, in order: stack parents before children (a child's base is the
@@ -186,7 +222,8 @@ Read the plan before asking:
   again without the one to defer, and say so.
 - A stacked child whose base is not `main` is retargeted
   (`gh pr edit B --base main`) before its parent merges with
-  `--delete-branch`; otherwise GitHub closes it.
+  `--delete-branch`; otherwise GitHub closes it. A sub-PR whose base is a
+  side branch (`side/*`) keeps that base (AGENTS.md **Side branch**).
 - Process PRs no longer touch `.claude/PROCESS_VERSION` (#1153), so they do
   not conflict with each other on it. A PR that still edits that file is
   sent back: the merging session is its one writer (see "After all merges").
@@ -220,7 +257,72 @@ approved set before merging: the plan changes.
 
 ## 4. Merge the approved ones, as one batch
 
+### 4a. Optional: one heavy run for wave 1 (#3460)
+
+AGENTS.md "Heavy lanes at review": no merge waits for a heavy lane result
+(#3556). The full heavy lanes run at the cut, in the cut gate on the cut
+runner. This step is an optional tool. Skip it by default. Run it only
+when a session chooses to check a wave before the merges. A missing
+`heavy-wave` record never holds a merge. A PR is never "owed heavy"
+(**Owed heavy result** is retired).
+
+1. Read the current head of each wave-1 PR:
+   `gh pr view N --json headRefOid --jq .headRefOid`.
+2. Make the trial tree in the main checkout's `.claude/worktrees/`:
+   `git fetch origin` and
+   `git worktree add --detach .claude/worktrees/heavy-wave origin/main`.
+3. In that worktree, merge each wave-1 PR in the planner's order:
+   `git fetch origin pull/N/head` and
+   `git merge --no-ff --no-edit FETCH_HEAD`. Make sure that `FETCH_HEAD` is
+   the head of step 1. Never push the trial tree.
+4. Run the gate there one time, in the foreground or in the background
+   with a completion notice:
+   `cargo xtask gate heavy --base origin/main --covers A:<sha> --covers B:<sha> ...`.
+   Name each wave-1 PR. Do not add `--only` or `--failed`: the tool
+   refuses them with `--covers`. The tool refuses a head that is not in
+   the tree.
+5. Record the result on each PR of the wave with this one comment form.
+   Take the values from `covers.txt` in the run's log directory:
+
+   ```
+   <!-- heavy-wave: <tree hash> -->
+   Heavy wave run (#3460) · tree <tree hash> · base origin/main <merge-base sha>
+   covers: #A <head sha> · #B <head sha> · ...
+   lanes: <crate> heavy: <target> ok (<secs>s) · ... (or: the wave reaches no heavy lane)
+   counts: <planned> planned, <ran> ran, <ok> ok, <failed> failed · verdict PASS | FAIL | INCOMPLETE | VOID | NO LANE
+   known-fail: SKIPPED (known fail, #N): <test> · ... (or: none)
+   wall: <minutes> min · gate-logs/heavy-<stamp>/covers.txt
+   ```
+
+   Only `PASS` covers the heads. `NO LANE` means that the wave reaches no
+   heavy lane: write "the wave reaches no heavy lane" in the `lanes:` line.
+   `INCOMPLETE` (a planned step did not run) and `VOID` are no result: run
+   step 4 again.
+6. A red step: attribute it to one PR. Take the PR whose diff the red test
+   reads. If two or more PRs reach the lane and the cause is not clear,
+   take the last of them in the planner's order. Post the record with
+   `FAIL` on that PR, set `needs-rework` and remove `merge-ready` with one
+   comment (AGENTS.md, #3382). Take that PR out of the wave. Make a new
+   trial tree without it and run step 4 again for the other PRs.
+7. Remove the trial tree after the run:
+   `git worktree remove --force .claude/worktrees/heavy-wave`.
+8. A record covers a PR only for the head that it names. A PR that has a
+   new commit after the run is not covered by it. That PR still merges by
+   its review: the record is not a merge condition.
+9. If `origin/main` moved after the run (its sha is not the `base` of the
+   record), the record is stale. Run `cargo xtask merge-plan` again for the
+   merge order, as usual.
+10. A wave-2 PR merges alone. It needs no heavy result.
+11. The one heavy condition (AGENTS.md "Heavy lanes at review"): a `P1` PR
+    under the safety floor needs its one targeted heavy step, green on its
+    final head, named in the PR body or the review. Without it, the PR is
+    not `merge-ready`: report it. No other PR waits for a heavy result.
+
 **Wave 1**, in the planned order. For each PR:
+
+Re-read ownership and the exact PR head before merging. Leave a PR with an
+active writer or reviewer out of this run. Ownership does not replace the
+counted independent review, `--check` validation, or merge approval.
 
 1. Retarget any stacked child of this PR to `main` first.
 2. Make sure the PR is ready (`gh pr ready N` if it is a draft that the
@@ -230,6 +332,10 @@ approved set before merging: the plan changes.
      `gh pr merge N --merge --delete-branch`;
    - a fork PR: `gh pr merge N --merge` (the fork's branch is not ours to
      delete).
+   - a PR whose head is a side branch (`side/*`, the PR to `main`):
+     only by the session that the maintainer's word for that PR names, and
+     `gh pr merge N --merge` without `--delete-branch` (AGENTS.md
+     **Side branch**).
 3. Confirm `gh pr view N --json state` is `MERGED`; note the merge commit.
 4. About 5 seconds, then re-read the next PR's `mergeable` (retry while
    `UNKNOWN`). The simulation said it is clean; if GitHub says `CONFLICTING`
@@ -250,6 +356,18 @@ Do not re-review, re-gate or refresh anything between wave-1 merges.
    tool); a fork PR - only where the PR allows maintainer edits and the user
    approved pushing there, otherwise ask the author once and leave it out of
    this run.
+   Use the ownership guard and `/resolve-conflicts` pre-push check. Record
+   one writer before dispatch and pass its record URL, identity, base and
+   starting exact head. Run `cargo check --tests -p <affected-package>` for
+   affected code after refresh and before push, even for SAME. Shared inputs,
+   including `Cargo.lock`, select each affected package, one package at a time;
+   never `--workspace` or an unqualified full-workspace build. A moved remote head or a
+   rejected push is a STOP, never a force-push. Release the writer after the
+   verified push; record one collaborator reviewer before any DELTA review.
+   Pass the record URL, identity, base and starting exact head to that reviewer.
+   Require reads before work, a re-read of ownership and head before a verdict
+   or labels, and a release on completion, skip or failure. Contributor
+   pre-checks claim no reviewer ownership.
 2. Classify the refresh with `cargo xtask merge-plan --delta N --reviewed <reviewed sha>`:
    `SAME` or `MECHANICAL` -> merge it now (AGENTS.md says which PR comment to
    leave and when the PR is flagged ready again); `DELTA` -> one read-only
@@ -262,7 +380,10 @@ Do not re-review, re-gate or refresh anything between wave-1 merges.
 
 **After all merges:**
 - For each merged PR, read the issues it closed (`closingIssuesReferences`)
-  and remove `in-review` and `claimed` from those issues.
+  and remove `in-review` and `claimed` from those issues. A sub-PR whose
+  base is a side branch closes no issue: its issue keeps `in-review` and
+  gets the comment `merged to side/<name> in PR #M; closes at the
+  switch of its kind` (AGENTS.md **Side branch**).
 - **Process files:** if a merged PR changed process files (`AGENTS.md`,
   `.claude/agents/`, `.claude/skills/`, `scripts/gate.*`, `xtask/`), once
   for the whole batch: run `cargo xtask process-bump` in a worktree off the

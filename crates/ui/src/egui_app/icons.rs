@@ -91,6 +91,8 @@ icon_table! {
     VCarve => "op-v-carve", "icon-v-carve";
     Chamfer2D => "op-chamfer2d", "icon-chamfer2d";
     Deburr => "op-deburr", "icon-deburr";
+    /// A tilted cone on a broken corner, with its tilt arc (#1894).
+    MultiAxisDeburr => "op-multiaxis-deburr", "icon-multiaxis-deburr";
     Circular => "op-circular", "icon-circular";
     PlasmaProfile => "op-plasma-profile", "icon-plasma-profile";
     /// The wire between its two guides, through the plate it cuts (#532).
@@ -101,6 +103,9 @@ icon_table! {
     SinkerSideBurn => "op-sinker-side-burn", "icon-sinker-side-burn";
     /// A slot undercut (#1444): a T-slot's section, the cutter in it.
     SlotUndercut => "op-slot-undercut", "icon-slot-undercut";
+    /// A waterjet profile (#1883): the nozzle and its straight jet
+    /// through the sheet.
+    WaterjetProfile => "op-waterjet-profile", "icon-waterjet-profile";
     // Holes and probing:
     Drill => "op-drill", "icon-drill";
     Bore => "op-bore", "icon-bore";
@@ -120,6 +125,10 @@ icon_table! {
     RotaryContour => "op-rotary-contour", "icon-rotary-contour";
     RotaryParallel => "op-rotary-parallel", "icon-rotary-parallel";
     RotaryOffset => "op-rotary-offset", "icon-rotary-offset";
+    /// The Rotary Flow band (#2826): the bar with its two diagonal
+    /// flow lines crossing it - the helical band the picked chains
+    /// span.
+    RotaryFlow => "op-rotary-flow", "icon-rotary-flow";
     MultiAxisRough => "op-multiaxis-rough", "icon-multiaxis-rough";
     Flow5D => "op-flow5d", "icon-flow5d";
     MultiAxisContour => "op-multiaxis-contour", "icon-multiaxis-contour";
@@ -183,6 +192,8 @@ icon_table! {
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
     ToolWaterjet => "tool-waterjet", "icon-tool-waterjet";
+    // #4081: the laser head - a head, its beam and the burst on the sheet.
+    ToolLaser => "tool-laser", "icon-tool-laser";
     ToolElectrode => "tool-electrode", "icon-tool-electrode";
     ToolWire => "tool-wire", "icon-tool-wire";
     // #894: the thread mills - a neck over a toothed head (multi-form)
@@ -195,6 +206,9 @@ icon_table! {
     ToolKeyseat => "tool-keyseat", "icon-tool-keyseat";
     ToolDovetail => "tool-dovetail", "icon-tool-dovetail";
     ToolLollipop => "tool-lollipop", "icon-tool-lollipop";
+    // #3369: a router bit - a cutter body with a concave form over a
+    // pilot bearing.
+    ToolFormMill => "tool-form-mill", "icon-tool-form-mill";
     // The operation page's section tabs (M1.4's named sections), one
     // per tab the page shows; drawn from what each section is.
     SecGeometry => "sec-geometry", "icon-sec-geometry";

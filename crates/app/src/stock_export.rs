@@ -10,13 +10,14 @@
 //!   derived from the same `FieldView` the viewport traces, and keyed by
 //!   it (`MeshCache`): a new view - any cut appended, any edit re-armed
 //!   - is a new mesh; nothing reads the triangles back as material.
-//! - **A hole is a refusal.** An extraction that is not watertight is
-//!   never written: the file would claim a solid it is not.
+//! - **A hole is a refusal.** An extraction with an edge not on exactly
+//!   two facets (a hole, or fins on one edge: #4122) is never written:
+//!   the file would claim a solid it is not.
 
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::geometry::Triangle;
+use crate::geometry::{repair, Triangle};
 use crate::stock_sim::iso;
 use crate::stock_view::FieldView;
 
@@ -27,9 +28,11 @@ pub fn machined_mesh(fv: &FieldView) -> Result<Vec<Triangle>, String> {
     if tris.is_empty() {
         return Err("the program leaves no material - nothing to export".into());
     }
-    let open = iso::open_edges(&tris);
-    if open > 0 {
-        return Err(format!("the extracted surface has {open} open edges - refused, not written"));
+    // #4122: a solid's every edge is on two facets; an open edge, or one
+    // on four or more facets, is not a solid.
+    let unpaired = iso::unpaired_edges(&tris);
+    if unpaired > 0 {
+        return Err(format!("the extracted surface has {unpaired} edges not on two facets - refused, not written"));
     }
     Ok(tris)
 }
@@ -56,14 +59,38 @@ pub fn stl_bytes(tris: &[Triangle]) -> Vec<u8> {
     b
 }
 
-/// Extract and write `fv`'s machined stock to `path`; the facet count.
-pub fn write_stl(fv: &FieldView, path: &Path) -> Result<usize, String> {
-    let tris = machined_mesh(fv)?;
-    if u32::try_from(tris.len()).is_err() {
+/// The binary STL of `tris` as the file will hold it, and its facet
+/// count (#4182). A corner is written as `f32`, so corners closer than one
+/// `f32` step are one corner in the file: when any facet collapses there
+/// or any two distinct corners meet, the corners are welded at their
+/// written values (`repair::weld_at_f32`) and the result is checked again,
+/// so a file that is not a closed solid is refused by name, never written.
+/// Facets whose corners all stay distinct are written byte for byte as
+/// `stl_bytes` writes them.
+pub fn file_bytes(tris: &[Triangle]) -> Result<(Vec<u8>, usize), String> {
+    let welded = repair::weld_at_f32(tris).map_err(|e| format!("the mesh cannot be welded at its written corners: {e}"))?;
+    let written: &[Triangle] = match &welded {
+        None => tris,
+        Some(r) => &r.mesh.facets,
+    };
+    if written.is_empty() {
+        return Err("the mesh collapses to nothing at the corners binary STL writes - nothing to export".into());
+    }
+    let unpaired = iso::unpaired_edges(written);
+    if unpaired > 0 {
+        return Err(format!("as written, the surface has {unpaired} edges not on two facets - refused, not written"));
+    }
+    if u32::try_from(written.len()).is_err() {
         return Err("the mesh has more facets than binary STL can count".into());
     }
-    std::fs::write(path, stl_bytes(&tris)).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    Ok(tris.len())
+    Ok((stl_bytes(written), written.len()))
+}
+
+/// Extract and write `fv`'s machined stock to `path`; the facet count.
+pub fn write_stl(fv: &FieldView, path: &Path) -> Result<usize, String> {
+    let (bytes, n) = file_bytes(&machined_mesh(fv)?)?;
+    std::fs::write(path, bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(n)
 }
 
 /// The mesh cache: one extraction per field view, rebuilt when the view

@@ -366,6 +366,7 @@ fn deburr_at_the_wall_corner_is_chamfer_byte_for_byte() {
     let cp = ChamferParams {
         width: w,
         angle_deg: 45.0,
+        minimum_cone_radius: 0.0,
         clearance_z: 20.0,
         retract_z: None,
         top_z,
@@ -417,3 +418,7 @@ fn every_run_leaves_its_cut_straight_up_before_the_next_traverse() {
         assert!((m.to.z - p.clearance_z).abs() < 1e-9, "rapid {i} stops short of clearance: {:?}", m.to);
     }
 }
+
+// #3329: the start and exit points on the chains.
+#[path = "deburr/seam.rs"]
+mod seam;

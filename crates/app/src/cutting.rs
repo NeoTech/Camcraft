@@ -272,7 +272,7 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::Trace { feed, .. }
         | OpParams::Pocket3D { feed, .. }
         | OpParams::Finish3D { feed, .. }
-        | OpParams::Deburr { feed, .. }
+        | OpParams::Deburr { feed, .. } | OpParams::MultiAxisDeburr { feed, .. }
         | OpParams::Contour5D { feed, .. }
         | OpParams::Parallel5D { feed, .. }
         | OpParams::Swarf { feed, .. }
@@ -283,6 +283,8 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::MultiAxisRough { feed, .. }
         | OpParams::Flow5D { feed, .. }
         | OpParams::MultiAxisContour { feed, .. }
+        // The flow passes feed along their lines (#2826).
+        | OpParams::RotaryFlow { feed, .. }
         | OpParams::Bore { feed, .. }
         | OpParams::Thread { feed, .. } => Some(feed),
         _ => None,

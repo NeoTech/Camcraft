@@ -23,9 +23,11 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 axisInversion = true; // verified on the engine's mirrored stream for a flipped WCS X/Y and an inverted machine X/Y (#2475): trace equivalence test + golden
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
-workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
+workOffsetMax = 500;    // LinuxCNC G-code reference: G54-G59.3 (1-9) and G54.1 P1..P500 (10-500) (#931, #4228)
+millSpindleReverse = true; // reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 endUnits = "G20 G21";     // #596 / #2189: switches end units before M30 when asked
+coolantModes = true;      // #3446: reads PARAM Coolant (#112/#150)
 
 declaredOptions = {
   showSequenceNumbers: {
@@ -52,6 +54,7 @@ declaredOptions = {
 };
 afterModes = true; // #1532: reads PARAM AfterOperation (stop / optional stop) and PARAM SetupChange; a trip home is refused by name
 rotariesBeforeTraverse = true; // #3100: each section turns A at the safe Z (G53 G0 Z, then G0 A) before its first X/Y traverse (indexFor, xyFirst); pinned by posting_rotaries_first.rs
+uprightReturn = true; // #3477: the same G53 G0 Z, then G0 A turn writes A0 at a section after a tilted section; pinned by upright_after_tilt.rs
 explains = "paren"; // #1387: LinuxCNC parenthesized comments; shared helper keeps them inert
 // Original wording; inherited mill meanings cite RS-274 / LinuxCNC in explain.rs.
 explainWords = {
@@ -67,6 +70,11 @@ explainWords = {
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var wcsIndex = 1;          // the offset number wcsWord writes (#931)
+var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
+var compG = "";            // G41/G42/G40 pending for the next straight block (#39, #4228)
+var compD = "";            // D<tNo>
+var compOn = false;        // compensation is active
+var compNoted = false;     // wear comp note emitted for this section
 var sRpm = 0;              // spindle/T order follows the stream: PARAMs,
 var spindleWait = false;   // TOOL, SECTION - the preamble writes them
 var toolWait = false;      // when the first motion needs them legal
@@ -81,6 +89,7 @@ var clearZ = null;         // #1614: the section's ClearancePlane, null when uns
 var afterAsk = "";         // the section's PARAM AfterOperation (#1532), none when unstated
 var setupNext = "";        // the section's PARAM SetupChange (#1532): the setup the program changes to after it
 var coolant = "";          // the M-code this program started, if any
+var coolantAsk = "flood";  // #3446: the section's PARAM Coolant, flood when unstated
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var wcsFlip = "";          // #1649: the flipped WCS axes ("X", "Y", "XY") - the engine mirrored the section
 var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
@@ -110,6 +119,23 @@ function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+// #3699: a tap feed is pitch x rpm, kept at 0.001 mm/min by the stream, and
+// the control cuts the pitch F / S. G84 writes the feed at three mm or four
+// inch decimals; a tap whose written F and S do not hold the pitch to 0.01
+// percent is refused by name.
+function tapFeed(v) { return fu(v); }
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var written = Number(fu(feed)) * (inch ? 25.4 : 1);
+  var want = sRpm > 0 ? feed / sRpm : 0;
+  var got = speed > 0 ? written / speed : 0;
+  if (!(want > 0 && Math.abs(got - want) / want <= 1e-4)) {
+    msg("canned cycle G84 (tap)" + inOp() + " feed " + feed + " mm/min at " + sRpm +
+      " rpm posts as F" + tapFeed(feed) + " S" + speed + " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 var seqNum = 0;
 var seqNextForce = false;
 var secStarted = 0;
@@ -174,6 +200,7 @@ function xyz(p) {
   return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)];
 }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
 }
@@ -202,27 +229,47 @@ function spindleStopped(what) {  // true: refused, nothing is posted
 }
 var feedRefused = false;  // #1357: the cycle-feed refusal, once per program
 
-// The .mch tool-station coolant list carries names + M-codes. This post
-// reads no PARAM Coolant (the engine refuses a non-Flood op by name), so
-// every section asks flood: the machine's Flood entry; failing one, the
-// first coded entry of no other known family (a shop's own "Brine" is
-// its flood); a stated codeless Flood is the operator's own valve,
-// silent. A list that states only other kinds (Mist, Air - #869) has no
-// flood code: refused by name, never posted as mist or air. An unstated
-// list stays silent. M9 (stop) is the RS-274 fixed pair.
+// The .mch tool-station coolant list carries names + M-codes. A flood ask
+// takes the machine's Flood entry; failing one, the first coded entry of
+// no other known family (a shop's own "Brine" is its flood); a stated
+// codeless Flood is the operator's own valve, silent. A list that states
+// only other kinds (Mist, Air - #869) has no flood code: refused by name,
+// never posted as mist or air. An unstated list stays silent. M9 (stop)
+// is the RS-274 fixed pair.
 var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
+function coolantName(c) {
+  return String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+}
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   var other = "", floodNamed = false;
   for (var i = 0; i < cs.length; i++) {
     var c = cs[i];
     var code = (typeof c === "string") ? "" : (c.mCode || "");
-    var name = String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+    var name = coolantName(c);
     if (name === "flood") { if (code) return code; floodNamed = true; continue; }
     if (code && !other && COOLANT_KINDS.indexOf(name) < 0) other = code;
   }
   if (other || floodNamed || cs.length === 0) return other;
-  msg("the machine states no flood coolant code" + inOp() + " - add a Flood entry to the machine, or post through a post that reads the operation's coolant");
+  msg("the machine states no flood coolant code" + inOp() + " - pick another coolant for the operation (Off cuts dry) or add a Flood entry to the machine");
+  return "";
+}
+// #3446: the op's coolant ask (#112) - off writes no coolant word; mist,
+// air or through-tool take the machine's own entry of that family,
+// refused by name (naming the operation) when the machine states none.
+function coolantFor(ask) {
+  if (ask === "off") return "";
+  if (!ask || ask === "flood") return coolantCode();
+  var want = ask === "mist" ? ["mist"] : ask === "air" ? ["air", "air-blast"]
+    : ask === "through-tool" ? ["through-spindle", "through-tool"] : [];
+  if (want.length === 0) { msg("unknown coolant ask " + ask + inOp()); return ""; }
+  var cs = (typeof machine !== "undefined" && machine.coolants) || [];
+  for (var i = 0; i < cs.length; i++) {
+    var c = cs[i];
+    var code = (typeof c === "string") ? "" : (c.mCode || "");
+    if (code && want.indexOf(coolantName(c)) >= 0) return code;
+  }
+  msg("the machine states no " + ask + " coolant code" + inOp() + " - pick another coolant for the operation or add it to the machine");
   return "";
 }
 
@@ -239,6 +286,16 @@ function planeWord(g) {  // "" while modal; the word (and the new state) on chan
   return "G" + g;
 }
 function restorePlane() { var pw = planeWord(17); if (pw) block([pw]); }
+// #391: a control offsets the cutter in the ACTIVE plane, and every mill
+// generator compensates in XY - so the block that writes G41/G42/G40
+// states G17 when an XZ/YZ arc left G18/G19 modal, and no arc leaves
+// G17 while compensation is engaged (refused by name, see onCircular).
+function compPlaneWord(cg) { return cg ? planeWord(17) : ""; }
+function compPlaneRefuse(g) {
+  if (!compOn || g === 17) return false;
+  msg("an " + (g === 18 ? "XZ (G18)" : "YZ (G19)") + " arc while cutter compensation is engaged - the control would compensate in that plane; cancel compensation (G40) first");
+  return true;
+}
 // The center words of the arc's plane as increments from the start
 // point (G91.1, stated in the header): a shared translation cancels in
 // an increment, so the origin must NOT enter them.
@@ -418,17 +475,39 @@ function retract() {
   }
 }
 
-// Cutter compensation in the control: not stated by this post yet -
-// refused by name, never a centre path under a Control op.
-function onRadiusCompensation() {
-  msg("control cutter compensation (G41/G42) is not supported by this post - choose In computer, or the Fanuc post");
+// Cutter radius compensation in the control (#4228; PathPilot / LinuxCNC
+// G41 left / G42 right / G40 cancel with D<tool_number>).
+function onRadiusCompensation(side) {
+  var s = String(side || properties.Compensation || "off");
+  if (s === "off") {
+    compG = compOn ? "G40" : "";
+    compD = "";
+    compOn = false;
+    return;
+  }
+  if (inCycle) { msg("cutter compensation inside a canned-cycle group"); return; }
+  compG = (s === "left") ? "G41" : "G42";
+  compD = "D" + ni(tNo);
+  compOn = true;
+  if (properties.CompensationType === "wear" && !compNoted) {
+    block(["(WEAR COMP - " + compD + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS)"]);
+    compNoted = true;
+  }
+}
+function compRefuse(what) {
+  if (compG) {
+    msg("cutter compensation must engage or cancel on G1, not " + what);
+    compG = ""; compD = ""; compOn = false;
+  }
 }
 
-// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// #931, #4228: PARAM WorkOffset arrives as the 1-based offset number (the engine
 // refuses one above workOffsetMax by setup name); the word is ours to write.
 function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
-  if (!(n >= 1 && n <= 9 && n === Math.floor(n))) return "";
-  return n <= 6 ? "G" + (53 + n) : "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+  if (!(n >= 1 && n <= workOffsetMax && n === Math.floor(n))) return "";
+  if (n <= 6) return "G" + (53 + n);
+  if (n <= 9) return "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+  return "G54.1 P" + n;                 // PathPilot / LinuxCNC: G54.1 P1..P500
 }
 function offsetWord(value) {
   var n = Number(value), w = workOffsetName(n);
@@ -438,10 +517,13 @@ function offsetWord(value) {
 }
 
 function onParameter(name, value) {
+  if (name === "OperationName") spinRev = false;
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1614
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
+  if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }  // #3446
   commentParam(name, value);
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "SetupChange") { setupNext = clean(value); return; }
@@ -515,9 +597,16 @@ function beltNote(rpm) {
 // The header's path-blending tolerance (#616: shared by the header and
 // the per-section reset, one constant).
 function blendP() { return inch ? "P0.001" : "P0.025"; }
+// #4147: PathPilot / LinuxCNC reads G64 P0 as G64 with no deviation limit.
+// Clamp positive tolerances that round to zero under fu() to the smallest
+// positive value (0.001 mm, 0.0001 in). Never write P0.
+function tolP(tol) {
+  var s = fu(tol);
+  return (s === "0" || s === "-0") ? (inch ? "P0.0001" : "P0.001") : "P" + s;
+}
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G64", "P" + fu(smoothTol)]);
+  block(["G64", tolP(smoothTol)]);
   smoothActive = true;
 }
 function smoothOff() {
@@ -542,6 +631,7 @@ function startPreamble() {
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
+    if (compOn) msg("tool change before cutter compensation cancel (G40)");
     toolNote();
     // The initial spindle tool is unknown. Only a repeated tool that this
     // program already loaded can skip the trip to G30 and the tool change.
@@ -568,19 +658,25 @@ function startPreamble() {
   var touchProbe = spindleWait && !(sRpm > 0);
   if (spindleWait && sRpm > 0) {
     block([beltNote(sRpm)]);
-    block(["S" + ni(sRpm), "M3"]);
+    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
     spindleOn = true;
   }
   if (probeStop) { block(["M5"]); spindleOn = false; }
   probeSection = touchProbe && kindProbe;
   spindleWait = false;
-  coolant = touchProbe ? "" : coolantCode();
+  coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }
 
 function endPreamble() {
   if (!sectionOpen) return;
+  if (compOn || compG) {
+    msg("section ends with cutter compensation active - missing cancel");
+    compG = ""; compD = ""; compOn = false;
+  }
+  compNoted = false;
+  spinRev = false;
   restorePlane();            // the plane never leaks past its section
   g94();                     // #796: no section leaves G93 behind
   sectionOpen = false;
@@ -592,6 +688,7 @@ function endPreamble() {
   if (inCycle) block(["G80"]);
   inCycle = false;
   if (coolant) block(["M9"]);
+  coolantAsk = "flood";      // #3446: the next section states its own ask
   block(["M5"]);
   spindleOn = false;
   probeSection = false;
@@ -1063,6 +1160,7 @@ function probeSeat() {
   inCycle = false;
 }
 function onRapid() {
+  compRefuse("G0");
   startPreamble();
   if (chainRapid() || !motionFor(properties, "")) return;
   if (aNext) { turnMove(properties, true); return; }
@@ -1075,12 +1173,27 @@ function onLinear() {
   if (spindleStopped("feed move G1")) return;
   if (aNext) { turnMove(properties, false); return; }
   if (!startXY(properties)) return;  // #1614: refused - the move is not written
-  block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
+  var cg = compG, cd = compD;
+  compG = ""; compD = "";
+  var cp = compPlaneWord(cg);
+  var words = [];
+  if (cp) words.push(cp);
+  words.push("G1");
+  if (cg) words.push(cg);
+  words = words.concat(xyz(properties));
+  if (cd) words.push(cd);
+  words.push(fw(properties.FeedRate));
+  block(words);
 }
 function onCircular() {
+  compRefuse("an arc");
   startPreamble();
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (chainCut() || !motionFor(properties, "arc move")) return;
   var p = properties;
+  if (compPlaneRefuse(planeOf(p))) return;
   if (indexed()) {  // #785: a tilted path is chords; an arc here is unstated
     aRefuse("arc on an indexed A" + inOp() + " - the indexed frame posts lines only");
     return;
@@ -1261,6 +1374,12 @@ function onCycle() {
   // (the stream's synthesized tap feed), no P - PathPilot sizes the
   // bottom dwell itself, and the MX mills tap from the spindle encoder.
   else if (p.CycleType === "TAP") {
+    var isLeftTap = spinRev || p.CycleType === "LEFT_TAP" || String(p.TappingDirection || "") === "reverse" || String(p.CycleDirection || "") === "reverse" || String(p.ThreadHand || "") === "left";
+    if (isLeftTap) {
+      if (!tapRefused) tapRefused = true; else return;
+      msg("left-hand rigid tapping (G74) is not supported on PathPilot - use thread milling");
+      return;
+    }
     // A machine that says it cannot rigid-tap (the R8 770M, 1100M, PCNC 440
     // and the Mach3-era PCNC 770 / 1100: tapping heads, tension/compression
     // holders and thread milling only) refuses the
@@ -1301,6 +1420,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   if (!xyFirst(p.X, p.Y)) return;  // a cycle as the first move: its first hole (#1614: refused - not written)
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
@@ -1320,7 +1440,7 @@ function onCycle() {
     // #2362: LinuxCNC / PathPilot requires a non-negative P on the first
     // G86 block of a cycle, even when the dwell is 0 (P0).
     if (g === "G86" || (dwell > 0 && (g === "G82" || g === "G89"))) words.push("P" + secs(dwell));
-    words.push(fw(p.FeedRate));
+    words.push(g === "G84" ? "F" + tapFeed(p.FeedRate) : fw(p.FeedRate));
     block(words);
     cycleSig = sig;
   }

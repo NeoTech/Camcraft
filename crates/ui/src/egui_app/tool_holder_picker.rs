@@ -6,7 +6,9 @@
 //! bore the library's standard bore for the tool's shank. #2016: the tool keeps a reference to the
 //! entry; the Profile table above shows its outline, and an edited
 //! point makes it a drawn profile of its own. Provenance: our own
-//! pane over `app::holder_library`; no vendor material consulted.
+//! pane over `app::holder_library`; no vendor material consulted. #3895:
+//! the tool library window's assembly group draws the same fields; #3930:
+//! the tool shape window no longer does.
 
 use egui::{Color32, Ui};
 
@@ -15,12 +17,18 @@ use camcraft_app::units::{self, Unit};
 
 use crate::state::State;
 
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
+fn bad_ink() -> Color32 {
+    crate::egui_app::theme::current().bad_ink
+}
 
-/// The holder library picker, the first thing the shape editor shows
-/// (#2397).
-pub(super) fn holder_picker(ui: &mut Ui, state: &mut State, u: Unit) {
+/// #3895: the picker without its Apply holder button - the pick, the
+/// gauge length, the projection and what the pick is. The tool library
+/// window's assembly group adds its own rows before the button. #3930:
+/// that group is the one place that draws the picker.
+pub(super) fn holder_fields(ui: &mut Ui, state: &mut State, u: Unit) {
     ui.separator();
     ui.strong("Holder library");
     let picked = state.tool_profile_ui.library.clone();
@@ -64,23 +72,28 @@ pub(super) fn holder_picker(ui: &mut Ui, state: &mut State, u: Unit) {
         match shank.map(|s| holder_library::resolve(n, s).and_then(|e| e.fits_shank(s).map(|()| e))) {
             // The resolved holder, bore and body as Apply lands them.
             Some(Ok(e)) => {
-                ui.colored_label(NOTE, describe(&e, u));
+                ui.colored_label(note_ink(), describe(&e, u));
             }
             Some(Err(err)) => {
                 if let Some(w) = what {
-                    ui.colored_label(NOTE, w);
+                    ui.colored_label(note_ink(), w);
                 }
-                ui.colored_label(BAD, err.to_string());
+                ui.colored_label(bad_ink(), err.to_string());
             }
             None => {
                 if let Some(w) = what {
-                    ui.colored_label(NOTE, w);
+                    ui.colored_label(note_ink(), w);
                 }
             }
         }
     }
+}
+
+/// "Apply holder": queue the one `SetToolBody::library` of the pick.
+pub(super) fn apply_holder_button(ui: &mut Ui, state: &mut State) {
+    let pick = state.tool_profile_ui.library.is_some();
     if ui
-        .add_enabled(pick.is_some(), egui::Button::new("Apply holder"))
+        .add_enabled(pick, egui::Button::new("Apply holder"))
         .on_hover_text("set the library holder as the tool's holder (one undo step); the tool keeps the holder by name until its profile is edited")
         .clicked()
     {
@@ -89,15 +102,17 @@ pub(super) fn holder_picker(ui: &mut Ui, state: &mut State, u: Unit) {
 }
 
 /// One line on what a picker row is: an entry as [`describe`] says, or
-/// a taper's Weldon row with the bores it takes the tool's shank into.
+/// a taper's Weldon or shrink-fit row with the bores it takes the tool's
+/// shank into.
 fn describe_row(r: &PickerRow, u: Unit) -> String {
     match r {
         PickerRow::Entry(e) => describe(e, u),
-        PickerRow::Weldon { taper: t, bores } => {
+        PickerRow::Weldon { taper: t, bores } | PickerRow::Shrink { taper: t, bores } => {
             let l = |v: f64| units::len(v, u, 2);
             let b: Vec<String> = bores.iter().map(|b| format!("Ø{}", l(*b))).collect();
+            let kind = if matches!(r, PickerRow::Shrink { .. }) { "shrink fit" } else { "Weldon" };
             format!(
-                "{} {} Ø{} × {} {}; Weldon, bore for the tool's shank: {}",
+                "{} {} Ø{} × {} {}; {kind}, bore for the tool's shank: {}",
                 t.name,
                 t.ring,
                 l(t.flange_d),
@@ -122,6 +137,9 @@ fn describe(e: &HolderEntry, u: Unit) -> String {
             l(er.max_bore)
         ),
         Clamp::Weldon { bore, body_d } => format!("Weldon bore Ø{}, body Ø{}", l(bore), l(body_d)),
+        Clamp::Shrink { bore, nose_d, body_d } => {
+            format!("shrink-fit bore Ø{}, nose Ø{}, body Ø{}", l(bore), l(nose_d), l(body_d))
+        }
     };
     match e.taper {
         Some(t) => format!("{} {} Ø{} × {} {}; {nose}", t.name, t.ring, l(t.flange_d), l(t.flange_t), u.suffix()),

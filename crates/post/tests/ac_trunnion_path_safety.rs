@@ -35,6 +35,95 @@ fn refuse(result: Result<Vec<camcraft_post::kinematics::SolvedMove>, KinematicsE
 }
 
 #[test]
+fn rotary_travel_refusal_names_the_original_move() {
+    let mut cfg = AcTrunnionConfig::default();
+    cfg.a.travel = Some((-110.0, 30.0));
+    cfg.c.travel = Some((-30.0, 30.0));
+    let opts = PathOptions::default();
+    let reachable = axis(40.0, -90.0);
+    let unreachable = axis(40.0, -40.0);
+    let prefix = [
+        feed(axis(20.0, -90.0), axis(30.0, -90.0)),
+        feed(axis(30.0, -90.0), reachable),
+    ];
+    let solved = solve_path(&cfg, &prefix, &opts).expect("prefix is within travel");
+    assert!(solved.len() > prefix.len(), "prefix must subdivide");
+
+    for (prior_moves, source_index) in [(&prefix[..0], 0), (&prefix[..], 2)] {
+        for kind in [MoveKind::Feed, MoveKind::Rapid] {
+            let mut blocked = feed(reachable, unreachable);
+            blocked.kind = kind;
+            let mut path = prior_moves.to_vec();
+            path.push(blocked);
+            let error = solve_path(&cfg, &path, &opts).expect_err("endpoint is outside C travel");
+            assert!(
+                error.to_string().starts_with(&format!(
+                    "move {source_index}: axis C travel limit [-30, 30] deg exceeded (needs -50.000 deg)"
+                )),
+                "{error}"
+            );
+            let KinematicsError::PathTravelLimitExceeded {
+                source_index: reported_index,
+                source,
+            } = error
+            else {
+                panic!("expected path travel refusal, got {error:?}");
+            };
+            assert_eq!(reported_index, source_index);
+            assert!(matches!(
+                *source,
+                KinematicsError::TravelLimitExceeded {
+                    axis_name,
+                    required_deg,
+                    min_deg: -30.0,
+                    max_deg: 30.0,
+                    ..
+                } if axis_name == "C" && (required_deg + 50.0).abs() < 1e-9
+            ));
+        }
+    }
+}
+
+#[test]
+fn initial_pose_travel_refusal_names_move_zero() {
+    let mut cfg = AcTrunnionConfig::default();
+    cfg.a.travel = Some((-30.0, 30.0));
+    let path = [feed(axis(40.0, -90.0), axis(20.0, -90.0))];
+    let error = solve_path(&cfg, &path, &PathOptions::default())
+        .expect_err("initial pose is outside A travel")
+        .to_string();
+    assert!(error.starts_with("move 0: axis A travel limit"), "{error}");
+}
+
+#[test]
+fn subdivision_travel_refusal_names_the_original_move() {
+    let mut cfg = AcTrunnionConfig::default();
+    cfg.a.travel = Some((-60.0, -30.0));
+    let opts = PathOptions::default();
+    let start = axis(40.0, -150.0);
+    let end = axis(40.0, -30.0);
+    for endpoint in [start, end] {
+        solve_path(&cfg, &[feed(endpoint, endpoint)], &opts).expect("endpoint is within A travel");
+    }
+
+    // The interpolated axis between the endpoints tilts less than 30 degrees.
+    let path = [feed(start, start), feed(start, end)];
+    let error = solve_path(&cfg, &path, &opts).expect_err("midpoint is outside A travel");
+    let KinematicsError::PathTravelLimitExceeded {
+        source_index,
+        source,
+    } = error
+    else {
+        panic!("expected path travel refusal, got {error:?}");
+    };
+    assert_eq!(source_index, 1);
+    assert!(matches!(
+        *source,
+        KinematicsError::TravelLimitExceeded { axis_name, .. } if axis_name == "A"
+    ));
+}
+
+#[test]
 fn clearance_retract_keeps_c_continuous_and_checks_the_entire_lift() {
     let mut cfg = AcTrunnionConfig::default();
     cfg.a.travel = Some((-110.0, 30.0));
@@ -119,10 +208,9 @@ fn adjacent_cl_axis_change_is_refused_instead_of_teleporting() {
             rotary: None,
         });
     }
-    let err = refuse(solve_toolpath(&cfg, &toolpath, &PathOptions::default()));
-    assert!(
-        err.contains("DiscontinuousPath") && err.contains("source_index: 1"),
-        "{err}"
+    assert_eq!(
+        solve_toolpath(&cfg, &toolpath, &PathOptions::default()),
+        Err(KinematicsError::DiscontinuousPath { source_index: 1 })
     );
 }
 

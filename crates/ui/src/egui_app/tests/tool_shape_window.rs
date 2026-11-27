@@ -101,7 +101,8 @@ fn new_tool_matching_saved_name_has_no_empty_target_actions() {
     assert!(model::find_by_name(&h.state().state.world, "EM-0600-4FL").is_some());
     assert!(h.state().state.tool_shape_editor.is_none());
 
-    h.get_by_label("Close").click_accesskit();
+    // #4334: the tool library window has its own Close; this one is Properties'.
+    h.get_by_role_and_label(egui::accesskit::Role::Pane, "Properties").get_by_label("Close").click_accesskit();
     h.run_steps(3);
     assert_eq!(h.state().state.ui_target, UiTarget::None);
     assert!(!h.state().state.new_tool_form);

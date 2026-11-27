@@ -51,11 +51,12 @@ fn block() -> Mesh {
 /// The machine `text` mounted and a punch around the block created at
 /// `taper` degrees; the generator's answer returned.
 fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
-    punch_with(text, taper, None)
+    punch_with(text, taper, None, 0.0)
 }
 
-/// [`punch`] with a no-core burnout (#540) stated.
-fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<(), String>) {
+/// [`punch`] with a no-core burnout (#540) and a closing overlap
+/// (#3216) stated.
+fn punch_with(text: &str, taper: f64, burnout: Option<f64>, overlap: f64) -> (World, Result<(), String>) {
     let world = new_world();
     let mut h = History::default();
     let m = parse_mch(text).expect("the fixture parses");
@@ -67,19 +68,25 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
     );
     h.execute(&world, ImportModel::from_mesh("block", block()));
     let op = WireContourOp {
+        overlap,
+        lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: taper,
         four_axis: None,
         burnout,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         skims: Vec::new(),
+        sharp_corners: false,
     };
     // #1800: the taper door refuses at the command, so its words come back as `made`.
     let c = match CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("block".into()), OpParams::WireContour(op)) {
@@ -242,11 +249,33 @@ fn a_taper_whose_lower_edge_gouges_the_part_blocks_the_post() {
 /// with a burnout is refused by name - never cut upright silently.
 #[test]
 fn a_taper_with_a_no_core_burnout_is_refused_by_name() {
-    let (_, made) = punch_with(FIXTURE, 3.0, Some(0.5));
+    let (_, made) = punch_with(FIXTURE, 3.0, Some(0.5), 0.0);
     let err = made.expect_err("a tapered burnout");
     assert!(err.contains("Punch1") && err.contains("3.000 degree taper is asked with a no-core burnout"), "{err}");
-    let (_, made) = punch_with(FIXTURE, 0.0, Some(0.5));
+    let (_, made) = punch_with(FIXTURE, 0.0, Some(0.5), 0.0);
     assert!(made.as_ref().map_or_else(|e| !e.contains("taper"), |()| true), "a vertical burnout is not refused for a taper: {made:?}");
+}
+
+/// #3216: a closing overlap beside a constant taper is refused by name
+/// at the command door - the tapered cut leans one clean ring, and a
+/// seam-overlapped lap is not one. A 3 degree taper at overlap 1 mm
+/// once failed inside generation with "the wire path repeats a
+/// point"; the door now names the pair, and the same overlap on the
+/// vertical cut still rides its seam.
+#[test]
+fn a_closing_overlap_beside_a_taper_is_refused_by_name() {
+    let (_, made) = punch_with(FIXTURE, 3.0, None, 1.0);
+    let err = made.expect_err("a taper with a closing overlap");
+    assert!(
+        err.contains("a closing overlap is stated with a 3.000 degree taper") && err.contains("set the overlap to 0 or the taper to 0"),
+        "{err}"
+    );
+    assert!(!err.contains("repeats a point"), "the refusal names the pair at the door, never the taper builder's own: {err}");
+    let (world, made) = punch_with(FIXTURE, 0.0, None, 1.0);
+    made.expect("a vertical overlap rides its seam");
+    let e = model::find_by_name(&world, "Punch1").expect("op");
+    let path = model::toolpath_of(&world, &e).expect("the overlapped path").path;
+    assert!(path.notes.iter().any(|n| n.contains("rides 1.000 mm past its seam")), "{:?}", path.notes);
 }
 
 /// #1800 Done means: a non-zero taper on a machine that cannot post it is
@@ -285,4 +314,57 @@ fn a_taper_the_machine_cannot_post_is_refused_at_the_command_door() {
         .replace("\"max_taper_deg\": 15.0,", "\"max_taper_deg\": 15.0,\n    \"taper_angle\": { \"positive\": \"top_left\", \"corner\": \"mitre\" },");
     let (world, _) = punch(&angle, 3.0);
     assert!(model::find_by_name(&world, "Punch1").is_some(), "an angle-word machine needs no guide planes for a taper");
+}
+
+/// #4039: the origin at the part bottom, and the machine's lower guide
+/// at Z0. The work bottom meets the guide, so a vertical and a tapered
+/// cut post. A round-off of the origin (1e-12, or 0.1 + 0.2 - 0.3) is
+/// no gap. A real gap is still refused by name, and its message never
+/// reads "-0.000".
+#[test]
+fn a_work_bottom_at_the_lower_guide_is_within_reach() {
+    use camcraft_app::commands::SetWcsOrigin;
+    use camcraft_app::schema::Location;
+
+    let at_zero = FIXTURE.replace("\"lower_guide_z\": -5.0", "\"lower_guide_z\": 0.0");
+    let posted = |taper: f64, origin_z: f64, tag: &str| {
+        let (world, made) = punch(&at_zero, taper);
+        made.expect("the punch generates");
+        let origin = Location { pos: Point3::new(0.0, 0.0, origin_z), ..Location::default() };
+        History::default().execute(&world, SetWcsOrigin::new(&world, origin).expect("set the work origin"));
+        post(&world, tag)
+    };
+    for taper in [0.0, 3.0] {
+        for (i, z) in [0.0, 1e-12, 0.1 + 0.2 - 0.3].into_iter().enumerate() {
+            if let Err(e) = posted(taper, z, &format!("bottom-at-guide-{taper}-{i}")) {
+                panic!("taper {taper}, origin Z{z:e}: the work bottom meets the lower guide: {e}");
+            }
+        }
+    }
+    let err = posted(0.0, 0.01, "bottom-gap").expect_err("the work is 0.01 mm below the lower guide");
+    assert!(err.contains("Punch1: work bottom Z-0.010 is below the lower guide Z0.000, outside the guides' reach"), "{err}");
+    let err = posted(0.0, 1e-4, "bottom-small-gap").expect_err("the work is 0.0001 mm below the lower guide");
+    assert!(err.contains("Punch1: work bottom Z-0.000100 is below the lower guide Z0.000"), "{err}");
+    let err = posted(3.0, 0.01, "taper-gap").expect_err("the tapered work is below the lower guide");
+    assert!(err.contains("Punch1") && err.contains("outside the guides' reach") && !err.contains("-0.000 "), "{err}");
+}
+
+/// #4039, the mirror: the work top at the upper guide is within reach,
+/// with the origin's round-off; a real gap above it is refused.
+#[test]
+fn a_work_top_at_the_upper_guide_is_within_reach() {
+    use camcraft_app::commands::SetWcsOrigin;
+    use camcraft_app::schema::Location;
+
+    let at_top = FIXTURE.replace("\"upper_guide_z\": 25.0", "\"upper_guide_z\": 12.0");
+    let posted = |origin_z: f64, tag: &str| {
+        let (world, made) = punch(&at_top, 0.0);
+        made.expect("the punch generates");
+        let origin = Location { pos: Point3::new(0.0, 0.0, origin_z), ..Location::default() };
+        History::default().execute(&world, SetWcsOrigin::new(&world, origin).expect("set the work origin"));
+        post(&world, tag)
+    };
+    posted(-1e-12, "top-at-guide").expect("the work top meets the upper guide");
+    let err = posted(-0.01, "top-gap").expect_err("the work is 0.01 mm above the upper guide");
+    assert!(err.contains("Punch1: work top Z12.010 is above the upper guide Z12.000, outside the guides' reach"), "{err}");
 }

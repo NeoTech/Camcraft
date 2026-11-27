@@ -192,6 +192,10 @@ pub fn plasma_row_for(rows: &[CuttingRow], material: WorkMaterial, thickness: f6
 #[must_use]
 pub fn refusal_for_kind(rows: &[CuttingRow], kind: crate::tools::ToolKind) -> Option<String> {
     use crate::tools::ToolKind;
+    // #4081: the laser operation states the power and the feed; the head has no rows.
+    if kind == ToolKind::Laser {
+        return (!rows.is_empty()).then(|| "a laser head has no cutting data rows: the laser operation states the power and the feed".into());
+    }
     if kind == ToolKind::Wire {
         return (!rows.is_empty()).then(|| "an EDM wire uses machine EDM conditions, not per-material cutting data rows".into());
     }

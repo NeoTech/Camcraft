@@ -111,10 +111,16 @@ mod file;
 pub use file::*;
 mod params;
 pub use params::*;
+mod pass_start_dto;
+pub use pass_start_dto::PassStartDto;
+mod path_picks_dto;
+pub use path_picks_dto::{migrate_legacy_patch, PathPickDto, PathPicksDto};
 mod entity;
 // #2463: a linked model's source file and its digest.
 mod source_dto;
 pub use source_dto::SourceDto;
+// #3915: a `.sc` model's source face record (no version step).
+mod source_faces_dto;
 // #1339: who vouched for a mesh of unknown fidelity.
 mod vouch_dto;
 pub use vouch_dto::VouchDto;
@@ -124,6 +130,9 @@ mod plate_dto;
 mod modvise_dto;
 pub use vise_dto::ViseDto;
 mod thread_dto;
+// #3469: the part-off's kept piece and back stock.
+mod part_kerf_dto;
+pub use part_kerf_dto::PartKeptDto;
 mod break_dto;
 mod unreachable_dto;
 use unreachable_dto::UnreachableDto;
@@ -147,6 +156,9 @@ mod plasma_dto;
 mod cutting_rows_dto;
 pub use cutting_rows_dto::{CuttingRowDto, MaterialWord, StockMaterialWord};
 pub use plasma_dto::*;
+// #1883: the waterjet profile's file mirror.
+mod waterjet_dto;
+pub use waterjet_dto::*;
 mod wire_edm_dto;
 pub use wire_edm_dto::*;
 // #541: the sinker burn's file mirror.
@@ -157,6 +169,9 @@ pub use trochoid_dto::*;
 // #1444: the Slot Undercut's file mirror.
 mod undercut_dto;
 pub use undercut_dto::*;
+// #1894: the Multi-Axis Deburr's file mirror.
+mod multiaxis_deburr_dto;
+pub use multiaxis_deburr_dto::*;
 // #1862: a DXF profile's row.
 mod sketch_dto;
 pub use sketch_dto::{PrimitiveDto, SketchDto};
@@ -169,8 +184,19 @@ pub use links::*;
 pub use entity::*;
 mod wire;
 pub use wire::*;
+// #3609: a project open read-only refuses a save over its own file.
+mod read_only;
+pub use read_only::refuse_read_only_save;
+// #3608: the project file's size and modification time, for the overwrite guard of a save.
+mod disk_stamp;
+pub use disk_stamp::DiskStamp;
 mod json;
 pub use json::*;
+// #3645: the component table and the tool stacks on file.
+mod component_wire;
+pub use component_wire::*;
+mod assembly_wire;
+pub use assembly_wire::{assembly_from_dto, assembly_to_dto, stack_from_dto, LinkDto, MountDto};
 mod apply;
 mod fidelity_migrate;
 mod pocket_adaptive_migrate;

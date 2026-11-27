@@ -109,7 +109,18 @@ pub(super) fn wire_gate(world: &World, setup: Option<&str>, tool: &str, params: 
             if let Some(why) = operation::wire_op::tabs_taper_refusal(w) {
                 return Err(CommandError::Invalid(why));
             }
-            operation::wire_op::condition_of(world, setup, tool, w).map_err(CommandError::Invalid)?;
+            if let Some(why) = operation::wire_sketch_arcs::lead_arc_refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
+            // #4134: what the control's wire offset cannot engage on.
+            if let Some(why) = operation::wire_comp::refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
+            let cond = operation::wire_op::condition_of(world, setup, tool, w).map_err(CommandError::Invalid)?;
+            // #3991: the arc lead radius against the resolved kerf offset.
+            if let Some(why) = operation::wire_sketch_arcs::lead_arc_radius_refusal(w, &cond) {
+                return Err(CommandError::Invalid(why));
+            }
             // #1800: a taper the mounted machine cannot post is refused
             // here, by the machine check's own words, not first at the post.
             if let Some(m) = crate::machine::of_setup(world, setup).1 {
@@ -159,6 +170,15 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             family.work(),
         )));
     }
+    // #4081: a laser cutter cuts only laser work; no laser operation
+    // ships before the Laser Profile slice, so each kind is refused here.
+    if machine == crate::machine::Kind::Laser {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a laser cutter, which cuts only laser operations",
+            params.kind(),
+            family.work(),
+        )));
+    }
     // #532: wire EDM work needs a wire EDM, and a wire EDM cuts only it.
     if family == Family::WireEdm || machine == crate::machine::Kind::WireEdm {
         return Err(CommandError::Invalid(format!(
@@ -182,6 +202,13 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
     if family == Family::Plasma {
         return Err(CommandError::Invalid(format!(
             "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
+            params.kind(),
+        )));
+    }
+    // #1883: waterjet work needs a waterjet - no mill-turn carries a jet.
+    if family == Family::Waterjet {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is waterjet work; {clause} - mount a waterjet first",
             params.kind(),
         )));
     }
@@ -225,11 +252,36 @@ pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParam
 /// and setup name. Runs at construction, before any entity exists, so
 /// every surface (UI, CLI, scripts, undo replay) meets the same wall.
 pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
-    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
+    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool, operation::tool_gate::requests_reverse(params)) {
         return Err(CommandError::Invalid(msg));
     }
     thread_gate(world, params, tool)?;
     rest_gate(world, params, tool)
+}
+
+/// The slot door (#3475): a plain Slot's tool must fit its width, by the
+/// slot generator's own rule (`machining2d::slot_centre_band`), refused
+/// when the operation is made, re-tooled or retyped. Open for every other
+/// kind, for a width that only falls back from picks that seed no slot
+/// (generation names those picks), and for a tool name that does not
+/// resolve (the tool door names that one).
+pub(super) fn slot_gate(world: &World, setup: Option<&str>, src: &SrcRef, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    let OpParams::Slot { width, stock_to_leave, .. } = params else {
+        return Ok(());
+    };
+    if !operation::slot_width_is_stated(world, setup, src, params) {
+        return Ok(());
+    }
+    match model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e)) {
+        Some(def) => {
+            let unit = crate::units::of(world);
+            match operation::tool_gate::slot_fit_refusal(tool, def.diameter, *width, *stock_to_leave, unit) {
+                Some(msg) => Err(CommandError::Invalid(msg)),
+                None => Ok(()),
+            }
+        }
+        None => Ok(()),
+    }
 }
 
 /// The rest machining door (#1489): a 2D Pocket's previous tool must be

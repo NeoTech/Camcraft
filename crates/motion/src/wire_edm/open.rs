@@ -8,7 +8,10 @@
 //! - The wire-centre path is the run's one-sided parallel at the kerf
 //!   offset (wire radius + spark gap), its joins mitred: where the wire
 //!   rides outside a turn the kept corner stays sharp; where it rides
-//!   inside one, the corner minimum holds as for a closed profile.
+//!   inside one, the corner minimum holds as for a closed profile. A
+//!   CENTRE side (#3216) is the slit cut: the wire rides the run
+//!   itself and the kerf burns both sides - no side is kept, and the
+//!   kerf law has no product to protect.
 //! - No start hole: both ends of the run must reach (or pass) the
 //!   stock's edge, and the path is extended along the run's own end
 //!   directions until the wire stands the kerf offset plus the stated
@@ -33,6 +36,8 @@ use crate::geometry::Point3;
 use crate::machining2d::GenError;
 
 use super::ring::{dist, pt_ring};
+use crate::sheet::open::offset;
+use crate::sheet::Voice;
 use super::{laws, WireParams, WireSide, MIN_LEAD};
 
 /// How far (mm) inside the stock's edge a run's end may stand and still
@@ -71,9 +76,12 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
     let sign = match p.side {
         WireSide::Left => 1.0,
         WireSide::Right => -1.0,
+        // #3216: a centre-line slit - the wire rides the run itself,
+        // the kerf burns both sides, no side is kept.
+        WireSide::Centre => 0.0,
         WireSide::Die | WireSide::Punch => {
             return Err(invalid(format!(
-                "the profile is open and its side is {} - an open profile has no punch or die side; state the kerf side: left or right of the run's travel",
+                "the profile is open and its side is {} - an open profile has no punch or die side; state the kerf side: left, right, or the centre of the run's travel",
                 p.side.word()
             )));
         }
@@ -101,7 +109,7 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
     crossing(&run, z)?;
     reaches_edge(stock, &run, z)?;
     let k = p.kerf_offset();
-    let ride = offset(&run, sign * k, z)?;
+    let ride = offset(&run, sign * k, z, Voice::WIRE)?;
     let (Some(&first), Some(&last)) = (ride.first(), ride.last()) else {
         return Err(invalid("the open run lays down no cut".into()));
     };
@@ -123,9 +131,16 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
         return Err(invalid("the open run lays down no cut".into()));
     }
     let wire: Vec<Point2> = std::iter::once(t0).chain(ride.iter().copied()).chain(std::iter::once(t1)).collect();
-    laws::cover_run(&run, false, &wire, false, p)?;
-    laws::kerf(&path, &run, false, k, z)?;
+    let corner_rest = laws::cover_run(&run, false, &wire, false, p)?;
+    // A centre slit (#3216) burns both sides by statement - no side is
+    // kept, so the kerf law has no product to protect. The corner law
+    // above and the run-out below still refuse what the wire cannot
+    // follow.
+    if p.side != WireSide::Centre {
+        laws::kerf(&path, &run, false, k, z)?;
+    }
     path.notes.extend(notes(p, t0, t1));
+    path.notes.extend(corner_rest.map(|r| laws::sharp_note(r, k)));
     Ok(path)
 }
 
@@ -236,54 +251,6 @@ fn reaches_edge(stock: &Region, run: &[Point2], z: f64) -> Result<(), GenError> 
     Ok(())
 }
 
-/// The run's one-sided parallel at signed offset `s` (positive: left of
-/// travel), its joins mitred. A run that doubles back, or a turn the
-/// wire's side folds over, is refused by name.
-fn offset(run: &[Point2], s: f64, z: f64) -> Result<Vec<Point2>, GenError> {
-    let n = run.len();
-    let normal = |i: usize| {
-        let u = unit(run[i], run[i + 1]);
-        Point2::new(-u.y, u.x)
-    };
-    let mut out = Vec::with_capacity(n);
-    let n0 = normal(0);
-    out.push(Point2::new(run[0].x + s * n0.x, run[0].y + s * n0.y));
-    for (i, &q) in run.iter().enumerate().take(n - 1).skip(1) {
-        let (a, b) = (normal(i - 1), normal(i));
-        let c = 1.0 + a.x * b.x + a.y * b.y;
-        if !(c.is_finite() && c > 1e-3) {
-            return Err(at(
-                format!("the open run doubles back on itself at X{:.3} Y{:.3} - the wire cannot turn back along its own kerf", q.x, q.y),
-                q,
-                z,
-            ));
-        }
-        out.push(Point2::new(q.x + s * (a.x + b.x) / c, q.y + s * (a.y + b.y) / c));
-    }
-    let nl = normal(n - 2);
-    out.push(Point2::new(run[n - 1].x + s * nl.x, run[n - 1].y + s * nl.y));
-    // The wire's side of a turn folds over itself when the turn is
-    // tighter than the offset: the parallel then runs backwards.
-    for i in 0..n - 1 {
-        let (u, w) = (unit(run[i], run[i + 1]), (out[i + 1].x - out[i].x, out[i + 1].y - out[i].y));
-        if u.x * w.0 + u.y * w.1 <= 0.0 {
-            let q = run[i + 1];
-            return Err(at(
-                format!(
-                    "a corner of the open run near X{:.3} Y{:.3} is tighter than the wire can follow on its {} side - the minimum inside radius is the kerf offset ({:.4} mm)",
-                    q.x,
-                    q.y,
-                    if s > 0.0 { "left" } else { "right" },
-                    s.abs()
-                ),
-                q,
-                z,
-            ));
-        }
-    }
-    Ok(out)
-}
-
 /// Where the wire is threaded (or leaves): from the path's end `from`
 /// along `dir` until it stands `target` (kerf offset + clearance) off
 /// the stock. The run-out may not cut the stock deeper than the kerf
@@ -336,15 +303,21 @@ fn run_out(stock: &Region, from: Point2, dir: Point2, target: f64, k: f64, z: f6
 
 fn notes(p: &WireParams, t0: Point2, t1: Point2) -> Vec<String> {
     let cond = if p.condition.is_empty() { String::new() } else { format!(", condition {}", p.condition) };
+    let off = match p.side {
+        WireSide::Centre => "on the run's line itself".to_owned(),
+        _ => format!("{:.4} mm off the line", p.kerf_offset()),
+    };
+    let kept = match p.side {
+        WireSide::Centre => "no side kept - the kerf burns both sides (#3216)".to_owned(),
+        _ => format!("the {} side kept", if p.side == WireSide::Left { "right" } else { "left" }),
+    };
     vec![
         format!(
-            "wire EDM: open run, kerf on the {} of travel - the wire runs {:.4} mm off the line (wire radius {:.4} + spark gap {:.4}{cond}); kerf width {:.4} mm, the {} side kept",
+            "wire EDM: open run, kerf on the {} of travel - the wire runs {off} (wire radius {:.4} + spark gap {:.4}{cond}); kerf width {:.4} mm, {kept}",
             p.side.word(),
-            p.kerf_offset(),
             p.wire_diameter * 0.5,
             p.gap,
             p.kerf_width(),
-            if p.side == WireSide::Left { "right" } else { "left" }
         ),
         format!(
             "wire EDM: threaded outside the stock at X{:.3} Y{:.3} and run out at X{:.3} Y{:.3}, each {:.3} mm clear of the stock's edge past the kerf; no start hole, no return",

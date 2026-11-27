@@ -34,6 +34,49 @@ pub const FONT_CAPTION: &str = "font_caption";
 pub const FONT_ROW: &str = "font_row";
 pub const FONT_ROW_SUFFIX: &str = "font_row_suffix";
 pub const RIBBON_INK: &str = "ribbon_ink";
+pub const HANDLE_SHADE: &str = "handle_shade";
+pub const HANDLE_TEXT: &str = "handle_text";
+pub const PICK_RIM: &str = "pick_rim";
+pub const CUBE_EDGE: &str = "cube_edge";
+pub const CUBE_LABEL: &str = "cube_label";
+pub const CUBE_GLYPH_ON: &str = "cube_glyph_on";
+pub const CUBE_GLYPH_OFF: &str = "cube_glyph_off";
+pub const VIEWPORT_HINT: &str = "viewport_hint";
+pub const MARKER_STEM: &str = "marker_stem";
+pub const MARKER_RING: &str = "marker_ring";
+pub const MARKER_DOT: &str = "marker_dot";
+pub const AXIS_X: &str = "axis_x";
+pub const AXIS_Y: &str = "axis_y";
+pub const AXIS_Z: &str = "axis_z";
+pub const VIEWPORT_HOVER: &str = "viewport_hover";
+pub const OVERLAY_PANEL: &str = "overlay_panel";
+pub const OVERLAY_EDGE: &str = "overlay_edge";
+pub const OVERLAY_TEXT: &str = "overlay_text";
+pub const OVERLAY_TRACK: &str = "overlay_track";
+pub const DROP_VEIL: &str = "drop_veil";
+pub const EMPTY_HINT: &str = "empty_hint";
+pub const PICK_HALO: &str = "pick_halo";
+pub const PLATE_HOLE: &str = "plate_hole";
+pub const PLATE_DOWEL: &str = "plate_dowel";
+pub const GCODE_LINE: &str = "gcode_line";
+pub const TOOL_GROUND: &str = "tool_ground";
+pub const TOOL_AXIS: &str = "tool_axis";
+pub const TOOL_GRID: &str = "tool_grid";
+pub const TOOL_FLUTE: &str = "tool_flute";
+pub const TOOL_SHANK: &str = "tool_shank";
+pub const TOOL_BODY: &str = "tool_body";
+pub const TOOL_EDGE: &str = "tool_edge";
+pub const TOOL_HOLDER: &str = "tool_holder";
+pub const TOOL_NOTE: &str = "tool_note";
+pub const TOOL_DIM: &str = "tool_dim";
+pub const THUMB_FLUTE: &str = "thumb_flute";
+pub const BAD_INK: &str = "bad_ink";
+pub const WARN_INK: &str = "warn_ink";
+pub const MOUNT_AXIS: &str = "mount_axis";
+pub const MOUNT_RADIAL: &str = "mount_radial";
+pub const MOUNT_TIP: &str = "mount_tip";
+pub const MOUNT_ORIGIN: &str = "mount_origin";
+pub const MOUNT_HINT: &str = "mount_hint";
 pub const RIBBON_TAB_H: &str = "ribbon_tab_h";
 pub const RIBBON_CELL_TOP_GAP: &str = "ribbon_cell_top_gap";
 pub const RIBBON_CAPTION_GAP: &str = "ribbon_caption_gap";
@@ -71,7 +114,14 @@ pub const RIBBON_TAB_STROKE: &str = "ribbon_tab_stroke";
 pub const COLOR_NAMES: &[&str] = &[
     INK, INK_ALT, WELL, TEXT, TEXT_DIM, TEXT_FAINT, BORDER, ACCENT,
     ACCENT_HOVER, FIELD_BG, FIELD_HOVER, FIELD_ACTIVE, SELECTION_BG,
-    SELECTION_STROKE, VIEWPORT, RIBBON_INK,
+    SELECTION_STROKE, VIEWPORT, RIBBON_INK, HANDLE_SHADE, HANDLE_TEXT, PICK_RIM,
+    CUBE_EDGE, CUBE_LABEL, CUBE_GLYPH_ON, CUBE_GLYPH_OFF, VIEWPORT_HINT, MARKER_STEM,
+    MARKER_RING, MARKER_DOT, AXIS_X, AXIS_Y, AXIS_Z, VIEWPORT_HOVER,
+    OVERLAY_PANEL, OVERLAY_EDGE, OVERLAY_TEXT, OVERLAY_TRACK, DROP_VEIL,
+    EMPTY_HINT, PICK_HALO, PLATE_HOLE, PLATE_DOWEL, GCODE_LINE,
+    TOOL_GROUND, TOOL_AXIS, TOOL_GRID, TOOL_FLUTE, TOOL_SHANK, TOOL_BODY,
+    TOOL_EDGE, TOOL_HOLDER, TOOL_NOTE, TOOL_DIM, THUMB_FLUTE, BAD_INK,
+    WARN_INK, MOUNT_AXIS, MOUNT_RADIAL, MOUNT_TIP, MOUNT_ORIGIN, MOUNT_HINT,
 ];
 
 /// The geometry vocabulary (every override is clamped through the

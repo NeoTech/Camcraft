@@ -9,6 +9,7 @@
 //! blank leaves them to the controller's AutoFS).
 
 use super::height::Height;
+use crate::path_picks::PathPicks;
 
 /// Where the kerf offset is made: walked by the computer (the default -
 /// the path is the torch centre), or posted as G41/G42 for the control
@@ -61,9 +62,28 @@ pub struct PlasmaOp {
     pub pierce_height: Option<f64>,
     pub cut_height: Option<f64>,
     pub pierce_delay: Option<f64>,
+    /// The operation's start and exit picks (#3339).
+    pub picks: PathPicks,
 }
 
 impl PlasmaOp {
+    /// The by-name refusal of a pick that the plasma cut does not take
+    /// beside another setting (#3334): an exit pick under control
+    /// compensation. The generator refuses the same pair; this is the
+    /// command door's early word. `None` when the picks are taken.
+    #[must_use]
+    pub fn pick_refusal(&self) -> Option<String> {
+        let exit = self.picks.first(crate::path_picks::PickRole::Exit)?;
+        (self.comp == PlasmaComp::Control).then(|| {
+            format!(
+                "Plasma Profile: exit point ({:.3}, {:.3}): {}",
+                exit.xy.x,
+                exit.xy.y,
+                crate::plasma::EXIT_WITH_CONTROL_COMP
+            )
+        })
+    }
+
     /// Structural sanity (no world): every number finite and in range.
     /// The motion crate's door repeats the refusals by name at
     /// generation; this is the command door's yes / no.
@@ -86,5 +106,6 @@ impl PlasmaOp {
             && opt(self.pierce_height)
             && opt(self.cut_height)
             && opt(self.pierce_delay)
+            && self.picks.refusal().is_none()
     }
 }

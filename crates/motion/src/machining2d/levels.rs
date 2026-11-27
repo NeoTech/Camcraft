@@ -30,6 +30,8 @@ use super::slots::chord_clears;
 /// never bless a gouge.
 pub(super) enum Cert<'a> {
     Region(&'a Region),
+    /// Cutter-center disk of a Circular vault band or the authored rim.
+    RingDisk { center: Point2, radius: f64, tess: &'a Region },
     Stadium { a: Point2, b: Point2, h: f64, tess: &'a Region },
 }
 
@@ -38,7 +40,7 @@ impl Cert<'_> {
     pub(super) fn room(&self) -> &Region {
         match self {
             Cert::Region(r) => r,
-            Cert::Stadium { tess, .. } => tess,
+            Cert::Stadium { tess, .. } | Cert::RingDisk { tess, .. } => tess,
         }
     }
 
@@ -49,6 +51,9 @@ impl Cert<'_> {
     pub(super) fn chord_ok(&self, p: Point2, q: Point2) -> bool {
         match self {
             Cert::Region(r) => chord_clears(r, p, q),
+            Cert::RingDisk { center, radius, .. } => {
+                [p, q].iter().all(|v| (v.x - center.x).hypot(v.y - center.y) <= radius + 1e-7)
+            }
             Cert::Stadium { a, b, h, .. } => {
                 dist_to_seg(p, *a, *b) <= h + 1e-7 && dist_to_seg(q, *a, *b) <= h + 1e-7
             }
@@ -158,10 +163,22 @@ pub(super) struct Motion {
     /// ramp entry zig-zags along the first cut at the ramp angle, and a
     /// zig-zag ramp rides the ring's arcs.
     pub(super) ring_zig: bool,
+    /// The most out-and-back legs one zig-zag ramp may take
+    /// ([`crate::links::MAX_ZIG_LEGS`]; a bore's ring takes more).
+    pub(super) zig_legs: usize,
     /// #2265: a pass start inside a level that is still solid takes the
     /// user's entry (helix, ramp, arc), not a silent plunge - the pocket
     /// family opts in (`with_solid_restart`).
     pub(super) solid_restart: bool,
+    /// #3316: a keep-down pass link must also run through material this
+    /// path already cut (the start-side plan's open pieces end on walls,
+    /// beside stock no cut has reached yet).
+    pub(super) cleared_links: bool,
+    /// #3747: a ring area round a part links ring to ring in the plane.
+    pub(super) ring_links: Option<super::ring_links::RingLinks>,
+    /// #3746: a start-side ladder's air round the stock box; its Arc
+    /// entry plunges there and arcs onto the first ring.
+    pub(super) air: Option<super::air_entry::AirRoom>,
 }
 
 impl Motion {
@@ -188,7 +205,11 @@ impl Motion {
             xy_arc: false,
             holes: Vec::new(),
             ring_zig: false,
+            zig_legs: crate::links::MAX_ZIG_LEGS,
             solid_restart: false,
+            cleared_links: false,
+            ring_links: None,
+            air: None,
         }
     }
 
@@ -201,6 +222,12 @@ impl Motion {
     /// Every pass is a ring of arcs (#1558): ramps ride them.
     pub(super) fn with_ring_zig(mut self) -> Self {
         self.ring_zig = true;
+        self
+    }
+
+    /// Allow `legs` out-and-back legs on a ramp (a bore's small ring).
+    pub(super) fn with_zig_legs(mut self, legs: usize) -> Self {
+        self.zig_legs = legs;
         self
     }
 
@@ -304,6 +331,7 @@ pub(super) fn run_levels(
 /// came out degenerate still crosses in over new material.
 /// Mutable ladder cursor shared between `run_level_walks` and
 /// per-level keep-out walks (#2055).
+#[derive(Clone)]
 pub(super) struct WalkState {
     first: bool,
     pub(super) last_cut_z: Option<f64>,

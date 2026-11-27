@@ -87,11 +87,22 @@ pub struct Document {
     /// Common Z of the extracted geometry, in drawing units.
     pub elevation: Option<f64>,
     pub summary: ImportSummary,
+    /// The largest distance between a SPLINE or ELLIPSE and the arcs it was read as, in
+    /// drawing units (#1865). `None` when the drawing has no such curve.
+    pub curve_tolerance: Option<f64>,
 }
 
 pub(super) struct State {
     pub doc: Document,
     pub limits: Limits,
+    /// Curve evaluations left for this drawing's SPLINE and ELLIPSE fits.
+    pub curve_work: usize,
+    /// The INSERT references read so far; expanded at EOF, when every BLOCK is known.
+    pub inserts: Vec<super::insert::InsertRef>,
+    /// Set while a block body is read: a SPLINE or ELLIPSE keeps its definition in `curves`,
+    /// and is fitted only after its INSERT placement, in world units.
+    pub defer_curves: bool,
+    pub curves: Vec<super::insert_curve::LayeredCurve>,
 }
 
 impl State {

@@ -88,6 +88,7 @@ pub fn electrode_tool(x: f64, y: f64, length: f64, pickup: f64) -> Tool {
     Tool {
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         kind: ToolKind::Electrode,
         diameter: x,
         corner_r: 0.0,
@@ -113,6 +114,9 @@ pub fn electrode_tool(x: f64, y: f64, length: f64, pickup: f64) -> Tool {
         catalog: crate::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
         outline: Vec::new(),
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 

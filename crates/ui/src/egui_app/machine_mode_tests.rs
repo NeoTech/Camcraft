@@ -59,7 +59,7 @@ fn waterjet_without_a_mode_keeps_the_specific_door_caption() {
     assert_eq!(machine_modes::caption(Kind::Waterjet), "Machine");
     assert_eq!(machine_modes::short_caption(Kind::Waterjet), "Waterjet");
     let draft = machine::draft::MachineDraft::blank(Kind::Waterjet);
-    let machine = machine::parse_mch(&draft.value.to_string()).expect("waterjet draft parses");
+    let machine = machine::parse_mch(&draft.value().to_string()).expect("waterjet draft parses");
     let mut state = State::new();
     let load = camcraft_app::commands::LoadMachine::new(
         &state.world, "waterjet.mch".into(), Some(machine),

@@ -91,18 +91,24 @@ fn punch(taper_deg: f64) -> World {
     h.execute(&world, ImportModel::from_mesh("part", cone()));
     let src = SrcRef::Selection(vec![top_face(&world)]);
     let op = WireContourOp {
+        overlap: 0.0,
+        lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
         side: WireSide::Punch,
-        start: Some([-10.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-10.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         four_axis: None,
         skims: Vec::new(),
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", src, OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -124,6 +130,9 @@ fn post(world: &World, tag: &str) -> Result<String, String> {
 #[test]
 fn a_meshed_cone_posts_at_its_true_angle_under_the_chord_tolerance() {
     let world = punch(ANGLE);
+    let e = model::find_by_name(&world, "Punch1").expect("op");
+    let OpParams::WireContour(op) = model::operation_of(&world, &e).expect("op").params else { panic!("wire") };
+    assert!(!op.sharp_corners, "the chord fixture keeps sharp corners off");
     let clause = posting::wire_clause(&world);
     assert!(clause.problems.is_empty(), "{:?}", clause.problems);
     let line = clause.line.expect("the report line");

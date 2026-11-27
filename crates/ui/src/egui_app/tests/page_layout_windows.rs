@@ -23,7 +23,7 @@ fn assert_stack_in(h: &H, container: egui::Rect, who: &str, anchors: &[&str]) {
 }
 
 /// Floating `egui::Window`: inside the screen, anchors inside it top to bottom.
-fn assert_window_layout(h: &H, title: &str, anchors: &[&str]) {
+pub(super) fn assert_window_layout(h: &H, title: &str, anchors: &[&str]) {
     let screen = h.ctx.content_rect();
     let Some(win) = h
         .query_all_by_role(egui::accesskit::Role::Window)
@@ -48,8 +48,8 @@ fn assert_modal_layout(h: &H, id: &str, who: &str, anchors: &[&str], dismiss: &s
     assert!(modal.expand(1.0).contains_rect(button), "{who}: {dismiss} {button:?} leaves {modal:?}");
 }
 
-// #2397: the tool shape editor window - the holder library first, then
-// the Body / Profile tabs, then Close.
+// #2397: the tool shape editor window - the Body / Profile tabs, then
+// Close. #3930: the holder library left it for the tool library window.
 #[test]
 fn layout_window_tool_shape() {
     let _g = snapshot_guard();
@@ -65,8 +65,9 @@ fn layout_window_tool_shape() {
     assert_window_layout(
         &h,
         "Tool shape: EM-0600-4FL",
-        &["Holder library", "Library holder", "Body", "Holder profile", "Parametric", "Apply profile"],
+        &["Body", "Holder profile", "Parametric", "Apply profile"],
     );
+    assert!(h.query_by_label("Holder library").is_none(), "the shape window has no holder library");
     // Close is the window's fixed footer, under the shape.
     let win = h
         .query_all_by_role(egui::accesskit::Role::Window)
@@ -137,6 +138,28 @@ fn layout_window_unsaved_prompt() {
         "unsaved-prompt",
         "Unsaved changes modal",
         &["Unsaved changes", "Save the changes to Untitled before closing?", "Don't Save"],
+        "Cancel",
+    );
+}
+
+#[test]
+fn layout_window_overwrite_prompt() {
+    // #3608: a Save held because the project file on disk changed.
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.state_mut().state.save_guard.held = Some(std::path::PathBuf::from("job.camproj"));
+    h.run_steps(3);
+    assert_modal_layout(
+        &h,
+        "overwrite-prompt",
+        "Overwrite modal",
+        &[
+            "job.camproj: the file on disk changed",
+            "job.camproj on disk changed after this window opened or saved it. \
+             Overwrite puts your document in place of that file. \
+             Save As writes your document to a new file and does not change the file on disk.",
+            "Overwrite",
+        ],
         "Cancel",
     );
 }

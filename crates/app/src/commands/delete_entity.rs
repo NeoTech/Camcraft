@@ -6,9 +6,9 @@ use flecs_ecs::prelude::World;
 use crate::commands::{Command, CommandError};
 use crate::geometry::Triangle;
 use crate::model;
-use crate::schema::{FixtureDef, Location, Operation, OperationMeta, ProgramEntry, StockDef, ToolDef, Toolpath, Wcs};
+use crate::schema::{FixtureDef, Location, Operation, OperationMeta, ProgramEntry, StockDef, Toolpath, Wcs};
 use crate::stock::StockShape;
-use crate::tools::Tool;
+use super::tool::ToolRecords;
 
 pub struct DeleteEntity {
     name: String,
@@ -31,6 +31,8 @@ pub struct DeleteEntity {
     step_source: Option<String>,
     /// #2463: a linked model comes back linked.
     source: Option<crate::schema::ModelSource>,
+    /// #3915: a `.sc` model comes back with its face names.
+    source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
     /// Non-`None` restores the `StockDef` component; `wcs` restores the
     /// `Wcs` tag. Together with the CAM components below they keep every
     /// kind of named entity undoable with its kind intact.
@@ -42,13 +44,9 @@ pub struct DeleteEntity {
     wcs: bool,
     /// #1720: a deleted WCS's flipped axes come back with its undo.
     wcs_flip: [bool; 3],
-    tool: Option<Tool>,
-    /// #221: a deleted tool's number, restored with it on undo.
-    tool_number: Option<u32>,
-    /// #368: a deleted tool's modelled body, restored with it on undo.
-    tool_body: Option<crate::schema::ToolBody>,
-    /// #93: a tool's drawn cutter, restored with it.
-    tool_cutter: Option<camcraft_tools::spun::SpunProfile>,
+    /// A deleted tool's records (number, body, cutter, component stack):
+    /// the one list `DeleteTool` keeps too (#4201 review).
+    tool: Option<ToolRecords>,
     operation: Option<Operation>,
     operation_meta: Option<OperationMeta>,
     /// A Pause / Home entry of the operation list (#155), with its
@@ -91,15 +89,13 @@ impl DeleteEntity {
             solids: crate::mesh_solids::of(world, &entity),
             step_source: crate::step_source::of(world, &entity),
             source: crate::model_source::of(world, &entity),
+            source_faces: crate::source_faces::of(world, &entity),
             stock: model::stock_def_of(world, &entity),
             sketch: crate::sketch::sketch_of(world, &entity),
             stock_material: crate::stock_material::of_entity(world, &entity),
             wcs: model::is_wcs(world, &entity),
             wcs_flip: crate::setup_wcs_flip::of_entity(world, &entity),
-            tool: model::tool_of(world, &entity),
-            tool_number: model::tool_number_of(world, &entity),
-            tool_body: crate::tool_body::body_of(world, &entity),
-            tool_cutter: crate::tool_cutter::cutter_of(world, &entity),
+            tool: ToolRecords::of(world, &entity),
             operation: model::operation_of(world, &entity),
             operation_meta: crate::program_entry::is_sequenced(world, &entity)
                 .then(|| model::operation_meta_of(world, &entity)),
@@ -139,6 +135,7 @@ impl Command for DeleteEntity {
         crate::mesh_solids::set(world, &entity, &self.solids);
         crate::step_source::set(world, &entity, self.step_source.as_deref());
         crate::model_source::set(world, &entity, self.source.as_ref());
+        crate::source_faces::set(world, &entity, self.source_faces.as_ref());
         if let Some(shape) = &self.stock {
             entity
                 .entity_view(world)
@@ -153,11 +150,7 @@ impl Command for DeleteEntity {
             entity.entity_view(world).set(sketch.clone());
         }
         if let Some(tool) = &self.tool {
-            entity
-                .entity_view(world)
-                .set(ToolDef { tool: tool.clone(), number: self.tool_number });
-            crate::tool_body::set_body(world, &entity, self.tool_body.as_ref());
-            crate::tool_cutter::set_cutter(world, &entity, self.tool_cutter.as_ref());
+            tool.land(world, &entity);
         }
         if let Some(operation) = &self.operation {
             entity.entity_view(world).set(operation.clone());

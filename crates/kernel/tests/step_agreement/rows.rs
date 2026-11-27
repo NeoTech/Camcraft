@@ -164,6 +164,29 @@ pub const ROWS: &[Row] = &[
         import: "agree",
         mesh: "off: volume",
     },
+    // #4045 (review of PR #4065): the EDM test parts that the Sodick LN2W
+    // goldens are cut from (our own parts; testdata/models/edm/).
+    Row {
+        file: "edm/edm-test-2axis.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "edm/edm-test-square.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "edm/edm-test-taper.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
     Row {
         file: "empty_list.step",
         mm_per_unit: 1.0,
@@ -205,6 +228,13 @@ pub const ROWS: &[Row] = &[
         ),
         import: "disagree: volume, area",
         mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "hole_on_pocket_wall.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "off: area",
     },
     Row {
         file: "lathe_holder_offset.step",
@@ -364,7 +394,9 @@ pub const ROWS: &[Row] = &[
             10,
             0.005,
         ),
-        import: "solidcore refuses: #117 at read: pcurves failed on",
+        // #3767: solidcore fa67b3f5 builds the pcurves; its vertex check
+        // refuses the solid (was "#117 at read: pcurves failed on").
+        import: "solidcore refuses: #117 at check: a vertex sits",
         mesh: "no exact solid to judge against",
     },
 ];

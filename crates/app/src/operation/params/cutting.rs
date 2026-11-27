@@ -42,13 +42,25 @@ impl OpParams {
                         h.write_u8(3);
                         w(h, p.clearance);
                     }
+                    // #3216: the centre slit's run-out clearance places
+                    // its threading point in the air, so it moves the
+                    // stamp as any open run's does.
+                    super::WireSide::Centre => {
+                        h.write_u8(4);
+                        w(h, p.clearance);
+                    }
                 }
                 // #540: written only when set, so no contour's stamp moves.
                 if let Some(c) = p.burnout {
                     h.write(b"burnout");
                     w(h, c);
                 }
-                match p.start {
+                // #4134: only a control or wear offset is digested, so no
+                // computer-compensated cut's stamp moves.
+                if p.compensation.in_control() {
+                    h.write(p.compensation.label().as_bytes());
+                }
+                match p.picks.first(crate::path_picks::PickRole::Start).map(|k| [k.xy.x, k.xy.y]) {
                     Some([x, y]) => {
                         h.write_u8(1);
                         w(h, x);
@@ -81,6 +93,12 @@ impl OpParams {
                 if let Some(f) = &p.four_axis {
                     super::wire_ruled::digest(f, h);
                 }
+                // #3216: only a stated closing overlap is digested, so
+                // every plain lap's stamp stays what it was.
+                if p.overlap != 0.0 {
+                    h.write(b"overlap");
+                    w(h, p.overlap);
+                }
             }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.
@@ -110,6 +128,14 @@ impl OpParams {
                     });
                     w(h, p.cavity_x);
                     w(h, p.cavity_y);
+                }
+                if !p.cavity_outline.is_empty() {
+                    h.write(b"cavity_outline");
+                    h.write_usize(p.cavity_outline.len());
+                    for point in &p.cavity_outline {
+                        w(h, point[0]);
+                        w(h, point[1]);
+                    }
                 }
                 // #544: the orbit - bytes only when one is stated, so a
                 // plain plunge's digest does not move.
@@ -164,6 +190,41 @@ impl OpParams {
                         }
                         None => h.write_u8(0),
                     }
+                }
+            }
+            // The waterjet profile (#1883): every stored number, the
+            // optional ones and the tabs with a presence byte.
+            OpParams::WaterjetProfile(p) => {
+                wh(h, p.clearance_z);
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write_u8(u8::from(p.control_comp));
+                h.write_u8(u8::from(p.reversed));
+                h.write_u8(p.lead as u8);
+                h.write_u8(p.open_side as u8);
+                for v in [p.lead_in, p.lead_out, p.feed, p.pierce_time, p.abrasive_delay] {
+                    w(h, v);
+                }
+                for v in [p.kerf, p.linearize] {
+                    match v {
+                        Some(x) => {
+                            h.write_u8(1);
+                            w(h, x);
+                        }
+                        None => h.write_u8(0),
+                    }
+                }
+                match &p.tabs {
+                    Some(t) => {
+                        h.write_u8(1);
+                        h.write_u32(t.count);
+                        w(h, t.width);
+                        for q in &t.at {
+                            w(h, q[0]);
+                            w(h, q[1]);
+                        }
+                    }
+                    None => h.write_u8(0),
                 }
             }
             _ => {}

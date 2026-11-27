@@ -232,3 +232,56 @@ fn pick_lines_build_once_per_input() {
     run(&mut h, |st| st.pending.push_back(CommandKind::Undo));
     assert_eq!(pick_lines(&h, "undo the move"), first);
 }
+
+fn chain_view(h: &Harness<'static, ShellUi>) -> std::sync::Arc<camcraft_app::machine::chain_view::ChainView> {
+    h.state().state.machines_pane.editor.as_ref().expect("the editor is open").draft.chain_view()
+}
+
+/// #2756: the Machines file editor's axis chain - its rows, their notes
+/// and the refusal keys that show at a row - is built once per edit of
+/// the machine file. A still frame and typing in the "add axis" form
+/// build nothing; an added axis and a write to the file's JSON build it
+/// again, and the rebuilt view is the fresh build's.
+#[test]
+fn the_axis_chain_is_built_once_per_edit_of_the_machine_file() {
+    use super::machines_edit::{pick_kind, press, type_into, user_dir};
+    use super::machines_pane::{harness_with_user_dir, open_machines};
+    use camcraft_app::machine::chain_view::{chain_view_builds, ChainView};
+
+    let dir = user_dir("chain_cache");
+    let mut h = harness_with_user_dir(Some(dir.clone()));
+    h.run();
+    open_machines(&mut h);
+    pick_kind(&mut h, "All", "mill");
+    press(&mut h, "New blank");
+    h.get_by_label("Z - linear");
+
+    let before = chain_view_builds();
+    h.run_steps(3);
+    type_into(&mut h, "New axis", "A");
+    assert_eq!(chain_view_builds() - before, 0, "still frames and the form build no axis row");
+
+    let before = chain_view_builds();
+    press(&mut h, "Add axis");
+    assert!(chain_view_builds() > before, "an added axis builds the rows again");
+    h.get_by_label("A - rotary");
+    let added = chain_view(&h);
+    let value = h.state().state.machines_pane.editor.as_ref().expect("the editor").draft.value().clone();
+    assert_eq!(*added, ChainView::of(&value), "the view after the add is the fresh build");
+
+    let before = chain_view_builds();
+    h.run_steps(3);
+    assert_eq!(chain_view_builds() - before, 0, "a still frame after the add builds nothing");
+
+    // A write to the file's JSON itself drops the view too.
+    {
+        let editor = h.state_mut().state.machines_pane.editor.as_mut().expect("the editor");
+        let a = added.rows.iter().find(|r| r.name == "A").expect("the A row").pointer.clone();
+        editor.draft.value_mut().pointer_mut(&a).expect("A")["offset"] = serde_json::json!([0.0, 0.0, -40.0]);
+    }
+    h.run();
+    let written = chain_view(&h);
+    assert!(written.notes.iter().flatten().any(|n| n.contains("states offset")), "the written offset shows its note");
+    assert_ne!(*written, *added);
+    let _ = std::fs::remove_dir_all(&dir);
+}

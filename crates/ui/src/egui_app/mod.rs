@@ -48,9 +48,13 @@ mod report_scrub;
 mod status_alert;
 
 mod stock_info;
+mod browser_open;
 mod donate;
 // #2384: the Home button and the recent projects start page.
 pub(crate) mod home;
+// #2428: top-band Settings dropdown and startup update-available notice.
+mod settings_drop;
+mod update_notice;
 mod machine_page;
 mod tool_list_page;
 mod stock_page;
@@ -77,6 +81,7 @@ mod op_icons;
 mod tool_icons;
 mod layout;
 mod load_field;
+mod pass_start_row;
 // #2339: the Panel setups window (save, load and delete dock arrangements).
 mod panel_setups;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
@@ -95,14 +100,18 @@ pub(crate) mod machines_pane;
 // pub(crate) for `State::ai_chat` and its `WakeFn` (#1946).
 pub(crate) mod ai_chat;
 // pub(crate): `MachinesPane::editor` names its type (#383).
+pub(crate) mod machine_axis_chain;
 pub(crate) mod machine_file_editor;
 mod feeds_page;
 mod spindle_row;
 mod approach_page;
 mod lead_page;
 mod start_exit_rows;
+mod turning_start_exit_rows;
+mod predrilled_page;
 pub(crate) mod op_tabs;
 mod painted;
+mod sim_steps;
 mod ribbon_cell;
 mod tree_badges;
 mod tree_glyphs;
@@ -119,6 +128,8 @@ mod stock_material_row;
 mod tool_body_assembly_page;
 mod tool_body_lathe_page;
 mod tool_body_page;
+// #3894: the orbitable model view shared by the body page and the tool library window.
+mod tool_model_view;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
 // #894: the Thread operation's pitch and hand rows.
@@ -127,18 +138,27 @@ mod thread_page;
 mod tool_thread_mill_row;
 // #1444: the undercut cutters' seeding and dovetail flank angle row.
 mod tool_undercut_row;
+// #3368: a chamfer mill's tip form and tip diameter rows.
+mod tool_taper_tip_row;
+// #3369: a form mill's preset list, number rows and pilot length.
+mod tool_form_mill_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
 mod tool_settings;
+// #3930: a saved tool's Properties summary and its "Edit in tool library" door.
+mod tool_summary;
 // #2014: the tool Properties' label-left property grid and its groups.
 mod tool_settings_grid;
-mod tool_library;
+// #3892: the tool library window (U1 of #3663).
+mod tool_library_dialog;
 mod tool_preview;
 // #890: the tool editor's per-material cutting data.
 mod tool_cutting_rows;
 mod tool_turning_row;
 mod tool_profile_page;
-// #793: the built-in taper holder picker in the Profile section.
+// #2007/#3914: what the Properties tool preview draws, with the cutter outline memo.
+mod tool_preview_inputs;
+// #793: the built-in taper holder picker (#3930: the tool library window's assembly group).
 mod tool_holder_picker;
 // #93 slice 2: the Profile tab's drawn cutter, neck and shank.
 mod tool_cutter_page;
@@ -147,6 +167,7 @@ mod setup_wcs_pick;
 // #870: the WCS page's footer (Set origin beside Close) and origin line.
 mod wcs_footer;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
+mod agie_inspection;
 mod setup_pages;
 mod setup_settings_page;
 mod setup_post_page;
@@ -189,9 +210,12 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod waterjet_page;
 mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;
+// #3333: the sinker kinds' Start point / Exit point groups.
+mod sinker_pick_rows;
 mod trochoid_page;
 // #1444: the Slot Undercut kind's fields.
 mod undercut_page;
@@ -204,6 +228,7 @@ mod mill2d_page;
 mod rest_pocket_page;
 mod mill3d_page;
 mod multiaxis_page;
+mod multiaxis_deburr_page;
 mod op_page;
 // #144: macOS Cmd+Q / app-menu Quit routed through the guarded Quit.
 #[cfg(not(target_arch = "wasm32"))]
@@ -215,11 +240,17 @@ mod thread_infeed_page;
 mod turning_page;
 // #107: Save / Don't Save / Cancel over unsaved changes.
 mod unsaved_prompt;
+// #1874: the length unit of a STEP file that states none.
+pub(crate) mod step_units_prompt;
+// #3608: Save As / Cancel / Overwrite when the project file changed.
+mod overwrite_prompt;
 mod panes;
 // #441: the ribbon's Theme door and its dropdown.
 mod theme_drop;
 mod recent_drop;
 mod file_drop;
+// #2950: dropped .mch and .cps files go to the machine and post lists.
+mod setup_file_drop;
 mod gen_overlay;
 // #343: the browser tree, split from panes (rows / pane / operation menu).
 mod browser_tree;
@@ -301,11 +332,15 @@ mod footer_tests;
 #[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
+mod boundary_offset_tests;
+#[cfg(test)]
 mod field_focus_tests;
 #[cfg(test)]
 mod coolant_tests;
 #[cfg(test)]
 mod thread_hand_tests;
+#[cfg(test)]
+mod part_kerf_tests;
 #[cfg(test)]
 mod thread_mill_page_tests;
 #[cfg(test)]
@@ -319,6 +354,8 @@ mod program_info_tests;
 #[cfg(test)]
 mod post_dialog_tests;
 #[cfg(test)]
+mod setup_post_gap_tests;
+#[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
 mod viewport_ground_tests;
@@ -331,11 +368,15 @@ mod ribbon_icon_tests;
 #[cfg(test)]
 mod plasma_ribbon_tests;
 #[cfg(test)]
+mod waterjet_ribbon_tests;
+#[cfg(test)]
 mod machine_mode_tests;
 #[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod report_tests;
+#[cfg(test)]
+mod gpu_test_lock;
 #[cfg(test)]
 mod fresh_op_tests;
 #[cfg(test)]
@@ -381,6 +422,8 @@ mod sinker_pass_tests;
 mod sinker_machine_tests;
 #[cfg(test)]
 mod rest_pocket_tests;
+#[cfg(test)]
+mod predrilled_page_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, or the file named on the
@@ -415,6 +458,14 @@ pub fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
+    let idle_env = std::env::var("CAMCRAFT_MCP_IDLE_TIMEOUT").ok();
+    let mcp_idle = match camcraft_app::mcp::idle_timeout_from(args, idle_env.as_deref()) {
+        Ok(idle) => idle,
+        Err(err) => {
+            diag_warn!("mcp: {err}");
+            return 2;
+        }
+    };
     if args.iter().any(|a| a == "--headless") {
         if pick != gpu::GpuPick::Auto || want.is_some() {
             diag_info!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
@@ -429,8 +480,9 @@ pub fn run(args: &[String]) -> i32 {
             }
         }
     } else {
-        // #2462: the file named on the command line opens in the window.
-        run_windowed(pick, want, mcp_port, &crate::cli_options::files(args))
+        // #2462: the file named on the command line opens in the window;
+        // #3609: read-only with `--read-only`.
+        run_windowed(pick, want, mcp_port, mcp_idle, &crate::cli_options::files(args), crate::cli_options::start_mode(args), crate::cli_options::read_only(args))
     }
 }
 
@@ -457,15 +509,15 @@ fn run_headless(_open: Option<crate::state::CommandKind>) -> i32 {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String]) -> i32 {
-    shell_window::run_windowed(pick, want, mcp_port, files)
+fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, mcp_idle: std::time::Duration, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
+    shell_window::run_windowed(pick, want, mcp_port, mcp_idle, files, start, read_only)
 }
 
 /// #31: the browser build has no winit window to open - its shell is the
 /// web runner still owed on that issue - so the windowed entry refuses by
 /// name instead of pretending.
 #[cfg(target_arch = "wasm32")]
-fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _files: &[String]) -> i32 {
+fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _mcp_idle: std::time::Duration, _files: &[String], _start: crate::cli_options::StartMode, _read_only: bool) -> i32 {
     diag_warn!("{WASM_NO_WINDOW}");
     2
 }

@@ -14,7 +14,7 @@ use egui::Ui;
 use camcraft_app::cutter_profile;
 use camcraft_app::units::{self, Unit};
 
-use super::tool_profile_page::{BAD, points_grid};
+use super::tool_profile_page::{bad_ink, points_grid};
 use crate::state::State;
 
 pub(super) fn cutter_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
@@ -92,7 +92,7 @@ fn cutter_view(ui: &mut Ui, state: &mut State, u: Unit) {
     let points = state.tool_cutter_ui.points.clone();
     let check = cutter_profile::check(&tool, points);
     // #2007: the one to-scale preview draws this draft
-    // (`tool_profile_page::preview_inputs`); no second view here.
+    // (`tool_preview_inputs::preview_inputs`); no second view here.
     match &check {
         Ok(s) => {
             ui.label(format!(
@@ -106,7 +106,7 @@ fn cutter_view(ui: &mut Ui, state: &mut State, u: Unit) {
             ));
         }
         Err(e) => {
-            ui.colored_label(BAD, e.to_string());
+            ui.colored_label(bad_ink(), e.to_string());
         }
     }
 }

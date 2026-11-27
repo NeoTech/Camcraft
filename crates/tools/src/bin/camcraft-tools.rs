@@ -23,6 +23,7 @@ COMMANDS:
     work materials: aluminium_6061 mild_steel stainless_304
                     grey_cast_iron brass plastics_pom
                     softwood hardwood mdf plywood acrylic hdpe
+                    copper
     tool materials: hss carbide
 
 OPTIONS:

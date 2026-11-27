@@ -159,6 +159,7 @@ fn hurco_export_roundtrips_and_escapes_xml_without_control_state() {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 25.0,
@@ -177,6 +178,9 @@ fn hurco_export_roundtrips_and_escapes_xml_without_control_state() {
         cutting: vec![],
         outline: vec![],
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     };
     tool.catalog.vendor = Some("A & B <Carbide>".into());
     let text = export_controller_table(

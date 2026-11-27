@@ -155,6 +155,11 @@ fn view_menu(ui: &mut Ui, state: &mut State) {
     ui.add_enabled(mounted, egui::Checkbox::new(&mut state.show_work_envelope, "Show work envelope"))
         .on_hover_text(tip)
         .on_disabled_hover_text("Mount a machine on the active setup to show its work envelope.");
+    // #2632: the operator-side arrow of the envelope. View state too.
+    let envelope_on = mounted && state.show_work_envelope;
+    ui.add_enabled(envelope_on, egui::Checkbox::new(&mut state.show_operator_side, crate::operator_side::SWITCH))
+        .on_hover_text(crate::operator_side::TIP)
+        .on_disabled_hover_text(crate::operator_side::TIP_OFF);
     // The display mode moved to the viewport's Display menu (#2818).
     // Projection is view state the same way (#434): orthographic keeps
     // a side view straight - parallel edges, no converging - which is

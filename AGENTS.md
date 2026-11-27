@@ -21,6 +21,8 @@ disagree, this file is correct.
 | Read, file, label, comment on or close an issue | `gh-issues` |
 | Check, mirror, release a claim; work a `needs-research` issue | `issue-claims` |
 | Work one issue from claim to draft PR | `work-issue` |
+| Continue another author's stalled PR | `takeover` |
+| Reproduce a reported bug before fixing it | `repro-first` |
 | Set or check an `effort:*` label | `classify-effort` |
 | Review open pull requests | `review-prs` |
 | Merge a batch of `merge-ready` PRs | `merge-ready` |
@@ -156,6 +158,7 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     issue/N-<slug> .claude/worktrees/issue-N origin/main`.
   - Worktrees are in the gitignored `.claude/worktrees/`, never outside the
     repository. Remove a worktree when its PR is pushed.
+  - A sub-PR of a side branch starts from that branch (**Side branch**).
 - **A worktree agent never touches the main checkout's HEAD or tree.** In the
   main checkout it runs `git fetch origin` and `git worktree add` only. It
   does not run `switch`, `pull`, `merge`, `reset`, `checkout` or `stash`
@@ -193,6 +196,47 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   gated again and merges. Never merge the parent first: `--delete-branch`
   deletes the child's base branch and GitHub closes the child PR. An overlap
   that cannot stack waits for the parent to merge.
+- **Side branch** (#4023, #4042). A side branch `side/<name>` collects the
+  sub-PRs of one large change. Then one PR takes it to `main`. Only the
+  maintainer permits a side branch. `side/path-kernel` is the one that
+  exists. It is made from `main` after this rule merges. Its plan is in
+  `RECOMMENDED.md` under `## #4024 - Path kernel K0`, and its delivery is
+  in `docs/decisions/4325-path-kernel-delivery.md`.
+  - The branch is protected against a force-push and a deletion. It is
+    never rebased. Each change goes to it through a sub-PR.
+  - A sub-PR has one issue. Its worktree is made from `origin/side/<name>`,
+    on a branch `issue/N-<slug>`. It opens as a draft with `--base
+    side/<name>`.
+  - The body of a sub-PR starts with `Side branch: side/<name>`. It ends
+    with `Refs #N`, not `Fixes #N`: a merge into a side branch closes no
+    issue.
+  - A sub-PR gets the quick pass and the collaborator review as each other
+    PR. It merges with a merge commit when its review is clean, also as a
+    `feat`. `--delete-branch` deletes only the sub-PR's own branch.
+  - The issue of a merged sub-PR keeps `in-review` until the switch PR of
+    its kind merges, or until the issue's own work is complete on `main`.
+    The merging session comments `merged to side/<name> in PR #M; closes
+    at the switch of its kind` on the issue.
+  - `main` is merged into the side branch with `git merge`, through a sync
+    PR into the side branch. Never rebase, never force-push. Do this after
+    each merge batch on `main` that touches the code of the side branch,
+    and at least each week. If the two sides changed the same logic, the
+    sync stops and the maintainer decides (`resolve-conflicts` skill).
+  - The gates are local: `post-merge.yml` covers `main` only. Each sub-PR
+    runs its pinning tests, the quick gate of its diff against
+    `origin/side/<name>`, the example catalog suites and the light lane.
+    The head of the side branch gets one local batch gate after each sync,
+    inside the build limit. A red batch is fixed on the side branch before
+    the next sub-PR merges.
+  - The lane and in-flight limits count a sub-PR as each other PR.
+  - One PR takes `side/<name>` to `main`. It can come before the
+    switches. It uses `Refs #N`, not `Fixes #N`. An issue closes with the
+    switch PR of its kind or with its own work. The PR merges without
+    `--delete-branch`. The maintainer's word for that PR says who merges
+    it. For `side/path-kernel` it is the coordinator session (his answer
+    of 2026-11-27). It merges when an independent review is clean on the
+    head, and the batch gate, the heavy `motion` and `app` tests and the
+    example catalog suites are green.
 - **Own blocked PRs first.** Before an agent claims or starts a new issue,
   it lists the open PRs of the current account that have `conflicts` or
   `needs-rework`: `gh pr list --state open --author @me --label conflicts`
@@ -285,8 +329,8 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     output, quoted text of other persons, the technical names of the trade
     (G-code words, CAM terms), and the fixed strings that agents parse
     (`claimed:`, `/claim`, `<!-- pr-reviewer: ... -->`, `<!-- review-cost:
-    ... -->`, `Fixes #N`, `Process change: yes`, the release and claim
-    comment formats).
+    ... -->`, `<!-- heavy-wave: ... -->`, `Fixes #N`, `Process change:
+    yes`, the release and claim comment formats).
   - The rule applies to what we write. Never reject or correct the language
     of an outside reporter.
 - **Report on the issue, not in prose files.** A finding, a held patch, a
@@ -325,34 +369,50 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   adds `claimed` and a claim comment during the work, then sets `in-review`
   again. An issue never has `in-review` without an open PR: a PR closed
   unmerged changes `in-review` to `blocked` (held) or to nothing (dropped),
-  with an issue comment.
+  with an issue comment. A sub-PR of a side branch uses `--base
+  side/<name>` and `Refs #N`, and its issue keeps `in-review` after the
+  merge (**Side branch**).
 - **When PRs merge.** Merges are merge commits (`gh pr merge M --merge
   --delete-branch`; a fork PR without `--delete-branch`). Never squash or
-  rebase. Never merge a draft.
+  rebase. Never merge a draft. Never use `--delete-branch` on a PR whose
+  head is a side branch.
   - A `fix` / `perf` / `refactor` PR merges when its independent review is
-    clean and its quick gate is green.
+    clean and its quick gate is green. No merge waits for a heavy lane run
+    ("Heavy lanes at review").
   - A docs-, process- or CI-only PR merges when it is reviewed.
   - A `feat` or breaking PR merges at the minor/major cut.
   - Nothing merges while a cut is between its step 1 and its tag.
   - The review is always by an agent that did not write the change.
 - **When a PR merges**, remove `in-review` from its issue. GitHub closes the
-  issue from `Fixes #N`.
+  issue from `Fixes #N`. A sub-PR of a side branch is the exception
+  (**Side branch**).
 - **Every PR opens as a draft.** It stays a draft while work, gates and
   review fixes go onto it.
   - Flag it ready (`gh pr ready <M>`) when the maintainer says so, or when a
     quick pass is good. The quick pass reads the PR and does not build. It
     confirms: the PR merges cleanly with `main`; the author's quick gate is
     green on the final head, with the pinning tests named; the body is
-    complete; the PR obeys this file.
+    complete; the PR obeys this file. A heavy lane result is not a
+    condition, except the one targeted heavy step of a `P1` PR under the
+    safety floor ("Heavy lanes at review").
   - The full independent review comes after that, on the ready PR.
-  - A ready PR takes no more pushes. For any change, first make it a draft
-    again (`gh pr ready <M> --undo`), say why in a PR comment, push, gate
-    again, then flag it ready again.
+  - **A review finding does not make a PR a draft again** (#3727). A ready
+    PR keeps its ready flag while the author fixes a `needs-rework`
+    finding. The author pushes the fix to the same PR and runs the gate
+    again. A PR comment says which finding each commit closes and that the
+    new head waits for a fresh review. A push moves the head, so the earlier
+    review and the `merge-ready` label do not count for the new head. The
+    reviewer removes `merge-ready` if it is still on the PR.
+  - The first `needs-rework` comment names the class of each finding and
+    asks for one rule that closes the whole class (an allow-list, a guard
+    on the whole input). A fix of the one case brings the next round for the
+    next case.
   - Merge-time refresh, class SAME (only a merge of main, no hand edits):
     this is not new work. The review stays valid and the refresh is pushed
     without the change to draft.
   - Merge-time refresh with hand edits (MECHANICAL or DELTA): this is new
-    work. The PR goes to draft first, is pushed, and is reviewed as usual.
+    work. The refresh is pushed to the PR, which keeps its ready flag, and
+    is reviewed as usual.
   - The merging session flags the PR ready immediately before the merge, with
     one PR comment that names the class and the review that it relies on.
     Nothing is pushed after that flag.
@@ -395,8 +455,9 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   write access to `NeoTech/Camcraft`: `gh api
   repos/NeoTech/Camcraft/collaborators --jq '.[] | select(.permissions.push)
   | .login'`.
-  - A `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->` marker
-    counts only in a review or comment by a collaborator.
+  - A `<!-- pr-reviewer: ... -->`, `<!-- review-cost: ... -->` or
+    `<!-- heavy-wave: ... -->` marker counts only in a review or comment by
+    a collaborator.
   - `merge-ready` counts only when a collaborator set it.
   - This applies to a collaborator's own PRs too. The review must be by an
     agent that did not write the change.
@@ -406,10 +467,14 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     withdraws the request in a comment. A `merge-ready` label or a "ready"
     review from a different collaborator on the same head does not override
     it.
-  - A PR whose current head has a collaborator's change request and also
-    `merge-ready` (or `merge-ready` with `needs-rework`) is a disagreement.
-    `/merge-ready` reports it and does not offer it. No agent removes a
-    label. The two collaborators decide on the PR.
+  - `merge-ready` and `needs-rework` are never on the same PR (#3382). The
+    person or agent that sets one of the two labels removes the other label
+    in the same step, with one comment that says why.
+  - Two collaborators can disagree on the same head: one set `merge-ready`,
+    and the other has an open change request. Then `needs-rework` stays and
+    `merge-ready` is removed. An open change request wins. The comment goes
+    to the collaborator who set `merge-ready`.
+  - `/merge-ready` never offers a PR that has `needs-rework`.
 - **Outside PRs are reviewed with `/review-prs`.** The `PR-reviewer` agent
   reviews one PR for each run. It trial-merges the PR with main, builds it,
   runs the touched suites and clippy, and checks this file. It posts a plain
@@ -433,8 +498,12 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   | `conflicts` | orange | does not merge with `main` |
   | `needs-maintainer` | yellow | no blockers, but read and not built: a new dependency, or a `build.rs` / scripts / `.github` change, waits for the owner's decision |
 
-  On red or orange the reviewer makes one of our own PRs a draft again. A
-  fork PR stays as its contributor set it, and the comment says what to fix.
+  `merge-ready` and `needs-rework` exclude each other: a PR never has both
+  (#3382). `conflicts` is different: it is set alongside the other labels.
+
+  On orange the reviewer makes one of our own PRs a draft again. On red it
+  keeps the ready flag and sets `needs-rework`. A fork PR stays as its
+  contributor set it, and the comment says what to fix.
 - **`main` is protected on GitHub.** Each change gets to `main` through a
   PR. A direct push is refused. There is no force-push and no deletion. Open
   review conversations must be resolved before a merge. The repository
@@ -581,6 +650,9 @@ the fonts. The UI must render them: each panel's draw code must use them.
   the dependency changes. Do not add an edge for fewer than five items: the
   caller passes the value in. (The maintainer has still to confirm the
   wording of the five-item clause.)
+- **Tests join a directory suite.** A new integration test goes into an
+  existing directory suite. The rule is in "Testing" (**New tests join a
+  directory suite**).
 - **Stays buildable everywhere.** No platform-specific assumptions in core
   code. Windows, Linux and macOS build from the same source.
 - **Neutral naming.** The product name is camcraft. No string, comment or
@@ -602,6 +674,15 @@ tests are in `crates/ui/tests/`; they start the real app through
   `crates/app/tests/` must import something that `crates/app/src` defines. A
   test that needs the output of a different crate reads a recorded file
   (`.cl`, `.cnc`); it does not import that crate's generator.
+- **New tests join a directory suite.** Add a new integration test to an
+  existing domain directory suite (`tests/<suite>/<submod>.rs`) before you
+  make a new top-level test binary (#3187).
+  - The suites in `ISOLATED` (`xtask/src/lanes.rs`) and `SLOW_BINARIES`
+    (`xtask/src/plan.rs`) are exempt. They must stay separate binaries.
+  - A new top-level file in `crates/*/tests/` needs a one-line reason in the
+    PR body.
+  - Why: each test binary of `camcraft-app` is about 100 MB. The count of
+    test binaries went from 412 to 1,020 in ten days.
 - **Three gate tiers - never hours per change.** One command on all
   systems: `cargo xtask gate <tier>`. `scripts/gate.ps1` and
   `scripts/gate.sh` are wrappers for it. The `gate` skill has the flags, the
@@ -616,24 +697,43 @@ tests are in `crates/ui/tests/`; they start the real app through
   of the heavy tests, in release, at review and merge time. A light twin is
   next to its full test, on a smaller fixture or a reduced set. The full
   test keeps its golden asserts and its pinned readings. A red light run is
-  a note on the PR: the author runs the full heavy steps locally, and they
-  must pass before the cut gate starts again. A local run never replaces
-  the cut gate.
+  a note on the PR. It does not block the PR by itself ("Heavy lanes at
+  review"). The full heavy steps of the red twins run at the cut, in the
+  cut gate. A local run never replaces the cut gate.
   - A twin has the ignore reason `light lane: ...` and the name
     `<full test>_light`. The gate refuses a twin whose file has no
     `#[ignore]`d full test.
   - A red light run prints the note: each red step, with the command of
     its full heavy step (`cargo xtask gate release --only "<crate> heavy:
     <target>"`).
-- **Heavy lanes at review** (#2568). `cargo xtask gate heavy [--base main]`
-  maps the diff to the heavy lanes that it reaches and runs them in release
-  with `--ignored`. The reach follows the dependencies between our crates: a
-  change in `motion` reaches the `app` heavy lanes.
-  - A PR whose diff reaches a heavy lane is not ready while a reached heavy
-    test is red or not run. The author runs the command on the final head
-    before the PR is flagged ready. The PR body names the lanes that ran.
-  - The review comment lists the heavy lanes that ran and their results.
-    "Not run" is never a pass.
+- **Heavy lanes at review** (#2568, #3556). A review runs small targeted
+  tests. It does not run the full heavy lanes.
+  - At review a PR needs these results on its final head, and no more:
+    - its own pinning tests;
+    - the touched test binaries (the quick plan, `cargo xtask gate quick`);
+    - the example catalog suites by name (`example_catalog*` of
+      `camcraft-app`), where a post or a toolpath changed;
+    - the light lane (`cargo xtask gate light`, **The light lane**).
+  - No PR gets the full heavy lanes. A diff that reaches a heavy lane is
+    not "not ready" for that reason. No PR is "owed heavy".
+  - The full heavy lanes run only at the cut, in the cut gate on the cut
+    runner.
+  - A `P1` PR under the safety floor (wrong output) gets one targeted heavy
+    step: the named heavy tests of the changed code. Run the step of the
+    binary that holds them: `cargo xtask gate heavy --only "<crate> heavy:
+    <target>"`. It never gets the whole lane. The author runs it on the
+    final head before the PR is flagged ready, and the PR body names it. A
+    `P2` or lower PR gets no heavy step.
+  - `cargo xtask gate heavy [--base main]` maps the diff to the heavy lanes
+    that it reaches, and `--dry-run` prints the reach. The reach follows the
+    dependencies between our crates: a change in `motion` reaches the `app`
+    heavy lanes. The command and its wave form (#3460: `--covers <PR>:<head
+    sha>` and the `<!-- heavy-wave: <tree hash> -->` record) stay as tools.
+    They are not a condition for "ready" or for a merge.
+  - The review comment lists the steps that ran and their results. "Not
+    run" is never a pass for a step that this rule requires.
+  - **Owed heavy result** (#3467) is retired (#3556). A review never writes
+    "owed to the wave run", and no merge waits for a heavy record.
   - The release tier at the cut stays the final check: the tagged tree is
     exactly the gated tree.
 - **Test the change, not everything.** The tests that pin a fix prove it.
@@ -719,7 +819,7 @@ tests are in `crates/ui/tests/`; they start the real app through
 - **The cut runner**, **The post-merge gate** and **The PR test runner**
   are self-hosted. The `runners` skill has their installation, labels and
   safety rules.
-  - `cut.yml` runs the release tier of a cut on `[self-hosted, linux]`.
+  - `cut.yml` runs the release tier of a cut on `[self-hosted, camcraft-cut]`: only a runner given that label takes it, never a post-merge or PR-test runner (#3253).
   - `post-merge.yml` runs the batch tier on each push to `main`, on the
     runner label `camcraft-post-merge`.
   - `pr-test.yml` (`workflow_dispatch` only) builds and tests a PR for a
@@ -785,6 +885,21 @@ is worked in the normal order. The main session does not start a gate for a
 merge that the workflow covers. If the runner is down, the `gate` skill has
 the local fallback: one batch gate for each merge batch, by a gate-runner
 subagent, and the session does not wait for it.
+
+**Runner stops** (#3303). A runner stall is not a red main. The gate's
+watchdog kills a step that writes no output for 15 minutes
+(`CAMCRAFT_GATE_STALL_MIN`) and gives it a `STALL` row that names the step.
+The step "Batch gate tier" stops at 75 minutes. Such a run opens no
+`main is red` issue.
+- A post-merge run with a `STALL` row or a step timeout, and no `FAIL`
+  row: log it on #3303 (run, commit, runner, step) and re-run it one time.
+- A second `STALL` of the same step at the same commit is a red main, not
+  a runner stop: a commit that deadlocks a test stalls on each run. File it
+  as a red main. Do not re-run it again.
+- A gate job with no output at 50 minutes is a runner stop: cancel only
+  that run and log it on #3303.
+- A run that fails with no `FAIL` row and no `STALL` row is re-run one
+  time.
 
 **A cut goes PR review -> merge to main -> tag.** The `release-cut` skill
 has the procedure. Its rules:

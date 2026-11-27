@@ -47,10 +47,11 @@ fn contour_op(lead: Lead, links: Links) -> OpParams {
         tab_height: 1.0,
         entry: Entry3D::Arc,
         helix_radius: 1.0,
-        blend_turns: true,
+        blend_turns: true, blend_radius: None,
         tilt: None,
         links,
         chain_overrides: Vec::new(),
+        picks: Default::default(),
     }
 }
 
@@ -58,7 +59,7 @@ fn contour_op(lead: Lead, links: Links) -> OpParams {
 /// level descent pitch 1.0, keep down between levels, retract plane
 /// between passes, top = model top.
 fn pocket_op(links: Links) -> OpParams {
-    OpParams::Pocket { rest: None,
+    OpParams::Pocket { pass_start: Default::default(), rest: None,
         blend_radius: None,
         stepover: 2.4,
         stock_to_leave: 0.0,
@@ -78,6 +79,7 @@ fn pocket_op(links: Links) -> OpParams {
         tilt: None,
         links,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 
@@ -328,6 +330,8 @@ fn the_stamp_tells_the_approach_apart_and_a_default_op_keeps_its_digest() {
         Approach { lead_out: Some(Lead::None), ..Approach::DEFAULT },
         Approach { axis_start: true, ..Approach::DEFAULT },
         Approach { arc_xy: true, ..Approach::DEFAULT },
+        // #3745: the approach distance outside the stock.
+        Approach { approach_distance: 5.0, ..Approach::DEFAULT },
     ] {
         assert_ne!(stamp(with(a)), base, "{a:?}");
         assert_ne!(stamp(Links { approach: a, ..kd }), stamp(kd), "{a:?}");

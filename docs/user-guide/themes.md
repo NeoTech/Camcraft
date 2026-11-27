@@ -8,6 +8,10 @@ set. Each setting has its default value (the dark theme).
 2. Change `descriptor.name`. Set `base` to `dark` or `light`.
 3. Change the values that you want. Delete the settings that you do not
    want to change: a setting that the file omits keeps the value of `base`.
+   There is one exception: the view cube, marker, axis and hover colours
+   (`cube_edge` to `viewport_hover`) follow `viewport`. If `viewport` makes
+   the 3D view light on a dark base, or dark on a light base, each of these
+   colours that the file omits takes the value of the other built-in theme.
 4. Select the theme in the theme switcher.
 
 The loader refuses a file by name when a colour is not `#rrggbb` or
@@ -35,6 +39,57 @@ clamped to the range.
 | `selection_stroke` | Outline of a selection |
 | `viewport` | Ground of the 3D view |
 | `ribbon_ink` | Ink of a plain ribbon glyph |
+| `handle_shade` | Shadow under a move or turn handle, its readout, and the origin triads |
+| `handle_text` | Readout text of a move or turn handle in the 3D view |
+| `pick_rim` | Rim of a picked point in the 3D view |
+| `cube_edge` | Outline of a view cube face and of a nav button |
+| `cube_label` | Label of a view cube face |
+| `cube_glyph_on` | Glyph of a nav button that is on |
+| `cube_glyph_off` | Glyph of a nav button that is off |
+| `viewport_hint` | Control hint in the corner of the 3D view |
+| `marker_stem` | Stem of the tool marker during playback |
+| `marker_ring` | Ring of the tool marker during playback |
+| `marker_dot` | Centre dot of the tool marker during playback |
+| `axis_x` | X axis of the Axes button and of a handle |
+| `axis_y` | Y axis of the Axes button and of a handle |
+| `axis_z` | Z axis of the Axes button and of a handle |
+| `viewport_hover` | Hover dot on the view cube and the hovered facet of the machined part |
+| `overlay_panel` | Ground of the generate progress panel over the 3D view |
+| `overlay_edge` | Outline of the generate progress panel |
+| `overlay_text` | Text of the generate progress panel, and the frame and text of the file drop hint |
+| `overlay_track` | Track of the generate progress bar |
+| `drop_veil` | Veil over the 3D view while a file is dragged over the window |
+| `empty_hint` | Text of the empty 3D view |
+| `pick_halo` | Dark halo under a picked edge and under the Geometry-list row hover |
+| `plate_hole` | Hole crosses and row and column names of a fixture plate |
+| `plate_dowel` | Dowel diamonds of a fixture plate |
+| `gcode_line` | The move of the selected G-code line, in the 3D view |
+| `tool_ground` | Ground of the tool, holder and profile previews |
+| `tool_axis` | Centre line of a tool preview |
+| `tool_grid` | Level lines of the tool profile preview |
+| `tool_flute` | Cutting band of a tool preview |
+| `tool_shank` | Shank of a tool preview and of a library thumbnail |
+| `tool_body` | Holder body of a tool or holder preview |
+| `tool_edge` | Outline of a tool or holder preview |
+| `tool_holder` | Holder outline in the tool profile and tool preview; its fill is this colour, partly transparent |
+| `tool_note` | Notes and labels in the tool and holder previews |
+| `tool_dim` | Dimension lines of the holder and side views |
+| `thumb_flute` | Cutting part of a tool library thumbnail |
+| `bad_ink` | A refused value or a cutter that cannot work: text and outline |
+| `warn_ink` | A warning of the tool assembly |
+| `mount_axis` | Spindle axis of the tool body page, and the lathe along arrow |
+| `mount_radial` | Lathe radial arrow of the tool body page |
+| `mount_tip` | Tool tip dot of the tool body page |
+| `mount_origin` | Model origin ring of the tool body page |
+| `mount_hint` | Pick hint text of the tool body page |
+
+A theme does not set the colours that carry a meaning: the verdict
+colours of a simulation (clean, rest, gouge, not judged), the move kinds
+(feed, rapid, plunge), the selection, the boundary roles, and the
+warning, error and missing text of the pages. Each colour-vision mode
+(View preferences) has its own fixed set, and each set is tested so that
+these colours stay apart for that eye. A theme file with such a key is
+refused with "unknown token".
 
 ## Geometry (`geometry`, in points)
 

@@ -43,10 +43,11 @@ fn slot_params() -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: None,
         extend_start: 0.0,
         extend_end: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -108,7 +109,7 @@ fn faced_doc() -> (World, History) {
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
     h.execute(&world, stock.expect("stock"));
     let face = OpParams::Face { holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -118,6 +119,7 @@ fn faced_doc() -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "Face1", "EM-0400-2FL", SrcRef::Stock, face).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate"));
@@ -253,4 +255,53 @@ fn a_document_without_material_writes_no_key_and_an_unknown_word_refuses() {
     let bad = text.replacen("\"entities\"", "\"material\": \"unobtainium\", \"entities\"", 1);
     let err = project::open(&new_world(), &bad).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("unknown workpiece material"), "{err}");
+}
+
+#[test]
+fn copper_suggestion_power_turning_and_untabulated_limits_hold() {
+    let t = catalog_tool("EM-0600-4FL");
+    // #3262: C11000 carbide milling: Vc mid 180 m/min; fz10 mid 0.06, x0.5 at 6 mm = 0.03.
+    let s = cutting::compute("EM-0600-4FL", &t, 4, ToolMaterial::Carbide, WorkMaterial::Copper, None, None);
+    assert!((s.vc - 180.0).abs() < 1e-12 && (s.fz - 0.03).abs() < 1e-12, "{s:?}");
+    let n = (180_000.0 / (std::f64::consts::PI * 6.0)).round();
+    assert_eq!(s.rpm, n);
+    assert_eq!(s.rpm, 9_549.0);
+    assert_eq!(s.feed, (0.03 * 4.0 * n).round());
+
+    // Power estimate uses Copper Kienzle constants (kc11 950, mc 0.25).
+    let p = cutting::power_of(&slot_params(), &t, WorkMaterial::Copper).expect("copper power");
+    let fz = 800.0 / (9500.0 * 4.0);
+    let hm = 2.0 * fz / std::f64::consts::PI;
+    let kc = 950.0 * hm.powf(-0.25);
+    let want_kw = 6.0 * 3.0 * 800.0 * kc / (60.0e6 * 0.8);
+    assert!((p.kw - want_kw).abs() < 1e-12, "{p:?} vs {want_kw}");
+
+    // Turning suggestion for Copper (C11000 carbide: Vc mid 190, f/rev mid 0.165).
+    let turn_tool = Tool { kind: camcraft_app::tools::ToolKind::Turning, turning: None, ..t.clone() };
+    let ts = camcraft_app::cutting_turn::compute(
+        "Turn",
+        &turn_tool,
+        ToolMaterial::Carbide,
+        WorkMaterial::Copper,
+        50.0,
+        None,
+        None,
+    )
+    .expect("copper turning");
+    assert!((ts.vc - 190.0).abs() < 1e-12 && (ts.fz - 0.165).abs() < 1e-12, "{ts:?}");
+    assert_eq!(ts.rpm, (190_000.0 / (std::f64::consts::PI * 50.0)).round());
+
+    // Untabulated tool limitations stay visible under Copper.
+    let taper = catalog().into_iter().map(|(_, tool)| tool).find(|tool| tool.kind == camcraft_app::tools::ToolKind::Taper).expect("taper");
+    assert!(cutting::power_of(&slot_params(), &taper, WorkMaterial::Copper).is_none());
+    let (world, mut h) = slotted_doc();
+    h.execute(&world, SetWorkMaterial::new(&world, Some(WorkMaterial::Copper)).expect("copper"));
+    let drill = catalog().into_iter().map(|(_, tool)| tool).find(|tool| tool.kind == camcraft_app::tools::ToolKind::Drill).expect("drill");
+    h.execute(&world, AddTool::new(&world, "DR", drill).expect("drill tool"));
+    let drill_p = camcraft_app::operation::seed_params(
+        camcraft_app::operation::KindInfo::ALL.iter().position(|k| k.label == "Drill").expect("drill kind"),
+    );
+    h.execute(&world, CreateOperation::new(&world, "Drill1", "DR", SrcRef::Stock, drill_p).expect("drill op"));
+    let err = cutting::suggest(&world, "Drill1").expect_err("drill has no table row");
+    assert!(err.contains("does not speak for a drill"), "{err}");
 }

@@ -6,8 +6,12 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+pub mod cli_skill;
+pub mod cli_ui;
 pub mod clock;
 pub mod commands;
+// #3073: saved cut recipes - an operation's settings under a name.
+pub mod cut_recipe;
 pub mod cutting;
 // #890: which row of a tool's per-material cutting data the document picks.
 pub mod cutting_rows;
@@ -20,6 +24,8 @@ pub mod fixture;
 pub mod fixture_profile;
 // #339 slice 6: the user fixture library file.
 pub mod fixture_library;
+// #3645: the user tool component library and its sync status.
+pub mod component_library;
 pub mod step_source;
 pub mod model_source;
 pub mod fixture_carried;
@@ -37,6 +43,7 @@ pub use camcraft_motion::finishing3d;
 pub use camcraft_geometry::geo2d;
 pub mod geometry;
 pub use camcraft_motion::links;
+pub use camcraft_motion::path_picks;
 pub use camcraft_motion::load;
 pub use camcraft_motion::machining2d;
 pub use camcraft_motion::machining3d;
@@ -56,12 +63,16 @@ pub mod model_fidelity;
 pub mod fidelity_note;
 pub mod mesh_open;
 pub mod mesh_solids;
+// #3915: the SolidCraft face names of a model's facets.
+pub mod source_faces;
 pub mod model_vouch;
 pub mod operation;
 pub mod pick;
 pub use camcraft_post::post;
 pub mod path_sig;
 pub mod posting;
+// #2950: the browser's own .mch and .cps files, kept for the session.
+pub use camcraft_post::session_files;
 // #530: the op-family door at post.
 mod posting_family;
 /// Which spindle a lathe post turns for a section, and the door that
@@ -70,6 +81,8 @@ pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
+// #1883: the waterjet profile and the 2D sheet kernel it shares.
+pub use camcraft_motion::{sheet, waterjet};
 pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
@@ -84,6 +97,8 @@ pub use camcraft_motion::sinker_wear;
 pub use camcraft_motion::sinker_orbit;
 // #545: sinker EDM side burning.
 pub use camcraft_motion::sinker_side;
+// #3333: the start and exit picks of the sinker kinds.
+pub use camcraft_motion::sinker_picks;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;
@@ -91,10 +106,16 @@ pub mod recognize;
 pub mod raster;
 // #877: the theme and colour-vision mode, kept per user (not per project).
 pub mod prefs;
+mod prefs_setups;
+// #2428: startup update check against GitHub Releases (native only for HTTP).
+pub mod update_check;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
 pub mod rotary_stack;
+// #2772 parts 1-2: the stated rotation-axis resolver (the op's own
+// direction, else the machine's stated rotary line, through the WCS).
+pub mod rotary_stated;
 pub mod schema;
 pub mod script;
 // #1862: DXF profiles placed on a setup's stock, and the virtual model reference.
@@ -109,6 +130,8 @@ pub mod setup_offsets;
 pub mod setup_align;
 // #343: each setup's own machine and post, and the one-mount law.
 pub mod setup_mount;
+// #2410: the router options that a machine kind offers (UI and MCP).
+pub mod router_offer;
 // #870: the WCS origin said in words ("top of stock, front-left corner").
 pub mod setup_origin;
 // #316: transforms between setups and the setup-relative link.
@@ -156,6 +179,7 @@ pub mod tool_list;
 pub mod tool_list_export;
 // #221: the number a tool posts as, and the clash law.
 pub mod tool_numbers;
+mod tool_reservations;
 pub use camcraft_tools::tools;
 // #894: the thread mills' form constants, sanity law and pitch door.
 pub use camcraft_tools::thread_mill;
@@ -182,6 +206,15 @@ pub mod tool_cutter;
 pub use camcraft_tools::holder_library;
 // #368: a tool's modelled body and the reads the judging laws take from it.
 pub mod tool_body;
+// #3644: the document component table and each tool's component stack.
+pub mod tool_assembly;
+// #3644: the records the table holds, for the callers outside this crate.
+pub use camcraft_tools::{component, component_geometry, connection_code};
+// #3898: the fit queries and the records a component is built from, for the
+// tool library window (the UI reaches the tools crate through app only);
+// `milling_cutter` for a row's #3646 cutter facts, `lathe_assembly` for its
+// #4278 lathe body.
+pub use camcraft_tools::{component_fit, frame, insert_iso1832, insert_seat, lathe_assembly, milling_cutter};
 // #371: the editor's placement preview and picks, the sim's posed body.
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
@@ -195,6 +228,10 @@ pub mod tool_body_lathe_view;
 pub mod tool_body_assembly;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
+// #4266: the sim playback's machine-frame view - the math lives in
+// camcraft-sim (pure vectors, no document concern); `app` re-exports it
+// for the UI ("app holds the document, nothing else").
+pub use camcraft_sim::machine_view as sim_machine_view;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.
 pub mod sim_lathe_body;
 pub mod units;

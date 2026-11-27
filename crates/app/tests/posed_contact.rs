@@ -18,7 +18,7 @@ use camcraft_app::finishing3d::{self, Finish3DParams, FinishPattern};
 use camcraft_app::geo2d::{Loop, Point2, Region};
 use camcraft_app::geometry::{Point3, Triangle};
 use camcraft_app::multiaxis::{contour5d, AxisControl};
-use camcraft_app::verify::{Mode, ToolGeom, VerifyContext, Warning, cuts_no_material, verify};
+use camcraft_app::verify::{Cutter, Mode, ToolGeom, VerifyContext, Warning, cuts_no_material, verify};
 
 const TAU: f64 = std::f64::consts::TAU;
 const R: f64 = 3.0;
@@ -76,6 +76,7 @@ fn finish(top_z: f64, bottom_z: f64) -> Finish3DParams {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        waterlines: true,
     }
 }
 
@@ -110,7 +111,7 @@ fn ctx<'a>(region: &'a Region, facets: &'a [Triangle], tool: &'a ToolGeom) -> Ve
         stock: None,
         model: Some(facets),
         tool,
-        cutter: None,
+        cutter: Some(Cutter { corner_r: tool.radius, ..Cutter::flat(tool) }),
         mode: Mode::Envelope,
         stock_top_z: 20.0,
         clearance_z: 40.0,

@@ -46,6 +46,7 @@ var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
 var setupNext = null;      // #1647: null means no marker; a cleaned name may be empty
+var dOff = false;          // #4144: a G53 retract wrote D0 - the next section selects the D again
 var homedAt = -1;          // linesWritten() just after a trip home (#504): onClose skips its own home when nothing followed
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;
@@ -87,6 +88,23 @@ function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; }
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+// #3699: a tap feed is pitch x rpm, kept at 0.001 mm/min by the stream, and
+// the control cuts the pitch F / S. G84 writes the feed at three mm or four
+// inch decimals; a tap whose written F and S do not hold the pitch to 0.01
+// percent is refused by name.
+function tapFeed(v) { return fu(v); }
+function tapPitchHolds(feed) {
+  var speed = Math.round(sRpm);
+  var written = Number(fu(feed)) * (inch ? 25.4 : 1);
+  var want = sRpm > 0 ? feed / sRpm : 0;
+  var got = speed > 0 ? written / speed : 0;
+  if (!(want > 0 && Math.abs(got - want) / want <= 1e-4)) {
+    msg("canned cycle G84 (tap)" + (coolantOp ? " in operation " + coolantOp : "") + " feed " + feed + " mm/min at " + sRpm +
+      " rpm posts as F" + tapFeed(feed) + " S" + speed + " - refused: the written pitch differs by more than 0.01 percent");
+    return false;
+  }
+  return true;
+}
 function block(words) {  // one numbered line per block - the DIN law
   var a = [];
   for (var i = 0; i < words.length; i++) {
@@ -101,6 +119,7 @@ function block(words) {  // one numbered line per block - the DIN law
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }
+function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
 }
@@ -358,7 +377,7 @@ function safeZ() {
 // Cutter radius compensation in the control (#39; DIN 66025 / ISO 6983
 // G41 left / G42 right / G40 cancel, and the family's published
 // programming fundamentals: the radius is the ACTIVE cutting edge's -
-// the D the tool call already selected (T n D n) - so no D word rides
+// the D the tool call already selected (T n D1, dWord) - so no D word rides
 // the engage block; the approach NORM runs straight to the first point
 // and stands the tool perpendicular to the path tangent at that start
 // point, the start-up the generator's lead law assumes - stated on the
@@ -382,7 +401,7 @@ function onRadiusCompensation(side) {
   compD = "";
   compOn = true;
   if (properties.CompensationType === "wear" && !compNoted) {
-    block(["; WEAR COMP - D" + ni(tNo) + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS"]);
+    block(["; WEAR COMP - " + dWord() + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS"]);
     compNoted = true;
   }
 }
@@ -438,6 +457,36 @@ function onSpindleSpeed() {
   }
 }
 
+// #4143: the D word of the tool call. 840D sl Fundamentals 12/2018,
+// section 6.6 (pp. 82-83): D selects an offset data block of the ACTIVE
+// tool. With "D number = cutting edge number" each tool has D1..D12, so a
+// one-edge milling cutter is D1 - D<T> selects an edge that a high tool
+// number does not have (an alarm, or no length). A control set to free D
+// numbers states `tooling.d_number: "tool-number"` in its machine file.
+var dRuleRefused = false;
+function dWord() {
+  var r = (typeof machine !== "undefined" && machine && machine.dNumber) || "first-edge";
+  if (r === "tool-number") return "D" + ni(tNo);
+  if (r !== "first-edge" && !dRuleRefused) {
+    dRuleRefused = true;
+    msg("machine tooling.d_number " + r + " - this post writes first-edge (D1) or tool-number (D = T) only");
+  }
+  return "D1";
+}
+
+// #4144: every G53 retract is a rapid (G53 is not a motion word: after a
+// G1 the move would run at the feed, after G2/G3 the control alarms) and
+// deselects the tool offset in the same block. 840D sl Fundamentals
+// 12/2018: G53 suppresses only the frames (section 9.1 p. 151, section
+// 13.10 p. 358), D0 deactivates the tool offsets (section 6.6 p. 82), and
+// the manual's own program example retracts with "G0 G53 X.. Z.. D0"
+// (section 4.4, pp. 54-55). So the Z word is the spindle reference
+// point's machine height, not the tool tip's.
+function retractZ(z) {
+  block(["G0", "G53", "Z" + fu(z), "D0"]);
+  dOff = true;
+}
+
 function onToolChange(number, name) {
   toolName = clean(name);
   tNo = number;
@@ -446,7 +495,7 @@ function onToolChange(number, name) {
 
 // The preamble closes over everything a raw motion line needs to be a
 // legal program: plane, offsets, tool, spindle, coolant. The tool call
-// selects tool and geometry together (T n D n) - no G43 word exists
+// selects tool and geometry together (T n D1, dWord) - no G43 word exists
 // in this family.
 // #616: per-operation smoothing, only when the document turned it on
 // (the stream then carries PARAM Smoothing / SmoothingMode). Siemens CYCLE832 high-speed settings: tolerance plus _ROUGH/_FINISH.
@@ -479,14 +528,22 @@ function startPreamble() {
   // in the opening block before any motion, whatever the control's
   // basic system or the last program left modal. #902: the unit is the
   // document's - an inch program states G700, inch for lengths and
-  // feeds alike, by the same law.
-  block(["G17", inch ? "G700" : "G710", "G90", wcsWord, "G40", "G80"]);
+  // feeds alike, by the same law. #4150: state G94 in the preamble.
+  block(["G17", inch ? "G700" : "G710", "G90", "G94", wcsWord, "G40", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
-    block(["T" + ni(tNo), "D" + ni(tNo), "M6"]);
+    block(["T" + ni(tNo), dWord(), "M6"]);
     xyUnknown = true;          // #1633: the first traverse states its height again
     toolWait = false;
+    dOff = false;
+  } else if (dOff) {
+    // #4144: a retract left D0 active with the same tool in the spindle;
+    // select its offset again before any motion, and the first traverse
+    // states its height (the length applies on the first Z move, section 6.6).
+    block([dWord()]);
+    xyUnknown = true;
+    dOff = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
     block(["S" + ni(sRpm), "M3"]);
@@ -520,7 +577,7 @@ function afterOp() {
     // #1647: lift Z before inviting the operator to re-clamp the part.
     var setupZ = safeZ();
     if (setupZ === null) return;
-    block(["G0", "G53", "Z" + fu(setupZ)]);
+    retractZ(setupZ);
     note("SETUP CHANGE - NEXT: " + (next || "UNNAMED SETUP"));
   }
   if (ask === "optional-stop") { block(["M1"]); return; }
@@ -528,7 +585,7 @@ function afterOp() {
   if (ask === "home") {
     var z = safeZ();            // refused (named once): no Z lift, so no XY move either
     if (z === null) return;
-    block(["G0", "G53", "Z" + fu(z)]);   // machine coordinates, Z first (onClose's law)
+    retractZ(z);               // machine coordinates, Z first (onClose's law)
     block(["G0", "G53", "X0", "Y0"]);
     homedAt = linesWritten();
     return;
@@ -668,6 +725,9 @@ function onLinear() {
 function onCircular() {
   startPreamble();
   compRefuse("an arc");
+  // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
+  var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
+  if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (!tiltOk(properties) || chainCut()) return;
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
@@ -780,6 +840,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
+  if (g === "G84" && !tapPitchHolds(Number(p.FeedRate))) return;
   if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
   var words = [g, wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), wo("R", p.R, orgZ)];
@@ -797,7 +858,7 @@ function onCycle() {
   // page 95, gives G89 dwell in milliseconds. Section 6.3.1 says cycle
   // parameters are modal: write P0 when a Back bore has no dwell.
   if ((ms > 0 && g !== "G73" && g !== "G84") || g === "G89") words.push("P" + ms);
-  words.push(fw(p.FeedRate));
+  words.push(g === "G84" ? "F" + tapFeed(p.FeedRate) : fw(p.FeedRate));
   block(words);
   cycX = p.X; cycY = p.Y; cycR = p.R;
   seatKnown = true;
@@ -935,7 +996,7 @@ function onClose() {
   // home) already is the program-end home - written once, not twice.
   if (linesWritten() !== homedAt) {
     var z = safeZ();
-    if (z !== null) block(["G53", "Z" + fu(z)]);
+    if (z !== null) retractZ(z);   // #4144: G0, and D0 like every G53 retract
   }
   var u = endUnitsWord();
   if (u) block([u]);

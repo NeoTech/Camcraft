@@ -13,8 +13,20 @@
 //! takes the ChangeTool gates, and holders off never clears a body.
 //! Provenance: our own tests over our own format and commands.
 //!
-//! Gate map (M4.4): covers app::tool_library, app::commands (tool_import),
-//! app::mcp (import_tool_library), app::script (importTools).
+//! #3897: the holder list's used-by count (`used_by`). #3644: the
+//! component table and assembly commands (`assembly_cmds`). #3645: the
+//! table and stacks in the project file (`component_files`), the user
+//! component library and its sync (`component_sync`), the `.camtools`
+//! version 8 export and import of components and stacks (`camtools_v8`).
+//! #3647: their MCP tools (`component_mcp`). #3898: the built-in ER
+//! collets (`builtin_collets`). #3646: multi-seat indexable cutters in
+//! the document (`multi_seat`). #3643: a turning tool from linked lathe
+//! components (`lathe_stack`).
+//! #3919: the built-in shrink-fit chucks (`builtin_shrink`).
+//! Gate map (M4.4): covers app::tool_library, app::commands (tool_import, tool_assembly),
+//! app::mcp (import_tool_library), app::script (importTools), app::tool_body, app::tool_assembly,
+//! app::project (component_wire, assembly_wire), app::component_library, app::commands (component_sync),
+//! app::mcp (component_tools, assembly_tools, component_library_tools).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportMode, ImportReport, ImportTools, SetStock, SetToolBody,
@@ -33,6 +45,29 @@ use camcraft_app::tools::{Tool, ToolKind, catalog};
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 use serde_json::{Value, json};
+
+#[path = "tool_library_holders/used_by.rs"]
+mod used_by;
+#[path = "tool_library_holders/assembly_cmds.rs"]
+mod assembly_cmds;
+#[path = "tool_library_holders/component_files.rs"]
+mod component_files;
+#[path = "tool_library_holders/component_sync.rs"]
+mod component_sync;
+#[path = "tool_library_holders/component_mcp.rs"]
+mod component_mcp;
+#[path = "tool_library_holders/builtin_collets.rs"]
+mod builtin_collets;
+#[path = "tool_library_holders/camtools_v8.rs"]
+mod camtools_v8;
+#[path = "tool_library_holders/multi_seat.rs"]
+mod multi_seat;
+#[path = "tool_library_holders/lathe_stack.rs"]
+mod lathe_stack;
+#[path = "tool_library_holders/lathe_stack_pad.rs"]
+mod lathe_stack_pad;
+#[path = "tool_library_holders/builtin_shrink.rs"]
+mod builtin_shrink;
 
 const DRAWN: &str = "Six";
 const MESH: &str = "Four";
@@ -299,7 +334,7 @@ fn held_op_world() -> (World, History) {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
         cut_z: Height::fixed(19.5),
@@ -308,6 +343,7 @@ fn held_op_world() -> (World, History) {
         feed: 1200.0,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     };
     h.execute(&w, CreateOperation::new(&w, "Face1", DRAWN, SrcRef::Stock, params).expect("op"));
     h.execute(&w, GenerateOperation::new(&w, "Face1").expect("generate"));

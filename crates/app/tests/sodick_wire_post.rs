@@ -70,18 +70,24 @@ fn punch_doc_with(machine_text: &str, condition: &str, skims: Vec<WireSkim>) -> 
     );
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        overlap: 0.0,
+        lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: condition.into(),
         side: WireSide::Punch,
-        start: Some([-30.0, 0.0]),
+        picks: camcraft_app::path_picks::PathPicks { start: vec![camcraft_app::path_picks::PathPick::xy(camcraft_app::geo2d::Point2::new(-30.0, 0.0))], exit: Vec::new() },
         tabs: None,
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
+        sharp_corners: false,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -178,7 +184,7 @@ fn the_punch_contour_posts_its_sodick_golden_through_the_gate() {
     // The fixture's fictional codes are never read by this post.
     assert!(!text.contains("FX-"), "{text}");
     // The program says it was not verified and what it leaves to the operator.
-    for said in ["NOT VERIFIED ON A CONTROL", "WIRE NOT THREADED AT START", "NO G92 IS WRITTEN", "FLUSHING ARE NOT PROGRAMMED"] {
+    for said in ["NOT VERIFIED ON A CONTROL", "THREADS THE WIRE WITH T91 AT START", "LN1W/LN2W: NOT SUPPORTED", "NO G92 IS WRITTEN", "FLUSHING ARE NOT PROGRAMMED"] {
         assert!(lines.iter().any(|l| l.starts_with('(') && l.contains(said)), "{said}:\n{text}");
     }
 }
@@ -203,11 +209,13 @@ fn taper_and_four_axis_are_refused_by_name() {
 
     let out = run(FIXTURE, &with_param(recs.clone(), "WireTaper", json!(3.0)), &serde_json::Value::Null);
     assert!(out.warnings.iter().any(|m| m.contains("Punch1") && m.contains("is tapered") && m.contains("2-axis cut only")), "{:?}", out.warnings);
-    assert!(!out.program.contains("G01") && !out.program.contains("T91") && !out.program.contains("C110"), "{}", out.program);
+    // #4044: the header comment names T91; only the code lines must not.
+    let code = |p: &str| p.lines().filter(|l| !l.starts_with('(')).collect::<Vec<_>>().join("\n");
+    assert!(!code(&out.program).contains("G01") && !code(&out.program).contains("T91") && !out.program.contains("C110"), "{}", out.program);
 
     let out = run(FIXTURE, &with_param(recs.clone(), "WireFourAxis", json!("arc-length")), &serde_json::Value::Null);
     assert!(out.warnings.iter().any(|m| m.contains("Punch1") && m.contains("is a 4-axis cut")), "{:?}", out.warnings);
-    assert!(!out.program.contains("G01") && !out.program.contains("T91"), "{}", out.program);
+    assert!(!code(&out.program).contains("G01") && !code(&out.program).contains("T91"), "{}", out.program);
 
     // A leaning move (an upper guide offset) in a section that states no
     // taper: refused, and no U V word is written.

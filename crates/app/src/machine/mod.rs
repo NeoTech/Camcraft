@@ -60,10 +60,14 @@ pub mod library;
 // #669: the machine check on a plasma table.
 mod plasma;
 mod waterjet;
+mod laser;
 pub mod wire_edm;
 mod sheet;
 pub mod validate;
 // #383: the machine editor - property grid, draft, user folder and save.
+pub mod chain;
+// #2756: the axis chain's rows, built once per edit (#2238).
+pub mod chain_view;
 pub mod draft;
 pub mod fields;
 pub mod order;
@@ -138,6 +142,9 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
     if kind(Some(machine)) == Kind::Waterjet {
         return waterjet::check_waterjet_ops(world, machine, program);
     }
+    if kind(Some(machine)) == Kind::Laser {
+        return Ok(laser::check_laser_ops(machine, program));
+    }
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);
     }
@@ -162,6 +169,11 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
             .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
         let tool = model::tool_of(world, &tool_entity)
             .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
+        if let Some(number) = crate::tool_numbers::number_of(world, &op.tool)
+            && let Err(why) = crate::tool_reservations::on_machine(machine, &op.tool, tool.kind, number)
+        {
+            say(&mut out, format!("{name}: {why}"));
+        }
         // #368: a modelled body is the holder the magazine measures.
         let tool = crate::tool_body::judged(world, &tool_entity, tool)
             .map_err(|e| format!("{name}: tool {}: {e}", op.tool))?

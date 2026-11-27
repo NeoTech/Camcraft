@@ -44,6 +44,7 @@ fn deburr(width: f64) -> OpParams {
         exclude_holes: false,
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
+        picks: Default::default(),
     }
 }
 
@@ -97,10 +98,8 @@ fn main_v75_deburr_migrates_once_and_preserves_the_machine_controller() {
     );
     let saved: Value =
         serde_json::from_str(&project::save_text(&world).expect("save")).expect("JSON");
-    assert_eq!(
-        saved["version"], 76,
-        "v75 readers must refuse the new width meaning"
-    );
+    const { assert!(project::PROJECT_VERSION >= 76, "v75 readers must refuse the new width meaning") };
+    assert_eq!(saved["version"], project::PROJECT_VERSION, "saves the current version");
     let machine = &saved["machine"]["machine"];
     assert_eq!(
         machine["controller_identity"],

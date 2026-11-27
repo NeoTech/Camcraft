@@ -25,7 +25,7 @@ use serde_json::json;
 fn face(feed: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -35,6 +35,7 @@ fn face(feed: f64) -> OpParams {
         feed,
         plunge_feed: 300.0,
         climb: true,
+        picks: Default::default(),
     }
 }
 
@@ -94,8 +95,8 @@ fn no_mounted_machine_is_refused_above_the_default_spindle_maximum() {
     let err = post(&world, "rpm").expect_err("15000 rpm is above the default machine's 12000");
     assert!(err.contains("default machine VMC 3-AXIS"), "the refusal names the default machine: {err}");
     assert!(
-        err.contains("Face1: tool EM-0400-2FL runs 15000 rpm, above the machine's 12000"),
-        "the refusal names the op and the limit: {err}"
+        err.contains("Face1: tool EM-0400-2FL runs 15000 rpm, above the machine's 12000 - set the tool's speed (edit_tool) or apply_cutting_data"),
+        "the refusal names the op, the limit and the fix (#3792): {err}"
     );
     assert!(err.contains("mount a machine on the setup"), "the refusal says what to do: {err}");
 }

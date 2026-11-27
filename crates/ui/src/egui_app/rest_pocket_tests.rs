@@ -39,7 +39,7 @@ fn sec_index(name: &str) -> usize {
 }
 
 fn pocket(strategy: PocketStrategy, rest: Option<RestParams>) -> OpParams {
-    OpParams::Pocket {
+    OpParams::Pocket { pass_start: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         stepover: 1.5,
         stock_to_leave: 0.0,
@@ -60,6 +60,7 @@ fn pocket(strategy: PocketStrategy, rest: Option<RestParams>) -> OpParams {
         rest,
         tilt: None,
         corner_relief: Default::default(),
+        picks: Default::default(),
     }
 }
 

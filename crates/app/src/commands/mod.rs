@@ -21,9 +21,12 @@ pub mod import_fixture;
 pub mod import_model;
 // #1862: a DXF profile placed on a setup's stock, and its move on the stock face.
 pub mod import_dxf;
+pub mod import_svg;
 pub mod move_sketch;
 // #2679: typed text placed as a profile of engraving strokes.
 pub mod insert_text;
+// #3072: typed text in an outline font placed as a profile of closed shapes.
+pub mod insert_outline_text;
 // #339 slice 6: a fixture library entry placed into a setup.
 pub mod insert_fixture;
 // #744: DXF/profile fixtures and STEP profile derivation.
@@ -78,6 +81,9 @@ pub mod wcs_circle;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
+pub mod tool_assembly;
+// #3645: the undoable pull of a user library component.
+pub mod component_sync;
 // #93 slice 2: a milling tool's drawn cutter outline.
 pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
@@ -85,6 +91,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #3915: picks follow their faces by SolidCraft name at a re-import.
+pub mod update_model_follow;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
 // #1339: a person vouches for a mesh of unknown fidelity.
@@ -108,8 +116,10 @@ pub use mod_vise::PlaceModVisePair;
 pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_dxf::{DxfOptions, ImportDxf};
+pub use import_svg::ImportSvg;
 pub use import_model::ImportModel;
 pub use insert_text::{InsertText, TextOptions};
+pub use insert_outline_text::{InsertOutlineText, OutlineTextOptions};
 pub use move_sketch::MoveSketch;
 pub use insert_fixture::InsertFixture;
 pub use profile_fixture::{DeriveFixtureProfile, InsertProfileFixture, SetFixtureProfile};
@@ -117,7 +127,7 @@ pub use load_machine::LoadMachine;
 pub use locate::{Locate, LocateFixture, LocatePart};
 pub use move_model::MoveModel;
 pub use operation::{
-    ChangeOperationKind, ClearToolpath, CreateOperation, DeleteOperation, EditOperationLinks,
+    ApplyCutRecipe, ChangeOperationKind, ClearToolpath, CreateOperation, DeleteOperation, EditOperationLinks,
     EditOperationParams, GenerateOperation, MarkOperationReviewed, PasteOperation, RegenerateAll,
     RenameOperation, ReorderOperation, SetOperationDoNotTouch, SetOperationGeometry,
     StagedGeneration,
@@ -155,6 +165,8 @@ pub use wcs_circle::SetWcsAtCircleCentre;
 pub use set_wcs_flip::SetWcsFlip;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
+pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
+pub use component_sync::SyncDocumentComponent;
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use electrode::ElectrodeFromFaces;
@@ -187,6 +199,9 @@ pub enum CommandError {
     /// #1862: every other refusal of a DXF import, in the reader's words.
     #[error("DXF import: {0}")]
     Dxf(String),
+    /// #1880: a refusal of an SVG import, in the reader's words.
+    #[error("SVG import: {0}")]
+    Svg(String),
     #[error("could not generate the toolpath: {0}")]
     Machining(String),
     /// A [`Machining`](CommandError::Machining) refusal about one spot

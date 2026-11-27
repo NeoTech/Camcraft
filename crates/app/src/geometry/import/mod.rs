@@ -26,6 +26,7 @@ pub use sourced::load_model_open_sourced;
 use std::path::{Path, PathBuf};
 
 use crate::geometry::Mesh;
+use crate::units::Unit;
 
 /// Hard cap on facets per model. 30M facets is the M5.3 E door: the
 /// roadmap's 10M+ models walk through with room for the mesh to ride the
@@ -55,6 +56,11 @@ pub enum ImportError {
     Obj(String),
     #[error("corrupt STEP: {0}")]
     Step(String),
+    /// #1874: the STEP file states no length unit and the caller stated
+    /// none. The model is never read in a guessed unit: the caller states
+    /// millimetres or inches and imports it again.
+    #[error("the STEP file states no length unit - state the unit (mm or in) to import it; the model is never read in a guessed unit")]
+    StepUnitsMissing,
     /// A Solidcraft design that the kernel reader or the machining mesh
     /// refused (#1456), with its own reason.
     #[error("Solidcraft design refused: {0}")]
@@ -112,6 +118,10 @@ pub struct Graded {
     pub open: Option<String>,
     /// Raw STEP text preserved for library/project persistence (#744).
     pub step_source: Option<String>,
+    /// SolidCraft's name of each face of a `.sc` design's body over the
+    /// facets it became (#3915); `None` for every other format, and for a
+    /// design whose cache holds no names that fit.
+    pub source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
 }
 
 impl Graded {
@@ -148,6 +158,12 @@ pub fn load_model_graded_within(path: &Path, budget: usize) -> Result<Graded, Im
 /// import, which lands it incomplete - every operation on it refused at
 /// the post by name (`mesh_open`).
 pub fn load_model_open_within(path: &Path, budget: usize) -> Result<Graded, ImportError> {
+    load_model_open_in(path, budget, None)
+}
+
+/// [`load_model_open_within`], with the caller's length unit for a STEP
+/// file that states none (#1874; STL, OBJ and Solidcraft ignore it).
+pub fn load_model_open_in(path: &Path, budget: usize, units: Option<Unit>) -> Result<Graded, ImportError> {
     let format = format_from_path(path)?;
     let meta = std::fs::metadata(path)?;
     if meta.len() > MAX_FILE_BYTES {
@@ -156,10 +172,10 @@ pub fn load_model_open_within(path: &Path, budget: usize) -> Result<Graded, Impo
     if format == Format::Stl {
         let mut mesh = gate(stl::parse_file(path)?)?;
         let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-        return Ok(Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None });
+        return Ok(Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None, source_faces: None });
     }
     let data = std::fs::read(path)?;
-    parse_model_open_within(&data, format, budget)
+    parse_model_open_in(&data, format, budget, units)
 }
 
 /// [`parse_model`], with the fidelity the import achieved.
@@ -176,14 +192,24 @@ pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> 
 /// [`parse_model_graded_within`] keeping a closed shell that meshes open,
 /// the bytes twin of [`load_model_open_within`] (#1610).
 pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
+    parse_model_open_in(data, format, budget, None)
+}
+
+/// [`parse_model_open_within`], with the caller's length unit for a STEP
+/// file that states none (#1874). A STEP file that states no unit, with no
+/// unit from the caller, is [`ImportError::StepUnitsMissing`].
+pub fn parse_model_open_in(data: &[u8], format: Format, budget: usize, units: Option<Unit>) -> Result<Graded, ImportError> {
+    let mut source_faces = None;
     let (mesh, coarse_mm, notes, open, file_tolerance) = match format {
         // #1456: the machining mesh is watertight and outward, at the chord cap.
         Format::Solidcraft => {
-            let (mesh, notes) = camcraft_geometry::solidcraft::parse(data, budget, step::CHORD_CAP)
+            let (mesh, notes, faces) = camcraft_geometry::solidcraft::parse(data, budget, step::CHORD_CAP)
                 .map_err(|error| match error {
                     camcraft_geometry::solidcraft::SolidcraftError::TooLarge => ImportError::TooLarge,
                     camcraft_geometry::solidcraft::SolidcraftError::Refused(reason) => ImportError::Solidcraft(reason),
                 })?;
+            // #3915: the facets land as parsed, so the record stays theirs.
+            source_faces = faces.map(std::sync::Arc::new);
             (mesh, None, notes, None, false)
         }
         Format::Stl | Format::Obj => {
@@ -197,14 +223,14 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
         // #917: solidcore's machining mesh is watertight and outward; a
         // solid with faces the mesher leaves out keeps its hole named.
         Format::Step => {
-            let (mesh, chord, notes, open, cause) = step::parse_with_cause(data, budget)?;
+            let (mesh, chord, notes, open, cause) = step::parse_with_cause_in(data, budget, units)?;
             (mesh, step::coarse(chord), notes, open, cause)
         }
     };
     let step_source = (format == Format::Step)
         .then(|| std::str::from_utf8(data).ok().map(str::to_owned))
         .flatten();
-    Ok(Graded { mesh: gate(mesh)?, coarse_mm, file_tolerance, notes, open, step_source })
+    Ok(Graded { mesh: gate(mesh)?, coarse_mm, file_tolerance, notes, open, step_source, source_faces })
 }
 
 /// Belt-and-gate: each importer checks finiteness at the parse site, and

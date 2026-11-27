@@ -3,15 +3,15 @@
 //! compensates in XY - so a G41/G42/G40 block after an XZ (G18) or YZ
 //! (G19) arc must state G17, and no arc may leave G17 while compensation
 //! is engaged (refused by name). Pinned for every post that writes
-//! control compensation: Fanuc, Haas, Mazak and Siemens 840D.
+//! control compensation: Fanuc, Haas, Mazak, Siemens 840D and Tormach.
 //!
 //! Gate map (M4.4): covers camcraft_post::post (engine) over the shipped
-//! assets/posts fanuc, haas, mazak and sinumerik scripts.
+//! assets/posts fanuc, haas, mazak, sinumerik and tormach scripts.
 
 use camcraft_post::post::engine;
 use serde_json::Value;
 
-const POSTS: &[&str] = &["fanuc", "haas", "mazak", "sinumerik"];
+const POSTS: &[&str] = &["fanuc", "haas", "mazak", "sinumerik", "tormach"];
 
 fn post(stem: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../assets/posts/{stem}.cps"));
@@ -94,8 +94,9 @@ fn every_comp_post_states_g17_before_engaging_after_an_xz_or_yz_arc() {
             assert!(out.warnings.is_empty(), "{stem} {leaves}: {:?}", out.warnings);
             assert!(out.program.contains(leaves), "{stem}: the arc must post in {leaves}: {}", out.program);
             let (comp_words, faults) = comp_plane_faults(&out.program);
-            // preamble G40, the engage and the cancel
-            assert_eq!(comp_words, 3, "{stem} {leaves}: {}", out.program);
+            // preamble G40, the engage and the cancel (Tormach states G40 in its header as well)
+            let expected_words = if *stem == "tormach" { 4 } else { 3 };
+            assert_eq!(comp_words, expected_words, "{stem} {leaves}: {}", out.program);
             assert!(faults.is_empty(), "{stem} {leaves}: {faults:?}\n{}", out.program);
             let engage = out.program.lines().find(|l| l.contains("G42")).unwrap_or("");
             assert!(engage.contains("G17"), "{stem} {leaves}: the engage block states the plane: {engage}");

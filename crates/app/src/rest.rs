@@ -58,8 +58,10 @@ mod across;
 mod ahead;
 mod carried_cache;
 mod pilots;
+mod staged;
 
 pub use pilots::{drills_ahead, turned_ahead, DrillAhead, TurnedAhead};
+pub use staged::{prior_simulations, stage as stage_prior, StagedPrior};
 
 pub use across::{REST_CARRY_REFUSAL, carried_digest, carried_stock_block, carried_stock_body, entered_body};
 pub use carried_cache::{CAP as CARRIED_CACHE_CAP, clear as clear_carried_cache, computes as carried_body_computes};
@@ -156,50 +158,9 @@ pub fn prior_state(
     setup: Option<&str>,
     tool_r: f64,
 ) -> Result<PriorState, GenError> {
-    let chain = chain_of(world, name, setup, true).map_err(GenError::Invalid)?;
-    if chain.crosses() {
-        // The stock this setup starts from is what the earlier setups
-        // left, carried (#318) - a mask even when nothing ahead cut.
-        let digest = prior_digest(world, name, setup);
-        let min_r = chain.ops().filter(|a| a.cut && a.radius > 0.0).map(|a| a.radius).fold(tool_r, f64::min);
-        let grid = carried_grid(world, &chain, min_r, true)
-            .map_err(|e| GenError::Invalid(format!("rest from previous setups: {e}")))?;
-        return Ok(PriorState { grid: Some(grid), digest });
-    }
-    let ahead = chain.into_ops();
-    if ahead.is_empty() {
-        return Ok(PriorState {
-            grid: None,
-            digest: None,
-        });
-    }
-    let digest = digest_of(&ahead);
-    if !ahead.iter().any(|a| a.cut) {
-        // Nothing cut before us: the stock as it came is the rest as
-        // it stands, and no mask is a cheaper way to say that.
-        return Ok(PriorState {
-            grid: None,
-            digest: Some(digest),
-        });
-    }
-    let min_r = ahead
-        .iter()
-        .filter(|a| a.cut && a.radius > 0.0)
-        .map(|a| a.radius)
-        .fold(tool_r, f64::min);
-    let refused = |e: String| GenError::Invalid(format!("rest from previous operations: {e}"));
-    // #637: the stock on this thread's engine (the column grid by default).
-    let mut held = stock_sim::carry::first_held(world, setup, min_r).map_err(refused)?;
-    let runs: Vec<(SimOp, bool)> = ahead
-        .iter()
-        .filter(|a| a.cut)
-        .map(|a| (SimOp { moves: &a.moves, radius: a.radius, ball: a.ball, cone: a.cone, corner: a.corner }, a.drill))
-        .collect();
-    simulate_ahead(&mut held, &runs).map_err(refused)?;
-    Ok(PriorState {
-        grid: Some(held.into_tops().map_err(refused)?),
-        digest: Some(digest),
-    })
+    // #3035: the world reads, then the simulation - one thread here;
+    // a generation job runs the second half on its worker.
+    staged::stage(world, name, setup, tool_r)?.simulate()
 }
 
 /// The program ahead of one operation, collected but not yet cut

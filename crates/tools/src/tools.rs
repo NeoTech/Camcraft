@@ -20,6 +20,9 @@
 pub use crate::cutting::{ToolMaterial, WorkMaterial};
 pub use crate::turning_data::TurningData;
 pub use crate::thread_hand::ThreadHand;
+pub use crate::cutter_hand::CutterHand;
+pub use crate::taper::TaperTip;
+pub use crate::form_mill::{FormPreset, FormSpec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolKind {
@@ -92,6 +95,11 @@ pub enum ToolKind {
     Torch,
     /// Abrasive waterjet nozzle: diameter is the stream kerf, rpm is zero.
     Waterjet,
+    /// Laser cutting head (#4081): `diameter` is the beam kerf, rpm is
+    /// zero, and it has no corner radius and no cutting data rows (the
+    /// laser operation states the power and the feed). Only the laser
+    /// operations mount it.
+    Laser,
     /// Sinker EDM electrode (#541): a rectangular solid burned straight
     /// down Z. `diameter` is its X size and `width` its Y size (both
     /// across the burning face), `flute_len` its length below the
@@ -135,6 +143,11 @@ pub enum ToolKind {
     /// a narrower neck. `flute_len` is the height above the tip where
     /// the neck leaves the ball (from the ball's centre up).
     Lollipop,
+    /// Form mill (#3369, [`crate::form_mill`]): a router-style cutter
+    /// whose edge is the drawn outline in `form`, with an optional pilot
+    /// bearing at the tip. `diameter` and `flute_len` are the outline's
+    /// widest cut and its top. No operation cuts with it yet.
+    FormMill,
 }
 
 impl core::fmt::Display for ToolKind {
@@ -154,6 +167,7 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Probe => "touch probe",
             ToolKind::Torch => "plasma torch",
             ToolKind::Waterjet => "waterjet nozzle",
+            ToolKind::Laser => "laser head",
             ToolKind::Electrode => "sinker electrode",
             ToolKind::ThreadMill => "thread mill",
             ToolKind::ThreadMillSingle => "single-form thread mill",
@@ -162,6 +176,7 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Keyseat => "keyseat cutter",
             ToolKind::Dovetail => "dovetail cutter",
             ToolKind::Lollipop => "lollipop cutter",
+            ToolKind::FormMill => "form mill",
         };
         f.write_str(s)
     }
@@ -213,6 +228,12 @@ pub struct Tool {
     pub pitch_min: f64,
     /// Tap thread hand; older tools default to right-hand.
     pub thread_hand: crate::thread_hand::ThreadHand,
+    /// The cutter's hand (#4031): right-hand cutters run M3, left-hand
+    /// ones need the spindle reversed (M4). Separate from `thread_hand`:
+    /// a left-hand tap cuts a left thread while its spindle may still
+    /// turn right, so the two hands are stated apart. Older tools
+    /// default to right-hand.
+    pub cutter_hand: crate::cutter_hand::CutterHand,
     /// Insert nose radius in mm (the ISO corner circle ground into the
     /// tip): 0.8 is common roughing stock. Inert unless kind is
     /// Turning, where it is the circle the facing verdict sweeps, or
@@ -280,6 +301,15 @@ pub struct Tool {
     /// stated - the turning ops then post the constant `rpm` (G97) as
     /// before. Read only by the turning operations (threading aside).
     pub turning: Option<crate::turning_data::TurningData>,
+    /// #3368: a chamfer mill's tip ([`crate::taper`]) - sharp (the
+    /// default), flat or ball. Sharp on every other kind.
+    pub tip_form: TaperTip,
+    /// #3368: a flat tip's diameter in mm (the cone extended down to the
+    /// tip face); 0 for a sharp tip.
+    pub tip_diameter: f64,
+    /// #3369: a form mill's outline and pilot ([`crate::form_mill`]);
+    /// `None` on every other kind.
+    pub form: Option<FormSpec>,
 }
 
 impl Tool {
@@ -309,6 +339,9 @@ impl Tool {
         // AddTool / ChangeTool / library refusals already call this.
         if self.kind == ToolKind::Waterjet {
             return crate::waterjet::refusal(self);
+        }
+        if self.kind == ToolKind::Laser {
+            return crate::laser::refusal(self);
         }
         if self.kind == ToolKind::Wire {
             return crate::wire::refusal(self);
@@ -392,6 +425,9 @@ impl Tool {
         let cr = self.corner_r.clamp(0.0, r).min(zc);
         let mut p: Vec<(f64, f64)> = Vec::new();
         add_pt(&mut p, 0.0, 0.0);
+        // Where the neck step starts: the flute top, or (#1444) above it
+        // where a lollipop ball meets its neck.
+        let mut neck_from = zc;
         match self.kind {
             ToolKind::BallNose | ToolKind::Probe => {
                 let steps = 24;
@@ -420,7 +456,7 @@ impl Tool {
             // not off this cylinder.
             ToolKind::EndMill | ToolKind::Tap | ToolKind::Bore | ToolKind::Turning
             | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch
-            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Wire
+            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Laser | ToolKind::Wire
             // A thread mill draws as the cylinder its tooth crests
             // sweep (#894) - the envelope the reach laws read.
             | ToolKind::ThreadMill | ToolKind::ThreadMillSingle
@@ -429,7 +465,13 @@ impl Tool {
             | ToolKind::TSlot | ToolKind::Keyseat => add_pt(&mut p, 0.0, r),
             // A dovetail narrows upward and a lollipop is a ball
             // (#1444): the head draws its own flute top.
-            ToolKind::Dovetail | ToolKind::Lollipop => crate::undercut::head_outline(self, &mut p),
+            ToolKind::Dovetail | ToolKind::Lollipop => neck_from = crate::undercut::head_outline(self, &mut p),
+            // #3369: a form mill draws its outline, arcs flattened outside.
+            ToolKind::FormMill => {
+                if !crate::form_mill::outline(self, &mut p) {
+                    add_pt(&mut p, 0.0, r);
+                }
+            }
             // The chamfer mill's cone is the same picture read the
             // other way in purpose - apex at the tip center opening
             // upward to the full radius - so it shares the drill's
@@ -440,8 +482,9 @@ impl Tool {
                 // z = r / tan(tip/2) - or the flute top first, clamped,
                 // with the straight land above drawn by the shared band
                 // step. Nonsense angles (0, negative) read as a flat.
+                // #3368: a flat or ball taper tip draws its own face first.
                 let tan_half = (self.tip_angle.to_radians() * 0.5).tan();
-                if tan_half > 0.0 && tan_half.is_finite() {
+                if !crate::taper::outline(self, r, zc, &mut p) && tan_half > 0.0 && tan_half.is_finite() {
                     let zr = (r / tan_half).min(zc);
                     add_pt(&mut p, zr, (zr * tan_half).min(r));
                 }
@@ -451,8 +494,8 @@ impl Tool {
             add_pt(&mut p, zc, r);
         }
         let sr = self.shank_d.max(0.0) * 0.5;
-        if zs > zc {
-            add_pt(&mut p, zc, sr);
+        if zs > neck_from {
+            add_pt(&mut p, neck_from, sr);
             add_pt(&mut p, zs, sr);
         }
         let hr = self.holder_d.max(0.0) * 0.5;
@@ -507,6 +550,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: stylus_len,
@@ -525,6 +569,9 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 
@@ -542,6 +589,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 10.0,
@@ -560,6 +608,9 @@ pub fn torch_tool(kerf: f64) -> Tool {
         cutting: Vec::new(),
         outline: Vec::new(),
         turning: None,
+        tip_form: Default::default(),
+        tip_diameter: 0.0,
+        form: None,
     }
 }
 
@@ -624,8 +675,14 @@ mod tests {
             let p = t.profile();
             assert!(p.len() >= 3, "{name}: an outline needs vertices");
             assert_eq!(p[0], (0.0, 0.0), "{name}: tip center first");
+            // #1444: a lollipop's neck starts inside its ball; the union
+            // draws the neck from where the ball narrows to it.
+            let neck_z = match crate::undercut::Undercut::of(&t) {
+                Some(u) if u.head == crate::undercut::Head::Ball => u.r + (u.r * u.r - u.neck_r * u.neck_r).sqrt(),
+                _ => g.flute_len,
+            };
             assert!(
-                near(&p, g.flute_len, g.shank_radius),
+                p.iter().any(|&(pz, pr)| (pz - neck_z).abs() < 1e-9 && (pr - g.shank_radius).abs() < 1e-6),
                 "{name}: the shank band must start where verify says"
             );
             assert!(

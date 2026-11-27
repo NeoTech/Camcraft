@@ -1,5 +1,7 @@
 //! A 2D Pocket rest pass with inside-corner reliefs (#2400) cuts every
 //! relief whose corner the rest area touches (#3146).
+//!
+//! Gate map: covers camcraft_motion::machining2d (corner_relief, corner_relief_spur, rest2d).
 
 use camcraft_motion::cl::Toolpath;
 use camcraft_motion::entry::Entry3D;

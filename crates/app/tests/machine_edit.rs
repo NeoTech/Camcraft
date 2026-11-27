@@ -134,7 +134,7 @@ fn a_refused_file_is_not_written_and_each_refusal_sits_on_its_field() {
 fn a_refusal_with_no_field_is_listed_above_the_grid() {
     let mut m = MachineDraft::blank(Kind::Mill);
     // Remove the Y axis part: the mill now lacks a required axis.
-    if let Some(Value::Array(a)) = m.value.pointer_mut("/kinematics/default/parts/0/parts") {
+    if let Some(Value::Array(a)) = m.value_mut().pointer_mut("/kinematics/default/parts/0/parts") {
         a.remove(1);
     }
     let r = m.refusals();
@@ -242,6 +242,24 @@ fn the_write_is_atomic_and_leaves_no_temp_file() {
     store::write_atomic(&deep, "ok").expect("creates the folder");
     assert!(deep.is_file());
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn two_threads_never_share_a_temp_file() {
+    // An autosave thread and a save by the user can write the same file at
+    // the same moment: each must write its own temp file.
+    let p = std::env::temp_dir().join("camcraft_temp_names").join("m.mch");
+    let here = store::temp_path_for(&p).expect("temp path");
+    assert_eq!(store::temp_path_for(&p).as_ref(), Some(&here), "one thread keeps its temp name");
+    assert_eq!(here.parent(), p.parent(), "the temp file is in the target's folder");
+    let there = std::thread::spawn({
+        let p = p.clone();
+        move || store::temp_path_for(&p)
+    })
+    .join()
+    .expect("the second thread ends")
+    .expect("temp path");
+    assert_ne!(here, there, "a second thread writes a different temp file");
 }
 
 #[test]

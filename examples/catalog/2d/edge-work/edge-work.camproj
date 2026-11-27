@@ -1,5 +1,5 @@
 {
-  "version": 73,
+  "version": 83,
   "entities": [
     {
       "name": "CM-0600-90",
@@ -77,14 +77,14 @@
             "tolerance": 0.01
           }
         },
-        "stamp": 1777631961018254063,
+        "stamp": 2688480003150545668,
         "cache": {
           "moves": [
             {
               "kind": "rapid",
               "from": [
-                0.0,
-                0.0,
+                30.0,
+                20.0,
                 21.0
               ],
               "to": [
@@ -238,7 +238,7 @@
         },
         "params": {
           "deburr": {
-            "width": 0.3,
+            "width": 0.42426407,
             "clearance_z": {
               "reference": "fixed",
               "offset": 21.0
@@ -255,17 +255,21 @@
             "plunge_feed": 200.0,
             "min_edge_angle_deg": 40.0,
             "hole_max_diameter": 10.0,
-            "unreachable": "skip_with_note"
+            "unreachable": "skip_with_note",
+            "break_mode": "constant_width",
+            "break_depth": 0.25,
+            "break_profile": "chamfer",
+            "passes": 1
           }
         },
-        "stamp": 1555766181262962361,
+        "stamp": 10832922880856589059,
         "cache": {
           "moves": [
             {
               "kind": "rapid",
               "from": [
-                0.0,
-                0.0,
+                -30.0,
+                -20.0,
                 21.0
               ],
               "to": [
@@ -391,7 +395,7 @@
                   6.0
                 ]
               ],
-              "depth": 0.30000000000000004,
+              "depth": 0.3000000009108041,
               "slope": 1.0000000000000002
             }
           ]
@@ -475,14 +479,14 @@
             "climb": true
           }
         },
-        "stamp": 11967034916578950457,
+        "stamp": 6655248219418916588,
         "cache": {
           "moves": [
             {
               "kind": "rapid",
               "from": [
-                0.0,
-                0.0,
+                30.0,
+                20.0,
                 21.0
               ],
               "to": [
@@ -861,14 +865,14 @@
             "climb": true
           }
         },
-        "stamp": 10184125399418623310,
+        "stamp": 9001775689688377521,
         "cache": {
           "moves": [
             {
               "kind": "rapid",
               "from": [
-                0.0,
-                0.0,
+                30.0,
+                20.0,
                 21.0
               ],
               "to": [

@@ -21,6 +21,8 @@ fn params(side: WireSide, start: Option<(f64, f64)>) -> WireParams {
         plane_z: 0.0,
         stock: None,
         clearance: 1.0,
+        sharp_corners: false,
+        overlap: 0.0,
         tabs: None,
     }
 }

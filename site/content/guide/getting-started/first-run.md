@@ -46,7 +46,7 @@ Shortcuts on this page are written with Ctrl. On macOS, press Cmd in their place
   {{ <icon name="tree-machine" /> }} machine, {{ <icon name="act-post" /> }} post, {{ <icon name="tree-fixture" /> }} fixtures and {{ <icon name="tools" /> }} tools, and the {{ <icon name="tree-op-group" /> }} operations.
 - **The properties pane** shows the page of whatever you selected. For a
   tool, it shows that tool's settings; browsing the tool library happens in
-  the separate **Tool library** pane (see [Tools](@/guide/set-up/tools.md)).
+  the separate **Tool library** window (see [Tools](@/guide/set-up/tools.md)).
 - **The viewport** shows the model, stock, toolpaths and simulation.
 
 Hover any ribbon button to read what it does. A greyed-out operation says
@@ -104,6 +104,14 @@ to frame again at any time. On a lathe, the viewport lays the spindle axis
 from left to right with the cross-slide up (a mill-turn, which is a lathe with live tooling, keeps
 the milling view). This changes only the view,
 not the work offset or the posted program.
+
+### Update notices
+
+The desktop app checks GitHub Releases at startup, at most once in
+24 hours. When it finds a newer version, **Update available: vX.Y.Z**
+appears in the title bar. Select it to open the release notes in your
+browser. To turn off startup checks, clear **Check for updates** in
+**Settings**.
 
 ### Themes and screen readers
 

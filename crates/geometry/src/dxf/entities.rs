@@ -4,6 +4,27 @@ use super::types::{DxfError, Primitive, State, error};
 use crate::geo2d::{COORD_LIMIT, Point2};
 use std::f64::consts::TAU;
 
+/// Record names of the DXF Reference ENTITIES chapter. A record of one of these kinds is
+/// drawable, so a section that the reader treats as inert must never hold one.
+/// SUN is in that chapter too but is left out: AutoCAD writes it in OBJECTS (subclass
+/// AcDbSun, no AcDbEntity), and OBJECTS refuses every kind on this list (#3683).
+#[rustfmt::skip]
+const ENTITY_KINDS: [&str; 53] = [
+    "3DFACE", "3DSOLID", "ACAD_PROXY_ENTITY", "ARC", "ATTDEF", "ATTRIB", "BODY", "CIRCLE",
+    "DGNUNDERLAY", "DIMENSION", "DWFUNDERLAY", "ELLIPSE", "EXTRUDEDSURFACE", "HATCH", "HELIX",
+    "IMAGE", "INSERT", "LEADER", "LIGHT", "LINE", "LOFTEDSURFACE", "LWPOLYLINE", "MESH",
+    "MLEADER", "MLINE", "MPOLYGON", "MTEXT", "NURBSURFACE", "OLE2FRAME", "OLEFRAME",
+    "PDFUNDERLAY", "PLANESURFACE", "POINT", "POLYLINE", "RAY", "REGION", "REVOLVEDSURFACE",
+    "SECTION", "SEQEND", "SHAPE", "SOLID", "SPLINE", "SURFACE", "SWEPTSURFACE", "TABLE", "TEXT",
+    "TOLERANCE", "TRACE", "VERTEX", "VIEWPORT", "WIPEOUT", "XLINE", "MULTILEADER",
+];
+
+pub(super) fn is_entity_kind(kind: &str) -> bool {
+    ENTITY_KINDS
+        .iter()
+        .any(|entity| entity.eq_ignore_ascii_case(kind))
+}
+
 pub(super) fn coordinate(value: f64, kind: &str) -> Result<f64, DxfError> {
     if !value.is_finite() || value.abs() >= COORD_LIMIT {
         return Err(error(kind, "coordinate outside geo2d range"));

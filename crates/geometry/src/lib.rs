@@ -26,7 +26,11 @@ pub mod nesting;
 pub mod profile_derive;
 pub mod profile_mesh;
 pub mod sketch_chains;
+pub mod wire_round_profile;
+pub mod die_opening;
 pub mod solidcraft;
+// #3915: the SolidCraft face names beside an imported mesh.
+pub mod source_faces;
 #[cfg(not(target_arch = "wasm32"))]
 mod kernel_import;
 pub mod step;
@@ -37,5 +41,11 @@ pub mod step_diag;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod step_units;
 pub mod sketch_data;
+// #1880: SVG drawings read as the same 2D primitives as DXF ones.
+pub mod svg;
 // #2679: typed text as single-line engraving strokes.
 pub mod stroke_text;
+// #3072: typed text in an outline font as closed shapes.
+pub mod outline_text;
+// #3915: picks follow their face by SolidCraft name at a re-import.
+pub mod source_follow;

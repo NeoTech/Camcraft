@@ -7,6 +7,7 @@
 //! downward-facing face above it); no vendor material consulted.
 
 use crate::geo2d::Region;
+use crate::stock_sim::Columns;
 use crate::geometry::slice::{self, SliceError};
 use crate::geometry::Triangle;
 use crate::machining2d::GenError;
@@ -64,4 +65,23 @@ pub(super) fn level_target(facets: &[Triangle], footprint: &Region, z: f64) -> R
         return Ok(target);
     }
     Ok(target.difference(&hang)?)
+}
+
+/// Half the width, in lattice cells, of the narrowest standing strip
+/// the re-machining mask still sends the cutter to (#1749): a strip
+/// one cell wide along a wall is the lattice's sampling, not stock.
+const MASK_RESIDUE: f64 = 1.0;
+
+/// Narrow `center` (already eroded from the unmasked `target`) to centers
+/// whose tool disc meets still-standing material in `mask` above `z`.
+/// Intersecting `mask` with `center.offset(r)` ignores unreachable corners
+/// and any `stock_to_leave` collar left by an earlier pass.
+pub(super) fn mask_center(center: Region, mask: &Columns<'_>, z: f64, r: f64) -> Result<Region, GenError> {
+    let s = center.offset(r)?.intersect(&mask.above(z)?)?;
+    let k = MASK_RESIDUE * mask.cell();
+    let standing = if k.is_finite() && k > 0.0 && !s.is_empty() { s.offset_sharp(-k)?.offset_sharp(k)? } else { s };
+    if standing.is_empty() {
+        return Ok(Region::empty());
+    }
+    Ok(center.intersect(&standing.offset(r)?)?)
 }

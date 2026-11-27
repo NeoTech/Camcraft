@@ -11,6 +11,7 @@
 use camcraft_motion::cl::{MoveKind, Toolpath};
 use camcraft_motion::entry::Entry3D;
 use camcraft_motion::geo2d::{Loop, Point2, Region};
+use camcraft_motion::links::Compensation;
 use camcraft_motion::machining2d::{
     ARC_FIT_TOL, chord_clears, contour, contour_along_chain, face, on_boundary, pocket,
     ring_is_circular, slot, trace, ContourParams, FaceHoles, FaceParams, GenError, Lead, PocketParams,
@@ -39,7 +40,7 @@ fn params() -> FaceParams {
         feed: 500.0,
         plunge_feed: 100.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stock_top: None,
     }
 }
@@ -357,8 +358,9 @@ fn cp() -> ContourParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
+        picks: Default::default(),
     }
 }
 
@@ -752,7 +754,20 @@ fn tabs_hold_the_part_until_the_floor() {
     let t = contour(&rect(0.0, 0.0, 20.0, 20.0), &p).expect("valid");
     // Levels -3 and -4 (the tab top, #2579) run a full ring, -6 runs
     // four subpaths between tabs (#2004: no air level at Top Z 0).
-    assert_eq!(plunge_xy(&t).len(), 6);
+    // An entry ends with a plunge followed by the in-plane cut. An
+    // intermediate peck instead retracts by rapid before the next peck.
+    let entries = t.moves.windows(2).filter(|pair| {
+        pair[0].kind == MoveKind::Plunge && pair[1].kind == MoveKind::Feed && pair[1].from.z == pair[1].to.z
+    }).count();
+    assert_eq!(entries, 6);
+    assert_eq!(t.moves.iter().filter(|m| m.kind == MoveKind::Plunge && m.to.z == -6.0).count(), 4);
+    // The four window starts are inside corner arcs. Unknown full-disc
+    // coverage conservatively adds one peck at -3 before each -6 entry.
+    let pecks: Vec<_> = t.moves.windows(2).filter(|pair| {
+        pair[0].kind == MoveKind::Plunge && pair[1].kind == MoveKind::Rapid
+    }).collect();
+    assert_eq!(pecks.len(), 4);
+    assert!(pecks.iter().all(|pair| pair[0].to.z == -3.0));
     // Hop motion only at the tabbed level: three retract feeds + rapids.
     let up = t
         .moves
@@ -919,26 +934,293 @@ fn the_inside_contour_bore_opens_with_a_helix() {
     assert!(t.is_chained() && t.all_finite());
 }
 
+/// The wall side's ramp: a 5 deg angle caps every feed descent of an
+/// outside contour, the first level's too, and no axial plunge enters
+/// the material. The ramp rides the lead-in and the ring, never a chord
+/// over the grown region (which holds the part).
+fn outside_ramped(entry: Entry3D, deg: f64) -> ContourParams {
+    let mut p = cp();
+    p.side = Side::Outside;
+    p.bottom_z = -3.0;
+    p.entry = entry;
+    p.helix_radius = 3.0;
+    p.links.approach.ramp_angle = deg;
+    p
+}
+
+/// The steepest feed descent (deg) of a path, and its axial feed descents.
+fn steepest_descent(t: &Toolpath) -> (f64, usize) {
+    let mut worst: f64 = 0.0;
+    let mut axial = 0;
+    for m in t.moves.iter().filter(|m| m.kind != MoveKind::Rapid && m.from.z - m.to.z > 1e-9) {
+        let run: f64 = m.chords(FLATTEN_TOL).iter().map(|(a, b)| (b.x - a.x).hypot(b.y - a.y)).sum();
+        if run <= 1e-9 {
+            axial += 1;
+        } else {
+            worst = worst.max(((m.from.z - m.to.z) / run).atan().to_degrees());
+        }
+    }
+    (worst, axial)
+}
+
 #[test]
-fn a_wall_side_entry_is_refused_by_name_grazing_unchanged() {
-    // The grown region contains the part's own interior, so a chord or a
-    // dive certified on it would lie - on the wall side the arms are
-    // refused by name, once, and the graze this generator has always
-    // posted stands. Byte-for-byte: the refusal costs no move.
-    let base = contour(&rect(0.0, 0.0, 30.0, 30.0), &cp()).expect("plunge graze");
-    for (arm, e) in [("ramp", Entry3D::Ramp), ("helix", Entry3D::Helix)] {
-        let mut p = cp();
-        p.side = Side::Outside;
-        p.entry = e;
-        p.helix_radius = 3.0;
-        let t = contour(&rect(0.0, 0.0, 30.0, 30.0), &p).expect("wall contour valid");
-        assert_eq!(t.moves, base.moves, "the {arm} must not move the wall-side path");
-        assert_eq!(
-            t.notes.iter().filter(|n| n.contains("needs bounded air")).count(),
-            1,
-            "the {arm} refusal is said exactly once: {:?}",
-            t.notes
-        );
+fn a_wall_side_ramp_entry_ramps_every_level_within_its_angle() {
+    let base = contour(&rect(0.0, 0.0, 30.0, 30.0), &outside_ramped(Entry3D::Plunge, 5.0)).expect("plunge graze");
+    let (_, plunged) = steepest_descent(&base);
+    assert!(plunged >= 3, "the plunge entry dives at each of the three levels: {plunged}");
+    let t = contour(&rect(0.0, 0.0, 30.0, 30.0), &outside_ramped(Entry3D::Ramp, 5.0)).expect("wall ramp");
+    let (worst, axial) = steepest_descent(&t);
+    assert!(worst > 1.0 && worst <= 5.0 + 1e-3, "it ramps, no steeper than 5 deg: {worst}");
+    assert_eq!(axial, 0, "no axial dive at any level: {:?}", t.moves);
+    assert!(!t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "no plunge move: {:?}", t.moves);
+    assert!(t.notes.is_empty(), "nothing to say: {:?}", t.notes);
+    // The ramp is on the ring: every ramp point stays outside the 30 x 30
+    // part by the cutter radius (the cutter centre never nears the wall).
+    let r = 5.0 - 1e-6;
+    for m in t.moves.iter().filter(|m| m.kind != MoveKind::Rapid) {
+        for (_, q) in m.chords(FLATTEN_TOL) {
+            let dx = (q.x - 15.0).abs() - 15.0;
+            let dy = (q.y - 15.0).abs() - 15.0;
+            let off = dx.max(0.0).hypot(dy.max(0.0));
+            assert!(off >= r, "the centre stands {off:.3} from the part wall at {q:?}");
+        }
+    }
+    assert!(t.is_chained() && t.all_finite());
+}
+
+#[test]
+fn a_wall_side_helix_stands_down_to_the_same_ramp_and_says_so_once() {
+    let ramp = contour(&rect(0.0, 0.0, 30.0, 30.0), &outside_ramped(Entry3D::Ramp, 5.0)).expect("ramp");
+    let helix = contour(&rect(0.0, 0.0, 30.0, 30.0), &outside_ramped(Entry3D::Helix, 5.0)).expect("helix");
+    assert_eq!(helix.moves, ramp.moves, "the helix stands down to the ramp");
+    assert_eq!(
+        helix.notes.iter().filter(|n| n.contains("needs bounded air")).count(),
+        1,
+        "said exactly once: {:?}",
+        helix.notes
+    );
+}
+
+#[test]
+fn a_wall_side_helix_names_its_ramp_and_its_tabbed_graze_each_once() {
+    // Three levels (-1, -2, -3), two tabs 1.5 high: -1 is untabbed (the helix
+    // stands down to the ramp), -2 and -3 are tabbed (they graze). Both
+    // substitutions are said, once each (review of #3833).
+    let mut p = outside_ramped(Entry3D::Helix, 5.0);
+    p.tab_count = 2;
+    p.tab_width = 5.0;
+    p.tab_height = 1.5;
+    let t = contour(&rect(0.0, 0.0, 30.0, 30.0), &p).expect("tabbed helix");
+    let said = |what: &str| t.notes.iter().filter(|n| n.contains(what)).count();
+    assert_eq!(said("needs bounded air"), 1, "{:?}", t.notes);
+    assert_eq!(said("a standing tab is material"), 1, "{:?}", t.notes);
+    assert!(t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "the tabbed levels graze: {:?}", t.moves);
+}
+
+#[test]
+fn a_wall_side_ramp_too_short_for_its_angle_grazes_and_says_why() {
+    // A 4 x 4 part: the ring is too short for 0.005 deg over 1 mm (64 legs).
+    let t = contour(&rect(0.0, 0.0, 4.0, 4.0), &outside_ramped(Entry3D::Ramp, 0.005)).expect("graze");
+    assert_eq!(t.notes.iter().filter(|n| n.contains("too short for the ramp angle")).count(), 1, "{:?}", t.notes);
+    assert!(t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "the graze dive stands in: {:?}", t.moves);
+}
+
+/// #3917: `n` separate 16 mm square parts, 40 mm apart along X.
+fn separate_parts(n: usize) -> Region {
+    let sq = |i: usize| {
+        let x0 = 40.0 * i as f64;
+        Loop::new(vec![Point2::new(x0, 0.0), Point2::new(x0 + 16.0, 0.0), Point2::new(x0 + 16.0, 16.0), Point2::new(x0, 16.0)]).unwrap()
+    };
+    Region::new((0..n).map(sq).collect()).unwrap()
+}
+
+/// #3917: every outside ring after the first at a level is entered by the
+/// wall-side ramp, not by the pass link's axial plunge; and the traverse
+/// between the parts rides the pass link's plane (clearance for pass
+/// Clearance, the retract plane for pass Retract).
+#[test]
+fn every_outside_ring_of_several_parts_is_entered_by_the_wall_side_ramp() {
+    let part = |x: f64| ((x - 8.0) / 40.0).round() as i64;
+    for n in [2, 3] {
+        let base = contour(&separate_parts(n), &outside_ramped(Entry3D::Plunge, 5.0)).expect("plunge parts");
+        assert_eq!(steepest_descent(&base).1, 3 * n, "the plunge entry dives at each ring of each level");
+        for (pass, plane) in [(camcraft_motion::links::Link::Clearance, 5.0), (camcraft_motion::links::Link::Retract, 3.0)] {
+            for entry in [Entry3D::Ramp, Entry3D::Helix] {
+                let mut p = outside_ramped(entry, 5.0);
+                p.links.pass = pass;
+                let t = contour(&separate_parts(n), &p).expect("ramped parts");
+                let what = format!("{n} parts, {entry:?}, pass {pass:?}");
+                let (worst, axial) = steepest_descent(&t);
+                assert!(worst > 1.0 && worst <= 5.0 + 1e-3, "{what}: every ring ramps within 5 deg: {worst}");
+                assert_eq!(axial, 0, "{what}: no ring dives: {:?}", t.notes);
+                assert!(!t.moves.iter().any(|m| m.kind == MoveKind::Plunge), "{what}: no plunge move");
+                assert!(t.is_chained() && t.all_finite());
+                // A ring-to-ring crossing: a rapid to another part, with the
+                // cut level before it (the last feed's Z) equal to the level
+                // after it (the lowest Z before the next crossing). The
+                // others are the approach and the level links.
+                let at: Vec<usize> = (0..t.moves.len())
+                    .filter(|&i| t.moves[i].kind == MoveKind::Rapid && part(t.moves[i].to.x) != part(t.moves[i].from.x))
+                    .collect();
+                let crossings: Vec<f64> = at
+                    .iter()
+                    .enumerate()
+                    .filter(|&(k, &i)| {
+                        let before = t.moves[..i].iter().rev().find(|m| m.kind != MoveKind::Rapid).map(|m| m.to.z);
+                        let end = at.get(k + 1).copied().unwrap_or(t.moves.len());
+                        let after = t.moves[i..end].iter().map(|m| m.to.z).fold(f64::INFINITY, f64::min);
+                        before.is_some_and(|z| (z - after).abs() < 1e-9)
+                    })
+                    .map(|(_, &i)| t.moves[i].to.z)
+                    .collect();
+                assert_eq!(crossings.len(), 3 * (n - 1), "{what}: one crossing to the next part per level: {crossings:?}");
+                assert!(crossings.iter().all(|z| (z - plane).abs() < 1e-9), "{what}: the crossing rides the pass plane {plane}: {crossings:?}");
+            }
+        }
+    }
+}
+
+/// #3888: the outside ramp's params under one compensation, with the
+/// straight Perpendicular lead-in that control and wear need (radius 5)
+/// - #3891 refuses the Linear shape, whose start rides the ring line.
+fn ramped_comp(side: Side, entry: Entry3D, comp: Compensation) -> ContourParams {
+    let mut p = outside_ramped(entry, 5.0);
+    p.side = side;
+    p.lead = Lead::Perpendicular { length: 6.0 };
+    p.links.approach.compensation = comp;
+    p
+}
+
+#[test]
+fn a_ramp_or_helix_under_control_or_wear_is_refused_by_name_on_both_sides() {
+    // #3888: the zig-zag (and the bore's orbit) runs on the ring before the
+    // lead-in engages G41/G42, so the register never applies to it.
+    for comp in [Compensation::Control, Compensation::Wear] {
+        for side in [Side::Outside, Side::Inside] {
+            for (entry, name) in [(Entry3D::Ramp, "Ramp"), (Entry3D::Helix, "Helix")] {
+                let err = contour(&rect(0.0, 0.0, 30.0, 30.0), &ramped_comp(side, entry, comp))
+                    .expect_err("a ramp before G41/G42 must refuse");
+                let why = format!("{err:?}");
+                let want = format!("{} compensation does not ride a {name} entry", comp.label());
+                assert!(why.contains(&want), "{comp:?} {side:?} {name}: {why}");
+            }
+            // A level transition that ramps is the same descent.
+            let mut p = ramped_comp(side, Entry3D::Plunge, comp);
+            p.links.transition = Some(Entry3D::Ramp);
+            let why = format!("{:?}", contour(&rect(0.0, 0.0, 30.0, 30.0), &p).expect_err("transition ramp"));
+            assert!(why.contains("does not ride a Ramp level transition"), "{comp:?} {side:?}: {why}");
+            // The plunge at the lead-in's start still stands, under its span.
+            let t = contour(&rect(0.0, 0.0, 30.0, 30.0), &ramped_comp(side, Entry3D::Plunge, comp)).expect("plunge");
+            assert!(!t.comps.is_empty(), "{comp:?} {side:?}: one span per level");
+        }
+    }
+}
+
+#[test]
+fn a_wall_side_ramp_in_computer_compensation_is_unchanged() {
+    // #3888 pins the computer side: no span, and the same ramp as before.
+    let comp = contour(&rect(0.0, 0.0, 30.0, 30.0), &ramped_comp(Side::Outside, Entry3D::Ramp, Compensation::Computer))
+        .expect("computer ramp");
+    assert!(comp.comps.is_empty());
+    let (worst, axial) = steepest_descent(&comp);
+    assert!(worst > 1.0 && worst <= 5.0 + 1e-3 && axial == 0, "it ramps: {worst} {axial}");
+    let mut plain = outside_ramped(Entry3D::Ramp, 5.0);
+    plain.lead = Lead::Perpendicular { length: 6.0 };
+    let plain = contour(&rect(0.0, 0.0, 30.0, 30.0), &plain).expect("default ramp");
+    assert_eq!(comp.moves, plain.moves);
+}
+
+/// #3891: the XY distance of `(x, y)` from the 30 x 30 part's boundary,
+/// outside it (the wall side) or inside it (the bore side).
+fn wall_gap(x: f64, y: f64, inside: bool) -> f64 {
+    if inside {
+        x.min(30.0 - x).min(y).min(30.0 - y)
+    } else {
+        let (ox, oy) = ((0.0 - x).max(x - 30.0), (0.0 - y).max(y - 30.0));
+        ox.max(0.0).hypot(oy.max(0.0))
+    }
+}
+
+/// #3891: every cut-adjacent move before each span's engage keeps the
+/// Perpendicular lead's length beyond the ring line, so a register
+/// difference up to that length cannot reach the finished wall while
+/// G40 is active.
+fn pre_engage_gaps(t: &Toolpath, inside: bool) -> Vec<f64> {
+    let mut gaps = Vec::new();
+    let mut prev_end = 0usize;
+    for c in &t.comps {
+        for m in &t.moves[prev_end..c.first] {
+            if m.kind != MoveKind::Rapid {
+                gaps.push(wall_gap(m.to.x, m.to.y, inside));
+            }
+        }
+        prev_end = c.last + 1;
+    }
+    gaps
+}
+
+#[test]
+fn a_linear_lead_under_control_or_wear_is_refused_by_name_on_both_sides() {
+    // #3891: a Linear lead's start rides the ring's own offset line, so
+    // the Plunge's dive there (and the Arc entry's chord, tangent to the
+    // lead) stand the nominal radius off the finished wall under G40 -
+    // a register over the nominal radius cuts it. The door refuses the
+    // shape for both ends, before any geometry.
+    for comp in [Compensation::Control, Compensation::Wear] {
+        for side in [Side::Outside, Side::Inside] {
+            let want = format!("{} compensation does not ride a Linear lead-in", comp.label());
+            let mut p = ramped_comp(side, Entry3D::Plunge, comp);
+            p.lead = Lead::Linear { length: 6.0 };
+            let why = format!("{:?}", contour(&rect(0.0, 0.0, 30.0, 30.0), &p).expect_err("a Linear lead-in"));
+            assert!(why.contains(&want), "{comp:?} {side:?}: {why}");
+            // The lead-out is the same law: the cancel's withdrawal ends
+            // on the ring's own offset, past G40.
+            let mut p = ramped_comp(side, Entry3D::Plunge, comp);
+            p.links.approach.lead_out = Some(Lead::Linear { length: 6.0 });
+            let why = format!("{:?}", contour(&rect(0.0, 0.0, 30.0, 30.0), &p).expect_err("a Linear lead-out"));
+            assert!(why.contains("does not ride a Linear lead-out"), "{comp:?} {side:?}: {why}");
+            assert!(why.contains(&format!("{} compensation", comp.label())), "{comp:?} {side:?}: {why}");
+            // The same parameters in computer generate: the option only
+            // narrows the compensated modes.
+            let mut plain = ramped_comp(side, Entry3D::Plunge, comp);
+            plain.lead = Lead::Linear { length: 6.0 };
+            plain.links.approach.lead_out = Some(Lead::Linear { length: 6.0 });
+            plain.links.approach.compensation = Compensation::Computer;
+            contour(&rect(0.0, 0.0, 30.0, 30.0), &plain).expect("computer takes the Linear lead");
+        }
+    }
+}
+
+#[test]
+fn the_perpendicular_comp_entry_keeps_the_lead_length_beyond_the_ring() {
+    // #3891: with the Linear shape refused, every pre-engage move the
+    // Plunge and the Arc entry post holds at least the lead length (6,
+    // one over the radius 5) beyond the ring line - the register
+    // difference the door can vouch for. The bore side is pinned here:
+    // a whole-model source cannot post it.
+    for comp in [Compensation::Control, Compensation::Wear] {
+        for side in [Side::Outside, Side::Inside] {
+            let inside = side == Side::Inside;
+            for entry in [Entry3D::Plunge, Entry3D::Arc] {
+                let t = contour(&rect(0.0, 0.0, 30.0, 30.0), &ramped_comp(side, entry, comp))
+                    .unwrap_or_else(|e| panic!("{comp:?} {side:?} {entry:?}: {e:?}"));
+                assert!(!t.comps.is_empty(), "{comp:?} {side:?} {entry:?}: one span per level");
+                let gaps = pre_engage_gaps(&t, inside);
+                assert!(!gaps.is_empty(), "{comp:?} {side:?} {entry:?}: the descents stand");
+                let worst = gaps.iter().copied().fold(f64::INFINITY, f64::min);
+                assert!(
+                    worst + 1e-6 >= 11.0,
+                    "{comp:?} {side:?} {entry:?}: the closest pre-engage position is {worst:.3} mm off the wall, \
+                     not the radius 5 plus the lead 6"
+                );
+                // The closest position is the dive point itself: the
+                // geometry the door vouches for, nothing closer.
+                assert!(
+                    (worst - 11.0).abs() <= 0.01,
+                    "{comp:?} {side:?} {entry:?}: the dive point sits {worst:.3} mm out, not r + lead"
+                );
+            }
+        }
     }
 }
 
@@ -1656,7 +1938,7 @@ fn sp() -> SlotParams {
         plunge_feed: 100.0,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
     }
 }
 

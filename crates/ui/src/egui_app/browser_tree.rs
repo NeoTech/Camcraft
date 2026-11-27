@@ -126,6 +126,7 @@ pub(crate) fn kind_name(k: ToolKind) -> &'static str {
         ToolKind::Probe => "touch probe",
         ToolKind::Torch => "plasma torch",
         ToolKind::Waterjet => "waterjet nozzle",
+        ToolKind::Laser => "laser head",
         ToolKind::Electrode => "sinker electrode",
         ToolKind::ThreadMill => "thread mill",
         ToolKind::ThreadMillSingle => "single-form thread mill",
@@ -134,6 +135,7 @@ pub(crate) fn kind_name(k: ToolKind) -> &'static str {
         ToolKind::Keyseat => "keyseat cutter",
         ToolKind::Dovetail => "dovetail cutter",
         ToolKind::Lollipop => "lollipop cutter",
+        ToolKind::FormMill => "form mill",
     }
 }
 

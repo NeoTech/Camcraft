@@ -59,9 +59,9 @@ pub struct MachinesPane {
 }
 
 /// The kinds New blank offers, in the combo's order.
-const KINDS: [Kind; 7] = [
+const KINDS: [Kind; 8] = [
     Kind::Mill, Kind::Lathe, Kind::MillTurn, Kind::Plasma,
-    Kind::Waterjet, Kind::WireEdm, Kind::SinkerEdm,
+    Kind::Waterjet, Kind::Laser, Kind::WireEdm, Kind::SinkerEdm,
 ];
 
 /// The dropdown's first entry: no filter, New blank shut.
@@ -131,13 +131,7 @@ pub(crate) const USE_FOR_SETUP: &str = "Use for this setup";
 pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     refresh(state);
     let inks = text_inks(ui, &state.world);
-    // Why the selected machine can't be assigned (read before the pane
-    // borrow below takes `state`).
-    let block = state
-        .machines_pane
-        .selected
-        .and_then(|i| state.machines_pane.list.as_ref().and_then(|l| l.get(i)))
-        .map(|e| e.assign_block(&state.world));
+    let mounted = camcraft_app::machine::of(&state.world).0;
     let mut assign = None;
     let p = &mut state.machines_pane;
     let Some(list) = p.list.as_ref() else { return };
@@ -237,6 +231,9 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 if r.clicked() {
                     chose = Some(i);
                 }
+                if r.double_clicked() && e.assign_block(&state.world).is_none() {
+                    assign = Some(e.source.clone());
+                }
             }
         });
     if let Some(i) = chose {
@@ -250,11 +247,39 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     {
         p.selected = None;
     }
+    // Assignment stays outside both scroll areas. Read the current pick,
+    // including a row selected during this frame, for its refusal reason.
+    if let Some(e) = p.selected.and_then(|i| list.get(i)) {
+        if e.source.mount_path() != mounted {
+            ui.add(Label::new(RichText::new(format!(
+                "Selected: {} - not yet this setup's machine", e.name
+            )).color(pal.text_dim)).wrap());
+        }
+        let why = e.assign_block(&state.world);
+        let r = ui.add_enabled(why.is_none(), egui::Button::new(USE_FOR_SETUP));
+        match &why {
+            None => {
+                if r.on_hover_text(format!("Make this the setup's machine ({} undoes it)", chord("Z"))).clicked() {
+                    assign = Some(e.source.clone());
+                }
+            }
+            Some(why) => {
+                r.on_disabled_hover_text(format!("Cannot assign: {why}"));
+                ui.add(Label::new(RichText::new(format!("Cannot assign: {why}")).color(pal.text_dim)).wrap());
+            }
+        }
+    }
+    if let Some(source) = assign {
+        state.pending.push_back(CommandKind::UseCatalogueMachine(source));
+    }
     ui.separator();
     if let Some(ed) = p.editor.as_mut() {
         let dir = p.user_dir.clone().flatten();
+        // Full width like the list: shrunk to its content, the editor
+        // kept last frame's width and clipped the axis chain's rows.
         let out = ScrollArea::vertical()
             .id_salt("machines-editor")
+            .auto_shrink([false, true])
             .show(ui, |ui| file_editor::draw(ui, ed, dir.as_deref(), pal, inks.error))
             .inner;
         if out.close {
@@ -280,26 +305,13 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         }
         return;
     };
-    ScrollArea::vertical().id_salt("machines-detail").show(ui, |ui| {
+    ScrollArea::vertical().id_salt("machines-detail").auto_shrink([false, true]).show(ui, |ui| {
         ui.add(Label::new(RichText::new(&e.name).strong()).wrap());
         ui.add(Label::new(RichText::new(e.source.label()).small().color(pal.text_dim)).wrap());
         let ink = if e.is_valid() { pal.accent } else { inks.error };
         ui.label(RichText::new(verdict(e)).color(ink).strong());
         for r in &e.refusals {
             super::error_text::error_text(ui, inks.error, &r.to_string());
-        }
-        let why = block.clone().flatten();
-        let r = ui.add_enabled(why.is_none(), egui::Button::new(USE_FOR_SETUP));
-        match &why {
-            None => {
-                if r.on_hover_text(format!("Make this the setup's machine ({} undoes it)", chord("Z"))).clicked() {
-                    assign = Some(e.source.clone());
-                }
-            }
-            Some(why) => {
-                r.on_disabled_hover_text(format!("Cannot assign: {why}"));
-                ui.add(Label::new(RichText::new(format!("Cannot assign: {why}")).color(pal.text_dim)).wrap());
-            }
         }
         ui.add_space(4.0);
         for g in &e.groups {
@@ -316,8 +328,5 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     });
     if reread {
         p.list = None;
-    }
-    if let Some(source) = assign {
-        state.pending.push_back(CommandKind::UseCatalogueMachine(source));
     }
 }

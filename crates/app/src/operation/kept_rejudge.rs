@@ -62,10 +62,23 @@ fn part_problem(world: &World, name: &str, op: &Operation, path: &Toolpath, know
         Ok(job) => job,
         Err(e) => return Some(format!("{name}: the parts beside its source cannot be read again ({e}); regenerate it")),
     };
+    if matches!(op.params, super::OpParams::MultiAxisDeburr { .. }) {
+        // Posed moves have no column-stock verdict. Re-read the stock
+        // before accepting a cache, including stock changed after generation.
+        if let Err(e) = super::multiaxis_deburr_op::audit_stock(job.stock_facets.as_deref(), &job.material, job.frame.as_ref()) {
+            return Some(format!("{name}: {e}"));
+        }
+    }
     if job.keep_parts.is_empty() && job.neighbour_parts.is_empty() {
         return None;
     }
     let parts = keep_law::kept_parts_named(world, op.setup.as_deref(), &op.params, &op.src, job.part_solid);
+    // A cached posed deburr has no verdict for other parts imported or
+    // moved after generation. The upright solid judge cannot supply it.
+    if matches!(op.params, super::OpParams::MultiAxisDeburr { .. }) {
+        let part = parts.first().map_or("other kept parts", |(name, _)| name.as_str());
+        return Some(format!("{name}: Multi-Axis Deburr cannot judge the posed cutter against '{part}'; use a document with only the source part"));
+    }
     let geom = job.tool.geom();
     let holder = crate::tool_body::stack(&geom, job.body.as_ref()).with_neck(job.neck.clone());
     let cutter = verify::Cutter::of(&job.tool).with_body(&geom, &holder);

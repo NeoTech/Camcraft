@@ -1,8 +1,10 @@
-//! Provenance: Autodesk DXF SECTION, HEADER, TABLES and ENTITIES structure.
+//! Provenance: Autodesk DXF SECTION, HEADER, CLASSES, THUMBNAILIMAGE, ACDSDATA, TABLES and ENTITIES structure.
 use super::Units;
 use super::blocks::Blocks;
+use super::curves::{EVALUATION_BUDGET, ellipse, spline};
 use super::dictionaries;
-use super::entities::{layer_name, simple};
+use super::entities::{is_entity_kind, layer_name, simple};
+use super::insert::{self, Definitions};
 use super::pairs::{Pairs, Record, integer};
 use super::polyline::{legacy, lightweight};
 use super::types::{Document, DxfError, Layer, Limits, State, TextAnnotation, error};
@@ -26,8 +28,13 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
     let mut state = State {
         doc: Document::default(),
         limits,
+        curve_work: EVALUATION_BUDGET,
+        inserts: Vec::new(),
+        defer_curves: false,
+        curves: Vec::new(),
     };
     let mut blocks = Blocks::default();
+    let mut definitions = Definitions::default();
     let mut sections = BTreeSet::new();
     loop {
         let record = input
@@ -40,6 +47,7 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
                     return Err(error("EOF", "data after EOF"));
                 }
                 blocks.check_owners()?;
+                insert::expand(&definitions, &mut state)?;
                 return Ok(state.doc);
             }
             "SECTION" => {
@@ -57,20 +65,43 @@ pub fn parse_with_limits(bytes: &[u8], limits: Limits) -> Result<Document, DxfEr
                 if name == "HEADER" {
                     header(fields, &mut state.doc)?;
                     end_section(&mut input, "HEADER")?;
+                } else if matches!(name, "CLASSES" | "THUMBNAILIMAGE" | "ACDSDATA") {
+                    skip_inert(&mut input, name)?;
                 } else {
                     if fields.next()?.is_some() {
                         return Err(error(name, "unexpected SECTION fields"));
                     }
                     match name {
-                        "ENTITIES" => entities(&mut input, &mut state)?,
+                        "ENTITIES" => entity_list(&mut input, &mut state, Some("ENDSEC"))?,
                         "TABLES" => tables(&mut input, &mut state, &mut blocks)?,
-                        "BLOCKS" => blocks.read(&mut input, limits.max_entities)?,
+                        "BLOCKS" => blocks.read(&mut input, &mut definitions, limits.max_entities)?,
                         "OBJECTS" => dictionaries::read(&mut input, limits.max_entities)?,
                         _ => return Err(error(name, "unsupported SECTION")),
                     }
                 }
             }
             _ => return Err(error(record.kind, "expected SECTION or EOF")),
+        }
+    }
+}
+
+/// CLASSES, THUMBNAILIMAGE and ACDSDATA carry no geometry. Their content is opaque,
+/// including group pairs right after the name: consume records to the matching ENDSEC.
+fn skip_inert(input: &mut Pairs<'_>, name: &str) -> Result<(), DxfError> {
+    loop {
+        let record = input
+            .record()?
+            .ok_or_else(|| error(name, "missing ENDSEC"))?;
+        match record.kind {
+            "ENDSEC" => return record.empty(),
+            "EOF" | "SECTION" => return Err(error(name, "missing ENDSEC")),
+            kind if is_entity_kind(kind) => {
+                return Err(error(
+                    name,
+                    &format!("{kind} entity in a section without geometry"),
+                ));
+            }
+            _ => {}
         }
     }
 }
@@ -123,12 +154,21 @@ fn header(mut fields: Pairs<'_>, doc: &mut Document) -> Result<(), DxfError> {
     Ok(())
 }
 
-fn entities(input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
+/// Read entity records up to `end` (ENDSEC of ENTITIES), or to the end of `input` when `end`
+/// is `None` (a block body, which holds no ENDBLK).
+pub(super) fn entity_list(
+    input: &mut Pairs<'_>,
+    state: &mut State,
+    end: Option<&str>,
+) -> Result<(), DxfError> {
     loop {
-        let record = input
-            .record()?
-            .ok_or_else(|| error("ENTITIES", "missing ENDSEC"))?;
-        if record.kind == "ENDSEC" {
+        let Some(record) = input.record()? else {
+            return match end {
+                Some(_) => Err(error("ENTITIES", "missing ENDSEC")),
+                None => Ok(()),
+            };
+        };
+        if end == Some(record.kind) {
             return record.empty();
         }
         state.entity(record.kind)?;
@@ -136,7 +176,10 @@ fn entities(input: &mut Pairs<'_>, state: &mut State) -> Result<(), DxfError> {
             "LINE" | "ARC" | "CIRCLE" => simple(record, state)?,
             "LWPOLYLINE" => lightweight(record, state)?,
             "POLYLINE" => legacy(record, input, state)?,
-            "TEXT" | "MTEXT" | "DIMENSION" | "HATCH" => {
+            "SPLINE" => spline(record, state)?,
+            "ELLIPSE" => ellipse(record, state)?,
+            "INSERT" => insert::read(record, input, state)?,
+            "TEXT" | "MTEXT" | "DIMENSION" | "HATCH" | "POINT" => {
                 record.validate()?;
                 if matches!(record.kind, "TEXT" | "MTEXT") {
                     let layer = record.field(8)?.unwrap_or("0");

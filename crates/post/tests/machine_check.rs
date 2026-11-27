@@ -57,10 +57,10 @@ fn pure_tool_checks_keep_rpm_sizes_and_distinct_tool_count() {
     out.check_tool(&machine, Some(SourceLocation::Operation("Face2")), "T2", 100.0, 20.0, 49.0);
     assert_eq!(out.problems, [
         "program calls 2 tools, the changer holds 1",
-        "Face1: tool T1 runs 1001 rpm, above the machine's 1000",
+        "Face1: tool T1 runs 1001 rpm, above the machine's 1000 - set the tool's speed (edit_tool) or apply_cutting_data",
         "Face1: tool T1 is 101.0 mm long, the machine takes 100.0",
         "Face1: tool T1 is 21.0 mm across, the machine takes 20.0",
-        "Face2: tool T2 runs 49 rpm, below the machine's 50",
+        "Face2: tool T2 runs 49 rpm, below the machine's 50 - set the tool's speed (edit_tool) or apply_cutting_data",
     ]);
 }
 

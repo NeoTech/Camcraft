@@ -13,10 +13,20 @@ use egui_wgpu::{Renderer, ScreenDescriptor};
 
 use super::super::shell::*;
 use super::super::{icons, view_pass, world};
-use super::{resize_frame_deadline, Shell};
+use super::{eye_boot, resize_frame_deadline, Shell};
 
 
 impl Shell {
+    /// The eye that `eye_boot` built, once: taken into the shell, or refused by name.
+    fn take_eye(&mut self) {
+        match eye_boot::take(&mut self.eye_rx) {
+            Some(Ok(eye)) => self.stock_eye = Some(eye),
+            Some(Err(err)) => diag_warn!("stock eye: {err} - the deviate sheet stands in"),
+            None => {}
+        }
+    }
+
+
     fn draw(&mut self) {
         if self.failed || self.occluded {
             return;
@@ -30,6 +40,7 @@ impl Shell {
         }
         // Commands the panels queued last frame land before the scene is
         // collected, so this frame draws what the user's click did.
+        self.take_eye();
         self.state.drain_actions();
         let title = self.state.window_title();
         if title != self.window_title {
@@ -98,7 +109,7 @@ impl Shell {
         let mut raw_input = winit_state.take_egui_input(window);
         // #1696: pictures the capture read-back finished arrive as egui's
         // own Screenshot event, so the door that asked can match its token.
-        raw_input.events.extend(capture.drain_events());
+        raw_input.events.extend(capture.drain_events(state));
 
         // Size the 3D target from last frame's layout, like the imgui shell.
         let want = view_pass::target_extent(*viewport_points, scale);
@@ -122,6 +133,7 @@ impl Shell {
         // UI logic first: the dock reports the viewport tab's size, the GPU
         // passes follow (the imgui shell's ordering law - panels drive
         // extent).
+        let size_before_layout = *viewport_points;
         let mut full_output = egui_ctx.run_ui(raw_input, |ui| {
             shell_layout(
                 ui,
@@ -133,6 +145,9 @@ impl Shell {
                 left_press,
             );
         });
+        let win_px = window.inner_size();
+        *viewport_points =
+            view_pass::viewport_after_layout(size_before_layout, *viewport_points, (win_px.width, win_px.height));
         let egui_delay = full_output
             .viewport_output
             .get(&egui::ViewportId::ROOT)
