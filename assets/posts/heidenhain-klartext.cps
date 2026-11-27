@@ -1,5 +1,5 @@
 // Original CamCraft Klartext post. HEIDENHAIN iTNC 530 Conversational Format,
-// 533 190-22 (9/2006), NC 340 490-03: §§4.4, 5.2, 6.4, 7.2, 7.4, 8.9, 14.4.
+// 533 190-22 (9/2006), NC 340 490-03: §§4.4, 5.2, 6.4, 7.2, 7.4, 8.9, 8.10, 14.4.
 // https://content.heidenhain.de/doku/tnc_guide/pdf_files/iTNC530/34049x-neu/en/bhb.pdf
 // Machine installation selects the qualified language profile and change procedure.
 description = "Heidenhain Klartext (metric 3-axis milling)";
@@ -161,6 +161,17 @@ function onParameter(name, value) {
     case "SectionMode":
       if (value === "3-axis") return;
       break;
+    case "Smoothing":
+      // #4095: a finite positive deviation in mm (post::dump writes no other).
+      if (typeof value !== "number" || !isFinite(value) || !(value > 0)) {
+        refuse("smoothing tolerance " + value + " is not a positive number of mm");
+      }
+      section.Smoothing = value;
+      return;
+    case "SmoothingMode":
+      if (value !== "finish" && value !== "rough") refuse("smoothing mode \"" + value + "\" is not finish or rough");
+      section.SmoothingMode = value;
+      return;
   }
   refuse("unsupported parameter " + name + " (" + value + ")");
 }
@@ -287,6 +298,7 @@ function onSection() {
   block("M0");
   block("M3");
   block(flood ? "M8" : "M9");
+  smoothOn();
   // Establish the programmed start before the first record, including an arc
   // or a plunge as the first record. Stay at the upper limit during XY travel,
   // then descend only in the column of the verified start point.
@@ -377,6 +389,7 @@ function onSectionEnd() {
       local(lastPoint[2], "Z") < local(section.ClearancePlane, "Z")) {
     refuse("operation ends below ClearancePlane; provide a verified retract before stopping the spindle");
   }
+  smoothOff();
   block("M9");
   block("M5");
   inSection = false;
@@ -588,4 +601,64 @@ function onComment(text) {
   var singleLine = String(text || "").replace(/\s+/g, " ");
   var words = commentText(singleLine).match(/.{1,64}(?: |$)|.{1,64}/g) || [];
   for (var i = 0; i < words.length; ++i) block("; " + words[i].trim());
+}
+
+// ------------------------------------------------------------ smoothing
+// #4095 (the Klartext use of the #4226 flags): a section's smoothing ask
+// (PARAM Smoothing / SmoothingMode, #616) is cycle 32 TOLERANCE, 533 190-22
+// section 8.10 (pages 509-511): "CYCL DEF 32.0 TOLERANCE", "CYCL DEF 32.1
+// T<mm>" and, where the control takes it, "CYCL DEF 32.2 HSC-MODE:<0|1>
+// TA<deg>" (0 finish, 1 rough; TA is the rotary-axis tolerance). The
+// cycle is DEF active. A cycle 32 with T only gets HSC-MODE and TA 0 from
+// the control. The resolver's g62Mode says if the control takes HSC-MODE
+// ("option2": only with software option 2 in installed_options, which the
+// manual states for the 340 49x software), and g62TMaxUm is the largest T
+// on the 1 um grid (0: no cycle 32). T 0 is the machine builder's
+// tolerance, so a T that rounds to 0 is refused. This post moves no
+// rotary axis, so it writes TA0. A rough ask where HSC-MODE cannot be
+// written is refused: this post fails on each warning. The section end
+// resets the cycle (the manual: redefine it and answer the tolerance with
+// NO ENT, which leaves "CYCL DEF 32.1" with no T), so that no tolerance
+// goes into the next operation. docs/decisions/4095-klartext-cycle-32.md.
+var smoothActive = false;
+function smoothRefuse(why) {
+  refuse("smoothing " + why + " - refused, not posted");
+}
+function smoothOn() {
+  if (section.Smoothing === undefined) {
+    if (section.SmoothingMode !== undefined) smoothRefuse("mode " + section.SmoothingMode + " without a tolerance");
+    return;
+  }
+  var who = "controller profile " + dialect.profile;
+  var maxUm = Number(dialect.g62TMaxUm);
+  if (!(maxUm > 0)) smoothRefuse("tolerance " + section.Smoothing + " mm: " + who + " has no cycle 32 TOLERANCE");
+  var um = Math.round(Number(section.Smoothing.toFixed(3)) * 1000);
+  if (!(um > 0)) {
+    smoothRefuse("tolerance " + section.Smoothing + " mm writes T0 at 0.001 mm, which the control reads as the" +
+      " machine builder's tolerance - the smallest T is 0.001 mm");
+  }
+  var t = String(Number((um / 1000).toFixed(3)));
+  if (um > maxUm) {
+    smoothRefuse("tolerance T" + t + " mm is above the largest T of " + who + " (" +
+      String(Number((maxUm / 1000).toFixed(3))) + " mm)");
+  }
+  var mode = String(dialect.g62Mode);
+  var opt2 = Array.isArray(dialect.options) && dialect.options.indexOf(2) >= 0;
+  var hsc = mode === "yes" || (mode === "option2" && opt2);
+  if (hsc && section.SmoothingMode === undefined) smoothRefuse("tolerance without a finish or rough mode");
+  if (!hsc && section.SmoothingMode === "rough") {
+    smoothRefuse("mode rough: " + who + (mode === "option2"
+      ? " takes CYCL DEF 32.2 HSC-MODE only with software option 2 (HSC machining), which the machine file does not list"
+      : " has no documented HSC-MODE") + "; ask for finish smoothing, or none");
+  }
+  block("CYCL DEF 32.0 TOLERANCE");
+  block("CYCL DEF 32.1 T" + t);
+  if (hsc) block("CYCL DEF 32.2 HSC-MODE:" + (section.SmoothingMode === "rough" ? "1" : "0") + " TA0");
+  smoothActive = true;
+}
+function smoothOff() {
+  if (!smoothActive) return;
+  block("CYCL DEF 32.0 TOLERANCE");
+  block("CYCL DEF 32.1");
+  smoothActive = false;
 }

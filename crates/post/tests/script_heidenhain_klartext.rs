@@ -198,7 +198,9 @@ fn unsupported_motion_or_missing_setup_data_is_refused() {
         STREAM.replace("Rapid X 115000 Y 25000 Z 15000\n", ""),
         STREAM.replace(
             "PARAM Coolant off",
-            "PARAM Smoothing 0.01\nPARAM Coolant off",
+            // #4095: smoothing posts as cycle 32 now; a rough ask has no
+            // HSC-MODE on the Picomax (no option 2 listed) and is refused.
+            "PARAM Smoothing 0.01\nPARAM SmoothingMode rough\nPARAM Coolant off",
         ),
     ];
     for stream in unsafe_streams {
@@ -392,3 +394,6 @@ mod cycle_tests;
 
 #[path = "klartext/dialect_tests.rs"]
 mod dialect_tests;
+
+#[path = "klartext/smoothing_tests.rs"]
+mod smoothing_tests;
