@@ -141,3 +141,67 @@ inside a cycle, with no test of the consumer side); a default S for 207.
 **Cost to change later.** A left-hand thread needs a spindle-direction
 override in the cycle record. A stored tolerance is one new field in
 `ParsedSection`.
+
+## #2227 - Klartext reader, third slice: RND, CHF, polar LP / CP
+
+**What was decided.** The reader reads the contour elements of a
+hand-written program that its motion model can show exactly:
+
+- `RND R<r> [F<f>]` (rounding arc) and `CHF <l> [F<f>]` (chamfer) between
+  two straight feed lines (`L` or `LP`) in the working plane.
+- `LP PR.. PA.. [Z..] [R0] F../FMAX` with `IPR` / `IPA`: a straight line to
+  polar coordinates about the pole `CC`.
+- `CP PA.. DR±` and `CP IPA.. DR±`, with `Z` / `IZ` as a helix: an arc about
+  the pole at the radius of the tool position.
+
+`RL` / `RR`, `APPR` / `DEP`, `CTP`, `LBL` / `CALL LBL` and inch programs stay
+refused by name and line.
+
+**Why, item by item.**
+- *Look-ahead, not a rewrite of moves.* A transition changes the element
+  before it. The reader looks one block ahead: a line that an `RND` / `CHF`
+  follows waits, and the line after the transition sets the cut-back points.
+  The toolpath then gets the shortened line, the transition and the next
+  line. No move that is already in the toolpath changes.
+- *Geometry.* The corner point is not machined. A rounding arc of radius R
+  on a turn of angle phi starts and ends R tan(phi/2) from the corner, on
+  each line, with its centre on the inner side; it is tangent to both lines.
+  A chamfer cuts the side length from each line (the cut-off triangle has two
+  legs of that length). A transition that needs more of a line than the line
+  has after an earlier cut-back is refused, as are two lines in line (no
+  corner).
+- *The F of RND / CHF acts only on the transition.* Without F, the
+  transition uses the modal feed. The modal feed does not change.
+- *Only line-line transitions.* A transition next to an arc needs the fillet
+  between a line and a circle or two circles. It is refused by name; it is a
+  follow-up. A transition next to an `FMAX` line, a line with a Z change, a
+  line with an M function that acts at the block end (before) or with any M
+  function (after) is refused too: the order of these effects around the
+  transition is not settled in our sources.
+- *Polar reference.* A polar coordinate that is not written, and the
+  reference of `IPR` / `IPA`, come from the tool position about the current
+  pole. An angle from a position differs from the last programmed angle only
+  by whole turns, which do not change an `LP` end point or a `CP` sweep. At
+  the pole the angle is not defined, so `LP` without `PA` and `CP` from the
+  pole are refused.
+- *CP direction.* `CP IPA` needs the sign of `IPA` and `DR` to agree, as in
+  the manual's helix table; a mismatch is refused, not guessed. `CP PA` with
+  the start angle is refused (write `IPA+360` for a full circle). `|IPA|` is
+  limited to the control input range 99999.9999 degrees.
+- *CP pieces.* The toolpath arc model holds less than one turn per move, so
+  each `CP` is split into equal pieces of at most 90 degrees on the same
+  circle, with Z linear over the sweep (a helix). The motion is the same.
+- *`RL` / `RR` stay refused.* The compensated path needs the tool radius of
+  the tool table, which is not in the program, and the control's corner
+  rules. `R0` is read. `APPR` / `DEP` always come with `RL` / `RR`, so they
+  do not fit the tool-centre model and stay refused.
+
+**Dropped.** Reading a transition next to an arc as a transition next to its
+chord (wrong path); taking `CP IPA` as `|IPA|` in the direction of `DR`
+(guessed sweep); a tool-radius option to compute `RL` / `RR` (needs the
+control's corner and approach rules, a separate design).
+
+**Cost to change later.** A transition next to an arc is one new geometry
+function in `klartext/corner.rs` (offset-curve intersection) and the
+look-ahead accepts `C` / `CR` / `CT` / `CP`. `CTP` is one function in
+`klartext/polar.rs`.

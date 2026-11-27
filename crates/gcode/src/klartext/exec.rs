@@ -6,6 +6,7 @@ use camcraft_geometry::geometry::Point3;
 use camcraft_geometry::geometry::units::Unit;
 
 use super::KlartextOptions;
+use super::corner::{Corner, PendingLine};
 use super::cycles::DrillDef;
 use super::old_cycles::OldCycle;
 use super::source::Block;
@@ -24,6 +25,12 @@ pub struct Machine<'a> {
     pub cc: Option<Point2>,
     /// Unit XY direction at the end of the last move, for `CT`.
     pub tangent: Option<Point2>,
+    /// A straight line that waits for the `RND` / `CHF` block after it.
+    pub pending: Option<PendingLine>,
+    /// An `RND` / `CHF` block that waits for the straight line after it.
+    pub corner: Option<Corner>,
+    /// The first word of the next block (look-ahead for `RND` / `CHF`).
+    pub next_word: Option<String>,
     pub cycle: Option<DrillDef>,
     /// A sub-block cycle (`CYCL DEF 9.0`, `32.1`) that waits for its next block.
     pub old: Option<OldCycle>,
@@ -52,6 +59,9 @@ impl<'a> Machine<'a> {
             pos,
             cc: None,
             tangent: None,
+            pending: None,
+            corner: None,
+            next_word: None,
             cycle: None,
             old: None,
             q: QTable::new(),
@@ -68,7 +78,10 @@ impl<'a> Machine<'a> {
         }
     }
 
-    pub fn step(&mut self, b: &Block) -> Result<(), GcodeError> {
+    /// Execute one block; `next` is the block after it (look-ahead for the
+    /// rounding and chamfer blocks, which change the element before them).
+    pub fn step(&mut self, b: &Block, next: Option<&Block>) -> Result<(), GcodeError> {
+        self.next_word = next.and_then(|n| n.words.first().cloned());
         let w: Vec<&str> = b.words.iter().map(String::as_str).collect();
         if self.pgm_ended {
             return Err(b.syntax("block after END PGM"));
@@ -127,6 +140,9 @@ impl<'a> Machine<'a> {
             "C" => self.arc_block(b, rest),
             "CR" => self.radius_arc_block(b, rest),
             "CT" => self.tangent_arc_block(b, rest),
+            "LP" => self.polar_line_block(b, rest),
+            "CP" => self.polar_arc_block(b, rest),
+            "RND" | "CHF" => self.corner_block(b, rest),
             "BLK" => self.blk_form(b, rest),
             "TOOL" => self.tool_block(b, rest),
             "CYCL" => self.cycle_block(b, rest),
@@ -142,11 +158,11 @@ impl<'a> Machine<'a> {
                 self.pre_m(b, &words.m)?;
                 self.post_m(b, &words.m, words.mb)
             }
-            "RND" | "CHF" => Err(b.unsupported(
-                w[0],
-                "rounding and chamfer blocks change the neighbour elements; this reader version refuses them",
+            "CTP" => Err(b.unsupported(
+                "CTP",
+                "the tangential polar arc is not read in this reader version",
             )),
-            "LP" | "CP" | "CTP" | "PA" => Err(b.unsupported(w[0], "polar coordinates are not read")),
+            "PA" => Err(b.unsupported("PA", "polar coordinates are read only in LP and CP")),
             "APPR" | "DEP" => Err(b.unsupported(w[0], "approach and departure functions are not read")),
             "LBL" | "CALL" => Err(b.unsupported(
                 w[0],
