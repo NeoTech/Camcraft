@@ -141,6 +141,9 @@ fn the_default_is_today_s_millimetre_and_is_said() {
         assert!((deepest(&t) + exit_mm).abs() < 1e-6, "{name}: deepest {}", deepest(&t));
         let txt = format!("{exit_mm:.3}");
         assert!(said(&t, &format!("through holes run {txt} mm past the part bottom")) && said(&t, &format!("Z-{txt}")), "{name}: {:?}", t.notes);
+        // #2528: the note agrees with the field - 1 mm, and the point apart.
+        let why = if name == "D" { format!("(Break-through 1.000 mm from the full diameter, plus the {:.3} mm drill point)", dr6_point()) } else { "(Break-through)".into() };
+        assert!(said(&t, &why), "{name}: {:?}", t.notes);
         // Nothing is modelled under the stock: the exit is named, the
         // program still posts as it always has.
         assert!(t.notes.iter().any(|n| n.starts_with(BELOW_STOCK_NOTE) && n.contains(&format!("{txt} mm under the stock bottom Z0.000"))), "{name}: {:?}", t.notes);
