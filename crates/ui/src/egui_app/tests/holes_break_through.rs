@@ -202,7 +202,7 @@ fn drill_break_through_from_is_disabled_where_it_has_no_effect() {
     };
     // The reason is the disabled row's hover text: hover the label.
     let hover_says = |h: &mut Harness<'static, ShellUi>, w: &str| {
-        let at = h.get_by_label("Break-through from").rect().center();
+        let at = h.get_by_role_and_label(egui::accesskit::Role::Label, "Break-through from").rect().center();
         h.input_mut().events.push(egui::Event::PointerMoved(at));
         h.run_steps(60);
         structural::painted(h).iter().any(|(t, _)| t.contains(w))
@@ -284,7 +284,7 @@ fn drill_break_through_from_page_disables_a_tap_and_a_flat_drill_on_auto() {
         h.state_mut().state.op_ui.tool = tool.into();
         h.run_steps(3);
         assert!(disabled(&h), "Auto with {tool}: the combo is disabled");
-        let at = h.get_by_label("Break-through from").rect().center();
+        let at = h.get_by_role_and_label(egui::accesskit::Role::Label, "Break-through from").rect().center();
         h.input_mut().events.push(egui::Event::PointerMoved(at));
         h.run_steps(60);
         assert!(
