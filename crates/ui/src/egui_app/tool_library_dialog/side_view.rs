@@ -31,7 +31,7 @@ use crate::egui_app::tool_preview::{self, Scale};
 const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
 const DIM: Color32 = Color32::from_rgb(0x7F, 0xB4, 0xD8);
 /// Room around the drawing for the dimension columns and their values.
-const LEFT: f32 = 96.0;
+const LEFT: f32 = 112.0;
 const RIGHT: f32 = 120.0;
 const TOP: f32 = 30.0;
 const BOTTOM: f32 = 26.0;
@@ -104,9 +104,10 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
     }
 }
 
-/// #4336: the visible groove lines of the flutes, thin, in the note ink.
+/// #4336: the visible groove lines of the flutes, thin, in the dark ground
+/// ink over the light steel.
 fn flutes(p: &Painter, s: &Scale, m: &ToolModel) {
-    let stroke = Stroke::new(1.0, NOTE);
+    let stroke = Stroke::new(1.0, BG);
     for line in &m.flute_lines {
         let pts: Vec<Pos2> = line.iter().map(|&(z, x)| s.at(z, x)).filter(|q| q.x.is_finite() && q.y.is_finite()).collect();
         if pts.len() > 1 {
@@ -124,7 +125,7 @@ fn spindle_nose(p: &Painter, s: &Scale, m: &ToolModel, top: f32) {
     let face = s.at(m.dims.gauge, 0.0).y;
     let hw = hd.max(0.0) * 0.5 * NOSE_W;
     let (l, r) = (s.at(m.dims.gauge, -hw).x, s.at(m.dims.gauge, hw).x);
-    let top = top.min(face - 8.0);
+    let top = top.max(face - NOSE_H).min(face - 8.0);
     if ![face, l, r, top].iter().all(|v| v.is_finite()) || r - l < 4.0 {
         return;
     }
