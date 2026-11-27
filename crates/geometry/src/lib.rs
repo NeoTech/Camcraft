@@ -47,3 +47,5 @@ pub mod svg;
 pub mod stroke_text;
 // #3072: typed text in an outline font as closed shapes.
 pub mod outline_text;
+// #3915: picks follow their face by SolidCraft name at a re-import.
+pub mod source_follow;

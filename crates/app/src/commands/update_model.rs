@@ -85,7 +85,7 @@ pub struct UpdateModel {
     source: Option<crate::schema::ModelSource>,
     prev_source: Option<crate::schema::ModelSource>,
     /// #3915: the SolidCraft face names of each mesh, traded with the
-    /// facets; in memory only. Unstated, the update drops them.
+    /// facets. Unstated, the update drops them.
     source_faces: Option<Arc<SourceFaces>>,
     prev_source_faces: Option<Arc<SourceFaces>>,
     /// #826: a fixture plate's marker, when the model is one. Its grid was
@@ -96,6 +96,9 @@ pub struct UpdateModel {
     /// #1094: a raw-stock-only mark was said of the geometry it replaces,
     /// so a re-import in place drops it, in this same undo step.
     marks: super::stock_source_only::MarkDrops,
+    /// #3915: picks that follow their faces by SolidCraft name, decided in
+    /// `with_source_faces` and traded in this same undo step.
+    follow: super::update_model_follow::Follow,
 }
 
 impl UpdateModel {
@@ -155,6 +158,7 @@ impl UpdateModel {
                 .filter(|d| d.plate.plate.is_some())
                 .map(|d| Box::new((d, crate::plate::mount::Unmounts::of(world, name)))),
             marks: super::stock_source_only::MarkDrops::of(world, name),
+            follow: super::update_model_follow::Follow::snapshot(world, name),
         })
     }
 
@@ -226,6 +230,8 @@ impl UpdateModel {
     #[must_use]
     pub fn with_source_faces(mut self, source_faces: Option<Arc<SourceFaces>>) -> Self {
         self.source_faces = source_faces;
+        // #3915: the new record is here, so the picks can follow it.
+        self.follow.plan(&self.name, self.prev_facets.as_ref(), &self.mesh.facets, self.source_faces.as_ref());
         self
     }
 
@@ -247,6 +253,25 @@ impl UpdateModel {
             &model::features_of_local(self.prev_facets.as_deref().unwrap_or(&[])),
             &model::features_of_local(&self.mesh.facets),
         )
+    }
+
+    /// What the update does to the picks that follow SolidCraft names
+    /// (#3915): each followed pick and each pick that could not follow.
+    #[must_use]
+    pub fn follow_report(&self) -> &super::update_model_follow::FollowReport {
+        self.follow.report()
+    }
+
+    /// The re-import phrase for the window: what moved (`changes`), then
+    /// the picks that followed their SolidCraft names and each that could
+    /// not (#3915).
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let moved = self.changes().describe();
+        match self.follow.report().describe() {
+            Some(follow) => format!("{moved}; {follow}"),
+            None => moved,
+        }
     }
 }
 
@@ -286,6 +311,7 @@ impl Command for UpdateModel {
             p.1.write(world, true);
         }
         self.marks.write(world, true);
+        self.follow.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -322,5 +348,6 @@ impl Command for UpdateModel {
             }
         }
         self.marks.write(world, false);
+        self.follow.write(world, false);
     }
 }

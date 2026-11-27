@@ -679,9 +679,14 @@ function centerWords(p) {
 }
 
 // -------------------------------------------------------------- header
+// #4349: FANUC's published operator's manuals (Series 0i-F, "program
+// number") give O0001-O9999. A number outside the range is refused by
+// name, never clamped onto another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var v = typeof programNumber !== "undefined" ? Number(programNumber) : 1;
+  var n = isNaN(v) ? 1 : Math.round(v);
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -746,7 +751,7 @@ function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "DOOSAN DNM";
   writeln("%");
-  rawBlock([oWord(), "(" + nm + ")"]);
+  rawBlock([oWord(), "(" + clean(nm) + ")"]);  // #4349: no nested ( ), no %
   writeHeaderExtras();
   invertedNotes();
   unitBlock();
@@ -866,7 +871,8 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", "G17", wcsWord, "G40", "G49", "G80"]);
+  // #4346: a control left in G95 reads an mm/min F word as mm/rev - state G94.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
   uprightAfterTilt();
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);

@@ -103,6 +103,8 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
         Kind::SinkerEdm => sinker_post,
         // No waterjet post ships in this data-model slice.
         Kind::Waterjet => false,
+        // #4081: no laser post ships in the kind slice; the laser post slice adds it.
+        Kind::Laser => false,
     }
 }
 
@@ -129,7 +131,8 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::SinkerEdm => SINKER_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn | crate::machine::Kind::Waterjet => PostRef::Builtin,
+        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn | crate::machine::Kind::Waterjet
+        | crate::machine::Kind::Laser => PostRef::Builtin,
     }
 }
 
@@ -375,6 +378,8 @@ mod wcs_slot;
 mod mounts;
 #[path = "posting_setup_change.rs"]
 mod setup_change;
+#[path = "posting_pattern.rs"]
+mod pattern;
 #[path = "posting_program.rs"]
 mod program;
 pub use program::{
@@ -1004,6 +1009,9 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
     problems.extend(crate::operation::avoid::live_avoid_problems(world));
+    // #3012: each shifted copy of a pattern folder, against the machine
+    // travel and the fixtures - the copy-1 clauses above do not see it.
+    problems.extend(pattern::pattern_problems(world));
     let plasma_line = match (plasma.line, wire.line) {
         (Some(p), Some(w)) => Some(format!("{p}; {w}")),
         (p, w) => p.or(w),
@@ -1019,6 +1027,10 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     let not_judged = match (not_judged, swing) {
         (Some(s), Some(w)) => Some(format!("{s}; {w}")),
         (s, w) => s.or(w),
+    };
+    let not_judged = match (not_judged, pattern::not_judged(world)) {
+        (Some(s), Some(p)) => Some(format!("{s}; {p}")),
+        (s, p) => s.or(p),
     };
     GateReport { problems, not_judged, warnings: plasma.warnings }
 }
@@ -1182,8 +1194,12 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
     })?;
     // #1532: a setup change stops for the re-clamp (by default).
     let changes = setup_change::fold(world, &ops, &mut afters, by_post)?;
-    let mut streams = Vec::with_capacity(ops.len());
-    for (name, e) in &ops {
+    // #3012: a pattern folder's members post once per copy (by tool: one
+    // section each; by part: one section per copy and member).
+    let plan = pattern::plan(world, &ops)?;
+    let mut streams = Vec::with_capacity(plan.len());
+    for unit in &plan {
+        let (name, e) = (&unit.name, &unit.entity);
         let op = model::operation_of(world, e)
             .ok_or_else(|| format!("{name}: lost its operation"))?;
         let cache = model::toolpath_of(world, e)
@@ -1271,7 +1287,8 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         // #630: a nose-centre turning path posts as the tool's control
         // point for its orientation (or is refused by name when the
         // orientation cannot cut it); the cache stays the nose truth.
-        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin)
+        let path = pattern::path_for(unit, &cache.path, hs.clearance).map_err(|e| format!("{display_name}: {e}"))?;
+        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &path, origin)
             .map_err(|e| format!("{display_name}: {e}"))?;
         let d = Dump {
             op_kind: &op_kind,
@@ -1301,7 +1318,7 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).
-            after: afters.get(name).copied().unwrap_or_default(),
+            after: if unit.last { afters.get(name).copied().unwrap_or_default() } else { Default::default() },
             tool_number,
             tool_name: &op.tool,
             tool_diameter: tool.diameter,
@@ -1341,7 +1358,9 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         if operation::tool_gate::requests_reverse(&op.params) {
             post::ask_reverse_spindle(&mut records);
         }
-        setup_change::ask(&changes, name, &mut records);
+        if unit.last {
+            setup_change::ask(&changes, name, &mut records);
+        }
         section_mode::insert(&op.params, &posted, &mut records);
         streams.push((name.clone(), records));
     }

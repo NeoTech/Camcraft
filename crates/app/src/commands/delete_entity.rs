@@ -52,6 +52,10 @@ pub struct DeleteEntity {
     /// A Pause / Home entry of the operation list (#155), with its
     /// position (`operation_meta`).
     entry: Option<ProgramEntry>,
+    /// A pattern folder (#3012), with its position (`operation_meta`).
+    pattern: Option<crate::schema::PatternDef>,
+    /// #3012: a deleted member leaves its folder; undo puts it back.
+    member_drop: Option<super::pattern_folder::MemberDrop>,
     /// A model deleted from the tree keeps its fixture marker (M3.2
     /// stage B) through undo too - the marker is part of the entity's
     /// identity, and an undo that quietly demoted a vise to a raw
@@ -100,6 +104,8 @@ impl DeleteEntity {
             operation_meta: crate::program_entry::is_sequenced(world, &entity)
                 .then(|| model::operation_meta_of(world, &entity)),
             entry: crate::program_entry::entry_of(world, &entity),
+            pattern: crate::pattern_folder::pattern_of(world, &entity),
+            member_drop: super::pattern_folder::MemberDrop::of(world, name),
             path: model::toolpath_of(world, &entity),
             fixture: crate::fixture::def_of(world, &entity),
             riders: crate::plate::mount::Unmounts::of(world, name),
@@ -115,10 +121,16 @@ impl Command for DeleteEntity {
         }
         self.riders.write(world, true);
         self.marks.write(world, true);
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, true);
+        }
     }
 
     fn invert(&self, world: &World) {
         self.riders.write(world, false);
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, false);
+        }
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }
@@ -157,6 +169,9 @@ impl Command for DeleteEntity {
         }
         if let Some(entry) = &self.entry {
             entity.entity_view(world).set(entry.clone());
+        }
+        if let Some(pattern) = &self.pattern {
+            entity.entity_view(world).set(pattern.clone());
         }
         if let Some(meta) = &self.operation_meta {
             entity.entity_view(world).set(meta.clone());

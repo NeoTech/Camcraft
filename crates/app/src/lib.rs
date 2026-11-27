@@ -63,7 +63,7 @@ pub mod model_fidelity;
 pub mod fidelity_note;
 pub mod mesh_open;
 pub mod mesh_solids;
-// #3915: the SolidCraft face names of a model's facets (in memory only).
+// #3915: the SolidCraft face names of a model's facets.
 pub mod source_faces;
 pub mod model_vouch;
 pub mod operation;
@@ -80,6 +80,8 @@ mod posting_family;
 pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
+// #3012: pattern folders - linear and grid copies of member operations.
+pub mod pattern_folder;
 pub use camcraft_motion::plasma;
 // #1883: the waterjet profile and the 2D sheet kernel it shares.
 pub use camcraft_motion::{sheet, waterjet};

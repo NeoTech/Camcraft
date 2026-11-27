@@ -37,18 +37,20 @@ pub fn is_entry(world: &World, entity: &Entity) -> bool {
     entity.entity_view(world).try_get::<&ProgramEntry>(|_| ()).is_some()
 }
 
-/// An operation or an entry: a row of the operation list.
+/// An operation, an entry or a pattern folder (#3012): a row of the
+/// operation list.
 #[must_use]
 pub fn is_sequenced(world: &World, entity: &Entity) -> bool {
-    model::is_operation(world, entity) || is_entry(world, entity)
+    model::is_operation(world, entity) || is_entry(world, entity) || crate::pattern_folder::is_pattern(world, entity)
 }
 
-/// The setup an operation or an entry declares (`None` - the first).
+/// The setup a row declares (`None` - the first).
 #[must_use]
 pub fn declared_setup(world: &World, entity: &Entity) -> Option<String> {
     model::operation_of(world, entity)
         .map(|op| op.setup)
         .or_else(|| entry_of(world, entity).map(|e| e.setup))
+        .or_else(|| crate::pattern_folder::pattern_of(world, entity).map(|p| p.setup))
         .flatten()
 }
 

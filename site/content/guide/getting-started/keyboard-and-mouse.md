@@ -102,6 +102,18 @@ stays free for its secondary-click meaning.
 | A ribbon operation button: pin or unpin it | Right-click the button | Same |
 | An error message line in a page or dialog: Copy message | Right-click the line | Same |
 
+## Screen readers and field order
+
+Each input on the operation pages has an accessible name for screen
+readers: the label of its row. The fields of an operation page follow the
+Tab and Enter field order. This includes the wire tab count and taper
+angle, the sinker orbit vectors and turns, the EDM condition, the deburr
+number of passes and the optimal load.
+
+In a narrow Properties pane, for example at 1280 x 720, the **Set**
+button of the STEP facet budget and the **Edit** button of the setup tool
+list stay in reach.
+
 ## Not bound yet
 
 These have no keyboard or mouse binding in the app today:

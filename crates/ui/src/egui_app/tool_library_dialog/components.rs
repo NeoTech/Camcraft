@@ -10,6 +10,10 @@
 //! users of each row (`state_component_views`), keyed on the component
 //! table, the stacks, the library read and the filter; a still frame
 //! builds nothing.
+//! #4335 (U9): the list's one search box filters the library rows too
+//! (`search`; the hits are kept by State, `State::component_hits`), "N of
+//! M components" heads them, and a library row that the document holds
+//! has the "in document" mark.
 //! Provenance: our own list over our own component records; no HSMWorks
 //! material involved.
 
@@ -38,7 +42,7 @@ pub(crate) const DELETE_DOC: &str = "Delete from document";
 /// The heading of the document's table.
 pub(crate) const DOCUMENT: &str = "DOCUMENT COMPONENTS";
 /// The column heads of the library rows.
-pub(crate) const HEADS: [&str; 5] = ["Name", "Kind", "Machine side", "Tool side", "Source"];
+pub(crate) const HEADS: [&str; 6] = ["Name", "Kind", "Machine side", "Tool side", "Source", ""];
 const GROUP_W: f32 = 170.0;
 
 /// The groups in the order the column shows them.
@@ -76,6 +80,12 @@ pub(crate) fn sides(c: &ToolComponent) -> (String, String) {
     }
 }
 
+/// "N of M components".
+#[must_use]
+pub(crate) fn count_text(shown: usize, total: usize) -> String {
+    format!("{shown} of {total} components")
+}
+
 /// The library status of a document row in words.
 #[must_use]
 pub(crate) fn status_text(s: &SyncStatus) -> &'static str {
@@ -93,6 +103,8 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         return;
     };
     let d = state.component_derived(view.compatible.as_deref());
+    let query = state.tool_search.clone();
+    let hits = state.component_hits(&lib, &query);
     let mut next = view.clone();
     let mut asks: Vec<ComponentAction> = Vec::new();
     let mut edit = None;
@@ -103,8 +115,6 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         });
         ui.separator();
         ui.vertical(|ui| {
-            let label = ui.label("Component filter");
-            ui.add(egui::TextEdit::singleline(&mut next.filter).desired_width(ui.available_width())).labelled_by(label.id);
             match (&lib.error, &lib.path) {
                 (Some(e), _) => ui.weak(e.as_str()),
                 (None, Some(p)) => ui.weak(format!("My library: {}", p.display())),
@@ -115,7 +125,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
             }
             library_actions(ui, &lib, &d, &mut next, &mut asks);
             egui::ScrollArea::vertical().id_salt("tool_library_components").max_height(260.0).auto_shrink([false, true]).show(ui, |ui| {
-                library_rows(ui, &lib, &d, &mut next);
+                library_rows(ui, &lib, &d, &hits, &mut next);
             });
             ui.add_space(6.0);
             ui.label(RichText::new(DOCUMENT).small().weak());
@@ -210,15 +220,16 @@ fn library_actions(
     }
 }
 
-fn library_rows(ui: &mut Ui, lib: &LoadedLibrary, d: &Derived, view: &mut crate::state::ComponentsView) {
-    let f = view.filter.to_lowercase();
-    let shown: Vec<_> = lib
-        .all
+/// The library rows that match the search (`hits`), the group and the
+/// compatible filter, under "N of M components".
+fn library_rows(ui: &mut Ui, lib: &LoadedLibrary, d: &Derived, hits: &[usize], view: &mut crate::state::ComponentsView) {
+    let shown: Vec<_> = hits
         .iter()
+        .filter_map(|i| lib.all.get(*i))
         .filter(|c| view.group.is_none_or(|g| group_of(&c.component) == g))
-        .filter(|c| c.component.name().to_lowercase().contains(&f))
         .filter(|c| d.compatible.as_ref().is_none_or(|ids| ids.iter().any(|id| id == c.component.id())))
         .collect();
+    ui.weak(count_text(shown.len(), lib.all.len()));
     if shown.is_empty() {
         ui.label("No component matches the filters.");
         return;
@@ -239,6 +250,11 @@ fn library_rows(ui: &mut Ui, lib: &LoadedLibrary, d: &Derived, view: &mut crate:
             ui.label(machine);
             ui.label(tool);
             ui.label(if c.is_builtin() { "Built-in" } else { SOURCE });
+            if d.rows.iter().any(|(r, _, _)| r.component.id() == id) {
+                ui.weak(super::list::IN_DOCUMENT).on_hover_text("the document holds this component");
+            } else {
+                ui.label("");
+            }
             ui.end_row();
         }
     });

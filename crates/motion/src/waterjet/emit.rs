@@ -19,8 +19,8 @@ use super::plan::{self, Plan};
 use super::tabs::{self, Gap};
 use super::WaterjetParams;
 
-fn invalid(why: String) -> GenError {
-    Voice::WATERJET.invalid(why)
+fn invalid(v: Voice, why: String) -> GenError {
+    v.invalid(why)
 }
 
 /// Lay the contours down in `order` and certify the result.
@@ -34,11 +34,11 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &WaterjetPa
     for (pos, &k) in order.iter().enumerate() {
         let Some(c) = cs.get(k) else { continue };
         if c.role != ContourRole::Open {
-            rings[k] = Some(kerf_ring(c, r, &label(pos), Voice::WATERJET)?);
+            rings[k] = Some(kerf_ring(c, r, &label(pos), p.voice)?);
         }
     }
     let gaps: Vec<Vec<Gap>> = match &p.tabs {
-        Some(t) => tabs::lay(t, &rings, r)?,
+        Some(t) => tabs::lay(t, &rings, r, p.voice)?,
         None => vec![Vec::new(); cs.len()],
     };
     let mut notes: Vec<String> = Vec::new();
@@ -58,7 +58,7 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &WaterjetPa
         }
     }
     let Some((_, first)) = plans.first() else {
-        return Err(GenError::Empty("waterjet profile: no contour to cut".into()));
+        return Err(GenError::Empty(format!("{}: no contour to cut", p.voice.who)));
     };
     let feed = Some(p.feed);
     let mut b = PathBuilder::new(Point3::new(first.pierce.x, first.pierce.y, p.clearance_z));
@@ -75,7 +75,7 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &WaterjetPa
             push_piece(&mut b, *q, p.cut_z, feed, p.linearize);
         }
         if b.moves_len() == on {
-            return Err(invalid(format!("contour C{pos} lays down no cut")).with_ghost_moves(b.moves()));
+            return Err(invalid(p.voice, format!("contour C{pos} lays down no cut")).with_ghost_moves(b.moves()));
         }
         let off = b.moves_len() - 1;
         if let Some((side, prog)) = &pl.comp {
@@ -86,27 +86,27 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &WaterjetPa
             let programmed: Vec<Move> = pb.finish().moves;
             let span = CompSpan { side: *side, radius: r, wear: false, first: on, last: off, programmed };
             if !span.is_sane(b.moves()) {
-                return Err(invalid(format!(
+                return Err(invalid(p.voice, format!(
                     "contour C{pos}: the G41/G42 span does not chain onto its cut - cut it with the computer's offset"
                 ))
                 .with_ghost_moves(b.moves()));
             }
             b.push_comp(span);
         }
-        let contour = u32::try_from(*pos).map_err(|_| invalid("too many contours".into()))?;
+        let contour = u32::try_from(*pos).map_err(|_| invalid(p.voice, "too many contours".into()))?;
         lit.push(Lit { contour, role: c.role, on, off });
     }
     b.push(MoveKind::Rapid, Point3::new(b.at().x, b.at().y, p.clearance_z), None);
     let mut path = b.finish();
     let bridged = |pos: usize, q| order.get(pos).and_then(|k| gaps.get(*k)).is_some_and(|g| tabs::bridged(g, q));
-    cover_law(&path, &lit, cs, order, (p.kerf, tol), Voice::WATERJET, &bridged).map_err(|e| e.with_ghost(&path))?;
+    cover_law(&path, &lit, cs, order, (p.kerf, tol), p.voice, &bridged).map_err(|e| e.with_ghost(&path))?;
     if gaps.iter().any(|g| !g.is_empty()) {
         let chords: Vec<_> = path.moves.iter().filter(|m| m.kind == MoveKind::Feed).flat_map(|m| m.chords(tol)).collect();
         let reach = tabs::bridge_reach(p.kerf, p.lead_in, p.lead_out);
         for (pos, &k) in order.iter().enumerate() {
             let (Some(c), Some(g)) = (cs.get(k), gaps.get(k)) else { continue };
             if let Err((no, q)) = tabs::bridge_law(g, &c.pts, &chords, r, reach) {
-                return Err(invalid(format!(
+                return Err(invalid(p.voice, format!(
                     "contour C{pos}: tab {no} holds nothing - a lit move cuts through its bridge near X{:.3} Y{:.3}, so the part falls free; move the tab or shorten the leads",
                     q.x, q.y
                 ))
@@ -115,9 +115,9 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &WaterjetPa
         }
     }
     if let Some(f) = &forbidden {
-        kerf_law(&path, &lit, f, Voice::WATERJET).map_err(|e| e.with_ghost(&path))?;
+        kerf_law(&path, &lit, f, p.voice).map_err(|e| e.with_ghost(&path))?;
     } else {
-        notes.push("waterjet: no part silhouette to judge - roles read by nesting, the kerf law not run".into());
+        notes.push(format!("{}: no part silhouette to judge - roles read by nesting, the kerf law not run", p.voice.short));
     }
     path.notes.extend(head(cs, order, &gaps, plans.len(), p));
     path.notes.extend(notes);
@@ -129,25 +129,33 @@ fn head(cs: &[Contour], order: &[usize], gaps: &[Vec<Gap>], pierces: usize, p: &
     let holes = order.iter().filter(|&&k| cs.get(k).is_some_and(|c| c.role == ContourRole::Inner)).count();
     let tabs: usize = gaps.iter().map(Vec::len).sum();
     let mut out = vec![format!(
-        "waterjet: {} contour(s) cut inner first ({holes} hole(s), {tabs} tab(s)), {pierces} pierce(s), kerf {:.3} mm {}",
+        "{}: {} contour(s) cut inner first ({holes} hole(s), {tabs} tab(s)), {pierces} pierce(s), kerf {:.3} mm {}",
+        p.voice.short,
         order.len(),
         p.kerf,
         if p.control_comp { "compensated in the control (G41/G42)" } else { "offset in the computer" }
     )];
     out.push(if p.reversed {
-        "waterjet: cut direction REVERSED by the operation - outer contours counter-clockwise, holes clockwise".into()
+        format!("{}: cut direction REVERSED by the operation - outer contours counter-clockwise, holes clockwise", p.voice.short)
     } else {
-        "waterjet: outer contours clockwise, holes counter-clockwise".into()
+        format!("{}: outer contours clockwise, holes counter-clockwise", p.voice.short)
     });
-    out.push(format!(
-        "waterjet: requested pierce time {:.2} s and abrasive delay {:.2} s at each pierce; jet and dwell records are not implemented",
-        p.pierce_time, p.abrasive_delay
-    ));
+    out.push(if p.voice == Voice::WATERJET {
+        format!(
+            "{}: requested pierce time {:.2} s and abrasive delay {:.2} s at each pierce; jet and dwell records are not implemented",
+            p.voice.short, p.pierce_time, p.abrasive_delay
+        )
+    } else {
+        format!(
+            "{}: requested pierce time {:.2} s at each pierce; {} and dwell records are not implemented",
+            p.voice.short, p.pierce_time, p.voice.tool
+        )
+    });
     if p.lead_in == 0.0 {
-        out.push("waterjet: zero lead-in can place a pierce on the kerf ring at the part edge".into());
+        out.push(format!("{}: zero lead-in can place a pierce on the kerf ring at the part edge", p.voice.short));
     }
     if let Some(t) = p.linearize {
-        out.push(format!("waterjet: arcs sent as chords within {t:.4} mm - the control reads no G2/G3"));
+        out.push(format!("{}: arcs sent as chords within {t:.4} mm - the control reads no G2/G3", p.voice.short));
     }
     out
 }

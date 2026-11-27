@@ -1,5 +1,5 @@
 //! The face names of a `.sc` model in the document (#3915): the import
-//! lands SolidCraft's name of each face beside the facets, in memory only;
+//! lands SolidCraft's name of each face beside the facets;
 //! STL, OBJ and STEP models have none; an update trades them on undo and
 //! drops them when it does not state them; a repair drops them; a delete
 //! brings them back on undo; and names that do not describe the facets

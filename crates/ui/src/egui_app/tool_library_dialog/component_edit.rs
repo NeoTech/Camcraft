@@ -21,8 +21,10 @@ use camcraft_app::tool_assembly as ta;
 
 use crate::state::{ComponentAction, ComponentDraft, ErrorScope, State, draft_of, gauge_of, holder_entry};
 
-/// The button back to the page the editor was opened from.
-pub(crate) const BACK: &str = "Back to the list";
+/// The way back to the page the editor was opened from: since #4334 the
+/// frame's header button.
+#[cfg(test)]
+pub(crate) const BACK: &str = super::frame::BACK;
 pub(crate) const APPLY: &str = "Apply component";
 pub(crate) const NAME: &str = "Component name";
 pub(crate) const CODE: &str = "Insert code";
@@ -57,30 +59,51 @@ pub(crate) fn open(state: &mut State, id: &str) {
     }
 }
 
-fn close(state: &mut State) {
+pub(super) fn close(state: &mut State) {
     if let Some(v) = state.tool_library.as_mut() {
         v.component_edit = None;
     }
 }
 
-pub(super) fn draw(ui: &mut Ui, state: &mut State) {
-    let Some(mut d) = state.tool_library.as_ref().and_then(|v| v.component_edit.clone()) else {
+/// The open draft and its document row, from State's cache (a still frame
+/// reads no table). `None` when no component is open, or when it left the
+/// document.
+pub(super) fn current(state: &mut State) -> Option<(ComponentDraft, DocumentComponent, SyncStatus, Vec<String>)> {
+    let d = state.tool_library.as_ref().and_then(|v| v.component_edit.clone())?;
+    let derived = state.component_derived(None);
+    let (row, status, users) = derived.rows.iter().find(|(r, _, _)| r.component.id() == d.id).cloned()?;
+    Some((d, row, status, users))
+}
+
+/// #4334: the draft differs from the component (the footer's Apply).
+pub(super) fn changed(state: &mut State) -> bool {
+    current(state).is_some_and(|(d, row, _, _)| d != draft_of(&row))
+}
+
+/// #4334: the footer's "Apply component" - one undoable
+/// `EditDocumentComponent`, or the refusal by name.
+pub(super) fn apply(state: &mut State) {
+    let Some((d, row, _, _)) = current(state) else {
         return;
     };
-    // The row comes from State's cache: a still frame reads no table.
-    let derived = state.component_derived(None);
-    let Some((row, status, users)) = derived.rows.iter().find(|(r, _, _)| r.component.id() == d.id).cloned() else {
+    if d == draft_of(&row) {
+        return;
+    }
+    match build(&d, &row) {
+        Ok(edit) => state.queue_component(ComponentAction::Edit(Box::new(edit))),
+        Err(e) => state.refuse(ErrorScope::Tool, format!("component not changed: {e}")),
+    }
+}
+
+pub(super) fn draw(ui: &mut Ui, state: &mut State) {
+    let Some((mut d, row, status, users)) = current(state) else {
         // Deleted (or undone) under the editor: back to the list.
         close(state);
         return;
     };
-    let mut back = false;
     let mut ask = None;
-    ui.horizontal(|ui| {
-        back = ui.button(BACK).on_hover_text("close the editor; an unapplied draft is dropped").clicked();
-        ui.heading(row.component.name());
-        ui.weak(format!("{} · {}", super::components::kind_text(&row.component), d.id));
-    });
+    // #4334: the way back and the name head the window (the frame).
+    ui.weak(format!("{} · {}", super::components::kind_text(&row.component), d.id));
     ui.separator();
     if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
         super::super::error_text::error_text(ui, super::super::colorvision::text_inks(ui, &state.world).error, &msg);
@@ -124,15 +147,8 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         ));
     }
     ui.separator();
-    let changed = d != draft_of(&row);
+    // #4334: Apply component stands in the frame's footer.
     ui.horizontal_wrapped(|ui| {
-        if ui
-            .add_enabled(changed, egui::Button::new(APPLY))
-            .on_hover_text("write this draft to the component and each tool built from it (one undo step)")
-            .clicked()
-        {
-            ask = Some(build(&d, &row).map(|edit| ComponentAction::Edit(Box::new(edit))));
-        }
         let differs = matches!(status, SyncStatus::UpdateAvailable { .. });
         if ui
             .add_enabled(differs, egui::Button::new(super::components::SYNC))
@@ -140,26 +156,20 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
             .on_disabled_hover_text("the component does not differ from a library copy")
             .clicked()
         {
-            ask = Some(Ok(ComponentAction::Sync { id: d.id.clone() }));
+            ask = Some(ComponentAction::Sync { id: d.id.clone() });
         }
         if ui
             .add(egui::Button::new(super::components::SAVE))
             .on_hover_text("write this component to your library file and link it (the file write has no undo)")
             .clicked()
         {
-            ask = Some(Ok(ComponentAction::SaveToLibrary { id: d.id.clone() }));
+            ask = Some(ComponentAction::SaveToLibrary { id: d.id.clone() });
         }
     });
-    if back {
-        close(state);
-        return;
-    }
     if let Some(v) = state.tool_library.as_mut() {
         v.component_edit = Some(d);
     }
-    match ask {
-        Some(Ok(a)) => state.queue_component(a),
-        Some(Err(e)) => state.refuse(ErrorScope::Tool, format!("component not changed: {e}")),
-        None => {}
+    if let Some(a) = ask {
+        state.queue_component(a);
     }
 }

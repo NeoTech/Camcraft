@@ -2,8 +2,9 @@
 //! tool list, as in the #3663 mock-up: the cutter and the shank to scale
 //! in a fixed cell, the cutting band lighter than the shank. Display only.
 //! Frame cost (`crates/ui/AGENTS.md`): the shapes of a drawing are built
-//! when the tool value changes and kept by the tool's name; a still frame
-//! only moves the kept shapes to the row (`builds` is the counter).
+//! when the tool value or the drawing's theme inks change and kept by the
+//! tool's name; a still frame only moves the kept shapes to the row
+//! (`builds` is the counter).
 //! Provenance: our own drawing over `Tool::profile`, as the tool page's
 //! side drawing (`tool_preview::paint`); no HSMWorks material involved.
 
@@ -20,13 +21,25 @@ pub(crate) const CELL: Vec2 = Vec2::new(14.0, 30.0);
 /// More kept drawings than this clears the store (a long catalog scroll).
 const KEEP: usize = 512;
 
-const CUT: Color32 = Color32::from_rgb(200, 160, 80);
-const SHANK: Color32 = Color32::from_rgb(122, 130, 142);
+/// The theme inks of a drawing: the cutting band, then the shank.
+#[derive(Clone, Copy, PartialEq)]
+struct Inks {
+    cut: Color32,
+    shank: Color32,
+}
 
-/// One kept drawing: the tool it was built from and its shapes, placed
-/// in a cell whose top-left corner is the origin.
+impl Inks {
+    fn current() -> Self {
+        let t = crate::egui_app::theme::current();
+        Self { cut: t.thumb_flute, shank: t.tool_shank }
+    }
+}
+
+/// One kept drawing: the tool and the inks it was built from and its
+/// shapes, placed in a cell whose top-left corner is the origin.
 struct Kept {
     tool: Tool,
+    inks: Inks,
     shapes: Rc<Vec<Shape>>,
 }
 
@@ -52,12 +65,15 @@ pub(super) fn draw(ui: &mut Ui, name: &str, tool: &Tool) {
     }));
 }
 
-/// The kept shapes of `name`, built again only when its tool changed.
+/// The kept shapes of `name`, built again only when its tool or the
+/// theme inks changed.
 fn shapes_of(name: &str, tool: &Tool) -> Rc<Vec<Shape>> {
+    let inks = Inks::current();
     KEPT.with(|k| {
         let mut k = k.borrow_mut();
         if let Some(kept) = k.get(name)
             && kept.tool == *tool
+            && kept.inks == inks
         {
             return Rc::clone(&kept.shapes);
         }
@@ -65,22 +81,22 @@ fn shapes_of(name: &str, tool: &Tool) -> Rc<Vec<Shape>> {
         if k.len() >= KEEP {
             k.clear();
         }
-        let shapes = Rc::new(build(tool));
-        k.insert(name.to_owned(), Kept { tool: tool.clone(), shapes: Rc::clone(&shapes) });
+        let shapes = Rc::new(build(tool, inks));
+        k.insert(name.to_owned(), Kept { tool: tool.clone(), inks, shapes: Rc::clone(&shapes) });
         shapes
     })
 }
 
 /// The cutter and the shank (no holder), tip down, to scale in the cell.
 /// A tool without a size draws one thin line.
-fn build(t: &Tool) -> Vec<Shape> {
+fn build(t: &Tool, inks: Inks) -> Vec<Shape> {
     let outline = Tool { holder_len: 0.0, ..t.clone() }.profile();
     let ok = |&(z, r): &(f64, f64)| z.is_finite() && r.is_finite();
     let r_max = outline.iter().filter(|q| ok(q)).map(|q| q.1).fold(0.0f64, f64::max);
     let z_max = outline.iter().filter(|q| ok(q)).map(|q| q.0).fold(0.0f64, f64::max);
     let axis = CELL.x * 0.5;
     if r_max <= 0.0 || z_max <= 0.0 {
-        return vec![Shape::line_segment([Pos2::new(axis, 2.0), Pos2::new(axis, CELL.y - 2.0)], Stroke::new(1.0, SHANK))];
+        return vec![Shape::line_segment([Pos2::new(axis, 2.0), Pos2::new(axis, CELL.y - 2.0)], Stroke::new(1.0, inks.shank))];
     }
     let scale = ((CELL.x - 2.0) / (2.0 * r_max as f32)).min((CELL.y - 2.0) / z_max as f32).max(f32::EPSILON);
     let base = CELL.y - 1.0;
@@ -93,8 +109,12 @@ fn build(t: &Tool) -> Vec<Shape> {
         if !(ok(&w[0]) && ok(&w[1])) || z1 <= z0 {
             continue;
         }
-        let fill = if (z0 + z1) * 0.5 < flute { CUT } else { SHANK };
+        let fill = if (z0 + z1) * 0.5 < flute { inks.cut } else { inks.shank };
         out.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], fill, Stroke::NONE));
     }
     out
 }
+
+#[cfg(test)]
+#[path = "thumbs_tests.rs"]
+mod tests;

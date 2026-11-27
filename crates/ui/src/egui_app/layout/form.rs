@@ -28,6 +28,8 @@
 
 use egui::{Align, Button, Color32, DragValue, Id, Label, Layout, Response, RichText, TextEdit, Ui, Vec2};
 
+use super::row_name::{name_by_row, named_by};
+
 /// The label column's minimum width when the pane has room.
 pub const LABEL_W: f32 = 120.0;
 /// A compact control's width (combos, numbers).
@@ -68,12 +70,13 @@ pub fn row_label_id(ui: &Ui) -> Option<Id> {
 
 /// One property row: `label` in the label column, `add`'s controls at
 /// the right, on one line. The label's full text rides its hover (a
-/// truncated label never hides its name).
+/// truncated label never hides its name). The seam's controls drawn by
+/// `add` take the label as their accessible name ([`name_by_row`]).
 pub fn prop_row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
         let lab = label_cell(ui, label);
         remember(ui, &lab);
-        ui.with_layout(Layout::right_to_left(Align::Center), add).inner
+        named_by(ui, lab.id, |ui| ui.with_layout(Layout::right_to_left(Align::Center), add).inner)
     })
     .inner
 }
@@ -221,7 +224,8 @@ pub fn value_with_unit(ui: &mut Ui, v: &mut f64, unit: &str, speed: f64) -> Resp
     if !unit.is_empty() {
         dv = dv.suffix(format!(" {unit}"));
     }
-    ui.add_sized(Vec2::new(CTRL_W, ui.spacing().interact_size.y), dv)
+    let r = ui.add_sized(Vec2::new(CTRL_W, ui.spacing().interact_size.y), dv);
+    name_by_row(ui, r)
 }
 
 /// The toggle for a field whose 0 means "derived" (or "no limit"): the

@@ -37,7 +37,7 @@ pub struct ImportModel {
     /// in or a browser pick, which have no file to check again.
     pub source: Option<crate::schema::ModelSource>,
     /// SolidCraft's face names over the facets of a `.sc` design (#3915,
-    /// `import::Graded::source_faces`); in memory only. `None` otherwise.
+    /// `import::Graded::source_faces`). `None` otherwise.
     pub source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
 }
 

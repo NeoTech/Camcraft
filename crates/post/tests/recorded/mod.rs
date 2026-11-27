@@ -21,6 +21,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The recorded cases every post suite runs, in file-stem form.
 pub const CASES: [&str; 12] = [
@@ -119,7 +120,10 @@ pub fn stream_path(case: &str) -> PathBuf {
 }
 
 fn tmp(tag: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("camcraft_recorded_{tag}_{}", std::process::id()))
+    // One suite process runs many modules (#3188); two calls with one tag must not share a file.
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("camcraft_recorded_{tag}_{}_{n}", std::process::id()))
 }
 
 /// The vendor machine file at `path`, parsed and mirrored

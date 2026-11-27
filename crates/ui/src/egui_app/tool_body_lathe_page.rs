@@ -10,7 +10,7 @@
 //! `app::tool_body_lathe_view` (the handbook turning-tool convention: X
 //! radial, Z along the spindle); no vendor material consulted.
 
-use egui::{Color32, ComboBox, Painter, Pos2, Stroke, Ui};
+use egui::{ComboBox, Painter, Pos2, Stroke, Ui};
 
 use camcraft_app::tool_body_lathe_view::{self, FrameChoice};
 use camcraft_app::tool_body_view::{self, AXIS_CHOICES};
@@ -140,7 +140,8 @@ pub(super) fn overlay(painter: &Painter, d: &ToolBodyUi, screen: &dyn Fn([f64; 3
     if !tip.iter().all(|v| v.is_finite()) {
         return;
     }
-    let arrows = [(l.place.radial, Color32::from_rgb(240, 180, 60)), (l.place.along, Color32::from_rgb(90, 200, 230))];
+    let pal = super::theme::current();
+    let arrows = [(l.place.radial, pal.mount_radial), (l.place.along, pal.mount_axis)];
     for (dir, colour) in arrows {
         let n = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
         if n.is_finite() && n > 1e-12 {
@@ -148,7 +149,7 @@ pub(super) fn overlay(painter: &Painter, d: &ToolBodyUi, screen: &dyn Fn([f64; 3
             painter.line_segment([screen(tip), screen(end)], Stroke::new(1.5, colour));
         }
     }
-    painter.circle_filled(screen(tip), 4.0, Color32::from_rgb(240, 150, 40));
+    painter.circle_filled(screen(tip), 4.0, pal.mount_tip);
 }
 
 /// What the preview says while a pick mode waits for its click.
