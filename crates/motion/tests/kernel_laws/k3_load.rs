@@ -3,11 +3,12 @@
 //! load stage at a constant engagement of 25 % (the planned 60 degrees of
 //! the old tables), read with the law measures of #4154. The readings are
 //! pinned as measured, against the kernel plan without load control and
-//! the old planners' rows (`laws_pockets.rs`).
+//! the old planners' rows (`laws_pockets.rs`). The path is the cuts of
+//! the plan without the entry leads (`cuts_path_with`, #4269).
 
 use super::common::law_measure::measure;
 use super::fixture::{R, STEP, parts, planned_deg, spec_round, stock};
-use super::k4_order_link::kernel_path_with;
+use super::k4_order_link::cuts_path_with;
 use camcraft_motion::geo2d::{Point2, Region};
 use camcraft_pathkernel::load::{LoadControl, LoadStage, Reach, StockRead};
 use camcraft_pathkernel::order::StartSide;
@@ -35,7 +36,9 @@ impl StockRead for Left {
 /// a link, and the load stage reads the cuts only, so its moves above the
 /// limit are not named yet (#4272; before #4254 the Outside rows were
 /// [402, 145, 13], [334, 118, 74] on the disc and [724, 167, 3],
-/// [678, 143, 66] on the dog bone).
+/// [678, 143, 66] on the dog bone; with #4253 the disc row with constant
+/// engagement read [337, 118, 77], #4269). The path is the cuts-only path
+/// of the plan (`cuts_path_with`): the approach stretches are its feeds.
 const READ: [(&str, &str, [u32; 3], [u32; 3]); 4] = [
     ("disc", "Inside", [3507, 173, 0], [833, 173, 1]),
     ("disc", "Outside", [415, 145, 19], [344, 122, 81]),
@@ -55,7 +58,7 @@ fn kernel_load_control_round_the_disc_and_the_dog_bone() {
             let spec = spec_round(&part, planned_deg(STEP, R));
             let mut rows = Vec::new();
             for lc in [LoadControl::None, ce] {
-                let (path, _, v) = kernel_path_with(&part, side, Some((&stage, lc, &reader)));
+                let (path, _, v) = cuts_path_with(&part, side, Some((&stage, lc, &reader)));
                 let r = measure(&path, &spec).unwrap();
                 let ctl = v.as_ref().and_then(|v| v.out()).unwrap();
                 eprintln!("{pname} {sname} {lc:?}: {}", r.row());

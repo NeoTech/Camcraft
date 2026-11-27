@@ -9,7 +9,9 @@
 //! planners of camcraft_motion::machining2d and machining3d (read only),
 //! and the order and link stages of the kernel (camcraft_pathkernel::order,
 //! camcraft_pathkernel::link; #4177) and the load stage
-//! (camcraft_pathkernel::load; #4026) on the same fixtures.
+//! (camcraft_pathkernel::load; #4026) on the same fixtures, and the
+//! converter from a kernel plan to a toolpath (camcraft_motion::kernel_emit;
+//! #4269).
 //! Provenance: our own design record (#4024, "the laws as checks" and the
 //! switch-over proof); no vendor material consulted.
 
@@ -28,5 +30,7 @@ mod laws_holes;
 mod laws_slots;
 #[path = "kernel_laws/k4_order_link.rs"]
 mod k4_order_link;
+#[path = "kernel_laws/k6a_plan_emit.rs"]
+mod k6a_plan_emit;
 #[path = "kernel_laws/k3_load.rs"]
 mod k3_load;
