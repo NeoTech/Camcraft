@@ -84,7 +84,7 @@ fn the_flow_passes_tab_draws_the_axis_group_the_band_rows_and_the_guide_hint() {
     assert!(h.query_by_label("Stated rotation axis").is_some(), "the axis group is drawn");
     // The band rows are named and editable.
     for label in ["Stepover", "Tool lead angle", "Tool lag angle", "Max tilt", "Tolerance"] {
-        let row = h.get_by_label(label);
+        let row = h.get_by_role_and_label(egui::accesskit::Role::Label, label);
         assert!(!row.accesskit_node().is_disabled(), "{label} is enabled");
     }
     h.get_by_label("Stepover");
@@ -95,7 +95,7 @@ fn the_flow_passes_tab_draws_the_axis_group_the_band_rows_and_the_guide_hint() {
     // The guide hint rides the preceding row's hover, like every hint.
     h.ctx
         .style_mut_of(h.ctx.theme(), |s| s.interaction.tooltip_delay = 0.0);
-    h.hover_at(h.get_by_label("Tolerance").rect().center());
+    h.hover_at(h.get_by_role_and_label(egui::accesskit::Role::Label, "Tolerance").rect().center());
     h.run_steps(2);
     let texts = painted_texts(&h);
     assert!(
@@ -139,7 +139,7 @@ fn live_axis(state: &State) -> Option<[f64; 3]> {
 
 /// The group's unnamed header checkbox: the one on the title's row.
 fn group_checkbox<'a>(h: &'a Harness<'static, State>, title: &str) -> egui_kittest::Node<'a> {
-    let row = h.get_by_label(title).rect();
+    let row = h.get_by_role_and_label(egui::accesskit::Role::Label, title).rect();
     h.query_all_by(move |n| n.role() == Role::CheckBox)
         .find(|n| {
             let c = n.rect().center().y;
@@ -161,7 +161,7 @@ fn the_retract_hop_seeds_a_radius_below_the_clearance_radius() {
     // never above it (#4005 review item 3).
     h.get_by_label("Hop below clearance").click();
     h.run_steps(2);
-    let row = h.get_by_label("Retract radius");
+    let row = h.get_by_role_and_label(egui::accesskit::Role::Label, "Retract radius");
     assert!(!row.accesskit_node().is_disabled(), "the radius is editable");
     // The toggle and the displayed text: the row reads as a radius on
     // the shared reference, its readout one step of radius below the
