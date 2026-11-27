@@ -15,7 +15,9 @@ use camcraft_app::geometry::Triangle;
 use crate::state::Orbit;
 
 /// The background of every tool preview.
-pub(super) const BG: Color32 = Color32::from_rgb(24, 26, 31);
+pub(super) fn tool_ground() -> Color32 {
+    crate::egui_app::theme::current().tool_ground
+}
 /// Past this many facets the view paints every n-th one (picking still
 /// reads them all) - a vendor STEP can carry 10^5+.
 pub(crate) const MAX_PAINTED: usize = 30_000;

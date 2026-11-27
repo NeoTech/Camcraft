@@ -27,6 +27,7 @@ pub mod clamp;
 mod dropdown;
 mod legal;
 mod tables;
+mod verdict;
 pub use dropdown::DropGeom;
 
 /// One theme's whole truth: colours, then geometry.
@@ -94,6 +95,28 @@ pub struct Tokens {
     pub plate_hole: Color32,
     pub plate_dowel: Color32,
     pub gcode_line: Color32,
+    /// The tool drawings (#1120): the tool, holder and profile previews,
+    /// the library thumbnails, the tool body page, and the refusal and
+    /// warning inks of the tool pages. The previews keep their own dark
+    /// ground in both tables, as before.
+    pub tool_ground: Color32,
+    pub tool_axis: Color32,
+    pub tool_grid: Color32,
+    pub tool_flute: Color32,
+    pub tool_shank: Color32,
+    pub tool_body: Color32,
+    pub tool_edge: Color32,
+    pub tool_holder: Color32,
+    pub tool_note: Color32,
+    pub tool_dim: Color32,
+    pub thumb_flute: Color32,
+    pub bad_ink: Color32,
+    pub warn_ink: Color32,
+    pub mount_axis: Color32,
+    pub mount_radial: Color32,
+    pub mount_tip: Color32,
+    pub mount_origin: Color32,
+    pub mount_hint: Color32,
     // -- geometry: the Phase-6 complaint made themeable - ribbon size,
     // input fields and button size are tokens, not literals.
     /// Corner radius of widget rects and painted cells/rows.
@@ -220,6 +243,7 @@ impl Tokens {
             handle_shade: _, handle_text: _, pick_rim: _,
             cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
             overlay_panel: _, overlay_edge: _, overlay_text: _, overlay_track: _, drop_veil: _, empty_hint: _, pick_halo: _, plate_hole: _, plate_dowel: _, gcode_line: _,
+            tool_ground: _, tool_axis: _, tool_grid: _, tool_flute: _, tool_shank: _, tool_body: _, tool_edge: _, tool_holder: _, tool_note: _, tool_dim: _, thumb_flute: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
             radius_widget, radius_window, radius_menu,
             item_spacing_x: _, item_spacing_y: _,
             button_padding_x: _, button_padding_y: _,
@@ -323,6 +347,15 @@ impl Tokens {
             Margin::same(clamp::range(self.window_margin, clamp::WINDOW_MARGIN).round() as i8);
         s
     }
+}
+
+/// `c`'s own colour at `alpha` (#1120). `Color32` keeps its channels
+/// multiplied by alpha, so the colour is read unmultiplied first: a
+/// partly transparent token must not darken a second time.
+#[must_use]
+pub fn with_alpha(c: Color32, alpha: u8) -> Color32 {
+    let [r, g, b, _] = c.to_srgba_unmultiplied();
+    Color32::from_rgba_unmultiplied(r, g, b, alpha)
 }
 
 /// Install a token table into a context: visuals and spacing together,

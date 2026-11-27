@@ -6,8 +6,8 @@
 //! length, the largest and the nose diameter; the drawing keeps room for
 //! their labels, so no label is cut off at the edge.
 //! Frame cost (`crates/ui/AGENTS.md`): the shapes and labels are built
-//! when the holder, the rect, the unit or the dimension toggle change; a
-//! still frame builds nothing (`builds`).
+//! when the holder, the rect, the unit, the dimension toggle or the
+//! drawing's theme inks change; a still frame builds nothing (`builds`).
 //! Provenance: our own drawing over `holder_library::HolderEntry::points`;
 //! the dimension style follows `side_view` (general drawing practice). No
 //! HSMWorks material involved.
@@ -20,12 +20,11 @@ use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2};
 use camcraft_app::holder_library::HolderEntry;
 use camcraft_app::units::{self, Unit};
 
-use crate::egui_app::tool_model_view::BG;
+use crate::egui_app::tool_model_view::tool_ground;
 
-const BODY: Color32 = Color32::from_rgb(86, 92, 104);
-const EDGE: Color32 = Color32::from_rgb(214, 220, 228);
-const DIM: Color32 = Color32::from_rgb(0x7F, 0xB4, 0xD8);
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
 /// The room (px) the labels keep at the right and the left of the outline.
 const LABEL_R: f32 = 150.0;
 const LABEL_L: f32 = 40.0;
@@ -43,6 +42,25 @@ struct Key {
     rect: Rect,
     unit: Unit,
     dims: bool,
+    inks: Inks,
+}
+
+/// The theme inks that the kept shapes carry. The ground and the labels
+/// are painted live each frame, so they are not in the key.
+#[derive(Clone, Copy, PartialEq)]
+struct Inks {
+    axis: Color32,
+    body: Color32,
+    edge: Color32,
+    dim: Color32,
+    note: Color32,
+}
+
+impl Inks {
+    fn current() -> Self {
+        let t = crate::egui_app::theme::current();
+        Self { axis: t.tool_axis, body: t.tool_body, edge: t.tool_edge, dim: t.tool_dim, note: t.tool_note }
+    }
 }
 
 /// The kept drawing: its shapes and its labels.
@@ -70,8 +88,8 @@ pub(crate) fn largest_d(e: &HolderEntry) -> f64 {
 /// Holder `e` (shank range `clamps`, mm) to scale in a `size` area.
 pub(crate) fn outline(ui: &mut Ui, e: &HolderEntry, clamps: (f64, f64), size: Vec2, u: Unit, dims: bool) {
     let (resp, painter) = ui.allocate_painter(size, Sense::hover());
-    painter.rect_filled(resp.rect, 4.0, BG);
-    let key = Key { entry: *e, clamps, rect: resp.rect, unit: u, dims };
+    painter.rect_filled(resp.rect, 4.0, tool_ground());
+    let key = Key { entry: *e, clamps, rect: resp.rect, unit: u, dims, inks: Inks::current() };
     let d = KEPT.with(|k| {
         let mut k = k.borrow_mut();
         if let Some((kk, d)) = k.as_ref()
@@ -80,17 +98,17 @@ pub(crate) fn outline(ui: &mut Ui, e: &HolderEntry, clamps: (f64, f64), size: Ve
             return Rc::clone(d);
         }
         BUILDS.with(|b| b.set(b.get().saturating_add(1)));
-        let d = Rc::new(build(e, clamps, resp.rect, u, dims));
+        let d = Rc::new(build(e, clamps, resp.rect, u, dims, key.inks));
         *k = Some((key, Rc::clone(&d)));
         d
     });
     painter.extend(d.shapes.iter().cloned());
     for (at, align, text) in &d.labels {
-        painter.text(*at, *align, text, FontId::proportional(11.0), NOTE);
+        painter.text(*at, *align, text, FontId::proportional(11.0), note_ink());
     }
 }
 
-fn build(e: &HolderEntry, clamps: (f64, f64), rect: Rect, u: Unit, dims: bool) -> Drawing {
+fn build(e: &HolderEntry, clamps: (f64, f64), rect: Rect, u: Unit, dims: bool, inks: Inks) -> Drawing {
     let mut d = Drawing { shapes: Vec::new(), labels: Vec::new() };
     let Ok(points) = e.points(0.0, e.gauge_len) else {
         d.labels.push((rect.center(), Align2::CENTER_CENTER, "no outline".to_owned()));
@@ -116,18 +134,18 @@ fn build(e: &HolderEntry, clamps: (f64, f64), rect: Rect, u: Unit, dims: bool) -
     let at = |z: f64, r: f64| Pos2::new(axis + r as f32 * scale, base - z as f32 * scale);
     d.shapes.push(Shape::line_segment(
         [Pos2::new(axis, rect.top() + 4.0), Pos2::new(axis, rect.bottom() - 4.0)],
-        Stroke::new(1.0, Color32::from_rgb(70, 74, 84)),
+        Stroke::new(1.0, inks.axis),
     ));
     for w in pts.windows(2) {
         let ((z0, r0), (z1, r1)) = (w[0], w[1]);
         if z1 > z0 {
-            d.shapes.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], BODY, Stroke::NONE));
+            d.shapes.push(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], inks.body, Stroke::NONE));
         }
     }
     let mut edge: Vec<Pos2> = pts.iter().map(|&(z, r)| at(z, r)).collect();
     edge.extend(pts.iter().filter(|p| p.1 > 0.0).rev().map(|&(z, r)| at(z, -r)));
-    d.shapes.push(Shape::closed_line(edge, Stroke::new(1.0, EDGE)));
-    let ghost = Stroke::new(1.0, NOTE);
+    d.shapes.push(Shape::closed_line(edge, Stroke::new(1.0, inks.edge)));
+    let ghost = Stroke::new(1.0, inks.note);
     let dashed = |d: &mut Drawing, pts: &[Pos2]| d.shapes.extend(Shape::dashed_line(pts, ghost, 5.0, 4.0));
     // The spindle nose above the gauge line.
     let sp = [at(z_max, -r_box), at(top, -r_box), at(top, r_box), at(z_max, r_box), at(z_max, -r_box)];
@@ -147,7 +165,7 @@ fn build(e: &HolderEntry, clamps: (f64, f64), rect: Rect, u: Unit, dims: bool) -
     }
     if dims {
         let len = |v: f64| units::len(v, u, 2);
-        let stroke = Stroke::new(1.0, DIM);
+        let stroke = Stroke::new(1.0, inks.dim);
         // The gauge length on the right, the largest diameter over the top,
         // the nose diameter under the nose.
         let x = at(0.0, r_max).x + 14.0;
