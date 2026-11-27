@@ -169,6 +169,10 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
     subs::settle(&mut p);
     describe(&p, heavy, xtask, &unmapped, &mut plan.notes);
     plan.steps = steps(p, heavy, xtask);
+    if let Some(f) = crate::site_step::touched(diff.changed) {
+        plan.notes.push(format!("site tests: {f} is an input of site/tests (site_step::INPUTS); a missing tool is a SKIP row"));
+        plan.steps.push(crate::site_step::step(crate::site_step::Missing::Skip));
+    }
     Ok(Quick::Plan(plan))
 }
 
