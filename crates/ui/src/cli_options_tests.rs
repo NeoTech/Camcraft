@@ -56,6 +56,25 @@ fn help_and_version_are_found_in_any_place() {
 }
 
 #[test]
+fn idle_timeout_is_a_start_option_not_a_file() {
+    let args = argv(&["--mcp-idle-timeout", "0", "job.camproj"]);
+    assert_eq!(parse(&args), Ok(Parsed::Run));
+    assert_eq!(files(&args), ["job.camproj"]);
+    assert_eq!(parse(&argv(&["--mcp-idle-timeout=0"])), Ok(Parsed::Run));
+    let text = help_text();
+    assert!(text.contains("CAMCRAFT_MCP_IDLE_TIMEOUT"));
+    assert!(text.contains("300"));
+}
+
+#[test]
+fn invalid_idle_timeout_stops_before_a_window_opens() {
+    for value in ["bad", "-1", "NaN", "inf", "1.5", "18446744073709551616", ""] {
+        assert_eq!(crate::run(&argv(&[&format!("--mcp-idle-timeout={value}")])), 2, "{value}");
+    }
+    assert_eq!(crate::run(&argv(&["--mcp-idle-timeout"])), 2);
+}
+
+#[test]
 fn unknown_option_gives_an_error_that_names_it() {
     let err = parse(&argv(&["--gpu-bakend", "dx12"])).unwrap_err();
     assert!(err.contains("--gpu-bakend") && err.contains("--help"), "{err}");

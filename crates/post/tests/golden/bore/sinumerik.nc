@@ -1,7 +1,7 @@
 ; synthetic program, posted for syntax conformance
 ; VMC 3-AXIS
 ; OPERATION: Bore - G54
-N10 G17 G710 G90 G54 G40 G80
+N10 G17 G710 G90 G94 G54 G40 G80
 ; T4 BORING BAR 12 - D12
 N20 T4 D1 M6
 N30 S900 M3

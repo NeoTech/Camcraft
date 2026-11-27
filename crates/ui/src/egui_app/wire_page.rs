@@ -24,13 +24,14 @@ use camcraft_app::operation::{
 #[path = "wire_page_tests.rs"]
 mod tests;
 
-const SIDES: [&str; 4] = [
+const SIDES: [&str; 5] = [
     "Die - the wire runs inside the profile",
     "Punch - the wire runs outside the profile",
     "Left - an open run's kerf left of travel",
     "Right - an open run's kerf right of travel",
+    "Centre - a slit along the run's line (the kerf burns both sides)",
 ];
-const SIDE_OF: [WireSide; 4] = [WireSide::Die, WireSide::Punch, WireSide::Left, WireSide::Right];
+const SIDE_OF: [WireSide; 5] = [WireSide::Die, WireSide::Punch, WireSide::Left, WireSide::Right, WireSide::Centre];
 const PAIRINGS: [&str; 2] = ["By arc length from the start hole", "By sync points"];
 const WIDENINGS: [&str; 2] = ["Only where the surface twists", "The same all round"];
 
@@ -191,17 +192,19 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, picks, burnout, clearance, taper_deg, four_axis, sharp_corners, lead_arc_radius, .. } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, picks, burnout, clearance, taper_deg, four_axis, sharp_corners, overlap, lead_arc_radius, .. } = p;
 
     if tab == SEC_GEO {
         let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
         *side = SIDE_OF.get(si).copied().unwrap_or(WireSide::Die);
         prop_row(ui, "Run-out clearance", |ui| num(ui, u, clearance));
+        // #3216: the closing overlap rides the seam over.
+        prop_row(ui, "Closing overlap", |ui| num(ui, u, overlap));
         super::start_exit_rows::wire_start_group(ui, u, picks);
         super::start_exit_rows::wire_exit_group(ui, u, picks);
-        hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
-        hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, threaded outside the stock the run-out clearance off its edge");
+        hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch; a closing overlap rides the cut past its seam that far before the lead-out, to burn over the start (not with tabs)");
+        hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, centre cuts a slit along the run itself with the kerf on both sides; each pass is threaded outside the stock the run-out clearance off its edge");
         // #3207: sharp inside corners keep the wire's own radius.
         check_row(ui, "Sharp inside corners at the wire radius", sharp_corners);
         hint(ui, "on: an inside corner tighter than the wire is cut, and keeps the wire radius + gap - the leftover is said as a note; off refuses it");

@@ -81,16 +81,38 @@ common case on a loop tick - keep it quiet).
 
 ## 2. Dispatch exactly one PR
 
+Read [the ownership guard](../issue-claims/references/ownership.md) before
+dispatch. Check the issue writer and the PR-level review owner on GitHub.
+Verify collaborator authority under the guard before recording a reviewer.
+A contributor pre-check uses no reviewer record, marker or review labels.
+Record the sole reviewer, exact head and base on the PR before dispatch.
+Pass that record URL to the reviewer. A live owner means stand down and name
+it. Keep the local `.claude/pr-review.lock` and its one-review rule as well;
+it does not coordinate different checkouts or machines.
+
 Take the oldest PR needing review - **one per invocation**; the next loop tick
 takes the next. Never launch two `PR-reviewer` agents at once.
 
 1. Write the lock first:
    `echo "<N> <sha> $(date -u +%Y-%m-%dT%H:%MZ)" > "$(git rev-parse --show-toplevel)/.claude/pr-review.lock"`
 2. Agent tool, `subagent_type: "PR-reviewer"`, run in the background, prompt:
-   `Review PR #<N> of NeoTech/Camcraft (head <sha>). Follow your definition: comment only, own worktree, clean up, remove .claude/pr-review.lock when done.`
+   `Review PR #<N> of NeoTech/Camcraft. Ownership record URL: <record URL>.
+   Base: <repository/ref/full SHA>. Starting exact head: <sha>.
+   Confirm the named identity and sole ownership before work. Re-read records
+   and head before a verdict or labels. Append the ownership release with the
+   result URL or skip/failure reason. Follow your definition: comment only,
+   own worktree, clean up, remove .claude/pr-review.lock when done.`
 3. On its completion notification, make sure the lock is gone (delete it if
    the agent failed to) and that `../cc-pr<N>-review` is removed. Do not poll
    while it runs.
+   Verify the public release too. After confirmed dispatch failure, release
+   the record with the failure reason; do not leave it active. An unknown
+   worker state is not a confirmed failure.
+
+The reviewer re-reads the public records and head before posting its verdict
+or changing labels. If the head moved, stop without a current-head verdict.
+On completion or failure, append a review-owner release with the result URL
+or failure reason. Do not dispatch a replacement while the old owner is live.
 
 **Build on the runner when one is online** (#1420; maintainer, 2026-11-13:
 "then that is the decision, workflow_dispatch"). The agent, not this skill,

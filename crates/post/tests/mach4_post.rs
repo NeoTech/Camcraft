@@ -313,3 +313,31 @@ fn mach4_zero_dwell_backbore_posts_g85() {
     );
 }
 
+#[test]
+fn mach4_smoothing_request_emits_operator_notification_comment() {
+    let cps = mach4_post();
+    let mch = default_vmc();
+    let stream = "\
+PARAM WorkOffset 1
+PARAM ClearancePlane 25
+PARAM RetractPlane 5
+PARAM Smoothing 0.01
+PARAM SmoothingMode finish
+TOOL 1 \"10MM 4FL EM\"
+PARAM ToolKind Flat Endmill
+PARAM ToolDiameter 10
+PARAM SpindleSpeed 8000
+SECTION SmoothSection
+Rapid X 0 Y 0 Z 10
+Feed X 10 Y 0 Z 0 F 500
+ENDSECTION
+";
+    let out = engine::run(&cps, &mch, stream).expect("posts");
+    assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
+    assert!(
+        out.program.contains("(SMOOTHING NOT WRITTEN - MACH4 G64 HAS NO TOLERANCE)"),
+        "Mach4 must emit smoothing notice comment using the same pattern as Mach3:\n{}",
+        out.program
+    );
+}
+

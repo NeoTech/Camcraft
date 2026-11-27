@@ -17,6 +17,7 @@ use super::raster_bridge::bridge_line;
 use super::rim::rim_rows;
 use super::rings::emit_rings_with_trim;
 use super::raster_seam::{order, Pass, RasterEnds, RasterSeam};
+use super::finish_seam::parallel_direction;
 /// One Z-following raster pass: lines along the unit vector `(ux, uy)`
 /// across the shallow facets' padded bounds, stepped by the cos-law
 /// (or an explicit `stepover`), each walked by `march_curve`'s laws
@@ -243,16 +244,7 @@ pub fn parallel_with_angle(
         FinishPattern::Scallop => (d, d, d, -d),
         FinishPattern::ParallelMulti => (1.0, 0.0, 0.0, 1.0),
         FinishPattern::Parallel => {
-            let (ux, uy) = match direction_angle {
-                0.0 => (1.0, 0.0),
-                90.0 => (0.0, 1.0),
-                180.0 => (-1.0, 0.0),
-                270.0 => (0.0, -1.0),
-                _ => {
-                    let (sin, cos) = direction_angle.to_radians().sin_cos();
-                    (cos, sin)
-                }
-            };
+            let (ux, uy) = parallel_direction(direction_angle);
             (ux, uy, 0.0, 0.0)
         }
         _ => (1.0, 0.0, 0.0, 0.0),

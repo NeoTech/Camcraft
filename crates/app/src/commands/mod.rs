@@ -81,6 +81,7 @@ pub mod wcs_circle;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
+pub mod tool_assembly;
 // #93 slice 2: a milling tool's drawn cutter outline.
 pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
@@ -160,6 +161,7 @@ pub use wcs_circle::SetWcsAtCircleCentre;
 pub use set_wcs_flip::SetWcsFlip;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
+pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use electrode::ElectrodeFromFaces;

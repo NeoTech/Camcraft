@@ -745,6 +745,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // stale singleton from the previous document can never leak in
     // (the theme's law, worn in the pin's clothes).
     crate::ribbon::pinned_set(world, &file.pinned);
+    // #3644: the component table is not in the file yet (#3645): opening
+    // clears it, so no row of the previous document leaks in.
+    crate::tool_assembly::table_set(world, Vec::new());
     // Opening lands the material too - including None (the units law).
     crate::cutting::material_set(world, material);
     // #1094: a raw-stock-only mark lands only when its source model is in

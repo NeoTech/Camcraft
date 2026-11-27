@@ -97,6 +97,30 @@ pub(super) fn radial(loop_pts: &[Point2], s: Point2) -> Option<Vec<f64>> {
     Some(out)
 }
 
+/// Vertices closer than this (mm) to the last one kept are integer
+/// rounding noise of the offset (one Clipper unit is 1e-6 mm), not shape.
+const NOISE: f64 = 1e-5;
+
+/// The closed loop `pts` without the vertices that stand within [`NOISE`]
+/// of the last one kept (issue #4010). Clipper rounds each vertex of an
+/// opening to its 1e-6 mm grid, and an edge one or two units long can then
+/// turn back about the pole. The star law reads such an edge as a shadow
+/// and its line as a kernel wall through the area, so a round bore was
+/// refused as a star cell. The loop moves at most `NOISE`.
+fn denoised(pts: &[Point2]) -> Vec<Point2> {
+    let near = |a: Point2, b: Point2| (b.x - a.x).hypot(b.y - a.y) < NOISE;
+    let mut out: Vec<Point2> = Vec::with_capacity(pts.len());
+    for &p in pts {
+        if out.last().is_none_or(|&q| !near(q, p)) {
+            out.push(p);
+        }
+    }
+    while out.len() > 1 && out.first().zip(out.last()).is_some_and(|(&a, &b)| near(a, b)) {
+        out.pop();
+    }
+    out
+}
+
 /// Is the disc (`c`, `rad`) inside the kernel of the closed loop `pts`
 /// (on the inner side of every edge's line by at least `rad`)? Every
 /// segment from that disc to the loop then stays inside the loop.
@@ -131,10 +155,11 @@ impl Star {
         for &rho in radii {
             let opened = center.offset(-rho)?.offset(rho)?;
             let [l] = opened.loops() else { break };
-            if !(disc_in_kernel(l.points(), orbit.0, orbit.1 + 1e-3) && disc_in_kernel(l.points(), pole, 1e-3)) {
+            let pts = denoised(l.points());
+            if !(disc_in_kernel(&pts, orbit.0, orbit.1 + 1e-3) && disc_in_kernel(&pts, pole, 1e-3)) {
                 break;
             }
-            let Some(row) = radial(l.points(), pole) else { break };
+            let Some(row) = radial(&pts, pole) else { break };
             rows.push((rho, row));
         }
         Ok((!rows.is_empty()).then_some(Star { seed: pole, rows }))

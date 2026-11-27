@@ -27,6 +27,7 @@ fn params(side: WireSide, start: (f64, f64)) -> WireParams {
         stock: None,
         clearance: 1.0,
         sharp_corners: false,
+        overlap: 0.0,
     }
 }
 
@@ -187,4 +188,23 @@ fn the_straight_lead_is_the_default_and_unchanged() {
     assert_eq!(a.moves, b.moves);
     assert_eq!(a.notes, b.notes);
     assert_eq!(WireLead::default(), WireLead::Straight);
+}
+
+/// #3216: a stated closing overlap is refused by name on the analytic
+/// line-and-arc path, straight and tangent arc leads alike - the path
+/// never cuts the ride past the seam, so a stale file cannot generate a
+/// lap whose note claims one. Overlap 0 still generates.
+#[test]
+fn a_stated_closing_overlap_is_refused_by_name_on_the_analytic_path() {
+    let chain = circle(10.0);
+    for lead in [WireLead::Straight, arc(1.0)] {
+        let prm = WireParams { overlap: 1.0, ..params(WireSide::Die, (0.0, 0.0)) };
+        let e = wire_contour_arcs_led(&chain, &prm, lead).unwrap_err().to_string();
+        assert!(
+            e.contains("a closing overlap is stated on a drawn line-and-arc profile") && e.contains("set the overlap to 0"),
+            "{lead:?}: {e}"
+        );
+        let prm = WireParams { overlap: 0.0, ..params(WireSide::Die, (0.0, 0.0)) };
+        wire_contour_arcs_led(&chain, &prm, lead).unwrap_or_else(|e| panic!("{lead:?}: overlap 0 still generates: {e}"));
+    }
 }

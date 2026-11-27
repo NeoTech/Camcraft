@@ -312,6 +312,13 @@ before Rotary Contour or Rotary Parallel.
 | Passes | Tolerance | 0.05 (the verify budget) |
 | Lead in / Lead out | Entry | Plunge, down the radial |
 
+With **Strategy** set to **Zigzag**, each level finishes its walls with a closing
+ring. This removes the cusps between row ends on flats and other walls
+perpendicular to the rows. A ring that wraps the full turn skips the seam's
+duplicate edges, so it does not cut the same seam line twice. A boundary
+that does not wrap the seam closes normally. Inspect the generated path;
+this does not change the Adaptive seam refusals below.
+
 **Common refusals:** "the rotary wrap needs a closed solid, but the mesh
 is open: ... edges bound one facet only (a hole in the skin)"; "a feature
 that is not turned (a flat, a keyway, a cross hole) crosses the rotary

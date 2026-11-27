@@ -6,16 +6,23 @@
 //! not controller execution or ISO syntax verification.
 //!
 //! Gate map (#922): covers post::post (engine, cnc, probe_rec), post::machine,
-//! (post::machine), assets/posts/heidenhain.cps.
+//! (post::machine), post::heidenhain_dialect, assets/posts/heidenhain.cps,
+//! post::work_offset (#4088).
 
 use camcraft_post::cl::{CompSide, CycleKind, MoveKind};
 use camcraft_post::post::{cnc::{self, CycleRec, MoveRec, Record}, engine, probe_rec::TouchRec};
 use serde_json::{json, Value};
 use std::path::Path;
 
-// #4094: the G200/G205 parameter set of the stated control.
+// #4094: the G200 parameter set of the stated control.
 #[path = "heidenhain_cycles/levels.rs"]
 mod levels;
+// #4095: G247 follows the meaning of cycle 247 on the stated control.
+#[path = "heidenhain_cycles/presets.rs"]
+mod presets;
+// #4088: the machine file states the last preset row.
+#[path = "heidenhain_cycles/preset_rows.rs"]
+mod preset_rows;
 
 fn read(rel: &str) -> String {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel);
@@ -203,8 +210,14 @@ fn g200_uses_surface_relative_q_values_and_keeps_the_explicit_hop() {
     assert!(!out.program.contains("G01") && !out.program.contains("FUNCTION DWELL"), "native cycle replaces chain cuts/dwell");
 }
 
+/// #4224: PECK and DEEP post the checked chain as plain moves, never a
+/// native G205 or G200. Cycle 205 makes full retracts and cycle 200
+/// moves at FMAX to the set-up clearance above the last depth: with R on
+/// the surface (Q200=0) that is the cut face. The chain makes chip-break
+/// hops (PECK) or rapids to R and feeds down from R (DEEP). The posted
+/// blocks must be the chain, move for move.
 #[test]
-fn peck_and_deep_have_distinct_documented_native_cycles_and_q_inventory() {
+fn peck_and_deep_post_the_checked_chain_not_a_native_cycle() {
     let mut rs = setup(3000.0);
     let mut n = 0;
     add_hole(&mut rs, &mut n, hole(CycleKind::Peck, 10.0, 0.0, -8.0, 4.0, 0.2, Some(150.0)), None);
@@ -212,11 +225,20 @@ fn peck_and_deep_have_distinct_documented_native_cycles_and_q_inventory() {
     finish(&mut rs);
     let out = post(&stream(&rs));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(!out.program.contains("G205") && !out.program.contains("G200"), "no native peck cycle: {}", out.program);
+    assert!(!out.program.contains("Q258") && !out.program.contains("M99"), "{}", out.program);
     let bs = bodies(&out.program);
-    assert_qs(definition(&bs, "G205"), &[(200,"+0"),(201,"-8"),(206,"+150"),(202,"+4"),(203,"+0"),(204,"+0"),(212,"+0"),(205,"+4"),(258,"+0"),(259,"+0"),(257,"+4"),(256,"+1"),(211,"+0.2"),(379,"+0"),(253,"+150"),(208,"+99999.999"),(395,"+0")]);
-    assert!(!out.program.contains("FMAX"), "#3102: no Q word is FMAX: {}", out.program);
-    assert_qs(definition(&bs, "G200"), &[(200,"+0"),(201,"-8"),(206,"+90"),(202,"+4"),(210,"+0"),(203,"+0"),(204,"+0"),(211,"+0"),(395,"+0")]);
-    assert_eq!(calls(&bs), 2);
+    let from = |s: &str| bs.iter().position(|b| b == s).unwrap_or_else(|| panic!("no {s:?} in {bs:?}"));
+    // PECK: feed down by the peck, a 1 mm chip-break hop at rapid, feed
+    // on from the hop, the dwell at the bottom, rapid back to R.
+    let p = from("G00 X+10 Y+20 Z+0");
+    assert_eq!(&bs[p + 1..p + 7], ["G01 X+10 Y+20 Z-4 F150", "G00 X+10 Y+20 Z-3", "G01 X+10 Y+20 Z-8 F150",
+        "G04 F0.2", "G00 X+10 Y+20 Z+0", "G00 X+10 Y+20 Z+10"], "{bs:?}");
+    // DEEP: feed down by the peck, rapid to R, feed down from R to the
+    // next depth (no rapid into the hole), rapid back to R.
+    let d = from("G00 X+30 Y+20 Z+0");
+    assert_eq!(&bs[d + 1..d + 6], ["G01 X+30 Y+20 Z-4 F90", "G00 X+30 Y+20 Z+0", "G01 X+30 Y+20 Z-8 F90",
+        "G00 X+30 Y+20 Z+0", "G00 X+30 Y+20 Z+10"], "{bs:?}");
 }
 
 #[test]

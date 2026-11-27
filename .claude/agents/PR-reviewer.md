@@ -52,6 +52,18 @@ merge.
 
 ## Steps
 
+0. **Ownership before work.** Read
+   [the ownership guard](../skills/issue-claims/references/ownership.md).
+   The brief supplies the record URL, named identity, base and starting
+   exact head. Verify them against the complete public issue/PR threads
+   and remote head. A missing or mismatched record means STOP, not a new
+   competing record. A live other writer or counted reviewer means stand down.
+   If launched directly without a dispatcher, perform the guard's dispatch
+   reads, collaborator check, record creation and readback yourself first.
+   A contributor pre-check uses no reviewer record, no counted marker and no
+   labels. It still checks for live owners and moved heads. Failed authority
+   reads are not permission to claim collaborator ownership. Use the same
+   cleanup step 9 for every exit, including skip, moved head and failure.
 1. **Skip check.** `collabs=$(gh api repos/NeoTech/Camcraft/collaborators --jq '.[] | select(.permissions.push) | .login')` (collaborators of the base repository the PR targets; a fork's own owner is not one by being the fork's owner), then
    `gh pr view <N> --json headRefOid,reviews,comments,state,isDraft,author,headRepositoryOwner`.
    If the PR is closed, merged or a draft, report "skipped: <why>" and stop. If a
@@ -172,6 +184,10 @@ merge.
    head is a finding: name the red step.
    Continue to step 6 only after this check.
 6. **Law check against AGENTS.md** - for each, cite file:line on a finding:
+   First re-read the public ownership records and exact PR head. Confirm
+   your sole counted reviewer record (or the contributor pre-check scope).
+   If the head moved or ownership changed, STOP without a new-head verdict;
+   preserve findings for the starting SHA and release through step 9.
    - Prime Directive: no `unwrap()/expect()/panic!` outside tests; numeric
      casts and indexing safe; degenerate input refused by name; nothing that
      could post a gouging or wrong toolpath/NC silently.
@@ -218,6 +234,10 @@ merge.
      defect.
 7. **Post the review** (comment only) with this shape, plain and specific,
    first line `<!-- pr-reviewer: <headRefOid> -->`:
+   Immediately before posting, re-read ownership and head again. A moved
+   head or competing owner means STOP and release through step 9. Only a
+   collaborator uses this marker; a contributor posts a plain pre-check
+   without it and does not proceed to label changes in step 8.
    - one-line verdict: "Ready for the maintainer to merge" / "Needs changes
      before merge" / "Not built - needs a maintainer look" (the last, with
      no blockers, gets the yellow `needs-maintainer` label - see the
@@ -261,7 +281,16 @@ merge.
    if it conflicts); "Not built" with no blockers → `needs-maintainer`. On
    red or orange, one of our own PRs goes back to draft (`gh pr ready <N>
    --undo`); a fork PR's draft state is left as its contributor set it.
+   Immediately before any label change, re-read ownership and the exact
+   head. Stop if either changed. Do not relabel a head you did not review.
+   A contributor pre-check never changes review labels.
 9. **Clean up** - always, also after a failure or a skip:
+   Append an ownership release referencing the exact record URL, identity,
+   final head and verified review URL, or the skip/failure reason. Then read
+   back that exact release comment. Release only your own counted record;
+   a contributor pre-check has no reviewer record to release. If readback
+   fails, report the unresolved release to the dispatcher; do not announce
+   that ownership is free or dispatch a replacement.
    `git worktree remove --force .claude/worktrees/cc-pr<N>-review` and
    your target dir (if the local path made them), `git branch -D pr-<N>-review`, `git worktree prune`, and
    delete your review lock (`.claude/pr-review.lock`, or the per-PR
@@ -274,4 +303,5 @@ PR number and head SHA, verdict, where it was built (runner run URL,
 local, or not built), the test/clippy table, the requested changes
 (one line each), whether the review was posted (and its URL from `gh pr view
 <N> --json reviews`), the label set (and any removed), and confirmation the
-worktree, target and lock are removed.
+worktree, target and lock are removed. Include the ownership record URL and
+verified release URL, or state why the release is unresolved.

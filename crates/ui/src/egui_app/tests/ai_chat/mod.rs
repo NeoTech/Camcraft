@@ -6,6 +6,7 @@ mod budget;
 mod delete_confirmation;
 mod model_defaults;
 mod regressions;
+mod replay;
 mod safety;
 mod settings;
 mod settings_failure_details;

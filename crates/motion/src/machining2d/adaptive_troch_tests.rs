@@ -214,6 +214,29 @@ fn cleanup_front_respects_custom_engagement_limit() {
     assert!(first_extent <= 1.98 + angle_step + 2e-3, "custom angle cleanup advanced too far: {first_extent}");
 }
 
+#[test]
+fn plan_cleanup_checked_reports_exceeded_when_even_stepdown_cannot_hold_limit() {
+    let center = rect(-3.0, -3.0, 3.0, 3.0);
+    let cleared = rect(-5.0, -5.0, 5.0, 5.0);
+    let reach = rect(-6.0, -6.0, 6.0, 6.0);
+    let used = rect(-1.98, -1.98, 1.98, 1.98);
+    let t = AdaptiveTrochParams { max_engagement: 30.0, ..AdaptiveTrochParams::default() };
+    let plan = super::super::adaptive_troch_check::plan_cleanup_checked(
+        &reach,
+        &center,
+        &reach,
+        &[],
+        &used,
+        &cleared,
+        &PocketParams { bottom_z: -3.0, ..params() },
+        &t,
+    )
+    .expect("checked cleanup");
+    assert!(!plan.chains.is_empty(), "expected cleanup chains");
+    let (deg, _) = plan.exceeded.expect("expected exceeded measurement at 30 deg limit");
+    assert!(deg > 30.0, "expected > 30 deg, got {deg}");
+}
+
 // The slow tests of this module and their light twins (#3514).
 #[path = "adaptive_troch_heavy_tests.rs"]
 mod heavy;

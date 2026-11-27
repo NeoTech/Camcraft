@@ -104,8 +104,14 @@ impl KindInfo {
             // #3330: the raster corner where the cut starts, and the end
             // of the last pass.
             OpType::Parallel5D => PickCapability::Raster,
+            // #3329 slice 2: the corner of the 3D Finish's Parallel raster
+            // where the cut starts, and the end of its last pass.
+            OpType::Finish3D => PickCapability::Raster,
             // #3329 slice 1: the chain cut first and the chain cut last.
             OpType::Deburr => PickCapability::Chain,
+            // #3329 slice 3: the descent place of each level's first
+            // pass, and the end of the last pass.
+            OpType::Pocket3D => PickCapability::Region,
             OpType::Pocket
             | OpType::Trace
             | OpType::Adaptive2D
@@ -113,8 +119,6 @@ impl KindInfo {
             | OpType::Engrave
             | OpType::Chamfer2D
             | OpType::Circular
-            | OpType::Pocket3D
-            | OpType::Finish3D
             | OpType::MultiAxisDeburr
             | OpType::Swarf
             | OpType::AdvancedSwarf
@@ -306,6 +310,15 @@ impl OpParams {
             if matches!(self, OpParams::Drill { cross, .. } if !cross.is_empty()) {
                 return Some(format!("{}: a {what} point is not taken on cross holes - {PICK_TURRET}; clear it on this operation", info.label));
             }
+            // #3329: the 3D Finish reads a pick on its Parallel raster only.
+            if let OpParams::Finish3D { pattern, .. } = self
+                && *pattern != crate::finishing3d::FinishPattern::Parallel
+            {
+                return Some(format!(
+                    "{}: a {what} point is read on the Parallel pattern only, not on {pattern:?} - pick the Parallel pattern or clear the {what} point",
+                    info.label
+                ));
+            }
             // #3331: a turning pick is a point of the lathe (Z, X) plane.
             if cap == PickCapability::Meridian && picks.of(role).iter().any(|p| p.z.is_none()) {
                 return Some(format!(
@@ -319,6 +332,8 @@ impl OpParams {
             // #3333: a pick that the sinker's orbit or side move cannot hold.
             OpParams::SinkerBurn(p) => p.orbit_ends().err(),
             OpParams::SinkerSideBurn(p) => p.side_ends().err(),
+            // #3329: the 3D Pocket seats its ring and zigzag levels only.
+            OpParams::Pocket3D { strategy, rest_rough, .. } => pocket3d_pick_refusal(*strategy, *rest_rough),
             _ => self.hole_order().err(),
         }
     }
@@ -373,4 +388,18 @@ pub(super) fn wire_exit_refusal(w: &super::types::WireContourOp) -> Option<Strin
         return None;
     };
     Some(format!("Wire Contour: an exit point is stated with {with}; clear the exit point or that setting"))
+}
+
+/// #3329: the 3D Pocket strategies that take no pick, by name. The
+/// Adaptive (HSM) plan spirals out of its own entry bore, and the rest
+/// pass ends where its last crumb ends, after the coarse ladder.
+fn pocket3d_pick_refusal(strategy: crate::machining2d::PocketStrategy, rest_rough: bool) -> Option<String> {
+    if strategy == crate::machining2d::PocketStrategy::Adaptive {
+        return Some(
+            "3D Pocket: a start or exit point is not taken under the Adaptive strategy - its plan spirals out of its own entry bore; pick Zigzag, Waterline or Offset rings, or clear the point".into(),
+        );
+    }
+    rest_rough.then(|| {
+        "3D Pocket: a start or exit point is not taken with Rest roughing on - the rest pass cuts after the last level and ends where its last crumb ends; clear Rest roughing or the point".into()
+    })
 }

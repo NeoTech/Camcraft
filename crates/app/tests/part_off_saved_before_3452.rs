@@ -2,8 +2,11 @@
 //! side of the end face holds a cached part-off whose blade cut half a
 //! blade into the part (CL on the plane Z-70, posted Z-71.5). The Part
 //! stamp carries a salt since #3452, so that path loads Stale and the
-//! post refuses it until the op is generated again; the groove beside
-//! it (a blade kind whose path did not move) loads Ok.
+//! post refuses it until the op is generated again. Since #3704 the
+//! global GENERATOR_OUTPUT_VERSION makes every cache saved before a
+//! bump Stale too, so the groove beside it (a blade kind whose path did
+//! not move) also loads Stale and both operations regenerate before the
+//! post runs. No NC file is written from a stale cache.
 //!
 //! The fixture `fixtures/part_off_pre_3452.camproj` was recorded by
 //! `record_the_pre_3452_fixture` on the tree before #3452
@@ -154,14 +157,27 @@ fn a_part_off_saved_before_3452_loads_stale_and_does_not_post() {
     // The fixture holds the old law: the CL on the end face Z-70.
     let old = cached_feed_z(&world, "P1");
     assert!(!old.is_empty() && old.iter().all(|z| (z + 70.0).abs() < 1e-6), "the old centred kerf: {old:?}");
+    let old_groove = cached_feed_z(&world, "G1");
+    assert!(!old_groove.is_empty(), "the saved groove cache holds moves");
     assert_eq!(status(&world, "P1"), OpStatus::Stale, "a part-off cached before #3452 must be generated again");
-    assert_eq!(status(&world, "G1"), OpStatus::Ok, "the groove's path did not move: its stamp must not change");
-    let err = posting::post_setup_unwritten(&world).map(|_| ()).expect_err("a stale part-off never posts");
-    assert!(err.contains("P1: inputs moved since generation"), "{err}");
+    // Since #3704, a bump of GENERATOR_OUTPUT_VERSION makes every cache
+    // saved before the bump Stale, even one whose path did not move: the
+    // groove beside the part-off reads Stale for the global version too.
+    assert_eq!(status(&world, "G1"), OpStatus::Stale, "a cache saved before the global version bump is stale too");
+    let err = posting::post_setup_unwritten(&world).map(|_| ()).expect_err("a stale cache never posts");
+    // The refusal names the first stale operation it reaches and stops
+    // there (G1, the first op of the setup): no NC file is written from
+    // a stale cache.
+    assert!(err.contains("G1: inputs moved since generation"), "{err}");
     // Generated again, it follows the new law and posts.
     let mut h = History::default();
+    h.execute(&world, GenerateOperation::new(&world, "G1").expect("generate"));
     h.execute(&world, GenerateOperation::new(&world, "P1").expect("generate"));
     assert_eq!(status(&world, "P1"), OpStatus::Ok);
+    assert_eq!(status(&world, "G1"), OpStatus::Ok);
+    // The global version moved the stamp, not the groove's path: the
+    // regenerated groove holds the same feed stations as the saved cache.
+    assert_eq!(cached_feed_z(&world, "G1"), old_groove);
     let new = cached_feed_z(&world, "P1");
     assert!(new.iter().all(|z| (z + 71.5).abs() < 1e-6), "the CL half a blade behind the face: {new:?}");
     posting::post_setup_unwritten(&world).expect("it posts once generated again");

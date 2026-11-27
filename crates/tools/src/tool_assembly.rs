@@ -11,7 +11,8 @@
 //! The law: an assembly is resolved whole or refused by name - a fit
 //! the component checks refuse, a missing frame, an ambiguous port, a
 //! cycle, a non-finite transform, or a body that reaches into the
-//! flutes. Lathe assemblies are not resolved here yet.
+//! flutes. Lathe assemblies reuse this chain ([`placed`]) and are
+//! resolved in [`crate::lathe_assembly`].
 
 use crate::component::{ComponentKind, CuttingItem, ToolComponent};
 use crate::component_fit::{check_fit, FitError};
@@ -94,22 +95,7 @@ pub struct ResolvedAssembly {
 
 /// Resolve `nodes` (the module's law).
 pub fn resolve(nodes: &[AssemblyNode]) -> Result<ResolvedAssembly, AssemblyError> {
-    if nodes.is_empty() {
-        return Err(AssemblyError::Empty);
-    }
-    if nodes.len() > MAX_NODES {
-        return Err(AssemblyError::TooMany { count: nodes.len() });
-    }
-    let root = find_root(nodes)?;
-    let ports = check_links(nodes)?;
-    let cut = find_cutter(nodes)?;
-    let mut frames: Vec<Option<Frame>> = vec![None; nodes.len()];
-    frames[root] = Some(Frame::IDENTITY);
-    for i in 0..nodes.len() {
-        place(nodes, &ports, i, &mut frames)?;
-    }
-    let frames: Vec<Frame> = frames.into_iter().map(|f| f.unwrap_or(Frame::IDENTITY)).collect();
-    let cip = frames[cut].then(&cip_local(&nodes[cut])?);
+    let (frames, cut, cip) = placed(nodes)?;
     let gauge_len = -cip.origin()[2];
     if !gauge_len.is_finite() || gauge_len <= 0.0 || gauge_len > crate::holder_profile::MAX_BODY_HEIGHT {
         return Err(AssemblyError::BadGauge { gauge_len });
@@ -127,6 +113,30 @@ pub fn resolve(nodes: &[AssemblyNode]) -> Result<ResolvedAssembly, AssemblyError
     let body = body::judged(nodes, &frames, cut, solid)?;
     let (cutting, tool) = body::cutting(&nodes[cut], &frames[cut], &cip)?;
     Ok(ResolvedAssembly { gauge_len, cutting, tool, body, frames })
+}
+
+/// The checked stack placed in the root's frame (the root's MCS is the
+/// identity): each node's MCS frame, the cutting item's index, and its
+/// cutting point. The same checks as [`resolve`] up to the gauge length:
+/// the lathe resolver (#3643) reads its own tip from here.
+pub(crate) fn placed(nodes: &[AssemblyNode]) -> Result<(Vec<Frame>, usize, Frame), AssemblyError> {
+    if nodes.is_empty() {
+        return Err(AssemblyError::Empty);
+    }
+    if nodes.len() > MAX_NODES {
+        return Err(AssemblyError::TooMany { count: nodes.len() });
+    }
+    let root = find_root(nodes)?;
+    let ports = check_links(nodes)?;
+    let cut = find_cutter(nodes)?;
+    let mut frames: Vec<Option<Frame>> = vec![None; nodes.len()];
+    frames[root] = Some(Frame::IDENTITY);
+    for i in 0..nodes.len() {
+        place(nodes, &ports, i, &mut frames)?;
+    }
+    let frames: Vec<Frame> = frames.into_iter().map(|f| f.unwrap_or(Frame::IDENTITY)).collect();
+    let cip = frames[cut].then(&cip_local(&nodes[cut])?);
+    Ok((frames, cut, cip))
 }
 
 fn find_root(nodes: &[AssemblyNode]) -> Result<usize, AssemblyError> {

@@ -13,6 +13,7 @@
 //! camcraft_motion::geometry, camcraft_motion::machining2d, camcraft_motion::multiaxis.
 //! #3330: the start / exit picks of the ring ladder (finishing3d::ring_seam)
 //! and of the zigzag raster (finishing3d::raster_seam, multiaxis::parallel5d).
+//! #3329: the 3D Finish's picks on its Parallel raster (finishing3d::finish_seam).
 //! Lane shape (M4.4): all tests here run in seconds; envelope
 //! verdicts over these paths ride the app's ignored lane.
 
@@ -292,3 +293,7 @@ mod seam;
 // #3330: the user's start and exit points on the 5-axis parallel's raster.
 #[path = "multiaxis/raster_seam.rs"]
 mod raster_seam;
+
+// #3329: the user's start and exit points on the 3D Finish's raster.
+#[path = "multiaxis/finish_seam.rs"]
+mod finish_seam;

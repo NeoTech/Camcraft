@@ -49,7 +49,9 @@ pub fn moves_named(w: &Warning) -> [Option<usize>; 2] {
         // #3748: the first cut of the selected entry.
         | Warning::EntryNotRecommended { at, .. }
         // #3884: the plunge is the user's entry; its first cut.
-        | Warning::PlungeIntoStock { at } => [Some(*at), None],
+        | Warning::PlungeIntoStock { at }
+        // #3849: clean-up pass above the engagement limit.
+        | Warning::EngagementExceeded { at, .. } => [Some(*at), None],
         // #3035: the fallback names areas in the notes, not one move;
         // #3884: so do the stand-in entries.
         Warning::RestUnjudged { .. } | Warning::StrategyFallback { .. } | Warning::EntryStandIn { .. } => [None, None],

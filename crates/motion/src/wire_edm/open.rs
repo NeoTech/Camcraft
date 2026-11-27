@@ -8,7 +8,10 @@
 //! - The wire-centre path is the run's one-sided parallel at the kerf
 //!   offset (wire radius + spark gap), its joins mitred: where the wire
 //!   rides outside a turn the kept corner stays sharp; where it rides
-//!   inside one, the corner minimum holds as for a closed profile.
+//!   inside one, the corner minimum holds as for a closed profile. A
+//!   CENTRE side (#3216) is the slit cut: the wire rides the run
+//!   itself and the kerf burns both sides - no side is kept, and the
+//!   kerf law has no product to protect.
 //! - No start hole: both ends of the run must reach (or pass) the
 //!   stock's edge, and the path is extended along the run's own end
 //!   directions until the wire stands the kerf offset plus the stated
@@ -73,9 +76,12 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
     let sign = match p.side {
         WireSide::Left => 1.0,
         WireSide::Right => -1.0,
+        // #3216: a centre-line slit - the wire rides the run itself,
+        // the kerf burns both sides, no side is kept.
+        WireSide::Centre => 0.0,
         WireSide::Die | WireSide::Punch => {
             return Err(invalid(format!(
-                "the profile is open and its side is {} - an open profile has no punch or die side; state the kerf side: left or right of the run's travel",
+                "the profile is open and its side is {} - an open profile has no punch or die side; state the kerf side: left, right, or the centre of the run's travel",
                 p.side.word()
             )));
         }
@@ -126,7 +132,13 @@ pub(super) fn wire_open(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) 
     }
     let wire: Vec<Point2> = std::iter::once(t0).chain(ride.iter().copied()).chain(std::iter::once(t1)).collect();
     let corner_rest = laws::cover_run(&run, false, &wire, false, p)?;
-    laws::kerf(&path, &run, false, k, z)?;
+    // A centre slit (#3216) burns both sides by statement - no side is
+    // kept, so the kerf law has no product to protect. The corner law
+    // above and the run-out below still refuse what the wire cannot
+    // follow.
+    if p.side != WireSide::Centre {
+        laws::kerf(&path, &run, false, k, z)?;
+    }
     path.notes.extend(notes(p, t0, t1));
     path.notes.extend(corner_rest.map(|r| laws::sharp_note(r, k)));
     Ok(path)
@@ -291,15 +303,21 @@ fn run_out(stock: &Region, from: Point2, dir: Point2, target: f64, k: f64, z: f6
 
 fn notes(p: &WireParams, t0: Point2, t1: Point2) -> Vec<String> {
     let cond = if p.condition.is_empty() { String::new() } else { format!(", condition {}", p.condition) };
+    let off = match p.side {
+        WireSide::Centre => "on the run's line itself".to_owned(),
+        _ => format!("{:.4} mm off the line", p.kerf_offset()),
+    };
+    let kept = match p.side {
+        WireSide::Centre => "no side kept - the kerf burns both sides (#3216)".to_owned(),
+        _ => format!("the {} side kept", if p.side == WireSide::Left { "right" } else { "left" }),
+    };
     vec![
         format!(
-            "wire EDM: open run, kerf on the {} of travel - the wire runs {:.4} mm off the line (wire radius {:.4} + spark gap {:.4}{cond}); kerf width {:.4} mm, the {} side kept",
+            "wire EDM: open run, kerf on the {} of travel - the wire runs {off} (wire radius {:.4} + spark gap {:.4}{cond}); kerf width {:.4} mm, {kept}",
             p.side.word(),
-            p.kerf_offset(),
             p.wire_diameter * 0.5,
             p.gap,
             p.kerf_width(),
-            if p.side == WireSide::Left { "right" } else { "left" }
         ),
         format!(
             "wire EDM: threaded outside the stock at X{:.3} Y{:.3} and run out at X{:.3} Y{:.3}, each {:.3} mm clear of the stock's edge past the kerf; no start hole, no return",

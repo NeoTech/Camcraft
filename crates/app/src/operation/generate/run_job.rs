@@ -9,6 +9,8 @@ use super::*;
 /// exist. The reach preflight refuses unsupported depths before any
 /// generator builds a path.
 pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    // #3035: the rest grid's stock simulation, on this (the job's) thread.
+    job.settle_prior();
     // The spindle law's set-aside note (issue #71 review) rides the
     // path whichever arm cut it: a note, never a warning - the post
     // is not held for features the op honestly leaves standing.

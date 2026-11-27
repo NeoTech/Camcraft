@@ -3,7 +3,7 @@
 //! band.
 
 use super::*;
-use crate::holder_library::{BT30, BT40, CAT40, TTS};
+use crate::holder_library::{BT30, BT40, CAT40, HSK_A63, HSK_E32, HSK_E40, HSK_F63, ISO30, SK30, SK40, TTS};
 use crate::spun::SpunProfile;
 
 fn weldon_rows() -> Vec<(String, Vec<f64>)> {
@@ -21,7 +21,9 @@ fn weldon_rows() -> Vec<(String, Vec<f64>)> {
 #[test]
 fn the_picker_shows_one_weldon_row_for_each_taper() {
     let names: Vec<String> = weldon_rows().into_iter().map(|(n, _)| n).collect();
-    assert_eq!(names, ["BT30 Weldon", "BT40 Weldon", "CAT40 Weldon", "TTS Weldon"]);
+    // #3919 adds the DIN 69871 and HSK tapers after TTS.
+    let want = ["BT30", "BT40", "CAT40", "TTS", "SK30", "SK40", "ISO30", "HSK-A63", "HSK-F63", "HSK-E40", "HSK-E32"];
+    assert_eq!(names, want.map(|t| format!("{t} Weldon")));
     let rows = picker_rows();
     assert!(rows.iter().all(|r| !matches!(r, PickerRow::Entry(e) if matches!(e.clamp, Clamp::Weldon { .. }))));
     let ers = library().into_iter().filter(|e| matches!(e.clamp, Clamp::Er(_))).count();
@@ -34,7 +36,7 @@ fn the_picker_shows_one_weldon_row_for_each_taper() {
         }).collect::<Vec<_>>()
     };
     let rows = weldon_rows();
-    for (i, t) in [BT30, BT40, CAT40, TTS].iter().enumerate() {
+    for (i, t) in [BT30, BT40, CAT40, TTS, SK30, SK40, ISO30, HSK_A63, HSK_F63, HSK_E40, HSK_E32].iter().enumerate() {
         assert_eq!(rows[i].1, bores(t), "{}", t.name);
     }
 }

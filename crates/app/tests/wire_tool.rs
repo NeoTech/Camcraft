@@ -39,7 +39,9 @@ fn slug() -> Mesh {
 
 fn wire_op(condition: &str) -> WireContourOp {
     WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: condition.into(),

@@ -12,6 +12,7 @@
 //! exactly as before, and is refused by setup name for any offset above
 //! 6 - never handed a word it would misread, never posted at offset 1.
 
+use super::cnc::Record;
 use super::js::{is_true, Script};
 use super::PostError;
 use serde_json::{json, Value};
@@ -107,6 +108,29 @@ impl Manifest {
         }
         Ok(json!(n))
     }
+}
+
+/// #4088: the first `PARAM WorkOffset` above the machine's
+/// `controller.work_offset_max` (a Heidenhain preset table with fewer rows
+/// than the post can name), as a refusal naming its setup. The engine
+/// refuses it before any hook runs, so a script error cannot hide it. A
+/// machine that states no maximum keeps the post's own limit.
+pub(super) fn machine_refusal(records: &[Record], mch: &Value) -> Result<Option<String>, String> {
+    let Some(max) = crate::machine::installation::work_offset_max(mch)? else {
+        return Ok(None);
+    };
+    let mut base = BTreeMap::new();
+    for record in records {
+        let Record::Param { name, value } = record else { continue };
+        if let Some(n) = index_of(value).filter(|n| name == "WorkOffset" && *n > max) {
+            return Ok(Some(format!(
+                "{}uses work offset {n}, but this machine's control holds work offsets 1-{max} only (controller.work_offset_max in the machine file) - pick one of those, or state the control's real count in the machine file",
+                who(&base)
+            )));
+        }
+        base.insert(name.clone(), value.clone());
+    }
+    Ok(None)
 }
 
 fn who(base: &BTreeMap<String, Value>) -> String {

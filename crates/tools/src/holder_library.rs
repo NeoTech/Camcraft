@@ -3,7 +3,9 @@
 //! chuck (ISO 15488 / DIN 6499 collets and nuts) and Weldon side-lock
 //! (DIN 1835 form B / DIN 6359 bores) versions, plus standalone
 //! (straight-shank) ER11-ER40 collet chucks, plus the Tormach TTS
-//! straight-shank holders (#794, `holder_library_tts.rs`), each drawn as a spun
+//! straight-shank holders (#794, `holder_library_tts.rs`), plus the HSK
+//! (`holder_library_hsk.rs`) and DIN 69871 SK / router ISO30
+//! (`holder_library_din.rs`) holders (#3919), each drawn as a spun
 //! profile (#93) the tool editor drops into a tool's holder. Specced
 //! from the published standards' dimension tables (the numbers and
 //! their sources are recorded in docs/decisions/793-taper-holders.md
@@ -337,7 +339,23 @@ pub fn library() -> Vec<HolderEntry> {
     v.extend(ER_SIZES.iter().zip(STANDALONE_GAUGE).map(|(e, g)| er(None, e, g)));
     // #794: the Tormach TTS holders.
     v.extend(tts::entries());
+    // #3919: the DIN 69871 SK and router ISO30 holders, then HSK.
+    v.extend(din::entries());
+    v.extend(hsk::entries());
     v
+}
+
+/// One taper's entries (#3919): each ER size at its default gauge
+/// length, then each Weldon bore at `weldon_gauge`.
+fn family<'a>(taper: Taper, ers: &[(ErSize, f64)], bores: impl Iterator<Item = &'a Bore>, weldon_gauge: f64) -> Vec<HolderEntry> {
+    let er = ers.iter().map(|&(e, gauge_len)| HolderEntry { taper: Some(taper), clamp: Clamp::Er(e), gauge_len, label: "" });
+    let weldon = bores.map(|b| HolderEntry {
+        taper: Some(taper),
+        clamp: Clamp::Weldon { bore: b.1, body_d: b.2 },
+        gauge_len: weldon_gauge,
+        label: b.0,
+    });
+    er.chain(weldon).collect()
 }
 
 /// The library entry called `name` (as [`HolderEntry::name`] states it,
@@ -351,6 +369,14 @@ pub fn find(name: &str) -> Result<HolderEntry, LibraryError> {
 #[path = "holder_library_tts.rs"]
 mod tts;
 pub use tts::{TTS, TTS_BODY_D};
+
+#[path = "holder_library_din.rs"]
+mod din;
+pub use din::{ISO30, SK30, SK40};
+
+#[path = "holder_library_hsk.rs"]
+mod hsk;
+pub use hsk::{HSK_A63, HSK_E32, HSK_E40, HSK_F63};
 
 #[path = "holder_library_weldon.rs"]
 mod weldon;

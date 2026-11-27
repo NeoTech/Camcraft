@@ -528,8 +528,8 @@ function startPreamble() {
   // in the opening block before any motion, whatever the control's
   // basic system or the last program left modal. #902: the unit is the
   // document's - an inch program states G700, inch for lengths and
-  // feeds alike, by the same law.
-  block(["G17", inch ? "G700" : "G710", "G90", wcsWord, "G40", "G80"]);
+  // feeds alike, by the same law. #4150: state G94 in the preamble.
+  block(["G17", inch ? "G700" : "G710", "G90", "G94", wcsWord, "G40", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();

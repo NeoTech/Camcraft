@@ -132,6 +132,10 @@ pub fn run_program_with(
     if let Some(why) = super::manual_change::refusal(&mut s, mch)? {
         return Err(PostError::Refused(why));
     }
+    // #4088: a work offset past the machine's last preset row, by setup name.
+    if let Some(why) = super::work_offset::machine_refusal(&records, mch).map_err(PostError::Refused)? {
+        return Err(PostError::Refused(why));
+    }
     let wo = super::work_offset::Manifest::read(&mut s);
     // #1386: Explain G-code on a script that states no comment form is
     // refused by name here, before any hook runs.

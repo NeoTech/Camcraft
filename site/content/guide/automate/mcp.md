@@ -34,8 +34,18 @@ process and talks to it.
 
 The attached mode is off unless you ask for it. The app listens on the
 loopback address (127.0.0.1) only, serves one client at a time, and
-disconnects a client that sends nothing for five minutes so the next one
-can connect. Port `0` picks a free port.
+disconnects a client that sends no complete line for 300 seconds by default.
+Port `0` picks a free port.
+
+Set `camcraft-ui --mcp-port 7777 --mcp-idle-timeout 1800` for a longer
+idle window. `CAMCRAFT_MCP_IDLE_TIMEOUT` supplies the same value; the option
+wins. Use non-negative whole seconds that fit a 64-bit unsigned integer.
+`0` disables idle expiry, including after authentication on the UI link.
+A blank environment variable uses the default. An invalid value stops startup
+with a named error. The UI link still requires a valid hello within five
+seconds. Line limits, one-client ownership and shutdown remain unchanged.
+Set this option on the app, not on the stdio bridge. The bridge does not
+reconnect automatically when the app closes a connection.
 
 ### Setting up an MCP client
 

@@ -49,14 +49,14 @@ pub(super) struct LevelPlan {
 }
 
 /// A walk already cut and its bounding box.
-struct Cut {
+pub(super) struct Cut {
     pts: Vec<Point2>,
     lo: Point2,
     hi: Point2,
 }
 
 impl Cut {
-    fn new(pts: Vec<Point2>) -> Cut {
+    pub(super) fn new(pts: Vec<Point2>) -> Cut {
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
         for p in &pts {
@@ -67,7 +67,7 @@ impl Cut {
     }
 
     /// Is `q` within `d` of this walk?
-    fn near(&self, q: Point2, d: f64) -> bool {
+    pub(super) fn near(&self, q: Point2, d: f64) -> bool {
         if q.x < self.lo.x - d || q.x > self.hi.x + d || q.y < self.lo.y - d || q.y > self.hi.y + d {
             return false;
         }
@@ -120,7 +120,19 @@ pub(super) fn order(pieces: Vec<Piece>, center: &Region, tool_r: f64, side: &Sta
             (Some(&e), Some(&s)) if linkable(e, s, center, &planned, &done, reach, step, air) => Some((e, s, Vec::new())),
             (Some(&e), Some(&s)) => air.and_then(|_| {
                 let walks: Vec<&[Point2]> = planned.iter().copied().chain(done.iter().map(|c| c.pts.as_slice())).collect();
-                let mut via = edge_route(e, s, center, reach, &walks, |a, b| linkable(a, b, center, &planned, &done, reach, step, air))?;
+                let mut via = edge_route(e, s, center, reach, &walks, |a, b| {
+                    linkable(a, b, center, &planned, &done, reach, step, air)
+                        && full_width_at(&samples(&[a, b], step), &material, tool_r, |q, d| done.iter().rev().any(|c| c.near(q, d)))
+                            .is_none()
+                })?;
+                let mut check = Vec::with_capacity(via.len() + 1);
+                check.push(e);
+                check.extend_from_slice(&via);
+                if full_width_at(&samples(&check, step), &material, tool_r, |q, d| done.iter().rev().any(|c| c.near(q, d)))
+                    .is_some()
+                {
+                    return None;
+                }
                 via.pop();
                 Some((e, s, via))
             }),
@@ -286,7 +298,7 @@ pub(super) fn on_wall(pts: &[Point2], stock: Option<&Region>, tool_r: f64, step:
 
 /// Points along the walk `pts` no farther apart than `step`, both ends
 /// included.
-fn samples(pts: &[Point2], step: f64) -> Vec<Point2> {
+pub(super) fn samples(pts: &[Point2], step: f64) -> Vec<Point2> {
     let mut out: Vec<Point2> = pts.first().copied().into_iter().collect();
     for w in pts.windows(2) {
         let n = (dist(w[0], w[1]) / step).ceil().clamp(1.0, 1e5) as usize;

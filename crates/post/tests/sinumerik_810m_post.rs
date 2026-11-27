@@ -327,7 +327,7 @@ fn canned_cycles_emit_l81_to_l89_with_r_parameters_and_safe_hops() {
         assert!(!out.program.contains("Z-10"), "{kind:?}: expanded plunge Z-10 must be suppressed:\n{}", out.program);
     }
 
-    // Rigid tap with dwell > 0 is refused on 810M (R04 only valid without encoder R08=-4).
+    // Tap with encoder (R08=-3) and dwell > 0 is refused on 810M (R04 only valid without encoder R08=-4).
     let mut b = PathBuilder::new(Point3::new(10.0, 10.0, 10.0));
     b.push(MoveKind::Rapid, Point3::new(10.0, 10.0, 1.0), None);
     let fm = b.moves_len();
@@ -505,7 +505,7 @@ fn deep_to_tap_initializes_z_axis_before_every_l84() {
     });
     b.push(MoveKind::Rapid, Point3::new(10.0, 10.0, 4.0), None);
 
-    // Hole 2: rigid TAP (L84 R08=-3).
+    // Hole 2: TAP with encoder (L84 R08=-3).
     b.push(MoveKind::Rapid, Point3::new(30.0, 10.0, 4.0), None);
     b.push(MoveKind::Rapid, Point3::new(30.0, 10.0, 1.0), None);
     let fm2 = b.moves_len();
@@ -562,7 +562,7 @@ fn deep_to_tap_initializes_z_axis_before_every_l84() {
     assert_eq!(l84_params.len(), 2, "two L84 calls expected:\n{}", out.program);
     assert!(
         l84_params[0].contains("R08=-3") && l84_params[0].contains("R11=3"),
-        "rigid L84 after L83 DEEP must reset R11=3 (Z axis):\n{}",
+        "L84 with encoder after L83 DEEP must reset R11=3 (Z axis):\n{}",
         out.program
     );
     assert!(

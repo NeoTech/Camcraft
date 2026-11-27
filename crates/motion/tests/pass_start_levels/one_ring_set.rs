@@ -8,7 +8,7 @@
 use super::{params, rect, region};
 use camcraft_motion::cl::{MoveKind, Toolpath};
 use camcraft_motion::geo2d::{Point2, Region};
-use camcraft_motion::machining2d::{CornerRelief, PassStart, StartSide, pocket_started_on, rings_fallbacks};
+use camcraft_motion::machining2d::{CornerRelief, PASS_START_NOTE, PassStart, StartSide, pocket_started_on, rings_fallbacks};
 
 const R: f64 = super::R;
 const Z: f64 = super::Z;
@@ -131,5 +131,121 @@ fn the_one_ring_set_posts_no_crossing_feeds() {
             .filter(|pr| planar(pr[0]) && planar(pr[1]))
             .collect();
         assert!(crossed.is_empty(), "{start:?}: {crossed:?}");
+    }
+}
+
+fn lobe(cy: f64, r: f64) -> Vec<Point2> {
+    (0..64)
+        .map(|k| {
+            let a = f64::from(k) * std::f64::consts::TAU / 64.0;
+            Point2::new(r * a.cos(), cy + r * a.sin())
+        })
+        .collect()
+}
+
+/// Two-lobe figure-8 part (two discs of radius 32.5 at Y -36 and Y +36,
+/// joined by a 3 mm waist) in a stock box 92 x 148, tool radius 4 and
+/// step 4: the offset rings merge sharply at the waist (x_c jumps by
+/// more than one tool radius per stepover).
+fn two_lobe_waist() -> (Region, Region, Region, Region) {
+    let part = region(vec![lobe(-36.0, 32.5)])
+        .union(&region(vec![lobe(36.0, 32.5)]))
+        .and_then(|p| p.union(&region(vec![rect(-1.5, -36.0, 1.5, 36.0)])))
+        .expect("part");
+    let stock = region(vec![rect(-46.0, -74.0, 46.0, 74.0)]);
+    let band = stock.offset(R).and_then(|s| s.difference(&part)).expect("band");
+    let material = stock.difference(&part).expect("material");
+    (part, stock, band, material)
+}
+
+/// Flanks meter (`0.9 * r` either side, `2.5 * r` own-trail exclusion) over
+/// planar feeds of `path`, matching `offset_pass_start/flanks.rs`.
+fn full_width_points(path: &Toolpath, material: &Region, r: f64) -> Vec<Point2> {
+    let cell = 0.25;
+    let (lo, hi) = material.bounds().expect("material bounds");
+    let pad = 2.0 * r + 1.0;
+    let w = ((hi.x - lo.x + 2.0 * pad) / cell).ceil() as usize + 1;
+    let h = ((hi.y - lo.y + 2.0 * pad) / cell).ceil() as usize + 1;
+    let (x0, y0) = (lo.x - pad, lo.y - pad);
+    let mut cut = vec![(f64::INFINITY, 0.0); w * h];
+    let cell_of = |p: Point2| {
+        let (fx, fy) = ((p.x - x0) / cell, (p.y - y0) / cell);
+        (fx >= 0.0 && fy >= 0.0 && (fx as usize) < w && (fy as usize) < h).then(|| fy as usize * w + fx as usize)
+    };
+    let n_sweep = (r / cell).ceil() as i64 + 1;
+    let mut out = Vec::new();
+    let mut travel = 0.0;
+    for m in path.moves.iter().filter(|m| m.kind != MoveKind::Rapid) {
+        let planar = m.kind == MoveKind::Feed && (m.from.z - m.to.z).abs() < 1e-9;
+        for (a, b) in m.segments3(0.05) {
+            let len = (b.x - a.x).hypot(b.y - a.y);
+            let n = (len / (0.5 * cell)).ceil().max(1.0) as usize;
+            for k in 0..=n {
+                let t = k as f64 / n as f64;
+                let p = Point2::new(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
+                let z = a.z + t * (b.z - a.z);
+                let s = travel + t * len;
+                if planar && k > 0 && len > 1e-9 {
+                    let (tx, ty) = ((b.x - a.x) / len, (b.y - a.y) / len);
+                    let left = Point2::new(p.x - ty * 0.9 * r, p.y + tx * 0.9 * r);
+                    let right = Point2::new(p.x + ty * 0.9 * r, p.y - tx * 0.9 * r);
+                    let before = s - 2.5 * r;
+                    let uncut = |q: Point2| {
+                        material.contains(q) && cell_of(q).is_some_and(|i| cut[i].0 > z + 1e-3 || cut[i].1 >= before)
+                    };
+                    if uncut(left) && uncut(right) {
+                        out.push(p);
+                    }
+                }
+                for dy in -n_sweep..=n_sweep {
+                    for dx in -n_sweep..=n_sweep {
+                        let q = Point2::new(p.x + dx as f64 * cell, p.y + dy as f64 * cell);
+                        if (q.x - p.x).hypot(q.y - p.y) <= r
+                            && let Some(i) = cell_of(q)
+                            && z < cut[i].0 - 1e-3
+                        {
+                            cut[i] = (z, s);
+                        }
+                    }
+                }
+            }
+            travel += len;
+        }
+    }
+    out
+}
+
+/// #3788 pin: on a synthetic two-lobe part where the lobe offsets merge
+/// sharply at the waist, neither Inside nor Outside cuts the full tool
+/// width at the merge (Inside only cuts full width along the initial part
+/// wall; Outside cuts zero full-width points), and no narrow note is posted.
+#[test]
+fn two_lobe_ring_merge_cuts_no_full_width_at_waist() {
+    let (part, stock, band, material) = two_lobe_waist();
+    let mut p = params();
+    p.stepover = 4.0;
+    for start in [PassStart::Outside, PassStart::Inside] {
+        let side = StartSide { start, stock: Some(stock.clone()), around_part: true };
+        let path = pocket_started_on(&band, &p, &[], &CornerRelief::default(), &side).expect("plan");
+        assert_eq!(rings_fallbacks(&path.notes), 0, "{start:?}: {:?}", path.notes);
+        let full = full_width_points(&path, &material, R);
+        let on_wall = |q: Point2| (edge_dist(q, &part) - R).abs() < 0.5;
+        let off_wall: Vec<Point2> = match start {
+            PassStart::Inside => full.into_iter().filter(|&q| !on_wall(q)).collect(),
+            _ => full,
+        };
+        assert!(
+            off_wall.is_empty(),
+            "{start:?}: {} off-wall full-width point(s) at merge, first {:?}; notes={:?}",
+            off_wall.len(),
+            off_wall.first(),
+            path.notes
+        );
+        let narrow: Vec<&String> = path
+            .notes
+            .iter()
+            .filter(|n| n.starts_with(PASS_START_NOTE) && n.contains("take the full tool width"))
+            .collect();
+        assert!(narrow.is_empty(), "{start:?}: unexpected narrow note: {narrow:?}");
     }
 }

@@ -356,7 +356,7 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // keyword in any case ("Comments", "Messages", "Probe Logging",
 // "Logging", "Debug Messages"). A comment whose text would open with one
 // is led by "- ", so user text stays inert.
-var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
+var ACTIVE = /^\s*(M\s*S\s*G|D\s*E\s*B\s*U\s*G|P\s*R\s*I\s*N\s*T|L\s*O\s*G\s*O\s*P\s*E\s*N|L\s*O\s*G\s*A\s*P\s*P\s*E\s*N\s*D|L\s*O\s*G\s*C\s*L\s*O\s*S\s*E|L\s*O\s*G|P\s*R\s*O\s*B\s*E\s*O\s*P\s*E\s*N|P\s*R\s*O\s*B\s*E\s*C\s*L\s*O\s*S\s*E|A\s*B\s*O\s*R\s*T|A\s*X\s*I\s*S|P\s*Y\s*R\s*E\s*L\s*O\s*A\s*D|P\s*Y\s*R\s*U\s*N|P\s*Y)\b/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
@@ -1072,7 +1072,7 @@ function onProbeResult() {
     var op = ex < 0 ? "+" : "-";
     block(["#" + (dev + i) + "=[" + mean + op + fu(Math.abs(ex)) + "]"]);
     var o = nextO();
-    block([o, "if", "[ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]"]);
+    block([o, "if", "[[#<_task> EQ 1] AND [ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]]"]);
     block(["(MSG, PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
     block(["M2"]);
     block([o, "endif"]);

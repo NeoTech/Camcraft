@@ -5,7 +5,7 @@
 //! law around them, and the sentence shape the bar prints.
 //! Provenance: our own tests, specced from the panes' contract.
 //!
-//! Gate map (M4.4): covers ui::actions, ui::state, app::machine, app::operation, app::stock, app::tools.
+//! Gate map (M4.4): covers ui::actions, ui::state, app::machine, app::operation, app::stock, app::tools, app::tool_assembly.
 
 use std::path::PathBuf;
 
@@ -156,6 +156,27 @@ fn new_document_retires_the_machine_with_the_rest() {
         "a fresh blank never inherits the last document's limits"
     );
     let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn new_document_clears_the_component_table() {
+    // #4201 review: the table is a document singleton like the machine.
+    use camcraft_app::component::{ComponentKind, ToolComponent};
+    use camcraft_app::component_geometry::ComponentGeometry;
+    use camcraft_app::connection_code::ConnectionCode;
+    use camcraft_app::tool_assembly::components;
+    let mut state = State::new();
+    let code = |t: &str| ConnectionCode::parse(t).expect("connection code");
+    let kind = ComponentKind::AdaptiveItem { mcs: code("BT40"), csw: code("CYL 20") };
+    let holder = ToolComponent::new("bt40-cyl20", "BT40 CYL 20", kind).expect("holder");
+    let geometry = ComponentGeometry::axial("CSW", 50.0, None).expect("geometry");
+    let upsert = camcraft_app::commands::UpsertDocumentComponent::new(&state.world, holder, geometry).expect("upsert");
+    state.history.execute(&state.world, upsert);
+    assert_eq!(components(&state.world).len(), 1, "the row landed");
+    state.pending.push_back(CommandKind::NewDocument);
+    state.pending.push_back(CommandKind::ResolveUnsaved(UnsavedChoice::DontSave));
+    state.drain_actions();
+    assert!(components(&state.world).is_empty(), "new document must not retain old components");
 }
 
 #[test]

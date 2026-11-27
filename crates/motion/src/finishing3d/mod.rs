@@ -114,6 +114,10 @@ mod polar;
 mod raster;
 mod raster_bridge;
 mod raster_seam;
+// #3329: the 3D Finish's start and exit points on its Parallel raster.
+mod finish_seam;
+#[cfg(test)]
+mod finish_seam_tests;
 mod rim;
 mod rings;
 mod ring_seam;
@@ -145,6 +149,7 @@ pub(crate) use support::closest_pt_tri;
 pub use polar::{morphed_spiral, radial, spiral};
 pub use raster::{blend, parallel, parallel_angle_refusal, parallel_with_angle};
 pub use raster_seam::{parallel_seamed, RasterEnds, RasterSeam};
+pub use finish_seam::{finish_seamed, raster_ends_kept};
 pub use swarf::{swarf, swarf_multi};
 pub use ring_seam::{waterline, waterline_seamed, RingSeam};
 pub use morph::morph;

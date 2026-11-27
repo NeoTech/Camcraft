@@ -110,12 +110,16 @@ fn malformed_declared_facts_refuse_at_the_machine_reader_and_raw_engine() {
             "installed_options",
         ),
         ("tool_change", json!("unknown-mode"), "tool_change"),
+        ("max_tool_number", json!(0), "max_tool_number"),
+        ("max_tool_number", json!(-1), "max_tool_number"),
+        ("max_tool_number", json!(25.5), "max_tool_number"),
+        ("max_tool_number", json!("254"), "max_tool_number"),
     ];
     for (field, value, cause) in bad {
         let mut file: Value = serde_json::from_str(PICOMAX).unwrap();
         match field {
             "identity" => file["controller"]["identity"] = value,
-            "tool_change" => file["tooling"]["tool_change"] = value,
+            "tool_change" | "max_tool_number" => file["tooling"][field] = value,
             _ => file["controller"]["identity"][field] = value,
         }
         let reader_error = parse_mch(&file.to_string()).unwrap_err();
@@ -133,4 +137,53 @@ fn a_static_post_override_cannot_disappear_when_the_engine_reads_a_machine_file(
     assert!(error.contains("rigidTapping"), "{error}");
     let error = engine::run(FACTS, &file, "").unwrap_err().to_string();
     assert!(error.contains("rigidTapping"), "{error}");
+}
+
+/// #4087: the Picomax tool table has 254 lines (MP 7260 = 254). Both
+/// Heidenhain posts refuse a higher tool number by name, through the raw
+/// file and through the parsed mirror; tool 254 posts.
+#[test]
+fn heidenhain_posts_refuse_a_tool_number_above_the_machine_tool_table() {
+    let file: Value = serde_json::from_str(PICOMAX).unwrap();
+    assert_eq!(file["tooling"]["max_tool_number"], 254);
+    let mirrored = machine::mirror(&parse_mch(PICOMAX).unwrap());
+    let stream = include_str!("klartext/contour.cnc");
+    for (script, tool_call) in [
+        ("heidenhain.cps", "T254 G17 S3500"),
+        ("heidenhain-klartext.cps", "TOOL CALL 254 Z S3500"),
+    ] {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/posts/");
+        let text = std::fs::read_to_string(format!("{path}{script}")).unwrap();
+        for input in [&file, &mirrored] {
+            let refusal = |tool: u32| match engine::run(
+                &text,
+                input,
+                &stream.replace("TOOL 2 FLAT-6", &format!("TOOL {tool} FLAT-6")),
+            ) {
+                Ok(out) => out.warnings.join("\n"),
+                Err(e) => e.to_string(),
+            };
+            let at_limit = engine::run(
+                &text,
+                input,
+                &stream.replace("TOOL 2 FLAT-6", "TOOL 254 FLAT-6"),
+            )
+            .unwrap_or_else(|error| panic!("{script}: tool 254 must post: {error}"));
+            assert!(
+                at_limit.warnings.is_empty(),
+                "{script}: {:?}",
+                at_limit.warnings
+            );
+            assert!(
+                at_limit.program.contains(tool_call),
+                "{script}: missing {tool_call}: {}",
+                at_limit.program
+            );
+            let over = refusal(255);
+            assert!(
+                over.contains("tool number 255") && over.contains("tool table"),
+                "{script}: {over}"
+            );
+        }
+    }
 }

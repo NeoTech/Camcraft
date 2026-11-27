@@ -5,6 +5,8 @@
 //! Gate map (M4.4): covers app::mcp (live, listen, bridge, link,
 //! link_client, link_owner) and app::cli_ui (the `--ui` lane, #3751).
 
+#[path = "mcp_live/idle_timeout.rs"]
+mod idle_timeout;
 #[path = "mcp_live/ui_link.rs"]
 mod ui_link;
 #[path = "mcp_live/ui_link_owner.rs"]

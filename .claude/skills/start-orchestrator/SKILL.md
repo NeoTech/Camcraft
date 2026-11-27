@@ -56,6 +56,11 @@ start it with `model: opus` and say so). Its brief has:
 - the build cap: at most 3 local builds at `-j 6`, the review session's
   builds included;
 - the standing orders of section 5;
+- [the ownership guard](../issue-claims/references/ownership.md): before
+  dispatch of a writer or reviewer, the coordinator checks the public claim,
+  owner records and exact head. It records one named worker, reads it back,
+  and passes the record URL, base and starting exact head. A live owner
+  means stand down. Keep the existing claim lifetimes and explicit releases;
 - the rule that a maintainer decision goes to the main session as one line
   that starts with `ASK:`, and that the coordinator continues with other work.
 
@@ -77,6 +82,15 @@ post-merge runs. It sends lines: `REVIEWED`, `RUN`, `TRIAGED`, `BLOCKED`.
   and merges on them. Do not start a Claude PR-reviewer as a fallback unless
   the maintainer asks.
 
+Review requests and relays carry the ownership record URL, base and exact
+head. This applies to SlaveSession and read-only Opus reviews, including a
+delta review. The dispatcher checks collaborator authority under the guard;
+a contributor pre-check claims no reviewer ownership. Require the reviewer
+to read the record before work, re-read ownership and head before a verdict
+or labels, and release on completion, skip or failure. Verify the result and
+release before another dispatch. If this session dispatches directly, it
+performs these same guard steps; it does not bypass the coordinator's guard.
+
 ## 5. Standing orders (maintainer, 2026-11-18)
 
 - **Do not wait for the review session.** The coordinator resolves
@@ -96,6 +110,9 @@ post-merge runs. It sends lines: `REVIEWED`, `RUN`, `TRIAGED`, `BLOCKED`.
   ours to fix when it is idle for more than 24 hours, or when the maintainer
   says "take them over". Drafts are included only on that word. Push to the
   author's branch only if `maintainerCanModify` is true.
+  These routing orders do not expire a live claim or writer record. Apply
+  issue-claims and the ownership guard first. Any maintainer override must
+  explicitly release the existing owner before a replacement dispatch.
 - **P1 and P2 first.** Close and merge them. A contributor claim with no
   branch and no PR after 90 minutes is taken over when the maintainer says
   so.

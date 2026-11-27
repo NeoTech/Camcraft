@@ -56,6 +56,10 @@ plans compare those.
   rules) and follow them where they differ from this skill.
 - **Never touch another session's checkout.** Run `git fetch` only; the
   planner needs no checkout. Merging happens through `gh pr merge`.
+- Read [the ownership guard](../issue-claims/references/ownership.md) before
+  dispatch of any refresh writer or delta reviewer. Check the public issue
+  and PR records, not only the local review lock. A live owner means stand
+  down and name it; do not push a worker's prepared branch yourself.
 
 ## 1. Collect
 
@@ -316,6 +320,10 @@ when a session chooses to check a wave before the merges. A missing
 
 **Wave 1**, in the planned order. For each PR:
 
+Re-read ownership and the exact PR head before merging. Leave a PR with an
+active writer or reviewer out of this run. Ownership does not replace the
+counted independent review, `--check` validation, or merge approval.
+
 1. Retarget any stacked child of this PR to `main` first.
 2. Make sure the PR is ready (`gh pr ready N` if it is a draft that the
    rules allow to flag; AGENTS.md "Every PR opens as a draft"), then merge
@@ -347,6 +355,18 @@ Do not re-review, re-gate or refresh anything between wave-1 merges.
    tool); a fork PR - only where the PR allows maintainer edits and the user
    approved pushing there, otherwise ask the author once and leave it out of
    this run.
+   Use the ownership guard and `/resolve-conflicts` pre-push check. Record
+   one writer before dispatch and pass its record URL, identity, base and
+   starting exact head. Run `cargo check --tests -p <affected-package>` for
+   affected code after refresh and before push, even for SAME. Shared inputs,
+   including `Cargo.lock`, select each affected package, one package at a time;
+   never `--workspace` or an unqualified full-workspace build. A moved remote head or a
+   rejected push is a STOP, never a force-push. Release the writer after the
+   verified push; record one collaborator reviewer before any DELTA review.
+   Pass the record URL, identity, base and starting exact head to that reviewer.
+   Require reads before work, a re-read of ownership and head before a verdict
+   or labels, and a release on completion, skip or failure. Contributor
+   pre-checks claim no reviewer ownership.
 2. Classify the refresh with `cargo xtask merge-plan --delta N --reviewed <reviewed sha>`:
    `SAME` or `MECHANICAL` -> merge it now (AGENTS.md says which PR comment to
    leave and when the PR is flagged ready again); `DELTA` -> one read-only
