@@ -18,7 +18,7 @@
 //! registry, the tool door at generation.
 //! Lane shape (M4.4): all tests here run in seconds.
 
-mod common;
+use crate::common;
 
 use flecs_ecs::prelude::World;
 

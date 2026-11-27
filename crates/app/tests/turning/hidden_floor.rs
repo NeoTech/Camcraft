@@ -13,8 +13,6 @@
 //! and sim::stock_sim::scan_hidden through the document.
 //! Lane shape (M4.4): all tests here run in seconds.
 
-mod common;
-
 use flecs_ecs::prelude::World;
 
 use camcraft_app::commands::{
@@ -134,7 +132,7 @@ fn profile_finish() -> OpParams {
     }
 }
 
-const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
+const LATHE_CPS: &str = include_str!("../../../../assets/posts/fanuc-lathe.cps");
 
 /// `meridian`'s bar with `ops` created and generated in order; each
 /// op's warnings that block the post, by name.

@@ -27,7 +27,7 @@ use camcraft_app::verify::Warning;
 use camcraft_app::world::new_world;
 
 const TAU: f64 = std::f64::consts::TAU;
-const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
+const LATHE_CPS: &str = include_str!("../../../../assets/posts/fanuc-lathe.cps");
 const TN: &str = "TN-1600-0R8";
 /// A Ø12 part, z -16..15, in a Ø12 bar 1 mm longer (to Z16): the
 /// facing takes the bar's end down to the part's, Z16 to Z15.
