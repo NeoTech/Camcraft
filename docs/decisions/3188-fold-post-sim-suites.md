@@ -49,9 +49,14 @@ modules that post the same script and case would write the same file.
 - Moving the data directories (`golden/`, `recorded/`, `klartext/`,
   `coincident_arcs/`): other crates, `.gitattributes` and the post
   scripts' docs read them by path.
-- Editing the code comments in `crates/app/tests/`, `crates/gcode/tests/`
-  and the GPU fixtures that name an old path: that would put those app
-  binaries in this PR's gate for a comment. A `P7` follow-up updates them.
+- Editing the code comments in `crates/post/src/post/upright_after_tilt.rs`,
+  `crates/app/tests/`, `crates/gcode/tests/` and the GPU fixtures that name
+  an old path: a comment in `crates/post/src` alone put about 70 app suites
+  and the app heavy lanes into this PR's gate. A `P7` follow-up updates
+  them.
+- The six `xtask` pins that named old post and sim binaries now name the
+  suite that holds each module. The `moved_suites_...` pin reads all
+  sources of a directory suite, not one flat file.
 
 **Cost to change later.** A suite can be split or renamed with `git mv` and
 one `mod` line; the gate reads the suites from the tree.

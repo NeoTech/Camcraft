@@ -9,7 +9,7 @@
 //! the return, at a safe height, before the first X/Y traverse. A script
 //! that declares `uprightReturn = true` says it does that; each
 //! shipped post that declares it has a posting test of the real order
-//! (`crates/post/tests/script_rotary/upright_after_tilt.rs`). A script without it
+//! (`crates/post/tests/upright_after_tilt.rs`). A script without it
 //! (a user's own `PostRef::File`) gets no such program: the engine
 //! refuses it by name, because the cut would run at the old lean.
 
