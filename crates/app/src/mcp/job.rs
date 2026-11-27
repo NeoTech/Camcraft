@@ -253,6 +253,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("skims", "array", json!([])),
                         ("four_axis", "object", Value::Null),
                         ("sharp_corners", "boolean", json!(false)),
+                        ("overlap", "number", json!(0.0)),
                         ("lead_arc_radius", "number", Value::Null),
                     ],
                 );
@@ -356,6 +357,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
         Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
         Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
+        Warning::EngagementExceeded { at, .. } => ("engagement_exceeded", *at),
     };
     json!({
         "op": op,

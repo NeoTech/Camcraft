@@ -23,6 +23,8 @@ pub enum WireSideDto {
     Left,
     /// An open run's kerf, right of travel (#1109).
     Right,
+    /// An open run cut as a centre-line slit (#3216).
+    Centre,
 }
 
 fn default_clearance() -> f64 {
@@ -82,6 +84,10 @@ pub struct WireContourDto {
     /// off, so every file written before it reads unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sharp_corners: bool,
+    /// The closing overlap, mm (#3216); absent is the plain lap, so
+    /// every file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub overlap: f64,
     /// The tangent arc lead's radius, mm (#3991); absent is the straight
     /// lead, so every file written before it reads unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,6 +182,7 @@ impl WireContourDto {
                 WireSide::Punch => WireSideDto::Punch,
                 WireSide::Left => WireSideDto::Left,
                 WireSide::Right => WireSideDto::Right,
+                WireSide::Centre => WireSideDto::Centre,
             },
             start: None,
             picks: PathPicksDto::from_picks(&p.picks),
@@ -206,6 +213,7 @@ impl WireContourDto {
             clearance: p.clearance,
             skims: p.skims.iter().map(|s| WireSkimDto { condition: s.condition.clone(), reverse: s.reverse }).collect(),
             sharp_corners: p.sharp_corners,
+            overlap: p.overlap,
             lead_arc_radius: p.lead_arc_radius,
         }
     }
@@ -220,6 +228,7 @@ impl WireContourDto {
                 WireSideDto::Punch => WireSide::Punch,
                 WireSideDto::Left => WireSide::Left,
                 WireSideDto::Right => WireSide::Right,
+                WireSideDto::Centre => WireSide::Centre,
             },
             picks: self.picks.with_legacy(self.start, None),
             tabs: self.tabs.as_ref().map(|t| WireTabs {
@@ -249,6 +258,7 @@ impl WireContourDto {
             clearance: self.clearance,
             skims: self.skims.iter().map(|s| WireSkim { condition: s.condition.clone(), reverse: s.reverse }).collect(),
             sharp_corners: self.sharp_corners,
+            overlap: self.overlap,
             lead_arc_radius: self.lead_arc_radius,
         })
     }
@@ -280,6 +290,7 @@ mod tests {
             clearance: crate::operation::DEFAULT_CLEARANCE,
             skims: Vec::new(),
             sharp_corners: false,
+            overlap: 0.0,
         }
     }
 

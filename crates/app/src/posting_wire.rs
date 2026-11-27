@@ -161,7 +161,8 @@ pub(super) fn stream(
         let lean = if let Some(a) = angle {
             angle_lean(name, &machine.model, a, four.is_some(), hs.top, origin[2])?
         } else {
-            Lean::Guides(crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?)
+            let at = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
+            Lean::Guides { at, origin_z: origin[2], part: (hs.bottom, hs.top) }
         };
         Some((p.taper_deg, lean))
     };
@@ -194,9 +195,11 @@ pub(super) fn stream(
 /// How a leaning section's moves reach the control: as U/V offsets over
 /// the machine's guide planes (#536), or as an angle word on the top
 /// plane (#1164; `left`: a positive word leans the top left of travel).
+/// `part` is the cut's bottom and top (world Z), for a post that states
+/// the part's planes (#4075, Sodick TP / TN).
 #[derive(Clone, Copy)]
 enum Lean {
-    Guides((f64, f64)),
+    Guides { at: (f64, f64), origin_z: f64, part: (Option<f64>, Option<f64>) },
     Angle { top: f64, left: bool, corner: &'static str, plane: f64 },
 }
 
@@ -216,7 +219,12 @@ fn section(
     let mut dialect = Vec::new();
     match taper {
         None => {}
-        Some((_, Lean::Guides(guides))) => records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?,
+        Some((_, Lean::Guides { at, origin_z, part })) => {
+            records = guided(records, at).map_err(|e| format!("{name}: {e}"))?;
+            // #4075: the planes U V are stated at, and the part's, work Z.
+            let planes = [("WireGuideLower", Some(at.0)), ("WireGuideUpper", Some(at.1)), ("WireBottom", part.0), ("WireTop", part.1)];
+            dialect = planes.iter().filter_map(|(n, z)| z.map(|z| cnc::Record::Param { name: (*n).into(), value: json!(z - origin_z) })).collect();
+        }
         Some((deg, Lean::Angle { top, left, corner, plane })) => {
             records = angled(records, top, deg.abs(), left).map_err(|e| format!("{name}: {e}"))?;
             dialect = vec![
@@ -260,42 +268,61 @@ fn angle_lean(name: &str, model: &str, a: crate::machine::TaperAngle, four: bool
     Ok(Lean::Angle { top, left, corner: corner.word(), plane: top - origin_z })
 }
 
-/// #538: every pass starts and ends at the threading point (#532), so
-/// each return to it closes a pass; the skim that follows is announced
-/// by its own `PARAM EdmCondition` before its first move - the post
-/// selects that condition there, with the wire still threaded. A path
-/// that does not return once per pass is refused, never posted with
-/// the wrong condition on a pass.
+/// #538: every pass of a closed cut starts and ends at the threading
+/// point (#532), so each return to it closes a pass; the skim that
+/// follows is announced by its own `PARAM EdmCondition` before its
+/// first move - the post selects that condition there, with the wire
+/// still threaded. A path that does not return once per pass is
+/// refused, never posted with the wrong condition on a pass.
+/// #3216: an open run's passes are threaded anew in the air - the
+/// travel move between them is the boundary, so each skim is
+/// announced after the travel that closes the pass before it.
 fn announce_skims(records: &mut Vec<cnc::Record>, cache: &crate::schema::Toolpath, p: &WireContourOp, name: &str) -> Result<(), String> {
     use crate::cl::MoveKind;
     let Some(start) = cache.path.moves.first().map(|m| m.from) else {
         return Err(format!("{name}: the wire path is empty - regenerate it"));
     };
+    let open = p.side.is_open_side();
     let at_start = |m: &cnc::MoveRec| (m.x - start.x).abs() < 1e-6 && (m.y - start.y).abs() < 1e-6;
     let mut out = Vec::with_capacity(records.len() + p.skims.len());
+    // Boundaries seen: a closed cut's passes each END back at the
+    // threading point (a return per pass, the last skim's included); an
+    // open run's rough pass is already open, and each later pass OPENS
+    // at a travel move.
     let mut back = 0usize;
-    let mut pending = false;
+    // The skim whose condition waits for its first move, by index.
+    let mut pending: Option<usize> = None;
     for r in records.drain(..) {
-        if let cnc::Record::Move(m) = &r
-            && m.kind != MoveKind::Rapid
-        {
-            if pending {
-                if let Some(s) = back.checked_sub(1).and_then(|i| p.skims.get(i)) {
+        match &r {
+            // #3216: the travel move carries no wire - it closes the
+            // pass before it and opens the skim's own thread-in.
+            cnc::Record::Move(m) if open && m.kind == MoveKind::Rapid => {
+                back += 1;
+                pending = Some(back - 1);
+            }
+            cnc::Record::Move(m) if m.kind != MoveKind::Rapid => {
+                if let Some(i) = pending.take()
+                    && let Some(s) = p.skims.get(i)
+                {
                     out.push(cnc::Record::Param { name: "EdmCondition".into(), value: json!(s.condition) });
                 }
-                pending = false;
+                if !open && at_start(m) {
+                    back += 1;
+                    pending = Some(back - 1);
+                }
             }
-            if at_start(m) {
-                back = back.saturating_add(1);
-                pending = true;
-            }
+            _ => {}
         }
         out.push(r);
     }
     *records = out;
-    if back != p.skims.len() + 1 {
+    // A closed cut returns once per pass (the rough's and every skim's);
+    // an open run carries one travel per skim, none for the rough.
+    let want = p.skims.len() + usize::from(!open);
+    if back != want {
         return Err(format!(
-            "{name}: the wire path returns to its threading point {back} time(s), not once per pass ({} passes) - regenerate it",
+            "{name}: the wire path carries {back} {}, not one per pass ({} passes) - regenerate it",
+            if open { "pass boundary travel move(s)" } else { "return(s) to its threading point" },
             p.skims.len() + 1
         ));
     }

@@ -1,4 +1,4 @@
-//! The die-plate example: the native wire EDM die selection and post through
+//! The die-plate example: the Agie Wire EDM die selection and post through
 //! the normal CLI (#2957), on an original synthetic retained plate with a
 //! faceted through-opening.
 use std::{fs, path::Path, process::Command};

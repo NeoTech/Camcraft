@@ -36,7 +36,7 @@ impl State {
         }
     }
 
-    pub(super) fn import_agie_drawing(&mut self) {
+    pub(super) fn import_inspection_drawing(&mut self) {
         let Some(path) = crate::file_dialog::FileDialog::new().set_title("Import inspection drawing")
             .add_filter("DXF", &["dxf"]).pick_file() else { return; };
         let setup = camcraft_app::setup::active(&self.world);

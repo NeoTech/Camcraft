@@ -146,6 +146,11 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
     {
         o.insert("safeRetractZ".to_owned(), json!(z));
     }
+    if let Some(tol) = m.arc_tolerance
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("arcTolerance".to_owned(), json!(tol));
+    }
     // #671: a declared plasma table says so, for the plasma post's
     // machine check; every other mirror is unchanged.
     if crate::machine::kind(Some(m)) == crate::machine::Kind::Plasma

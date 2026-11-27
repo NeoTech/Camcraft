@@ -239,6 +239,7 @@ fn tool(kind: ToolKind, center_cutting: bool) -> Tool {
         orientation: None,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
         outline: Vec::new(),

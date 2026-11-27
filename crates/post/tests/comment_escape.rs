@@ -284,7 +284,7 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
             let error = result.expect_err("the native Agie job must refuse a single-file program");
             assert!(
                 matches!(&error, camcraft_post::post::PostError::Script(message) if message.contains(
-                    "Native wire EDM job files require the desktop or CLI One program post to a new job directory"
+                    "The Agie Wire EDM job requires the desktop or CLI One program post to a new job directory"
                 )),
                 "{stem}: {error}"
             );

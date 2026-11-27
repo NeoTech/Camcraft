@@ -180,7 +180,7 @@ fn every_wear_post_notes_the_register_once_and_control_writes_no_note() {
     let wear = STREAM.replace("COMP RIGHT 3000
 ", "COMP RIGHT 3000 WEAR
 ");
-    for (stem, note) in [("haas", "(WEAR COMP - D2 "), ("mazak", "(WEAR COMP - D2 "), ("sinumerik", "; WEAR COMP - D2 ")] {
+    for (stem, note) in [("haas", "(WEAR COMP - D2 "), ("mazak", "(WEAR COMP - D2 "), ("sinumerik", "; WEAR COMP - D1 ")] {
         let out = engine::run(&post(stem), &Value::Null, &wear).unwrap();
         assert!(out.warnings.is_empty(), "{stem}: {:?}", out.warnings);
         assert_eq!(out.program.matches(note).count(), 1, "{stem}: {}", out.program);

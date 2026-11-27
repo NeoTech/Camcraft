@@ -144,46 +144,54 @@ pub struct CubeInk {
     pub triad: [Color32; 3],
 }
 
-/// The cube greys for a ground.
+/// The cube greys for a ground, with the inks of that ground's built-in
+/// table.
 #[must_use]
 pub fn cube_ink(light: bool) -> CubeInk {
-    if light {
-        CubeInk {
-            face_base: 165.0,
-            face_span: 40.0,
-            hover_lift: 30,
-            edge: Color32::from_gray(90),
-            label: Color32::from_gray(20),
-            button: 185,
-            outline_buttons: true,
-            glyph_on: Color32::from_gray(10),
-            glyph_off: Color32::from_gray(60),
-            hint: Color32::from_gray(60),
-            marker: [Color32::from_gray(50), Color32::from_gray(40), Color32::from_gray(20)],
-            triad: [Color32::from_rgb(215, 20, 20), Color32::from_rgb(0, 140, 30), Color32::from_rgb(20, 70, 230)],
-        }
-    } else {
-        CubeInk {
-            face_base: 46.0,
-            face_span: 46.0,
-            hover_lift: 52,
-            edge: Color32::from_white_alpha(170),
-            label: Color32::from_white_alpha(230),
-            button: 46,
-            outline_buttons: false,
-            glyph_on: Color32::WHITE,
-            glyph_off: Color32::from_white_alpha(160),
-            hint: Color32::from_white_alpha(200),
-            marker: [Color32::from_gray(225), Color32::from_gray(240), Color32::WHITE],
-            triad: [Color32::from_rgb(245, 70, 70), Color32::from_rgb(60, 220, 80), Color32::from_rgb(90, 140, 255)],
-        }
+    cube_ink_on(if light { &theme::Tokens::LIGHT } else { &theme::Tokens::DARK }, light)
+}
+
+/// The cube greys for a ground, with the inks of a token table (#1120).
+/// The face and button greys are numbers the shader-like shading spans,
+/// not inks a theme names, so they stay with the ground.
+#[must_use]
+pub fn cube_ink_on(t: &theme::Tokens, light: bool) -> CubeInk {
+    let (face_base, face_span, hover_lift, button) =
+        if light { (165.0, 40.0, 30, 185) } else { (46.0, 46.0, 52, 46) };
+    CubeInk {
+        face_base,
+        face_span,
+        hover_lift,
+        edge: t.cube_edge,
+        label: t.cube_label,
+        button,
+        outline_buttons: light,
+        glyph_on: t.cube_glyph_on,
+        glyph_off: t.cube_glyph_off,
+        hint: t.viewport_hint,
+        marker: [t.marker_stem, t.marker_ring, t.marker_dot],
+        triad: [t.axis_x, t.axis_y, t.axis_z],
     }
 }
 
-/// The cube greys for the live theme's viewport ground.
+/// The cube greys and inks for the live theme's viewport ground.
 #[must_use]
 pub fn cube() -> CubeInk {
-    cube_ink(light_ground(theme::current().viewport))
+    let t = theme::current();
+    cube_ink_on(&t, light_ground(t.viewport))
+}
+
+/// The alpha of the veil over a hovered facet of the machined part.
+const FACET_VEIL_ALPHA: u8 = 90;
+
+/// The veil over a hovered facet: the hover ink's own colour at
+/// `FACET_VEIL_ALPHA`. `Color32` keeps its channels multiplied by alpha,
+/// so the colour is read unmultiplied first: a theme's semi-transparent
+/// `viewport_hover` must not darken twice (#3993 review).
+#[must_use]
+pub fn facet_veil(ink: Color32) -> Color32 {
+    let [r, g, b, _] = ink.to_srgba_unmultiplied();
+    Color32::from_rgba_unmultiplied(r, g, b, FACET_VEIL_ALPHA)
 }
 
 /// How much of its own colour an unselected path keeps on a light

@@ -14,7 +14,8 @@ use camcraft_app::posting;
 use camcraft_app::schema::{Location, ToolDef};
 use camcraft_app::stock::StockShape;
 use camcraft_app::tool_library::LibraryTool;
-use camcraft_app::tools::{Tool, catalog, probe_tool};
+use camcraft_app::tool_numbers;
+use camcraft_app::tools::{Tool, ToolKind, catalog, probe_tool};
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::*;
 
@@ -121,4 +122,47 @@ fn existing_cutting_tool_in_probe_pocket_blocks_post_stream() {
     let world = legacy_cutting_job();
     let error = posting::stream_records(&world).expect_err("unsafe reserved pocket must not post");
     assert!(error.contains("End mill") && error.contains("probe") && error.contains('1'), "{error}");
+}
+
+/// #3667: the number the tool window expects is the number `AddTool`
+/// gives, so it skips the probe pocket for a cutter and takes it for a probe.
+#[test]
+fn next_free_for_a_new_tool_matches_add_tool() {
+    let (world, mut history) = mounted();
+    assert_eq!(tool_numbers::next_free(&world), Some(1), "the plain count ignores reservations");
+    assert_eq!(tool_numbers::next_free_for(&world, "End mill", mill().kind), Some(2));
+    assert_eq!(tool_numbers::next_free_for(&world, "PROBE", ToolKind::Probe), Some(1));
+    assert_eq!(tool_numbers::next_free_for(&world, "PROBE", mill().kind), None, "a cutter cannot take the probe name");
+    history.execute(&world, AddTool::new(&world, "End mill", mill()).expect("mill"));
+    assert_eq!(number(&world, "End mill"), Some(2));
+}
+
+/// #3667: when every probe pocket holds a tool, the refusal names the
+/// pockets and tells the user what to do.
+#[test]
+fn a_probe_with_every_probe_pocket_full_says_what_to_do() {
+    let (world, mut history) = mounted();
+    history.execute(&world, AddTool::new(&world, "PROBE", probe_tool(4.0, 30.0)).expect("probe"));
+    assert_eq!(tool_numbers::next_free_for(&world, "Probe 2", ToolKind::Probe), None);
+    let error = AddTool::new(&world, "Probe 2", probe_tool(4.0, 30.0)).err()
+        .expect("no probe pocket is free").to_string();
+    assert!(error.contains("Probe 2") && error.contains("(T1)"), "{error}");
+    assert!(error.contains("Delete or renumber") && error.contains("reserve one more probe pocket"), "{error}");
+}
+
+/// #3667: a refusal names a tool setter pocket in plain words, not with
+/// the machine file's word `tool_setter`.
+#[test]
+fn a_tool_setter_pocket_is_named_in_plain_words() {
+    let world = new_world();
+    let mut history = History::default();
+    let machine = machine::parse_mch(r#"{
+        "general": {"model": "Setter pocket"},
+        "tooling": {"reserved": [{"number": 5, "use": "tool_setter"}]}
+    }"#).expect("valid reservation machine");
+    history.execute(&world, LoadMachine::new(&world, "setter.mch".into(), Some(machine)).expect("mount"));
+    history.execute(&world, AddTool::new(&world, "End mill", mill()).expect("mill"));
+    let error = SetToolNumber::new(&world, "End mill", Some(5)).err()
+        .expect("a cutter cannot use the tool setter pocket").to_string();
+    assert!(error.contains("tool setter") && !error.contains("tool_setter"), "{error}");
 }

@@ -188,6 +188,12 @@ impl LinkTally {
 /// cut is too short for the angle and the descent substitutes, named.
 pub const MAX_ZIG_LEGS: usize = 64;
 
+/// The leg cap of a bore's ring ramp: a hole barely wider than its cutter
+/// has a ring of a few hundredths of a millimetre, and a shallow ramp
+/// angle needs many out-and-back legs on it. The legs are arcs on that
+/// ring, so the cap bounds the posted moves (4 arcs a leg), not the cut.
+pub const MAX_BORE_ZIG_LEGS: usize = 4096;
+
 /// The prefix of the polyline `path` (from `path[0]`) of arc length
 /// `len`, ending on the exact point at that length.
 fn prefix(path: &[Point2], len: f64) -> Vec<Point2> {
@@ -218,6 +224,18 @@ fn prefix(path: &[Point2], len: f64) -> Vec<Point2> {
 /// `max_leg` long (M11.3 B's maximum ramp length; `0` no cap): more
 /// out-and-back legs over a shorter stretch of the same cut.
 pub(crate) fn plan_zig_capped(path: &[Point2], dz: f64, angle_deg: f64, max_leg: f64) -> Option<(Vec<Point2>, usize)> {
+    plan_zig_legs(path, dz, angle_deg, max_leg, MAX_ZIG_LEGS)
+}
+
+/// [`plan_zig_capped`] with the leg cap stated: a bore's ring ramp takes
+/// [`MAX_BORE_ZIG_LEGS`], every other ramp [`MAX_ZIG_LEGS`].
+pub(crate) fn plan_zig_legs(
+    path: &[Point2],
+    dz: f64,
+    angle_deg: f64,
+    max_leg: f64,
+    max_legs: usize,
+) -> Option<(Vec<Point2>, usize)> {
     let tan = angle_deg.to_radians().tan();
     let avail: f64 = path.windows(2).map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y)).sum();
     if !(dz.is_finite() && dz > 0.0 && tan.is_finite() && tan > 0.0 && avail.is_finite() && avail > 1e-6) {
@@ -226,7 +244,7 @@ pub(crate) fn plan_zig_capped(path: &[Point2], dz: f64, angle_deg: f64, max_leg:
     let run = dz / tan;
     let reach = if max_leg > 0.0 && max_leg.is_finite() { avail.min(max_leg) } else { avail };
     let n = (run / (2.0 * reach)).ceil().max(1.0);
-    if n > MAX_ZIG_LEGS as f64 {
+    if n > max_legs as f64 {
         return None;
     }
     let leg = (run / (2.0 * n)).min(reach);

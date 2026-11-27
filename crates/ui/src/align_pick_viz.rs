@@ -128,7 +128,7 @@ pub fn paint(painter: &egui::Painter, rect: egui::Rect, state: &State, aspect: f
         painter.line_segment([to_px(*a), to_px(*bb)], egui::Stroke::new(EDGE_PX, ink));
     }
     let disc = egui::Color32::from_rgba_unmultiplied(r, g, b, POINT_ALPHA);
-    let rim = egui::Stroke::new(1.5, egui::Color32::from_rgb(245, 240, 250));
+    let rim = egui::Stroke::new(1.5, crate::egui_app::theme::current().pick_rim);
     for p in &m.points {
         painter.circle(to_px(*p), POINT_RADIUS_PX, disc, rim);
     }

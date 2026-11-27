@@ -43,6 +43,7 @@ fn pick(world: &World, layer: &str) -> GeoSel {
 
 fn wire_op() -> WireContourOp {
     WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
         condition: "C110".into(),
         top_z: Height::of(HeightReference::TopOfStock, 0.0),

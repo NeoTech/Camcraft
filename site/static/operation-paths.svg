@@ -289,4 +289,10 @@
 <rect width="600" height="240" fill="white"/>
 <text x="20" y="28">Multi-Axis Deburr - section</text><path class="stock" d="M120 190 V95 H300 L330 125 V190 Z"/><path class="axis" d="M380 45 L330 95"/><path class="cut" d="M285 85 L345 145"/><path class="center" d="M300 95 L330 125"/>
 <text x="20" y="225">Tool axis tilted onto the edge break</text></g>
+<view id="RotaryFlow" viewBox="0 11520 600 240"/>
+<g id="RotaryFlow-diagram" transform="translate(0 11520)" role="img" aria-labelledby="RotaryFlow-title RotaryFlow-desc">
+<title id="RotaryFlow-title">Rotary Flow - oblique view</title><desc id="RotaryFlow-desc">Flow passes blend between two picked helical edges and wind around the turned rotor about the stated axis.</desc>
+<rect width="600" height="240" fill="white"/>
+<text x="20" y="28">Rotary Flow - oblique view</text><rect class="stock" x="80" y="85" width="330" height="85" rx="8"/><ellipse class="stock" cx="80" cy="127" rx="25" ry="42"/><ellipse class="stock" cx="410" cy="127" rx="25" ry="42"/><path class="center" d="M45 127 H455"/><path class="link" d="M120 85 L220 170 M220 85 L320 170"/><path class="cut" d="M145 85 L245 170 M170 85 L270 170 M195 85 L295 170"/>
+<text x="20" y="225">Passes blend between the picked helical edges</text></g>
 </svg>

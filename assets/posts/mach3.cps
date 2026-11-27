@@ -39,7 +39,7 @@ declaredOptions = {
     ],
     default: "off",
   },
-  sequenceNumberStart: { type: "integer", title: "First sequence number", group: "Format", description: "Starting N number", min: 1, max: 999999, default: 10 },
+  sequenceNumberStart: { type: "integer", title: "First sequence number", group: "Format", description: "Starting N number", min: 1, max: 99999, default: 10 },
   sequenceNumberIncrement: { type: "integer", title: "Sequence number increment", group: "Format", description: "Step between sequence numbers", min: 1, max: 10000, default: 10 },
   separateWordsWithSpace: { type: "boolean", title: "Separate words with space", group: "Format", description: "Insert a space between G-code words on a block", default: true },
   writeMachine: { type: "boolean", title: "Write machine header", group: "Header & comments", description: "Emit a comment naming the machine in the header", default: false },
@@ -99,6 +99,7 @@ function fw(v) { return has(v) ? "F" + ff(v) : ""; }
 var seqNum = 0;
 var seqNextForce = false;
 var secStarted = 0;
+var nRefused = false;
 function optBool(k, def) {
   return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "boolean" ? postOptions[k] : def;
 }
@@ -111,6 +112,13 @@ function optStr(k, def) {
 function nextSeq() {
   if (seqNum <= 0) seqNum = optInt("sequenceNumberStart", 10);
   else seqNum += optInt("sequenceNumberIncrement", 10);
+  if (seqNum < 1 || seqNum > 99999) {
+    if (!nRefused) {
+      nRefused = true;
+      msg("sequence number N" + seqNum + " exceeds Mach3 5-digit N99999 limit; disable block numbers or lower start/increment");
+    }
+    return "";
+  }
   return "N" + seqNum;
 }
 function isCommentOnly(a) {
@@ -129,7 +137,8 @@ function block(words) {  // join the non-empty words onto one line
     if (!commentOnly) {
       var mode = optStr("showSequenceNumbers", "off");
       if (mode === "every-block" || ((mode === "tool-change" || mode === "op-start") && seqNextForce)) {
-        prefix = nextSeq() + " ";
+        var n = nextSeq();
+        if (n) prefix = n + " ";
         seqNextForce = false;
       }
     }
@@ -322,7 +331,7 @@ function onOpen() {
   note(clean(nm) || "CAMCRAFT");
   invertedNotes();
   writeHeaderExtras();
-  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
+  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80", "G64"]);
 }
 // The machine's inverted linear axes (#375): the engine has mirrored the
 // stream into the controller's frame, and the header says so, one note

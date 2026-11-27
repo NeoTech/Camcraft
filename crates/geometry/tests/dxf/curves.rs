@@ -1,6 +1,6 @@
 //! SPLINE and ELLIPSE read as tangent arcs (#1865): the output keeps the stated two-sided
 //! bound against an independent evaluation of each curve, joins end to end, and turns
-//! smoothly at each joint. INSERT and POINT no longer stop the import.
+//! smoothly at each joint.
 //! Provenance: hand-built fixtures from the public DXF group codes; the test's own
 //! Cox-de Boor evaluator (The NURBS Book, A2.2) and the parametric ellipse.
 
@@ -205,23 +205,4 @@ fn a_slender_ellipse_keeps_the_bound_at_its_tight_ends() {
     }).collect();
     let d = hausdorff(&curve, &out);
     assert!(d <= CURVE_TOLERANCE_MM, "slender ellipse Hausdorff {d}");
-}
-
-#[test]
-fn insert_and_point_are_skipped_and_the_rest_reads() {
-    let text = "0\nSECTION\n2\nENTITIES\n\
-        0\nINSERT\n8\n0\n66\n1\n2\nBOLT\n10\n5\n20\n5\n\
-        0\nATTRIB\n8\n0\n1\nM6\n2\nSIZE\n10\n5\n20\n5\n\
-        0\nSEQEND\n8\n0\n\
-        0\nPOINT\n8\n0\n10\n1\n20\n1\n\
-        0\nINSERT\n8\n0\n2\nNUT\n10\n9\n20\n9\n\
-        0\nLINE\n8\ncut\n10\n0\n20\n0\n11\n10\n21\n0\n0\nENDSEC\n0\nEOF\n";
-    let doc = parse(text.as_bytes()).expect("the drawing reads");
-    assert_eq!(doc.primitives.len(), 1);
-    assert_eq!(doc.summary.skipped.get("INSERT"), Some(&2));
-    assert_eq!(doc.summary.skipped.get("POINT"), Some(&1));
-    assert_eq!(doc.curve_tolerance, None);
-    let open = text.replace("0\nSEQEND\n8\n0\n", "");
-    let refused = parse(open.as_bytes()).expect_err("attributes without SEQEND");
-    assert!(refused.0.contains("INSERT"), "{refused}");
 }

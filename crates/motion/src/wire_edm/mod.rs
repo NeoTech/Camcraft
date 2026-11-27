@@ -117,6 +117,9 @@ pub enum WireSide {
     /// An open run (#1109): the wire runs on the RIGHT of the run's
     /// travel; the left side is kept.
     Right,
+    /// An open run cut as a centre-line slit (#3216): the wire rides
+    /// the run itself, the kerf burns both sides, and no side is kept.
+    Centre,
 }
 
 impl WireSide {
@@ -128,14 +131,16 @@ impl WireSide {
             WireSide::Punch => "punch",
             WireSide::Left => "left",
             WireSide::Right => "right",
+            WireSide::Centre => "centre",
         }
     }
 
-    /// Whether the side is an open run's (left / right of travel) rather
-    /// than a closed profile's (die / punch).
+    /// Whether the side is an open run's (left / right of travel, or
+    /// the centre-line slit) rather than a closed profile's (die /
+    /// punch).
     #[must_use]
     pub fn is_open_side(self) -> bool {
-        matches!(self, WireSide::Left | WireSide::Right)
+        matches!(self, WireSide::Left | WireSide::Right | WireSide::Centre)
     }
 }
 
@@ -169,6 +174,12 @@ pub struct WireParams {
     /// rest up to the kerf offset, said as a note. `false` - the
     /// default - refuses any rest past [`COVER_TOL`].
     pub sharp_corners: bool,
+    /// The closing overlap, mm (#3216): how far past the seam the ride
+    /// continues before the lead-out returns to the threading point -
+    /// the start of the cut is burnt over, so no witness mark is left.
+    /// 0 is the plain lap. Refused with tabs (tabs pin the seam) and on
+    /// an open run (an open run has no seam); a skim inherits it.
+    pub overlap: f64,
 }
 
 fn invalid(why: String) -> GenError {
@@ -216,6 +227,9 @@ impl WireParams {
         if self.start.is_some_and(|s| !(s.x.is_finite() && s.y.is_finite())) {
             return Err(invalid("the start hole's position is not a finite point".into()));
         }
+        if !(self.overlap.is_finite() && self.overlap >= 0.0) {
+            return Err(invalid(format!("the closing overlap must be zero or more mm (it states {})", self.overlap)));
+        }
         Ok(())
     }
 }
@@ -240,12 +254,25 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
                 "tabs are stated on an open run - an open run closes no slug for a tab to hold; tabs hold a closed profile's slug (#539)".into(),
             ));
         }
+        // #3216: an open run has no seam to close past, and no lap to
+        // reverse - each pass is entered from the air at one end and
+        // run out at the other, walked in the run's own direction.
+        if p.overlap > 0.0 {
+            return Err(invalid(
+                "a closing overlap is stated on an open run - an open run has no seam to close past; the cut ends at its run-out".into(),
+            ));
+        }
+        if reverse {
+            return Err(invalid(
+                "a reversed pass is stated on an open run - an open run is walked in its own direction, from the air at one end to the air at the other; a skim of it walks the same way".into(),
+            ));
+        }
         return open::wire_open(loops, chains, p);
     }
     let (given, profile) = ring::profile(loops, chains)?;
     if p.side.is_open_side() {
         return Err(invalid(format!(
-            "the side is {} of travel, but the profile is closed - a closed profile states its die or punch side (left / right is an open run's kerf side)",
+            "the side is {} of travel, but the profile is closed - a closed profile states its die or punch side (left / right / centre is an open run's side)",
             p.side.word()
         )));
     }
@@ -260,7 +287,9 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
             "no start hole is stated - a closed profile is cut from a threading point ({}); the wire cannot be threaded through solid material",
             match p.side {
                 WireSide::Die => "a start hole in the slug, inside the profile",
-                WireSide::Punch | WireSide::Left | WireSide::Right => "a start hole or the stock's edge, outside the profile",
+                WireSide::Punch | WireSide::Left | WireSide::Right | WireSide::Centre => {
+                    "a start hole or the stock's edge, outside the profile"
+                }
             }
         )));
     };
@@ -284,6 +313,14 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
         Some(_) if reverse => {
             return Err(invalid("a reversed pass is stated with tabs - tabs are cut on the rough pass's walk only (#538 x #539)".into()))
         }
+        // #3216: tabs pin the seam - the lead-out must land on the
+        // start hole where the tab cut-off meets the main cut, so an
+        // overlap past the seam is refused by name.
+        Some(_) if p.overlap > 0.0 => {
+            return Err(invalid(
+                "a closing overlap is stated with tabs - tabs pin the seam the overlap rides past; state the overlap or the tabs, not both (#539)".into(),
+            ))
+        }
         Some(t) => Some(tabs::tabbed(&path_ring, &given, start, p, t)?),
         None => None,
     };
@@ -293,6 +330,19 @@ pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, r
             let mut v = ring::walk_from(&path_ring, seg, foot);
             if reverse {
                 v.reverse();
+            }
+            // The closing overlap (#3216): the ride continues past the
+            // seam by the stated arc length before the lead-out; the
+            // kerf law below judges the return move like every other.
+            // The ride ends back on the seam for a full-lap overlap -
+            // that point is already the path's own, so it never lands
+            // twice.
+            if p.overlap > 0.0 {
+                for q in ring::past_seam(&path_ring, seg, foot, p.overlap, reverse)? {
+                    if v.last().is_none_or(|l| ring::dist(*l, q) > 1e-9) {
+                        v.push(q);
+                    }
+                }
             }
             v.push(start);
             v
@@ -324,7 +374,7 @@ fn start_side(profile: &Region, path_ring: &[Point2], start: Point2, p: &WirePar
     let inside_path = Region::new(vec![Loop::new(path_ring.to_vec())?])?.contains(start);
     let inside_profile = profile.contains(start);
     let why = match (p.side, inside_path, inside_profile) {
-        (WireSide::Left | WireSide::Right, _, _) => {
+        (WireSide::Left | WireSide::Right | WireSide::Centre, _, _) => {
             format!("the side is {} of travel - a closed profile states die or punch", p.side.word())
         }
         (WireSide::Die, true, _) | (WireSide::Punch, false, _) => return Ok(()),
@@ -355,7 +405,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
 /// [`notes`] for a pass walked either way round (#538).
 fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<String> {
     let cond = if p.condition.is_empty() { String::new() } else { format!(", condition {}", p.condition) };
-    vec![
+    let mut said = vec![
         format!(
             "wire EDM: {} side - the wire runs {} the profile at {:.4} mm (wire radius {:.4} + spark gap {:.4}{cond}); kerf width {:.4} mm",
             p.side.word(),
@@ -363,6 +413,7 @@ fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<St
                 WireSide::Die => "inside",
                 WireSide::Punch => "outside",
                 WireSide::Left | WireSide::Right => "beside",
+                WireSide::Centre => "along",
             },
             p.kerf_offset(),
             p.wire_diameter * 0.5,
@@ -376,7 +427,18 @@ fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<St
             if reverse { "clockwise" } else { "counter-clockwise" }
         ),
         "wire EDM: a vertical cut - the moves state no pose (XY only) and no feed (the control's generator sets the rate); not verified here (no wire sweep against the part yet)".into(),
-    ]
+    ];
+    // #3216: a stated closing overlap is said, never silent.
+    if p.overlap > 0.0 {
+        said.insert(
+            2,
+            format!(
+                "wire EDM: the cut rides {:.3} mm past its seam before the lead-out, to burn over the start of the cut",
+                p.overlap
+            ),
+        );
+    }
+    said
 }
 
 #[cfg(test)]

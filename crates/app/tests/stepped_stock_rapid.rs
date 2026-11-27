@@ -101,6 +101,7 @@ fn part() -> Mesh {
 /// A milled bore of a 16 mm hole at the origin, mouth Z 20.
 fn bore() -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         break_through: None,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         links: camcraft_app::links::Links::PLANAR,

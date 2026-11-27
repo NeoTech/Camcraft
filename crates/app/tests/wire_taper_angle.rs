@@ -105,6 +105,7 @@ fn punch(machine: &str, mesh: Mesh, pick: bool, four_axis: Option<WireFourAxis>)
     h.execute(&world, ImportModel::from_mesh("part", mesh));
     let src = if pick { SrcRef::Selection(vec![top_face(&world)]) } else { SrcRef::Entity("part".into()) };
     let op = WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),

@@ -1,7 +1,6 @@
 //! Tool commands: add, edit and delete tool entities. Validation is all
 //! at construction (AGENTS.md: malformed input never enters the history);
 //! `apply` is a pure world write so redo replays identically.
-//!
 //! Provenance: our own command model; identity by name, snapshot-and-
 //! restore inverses, like every sibling command.
 
@@ -9,7 +8,7 @@ use flecs_ecs::prelude::World;
 
 use crate::commands::{Command, CommandError};
 use crate::model;
-use crate::schema::{Location, STOCK_NAME, LEGACY_WCS_NAMES, ToolBody, ToolDef};
+use crate::schema::{STOCK_NAME, LEGACY_WCS_NAMES, ToolBody, ToolDef};
 use crate::tools::Tool;
 
 pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
@@ -90,6 +89,8 @@ pub struct AddTool {
     holder: Option<(String, ToolBody)>,
     /// Why the machine's default holder was not applied, when it was not.
     skipped: Option<String>,
+    /// #3792: the speed is outside the mounted machine's spindle range.
+    warning: Option<String>,
 }
 
 impl AddTool {
@@ -135,6 +136,7 @@ impl AddTool {
             number,
             holder: None,
             skipped: None,
+            warning: None,
         })
     }
 
@@ -146,6 +148,9 @@ impl AddTool {
     /// holder in its place.
     pub fn with_holder(world: &World, name: &str, tool: Tool, pick: HolderPick) -> Result<Self, CommandError> {
         let mut cmd = Self::new(world, name, tool)?;
+        // #3792: said at the add; the speed stays what the library states.
+        cmd.warning = crate::machine::of(world).1
+            .and_then(|m| crate::machine::spindle_range_warning(&m, name, crate::posting::posted_rpm(&cmd.tool)));
         match pick {
             HolderPick::Bare => {}
             HolderPick::Named(entry) => {
@@ -188,6 +193,13 @@ impl AddTool {
             (None, None) => None,
         }
     }
+
+    /// #3792: the tool's speed is outside the mounted machine's spindle
+    /// range - the machine check will hold the post; the line names the fix.
+    #[must_use]
+    pub fn warning(&self) -> Option<String> {
+        self.warning.clone()
+    }
 }
 
 impl Command for AddTool {
@@ -229,17 +241,25 @@ impl ChangeTool {
     /// agreement - only for `ReshapeTool` (#93 slice 3), which lands a
     /// cutter checked against `next` in the same undo step.
     pub(crate) fn judged(world: &World, name: &str, next: Tool, judge_cutter: bool) -> Result<Self, CommandError> {
-        Self::judged_with(world, name, next, judge_cutter, true)
+        Self::judged_with(world, name, next, judge_cutter, true, None)
+    }
+
+    /// #3644: every `new` law, the body law judged against `body` (the
+    /// body an assembly lands in the same undo step), not the current one.
+    pub(crate) fn assembled(world: &World, name: &str, next: Tool, body: Option<&ToolBody>) -> Result<Self, CommandError> {
+        Self::judged_with(world, name, next, true, true, Some(body))
     }
 
     /// #2015: a row's seed landing on the running numbers (`SetWorkMaterial`):
     /// every `new` law, but the numbers are the row's, not an edit, so the
     /// `Unknown` row does not follow them.
     pub(crate) fn seeding(world: &World, name: &str, next: Tool) -> Result<Self, CommandError> {
-        Self::judged_with(world, name, next, true, false)
+        Self::judged_with(world, name, next, true, false, None)
     }
 
-    fn judged_with(world: &World, name: &str, mut next: Tool, judge_cutter: bool, follow: bool) -> Result<Self, CommandError> {
+    fn judged_with(
+        world: &World, name: &str, mut next: Tool, judge_cutter: bool, follow: bool, body: Option<Option<&ToolBody>>,
+    ) -> Result<Self, CommandError> {
         catalog_gate(name, &mut next)?;
         cutting_gate(name, &next)?;
         if let Some(why) = next.torch_refusal() {
@@ -289,7 +309,7 @@ impl ChangeTool {
         }
         // #368: an edit that would stand the tool's body over its flutes
         // (or retype it to a lathe insert) is refused by name.
-        if let Some(body) = crate::tool_body::body_of(world, &entity) {
+        if let Some(body) = body.map_or_else(|| crate::tool_body::body_of(world, &entity), |b| b.cloned()) {
             crate::tool_body::fits(&next, &body)
                 .map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
         }
@@ -333,55 +353,7 @@ impl Command for ChangeTool {
     }
 }
 
-/// Delete a tool entity; the snapshot restores it identically, undoable
-/// like every other persistent object.
-pub struct DeleteTool {
-    name: String,
-    tool: Tool,
-    /// #221: the tool's number, restored with it on undo.
-    number: Option<u32>,
-    /// #368: its modelled body, restored with it on undo.
-    body: Option<ToolBody>,
-    /// #93: its drawn cutter, restored with it on undo.
-    cutter: Option<camcraft_tools::spun::SpunProfile>,
-    location: Location,
-}
-
-impl DeleteTool {
-    pub fn new(world: &World, name: &str) -> Result<Self, CommandError> {
-        let Some(entity) = model::find_by_name(world, name) else {
-            return Err(CommandError::NotFound(name.to_string()));
-        };
-        let tool = model::tool_of(world, &entity)
-            .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
-        Ok(DeleteTool {
-            name: name.to_string(),
-            tool,
-            number: model::tool_number_of(world, &entity),
-            body: crate::tool_body::body_of(world, &entity),
-            cutter: crate::tool_cutter::cutter_of(world, &entity),
-            location: model::transform_of(world, &entity).unwrap_or_default(),
-        })
-    }
-}
-
-impl Command for DeleteTool {
-    fn apply(&self, world: &World) {
-        if let Some(entity) = model::find_by_name(world, &self.name) {
-            model::remove(world, &entity);
-        }
-    }
-
-    fn invert(&self, world: &World) {
-        if model::find_by_name(world, &self.name).is_some() {
-            return; // already restored (idempotent redo path)
-        }
-        let entity = model::spawn(world, &self.name);
-        model::set_transform(world, &entity, self.location);
-        entity
-            .entity_view(world)
-            .set(ToolDef { tool: self.tool.clone(), number: self.number });
-        crate::tool_body::set_body(world, &entity, self.body.as_ref());
-        crate::tool_cutter::set_cutter(world, &entity, self.cutter.as_ref());
-    }
-}
+#[path = "tool_delete.rs"]
+mod delete;
+pub use delete::DeleteTool;
+pub(crate) use delete::ToolRecords;

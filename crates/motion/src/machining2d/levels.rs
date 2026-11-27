@@ -163,6 +163,9 @@ pub(super) struct Motion {
     /// ramp entry zig-zags along the first cut at the ramp angle, and a
     /// zig-zag ramp rides the ring's arcs.
     pub(super) ring_zig: bool,
+    /// The most out-and-back legs one zig-zag ramp may take
+    /// ([`crate::links::MAX_ZIG_LEGS`]; a bore's ring takes more).
+    pub(super) zig_legs: usize,
     /// #2265: a pass start inside a level that is still solid takes the
     /// user's entry (helix, ramp, arc), not a silent plunge - the pocket
     /// family opts in (`with_solid_restart`).
@@ -202,6 +205,7 @@ impl Motion {
             xy_arc: false,
             holes: Vec::new(),
             ring_zig: false,
+            zig_legs: crate::links::MAX_ZIG_LEGS,
             solid_restart: false,
             cleared_links: false,
             ring_links: None,
@@ -218,6 +222,12 @@ impl Motion {
     /// Every pass is a ring of arcs (#1558): ramps ride them.
     pub(super) fn with_ring_zig(mut self) -> Self {
         self.ring_zig = true;
+        self
+    }
+
+    /// Allow `legs` out-and-back legs on a ramp (a bore's small ring).
+    pub(super) fn with_zig_legs(mut self, legs: usize) -> Self {
+        self.zig_legs = legs;
         self
     }
 

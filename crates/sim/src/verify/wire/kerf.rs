@@ -8,10 +8,10 @@
 //! Provenance: plain 2D distance geometry over the public wire EDM
 //! practice the umbrella #290 cites; our own code, no vendor material.
 
-use crate::cl::Toolpath;
+use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::Point2;
 
-use super::{dist, Product, WireFinding, WireUnder, KERF_TOL};
+use super::{dist, WireFinding, WireUnder, KERF_TOL};
 
 /// The wire as the laws read it: each vertex on the programmed plane
 /// `z0` and the wire's lean there per unit height (0 when vertical).
@@ -23,6 +23,12 @@ pub(crate) struct Wire {
     /// (1-based) and how far the recorded curve may stand off it - 0 for
     /// a straight move, the chord's sagitta for a piece of an arc (#3937).
     pub(super) seg: Vec<(usize, f64)>,
+    /// The pass boundaries of an open run's skims (#3216 over #538):
+    /// the vertex index each later pass starts at, in cut order. A
+    /// travel move (a rapid - the wire is cut and threaded anew, no
+    /// wire through the travel) closes the pass before it; its segment
+    /// belongs to no pass. Empty for every single-pass path.
+    pub(super) breaks: Vec<usize>,
 }
 
 impl Wire {
@@ -39,7 +45,7 @@ impl Wire {
             return None;
         }
         let seg = self.seg.get(..n.saturating_sub(1))?.to_vec();
-        Some(Wire { pts: self.pts.get(..n)?.to_vec(), lean: self.lean.get(..n)?.to_vec(), z0: self.z0, seg })
+        Some(Wire { pts: self.pts.get(..n)?.to_vec(), lean: self.lean.get(..n)?.to_vec(), z0: self.z0, seg, breaks: Vec::new() })
     }
 
     /// Whether any move is an arc, read as chords.
@@ -92,21 +98,6 @@ impl Reading {
     }
 }
 
-/// The first move whose kerf enters the product at height `z` by more
-/// than the verify tolerance `tol`: the wire's segment there against
-/// `k` widened by its lean toward the product (the ellipse's reach,
-/// module head).
-pub(super) fn gouge_at(p: &Product<'_>, wire: &Wire, k: f64, z: f64, tol: f64) -> (Option<WireFinding>, Option<WireUnder>) {
-    let pts = wire.at(z);
-    let mut read = Reading::new(tol);
-    for (i, w) in pts.windows(2).enumerate() {
-        let (d, at) = dist::entry(p, w[0], w[1]);
-        let (n, sag) = wire.seg(i);
-        read.take(n, d - sag, reach(k, w[0], w[1], wire.lean.get(i).copied(), wire.lean.get(i + 1).copied(), at), at);
-    }
-    read.close(z)
-}
-
 /// How far the kerf of the leaning wire on `a`-`b` reaches toward the
 /// product point `at`: `k` for a vertical wire, `k * sqrt(1 + (t.u)^2)`
 /// for a lean `t` (interpolated at the wire's nearest point) and `u`
@@ -132,7 +123,11 @@ pub(super) fn reach(k: f64, a: Point2, b: Point2, ta: Option<[f64; 2]>, tb: Opti
 /// moves as they stand, the arcs of a vertical cut as chords (`arcs`,
 /// #3937). A pose is read as the wire's lean only when the cut states a
 /// taper; a wire leaning past 89 degrees is no wire; an arc under a
-/// stated taper is a cone, which the laws do not read.
+/// stated taper is a cone, which the laws do not read. A RAPID move is
+/// an open run's pass boundary (#3216 over #538): the wire is cut at
+/// the move before it and threaded anew where the travel lands, so the
+/// travel burns nothing, the vertex it lands on opens the next pass,
+/// and no law reads the travel's own segment as a cut.
 pub(super) fn polyline(path: &Toolpath, taper: bool) -> Result<Wire, String> {
     let Some(m0) = path.moves.first() else {
         return Err("the path has no moves".into());
@@ -150,6 +145,7 @@ pub(super) fn polyline(path: &Toolpath, taper: bool) -> Result<Wire, String> {
     let mut pts = vec![Point2::new(m0.from.x, m0.from.y)];
     let mut lean = vec![[0.0; 2]];
     let mut seg = Vec::with_capacity(path.moves.len());
+    let mut breaks: Vec<usize> = Vec::new();
     for (i, m) in path.moves.iter().enumerate() {
         let n = i + 1;
         if m.arc.is_some() && (taper || m.axis.is_some()) {
@@ -162,6 +158,22 @@ pub(super) fn polyline(path: &Toolpath, taper: bool) -> Result<Wire, String> {
         let from = Point2::new(m.from.x, m.from.y);
         if pts.last().is_some_and(|l| dist::pp(*l, from) > 1e-6) {
             return Err(format!("move {n} does not start where the move before it ended"));
+        }
+        // A pass boundary (#3216): the travel itself is no cut - the
+        // vertex it lands on opens the next pass, the segment that
+        // reached it belongs to no pass.
+        if m.kind == MoveKind::Rapid {
+            if m.arc.is_some() {
+                return Err(format!("move {n} is a rapid arc - a pass boundary travels straight"));
+            }
+            if i + 1 == path.moves.len() {
+                return Err(format!("move {n} is a pass boundary with no pass after it - regenerate the path"));
+            }
+            pts.push(Point2::new(m.to.x, m.to.y));
+            lean.push([0.0; 2]);
+            seg.push((n, 0.0));
+            breaks.push(pts.len() - 1);
+            continue;
         }
         if m.arc.is_some() {
             let cs = super::arcs::chords(m).ok_or_else(|| format!("move {n} is an arc the wire laws cannot read (not a flat XY circle)"))?;
@@ -176,5 +188,5 @@ pub(super) fn polyline(path: &Toolpath, taper: bool) -> Result<Wire, String> {
         lean.push(lean_of(n, m.axis)?);
         seg.push((n, 0.0));
     }
-    Ok(Wire { pts, lean, z0: m0.from.z, seg })
+    Ok(Wire { pts, lean, z0: m0.from.z, seg, breaks })
 }

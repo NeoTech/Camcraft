@@ -143,6 +143,9 @@ impl Run {
                         share * 100.0
                     ));
                 }
+                for n in lvl.clean_notes() {
+                    b.note_once(n);
+                }
                 let (n, deg) = lvl.loops();
                 self.loops += n;
                 self.deg = self.deg.max(deg);

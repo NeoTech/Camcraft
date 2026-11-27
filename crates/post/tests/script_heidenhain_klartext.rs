@@ -377,3 +377,7 @@ fn successive_sections_with_the_same_tool_recheck_transfer_without_another_excha
         assert!(stationary.split_whitespace().any(|w| w == "M0"), "{nc}");
     }
 }
+
+#[path = "klartext/arc_tests.rs"]
+mod arc_tests;
+

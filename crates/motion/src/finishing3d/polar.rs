@@ -8,7 +8,8 @@ use crate::machining2d::GenError;
 use super::params::{Finish3DParams, refinement_floor, scallop_stepdown, scallop_stepover, validate};
 use super::support::{build_sups, plunge_support, plunge_support_grad};
 use super::march::{emit_runs, march_curve, march_curve_blind};
-use super::raster::{placement_guard, rings_and_tail, shallow_footprint};
+use super::grid::SupSet;
+use super::raster::{placement_guard, rings_and_tail};
 /// Radial finishing (M2.2d): `N = ceil(PI·R/s)` CHORDS through the
 /// shallow terrain's footprint center, each rotated `PI/N` from the
 /// last - so arc spacing at the rim meets the cos-law stepover, and
@@ -341,4 +342,28 @@ impl HoleCount {
             ));
         }
     }
+}
+
+/// The shallow terrain's polar stage: its footprint center, the
+/// circumscribed radius over the bbox corner (one stepover of
+/// margin added by the caller, so the rim's ground is reached),
+/// and the smallest shallow tilt - the cos-law's `m_z`. `None`
+/// when every facet is steep: the rings alone carry the model,
+/// exactly as the raster answers to that case.
+pub(super) fn shallow_footprint(sups: &SupSet) -> Option<(Point2, f64, f64)> {
+    let (mut x0, mut x1, mut y0, mut y1) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let mut mz = 1.0f64;
+    for s in sups.iter().filter(|s| s.shallow) {
+        x0 = x0.min(s.xmin);
+        x1 = x1.max(s.xmax);
+        y0 = y0.min(s.ymin);
+        y1 = y1.max(s.ymax);
+        mz = mz.min(s.m.z);
+    }
+    if x0 > x1 {
+        return None;
+    }
+    let c = Point2::new((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+    Some((c, (x1 - c.x).hypot(y1 - c.y), mz))
 }

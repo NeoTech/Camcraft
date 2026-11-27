@@ -113,6 +113,7 @@ fn drill_retract() -> String {
         turning: None,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         tip_form: Default::default(),
         tip_diameter: 0.0,
         form: None,

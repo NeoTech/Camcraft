@@ -557,9 +557,16 @@ function beltNote(rpm) {
 // The header's path-blending tolerance (#616: shared by the header and
 // the per-section reset, one constant).
 function blendP() { return inch ? "P0.001" : "P0.025"; }
+// #4147: PathPilot / LinuxCNC reads G64 P0 as G64 with no deviation limit.
+// Clamp positive tolerances that round to zero under fu() to the smallest
+// positive value (0.001 mm, 0.0001 in). Never write P0.
+function tolP(tol) {
+  var s = fu(tol);
+  return (s === "0" || s === "-0") ? (inch ? "P0.0001" : "P0.001") : "P" + s;
+}
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G64", "P" + fu(smoothTol)]);
+  block(["G64", tolP(smoothTol)]);
   smoothActive = true;
 }
 function smoothOff() {

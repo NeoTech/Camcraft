@@ -192,6 +192,8 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
         vendor: text_of(general.and_then(|g| g.get("vendor"))),
         controller_identity: super::installation::identity(&v)?,
         tool_change: super::installation::tool_change(&v)?,
+        max_tool_number: super::installation::max_tool_number(&v)?,
+        d_number: super::installation::d_number(&v)?,
         ..Default::default()
     };
 
@@ -221,6 +223,12 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
 
     let kine = v.pointer("/kinematics/default/parts");
     let f = mm_factor(v.pointer("/kinematics/default/units")).unwrap_or(1.0);
+    m.arc_tolerance = v.pointer("/controller/arc_tolerance")
+        .and_then(serde_json::Value::as_f64)
+        .or_else(|| v.pointer("/controller/arcTolerance").and_then(serde_json::Value::as_f64))
+        .or_else(|| v.get("arc_tolerance").and_then(serde_json::Value::as_f64))
+        .or_else(|| v.get("arcTolerance").and_then(serde_json::Value::as_f64))
+        .map(|tol| tol * f);
     // #131: keep the stated unit for the posts (the numbers stay mm).
     let length = v.pointer("/kinematics/default/units/length").and_then(|u| u.as_str());
     if matches!(length, Some("inch" | "inches")) {

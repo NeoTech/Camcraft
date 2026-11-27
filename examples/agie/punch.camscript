@@ -16,4 +16,4 @@ cam.call("add_operation", {
   }
 });
 cam.generate();
-cam.post({to: "PUNCH40", cps: "Native wire EDM job files", options: {separationLengthMm: 1.0}});
+cam.post({to: "PUNCH40", cps: "Agie Wire EDM (AgieVision)", options: {separationLengthMm: 1.0}});

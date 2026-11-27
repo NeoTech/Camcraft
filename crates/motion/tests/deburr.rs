@@ -418,3 +418,7 @@ fn every_run_leaves_its_cut_straight_up_before_the_next_traverse() {
         assert!((m.to.z - p.clearance_z).abs() < 1e-9, "rapid {i} stops short of clearance: {:?}", m.to);
     }
 }
+
+// #3329: the start and exit points on the chains.
+#[path = "deburr/seam.rs"]
+mod seam;

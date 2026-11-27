@@ -228,6 +228,9 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// Arc endpoint tolerance in millimeters (#4086), e.g. MP 7431 on Heidenhain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_tolerance: Option<f64>,
     /// `general.operator_side` (#2632): the stated side; `None` takes the kind's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operator_side: Option<super::operator_side::OperatorSide>,
@@ -265,6 +268,13 @@ pub struct Machine {
     /// Tool-changing procedure supported by this particular installation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_change: Option<super::ToolChangeMode>,
+    /// `tooling.max_tool_number` (#4087): the highest tool number the
+    /// control's tool table holds. `None` when the file states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_number: Option<u32>,
+    /// `tooling.d_number` (#4143): how the control numbers the tool call's D word.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub d_number: Option<super::DNumberRule>,
     /// Explicit `controller.rtcp` capability flag (#1962); `None` infers from tilt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controller_rtcp: Option<bool>,
@@ -323,6 +333,7 @@ impl Machine {
             && rate_ok(self.max_tool_diameter)
             && rate_ok(self.spindle_d)
             && rate_ok(self.spindle_len)
+            && rate_ok(self.arc_tolerance)
             && self
                 .kind
                 .as_deref()

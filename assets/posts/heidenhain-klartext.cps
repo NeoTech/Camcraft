@@ -15,7 +15,7 @@ programUnits = "mm";
 coolantModes = true;
 failOnWarning = true;
 workOffsetIndex = true;
-workOffsetMax = 6;
+workOffsetMax = 6; manualToolChange = ["manual-retract-top"]; // #4085: it writes the stop and checks for this change
 
 var blockNumber = 0;
 var programName = "";
@@ -91,6 +91,14 @@ function onOpen() {
   if (minimum <= 0 || maximum < minimum) {
     refuse("the installation must state a positive spindle speed range");
   }
+  var configuredTolerance = (typeof machine.arcTolerance === "number" && machine.arcTolerance > 0)
+    ? machine.arcTolerance
+    : (machine.controller && typeof machine.controller.arcTolerance === "number" && machine.controller.arcTolerance > 0)
+      ? machine.controller.arcTolerance
+      : 0.016;
+  if (configuredTolerance > 0.016) {
+    refuse("arc tolerance " + configuredTolerance + " mm exceeds the 0.016 mm controller maximum (MP 7431)");
+  }
   programName = program.numbered ? String(program.number) : "CAMCRAFT";
   block("BEGIN PGM " + programName + " MM");
 }
@@ -128,6 +136,10 @@ function onParameter(name, value) {
 function onToolChange(number, name) {
   if (inSection || !Number.isInteger(number) || number < 1 || number > 32767) {
     refuse("missing or invalid tool number");
+  }
+  // #4087: the machine's tool table (MP 7260 lines on the Picomax).
+  if (machine.toolNumberMax > 0 && number > machine.toolNumberMax) {
+    refuse("tool number " + number + " is above the machine tool table maximum " + machine.toolNumberMax);
   }
   if (section.tool !== undefined) refuse("multiple TOOL declarations in one section");
   section.tool = number;
@@ -295,10 +307,21 @@ function onCircular() {
     refuse("rounding would turn the XY arc into a full circle");
   }
   var radius = Math.hypot(startX - cx, startY - cy);
-  // MP7431 permits 0.0001 through 0.016 mm. The machine's selected value
-  // is unstated, so use the strictest documented endpoint tolerance.
-  if (radius < 0.001 || Math.abs(radius - Math.hypot(endX - cx, endY - cy)) > 0.0001000001) {
-    refuse("inconsistent XY arc centre or radius");
+  var endRadius = Math.hypot(endX - cx, endY - cy);
+  // MP 7431 circle end point tolerance: default 0.016 mm for the Picomax 55 (iTNC 530).
+  var arcTolerance = (typeof machine.arcTolerance === "number" && machine.arcTolerance > 0)
+    ? machine.arcTolerance
+    : (machine.controller && typeof machine.controller.arcTolerance === "number" && machine.controller.arcTolerance > 0)
+      ? machine.controller.arcTolerance
+      : 0.016;
+  if (arcTolerance > 0.016) {
+    refuse("arc tolerance " + arcTolerance + " mm exceeds the 0.016 mm controller maximum (MP 7431)");
+  }
+  if (radius < 0.001) {
+    refuse("inconsistent XY arc centre or radius: radius " + radius.toFixed(4) + " mm is below 0.001 mm limit");
+  }
+  if (Math.abs(radius - endRadius) > arcTolerance + 1e-6) {
+    refuse("inconsistent XY arc centre or radius: start radius " + radius.toFixed(4) + " mm, end radius " + endRadius.toFixed(4) + " mm, limit " + arcTolerance + " mm");
   }
   if (p.CircularDirection !== "CW" && p.CircularDirection !== "CCW") refuse("unknown arc direction");
   var direction = p.CircularDirection === "CW" ? "DR-" : "DR+";

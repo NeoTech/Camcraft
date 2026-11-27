@@ -202,6 +202,7 @@ fn plain_dxf_wire_page() -> State {
     let (mut st, id) = drawing_state(WIRE_ISO_MCH);
     let params = OpParams::WireContour(WireContourOp {
         condition: "C110".into(),
+        overlap: 0.0,
         top_z: Height::of(HeightReference::TopOfStock, 0.0),
         bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),
         side: WireSide::Die,

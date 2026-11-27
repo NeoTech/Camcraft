@@ -106,3 +106,39 @@ fn the_editor_draft_shows_the_tools_own_number() {
     state.sync_tool_ui();
     assert_eq!(state.tool_ui.number, 31);
 }
+
+/// #3667: a new tool's typed number is compared with the number `AddTool`
+/// gives, which skips the machine's reserved pockets. With T1 reserved for
+/// a probe, a typed 1 must queue `SetToolNumber` (which then refuses by
+/// name), and a typed 2 is the number `AddTool` gives, so nothing is queued.
+#[test]
+fn a_new_tools_typed_number_is_compared_with_the_reserved_aware_allocation() {
+    use camcraft_app::commands::{History, LoadMachine};
+    let mut state = State::new();
+    let machine = camcraft_app::machine::parse_mch(
+        r#"{"tooling": {"reserved": [{"number": 1, "use": "probe"}]}}"#,
+    )
+    .expect("reservation machine");
+    History::default().execute(
+        &state.world,
+        LoadMachine::new(&state.world, "reserved.mch".into(), Some(machine)).expect("mount"),
+    );
+    let tool = catalog()
+        .into_iter()
+        .find(|(n, _)| *n == TOOL)
+        .map(|(_, t)| t)
+        .expect("catalog tool");
+    state.tool_ui = crate::state::ToolUi::from_tool(TOOL, &tool, false);
+    let queued = |state: &State| {
+        state.pending.iter().any(|k| {
+            matches!(k, CommandKind::SetToolNumber { name, number: Some(1) } if name == TOOL)
+        })
+    };
+    state.tool_ui.number = 1;
+    super::tool_settings::push_number_if_changed(&mut state, TOOL);
+    assert!(queued(&state), "T1 is reserved, so a typed 1 is not what AddTool gives");
+    state.pending.clear();
+    state.tool_ui.number = 2;
+    super::tool_settings::push_number_if_changed(&mut state, TOOL);
+    assert!(state.pending.is_empty(), "AddTool gives T2, so nothing is queued");
+}

@@ -123,3 +123,79 @@ fn the_ring_restart_plunge_of_a_ramp_entry_bore_is_named() {
         t.notes
     );
 }
+
+/// A hole barely wider than the cutter: Ø3.175 tool, Ø3.2 hole, so the
+/// cutter-centre ring is 0.0125 mm in radius. Entry `entry`, the links'
+/// ramp and helix angle both `deg`, 1 mm stepdown, 3 mm deep.
+fn tight(entry: Entry3D, hole: f64, deg: f64) -> BoreParams {
+    let mut links = Links::PLANAR;
+    links.approach.ramp_angle = deg;
+    links.approach.helix_angle = deg;
+    BoreParams {
+        holes: vec![BoreHole { xy: Point2::new(0.0, 0.0), radius: hole * 0.5, top_z: 0.0, floor_z: -3.0, through: false, stepped: false }],
+        tool_diameter: 3.175,
+        corner_radius: 0.0,
+        stock_to_leave: 0.0,
+        stepdown: 1.0,
+        through_allowance: 0.0,
+        clearance_z: 5.0,
+        retract_z: None,
+        feed: FEED,
+        plunge_feed: PLUNGE,
+        climb: true,
+        tolerance: 0.01,
+        entry,
+        helix_radius: 1.0,
+        links,
+    }
+}
+
+/// Every descending feed move at the cutting feed is at most the angle;
+/// the only axial descent is the named re-plunge down the column a ring
+/// just cut (one per level at most), never a dive into solid. A hole from
+/// 3.2 mm (ring radius 0.0125 mm) to 6 mm (under 2 x the tool).
+#[test]
+fn a_bore_barely_wider_than_its_cutter_descends_within_the_angle_cap() {
+    let deg: f64 = 5.0;
+    let tan = deg.to_radians().tan();
+    for entry in [Entry3D::Ramp, Entry3D::Helix] {
+        for hole in [3.2, 3.5, 4.5, 6.0] {
+            let t = path(&tight(entry, hole, deg));
+            let mut axial = 0;
+            let mut ramps = 0;
+            for m in &t.moves {
+                let dz = m.from.z - m.to.z;
+                if m.kind == MoveKind::Rapid || dz <= 1e-9 {
+                    continue;
+                }
+                let len = xy_len(m);
+                if len > 1e-9 {
+                    assert!(dz <= tan * (len + 1e-5), "{entry:?} Ø{hole}: a descent steeper than {deg} deg at {:?} -> {:?}", m.from, m.to);
+                    ramps += 1;
+                } else {
+                    axial += 1;
+                }
+            }
+            assert!(ramps > 0, "{entry:?} Ø{hole}: it ramps");
+            assert!(axial <= 3, "{entry:?} Ø{hole}: {axial} axial descents, only the three ring re-plunges may stand: {:?}", t.notes);
+            assert!(
+                t.notes.iter().filter(|n| n.contains("axial dive")).count() == 0,
+                "{entry:?} Ø{hole}: an axial dive on the floor remains: {:?}",
+                t.notes
+            );
+            let low = t.moves.iter().filter(|m| m.kind != MoveKind::Rapid).map(|m| m.to.z).fold(f64::INFINITY, f64::min);
+            assert!((low + 3.0).abs() < 1e-6, "{entry:?} Ø{hole}: bottoms at the floor, not {low}");
+        }
+    }
+}
+
+/// The default stays the plunge: a Plunge bore posts the same path with
+/// or without angles on its links, and a tight hole still plunges.
+#[test]
+fn a_plunge_bore_ignores_the_ramp_and_helix_angles() {
+    let with = path(&tight(Entry3D::Plunge, 3.2, 5.0));
+    let without = path(&tight(Entry3D::Plunge, 3.2, 0.0));
+    assert_eq!(with.moves.len(), without.moves.len());
+    let axial = with.moves.iter().filter(|m| m.kind != MoveKind::Rapid && m.from.z - m.to.z > 1e-9 && xy_len(m) <= 1e-9).count();
+    assert!(axial >= 3, "plunge dives straight down at each level");
+}

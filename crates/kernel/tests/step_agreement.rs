@@ -31,9 +31,17 @@ fn models_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models")
 }
 
-/// Every `.step` / `.stp` file under testdata/models, sorted by name.
-fn step_files() -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(models_dir())
+/// The subdirectories of testdata/models whose STEP files this bench reads
+/// (#4065 review: the EDM test parts), named by their path in ROWS.
+const BENCH_DIRS: &[&str] = &["edm"];
+/// The subdirectories whose STEP files another bench pins: edge_gap is
+/// `step_edge_gap`'s (its files are made to stress one tolerance law).
+const OTHER_BENCH_DIRS: &[&str] = &["edge_gap"];
+
+/// The `.step` / `.stp` file names in `dir` (relative to testdata/models,
+/// "" for the top), each with its directory prefix.
+fn step_files_in(dir: &str) -> Vec<String> {
+    std::fs::read_dir(models_dir().join(dir))
         .map(|rd| {
             rd.filter_map(|e| e.ok())
                 .filter_map(|e| e.file_name().into_string().ok())
@@ -41,11 +49,36 @@ fn step_files() -> Vec<String> {
                     let l = n.to_ascii_lowercase();
                     l.ends_with(".step") || l.ends_with(".stp")
                 })
+                .map(|n| if dir.is_empty() { n } else { format!("{dir}/{n}") })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Every `.step` / `.stp` file at the top of testdata/models and in
+/// `BENCH_DIRS`, sorted by path.
+fn step_files() -> Vec<String> {
+    let mut names = step_files_in("");
+    for d in BENCH_DIRS {
+        names.extend(step_files_in(d));
+    }
+    names.sort();
+    names
+}
+
+/// The subdirectories of testdata/models that hold a STEP file.
+fn step_dirs() -> Vec<String> {
+    let mut dirs: Vec<String> = std::fs::read_dir(models_dir())
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| e.path().is_dir())
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|d| !step_files_in(d).is_empty())
                 .collect()
         })
         .unwrap_or_default();
-    names.sort();
-    names
+    dirs.sort();
+    dirs
 }
 
 struct Reading {
@@ -160,6 +193,9 @@ per_file! {
     step_box => "box.step",
     step_bspline_discontinuous => "bspline_discontinuous.step",
     step_bspline_dome => "bspline_dome.step",
+    step_edm_test_2axis => "edm/edm-test-2axis.step",
+    step_edm_test_square => "edm/edm-test-square.step",
+    step_edm_test_taper => "edm/edm-test-taper.step",
     step_empty_list => "empty_list.step",
     step_fig8 => "fig8.step",
     step_fillet_corner => "fillet_corner.step",
@@ -192,6 +228,11 @@ fn step_files_agree_or_refuse_by_name() {
     let pinned: Vec<&str> = ROWS.iter().map(|r| r.file).collect();
     assert_eq!(files, pinned, "a fixture has no row, or a row has no fixture - re-triage");
     assert_eq!(TESTED, pinned.as_slice(), "every row needs its own test in per_file!");
+    // A new subdirectory of STEP fixtures is read here or named as another bench's.
+    for d in step_dirs() {
+        assert!(BENCH_DIRS.contains(&d.as_str()) || OTHER_BENCH_DIRS.contains(&d.as_str()), "testdata/models/{d} holds STEP files that no bench pins");
+    }
+    assert!(files.iter().any(|f| f.starts_with("edm/")), "the EDM test parts are in the bench");
 }
 
 /// The recorded truck side (#2790) keeps its shape and the findings that

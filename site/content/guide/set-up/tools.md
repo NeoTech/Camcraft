@@ -11,21 +11,31 @@ Open {{ <icon name="tools" /> }} **Tools** in the Setup ribbon group. Choose **N
 tool a unique name, and select its type. Enter its cutter, flute, shank,
 holder, speed and feed values. Choose **Add tool** to save it.
 
-To change a document tool, select it in the browser. Its settings show
-directly in the Properties pane: geometry, holder, cutting data, tool
-numbers and identification. The setup's Tool list opens
-the same form. Change the fields and choose **Apply**. The Tool list's
-**Edit** button opens the wider editor, and **Close** closes it. Browsing the catalog, **Add**,
-**New tool…** and import and export live in the separate **Tool library**
-pane. Open it from **Tools** or from **Tool library…** in the browser; it
-does not replace the tool in Properties.
+**Tools** opens the separate **Tool library** window, not a dock pane.
+You can keep it open beside the viewport while Properties shows another
+subject. The old Tool library dock tab is gone. **View > Tool library…**
+also opens the window. On **Cutting tools**, choose **Document** for the
+job's tools or **Catalog** for built-in tools. Tool type and name filters
+apply to both sources.
+
+To change a document tool in this window, choose **Edit** in the Document
+list. The list becomes a rail of tools; **All tools** returns to the list.
+The **Tool** tab edits the type and geometry. The **Details** tab edits
+the material group, catalog facts and tool number. Change the fields and
+choose **Apply**. A geometry and catalog edit is one undo step. The window
+keeps its own draft; typing there does not overwrite a separate Properties
+draft. Selecting a tool in the window does not retarget Properties.
+
+You can still select a document tool in the browser to edit its settings
+in Properties. **Edit tool shape** opens the existing shape window; if
+Properties shows another tool, it first moves to this tool for shape editing.
 Edits and imports enter the undo history. A geometry change can make the
 operations that use the tool stale. Generate those operations again before
 posting.
 
-The catalog in the Tool library pane offers built-in tools. Choose
+The **Catalog** source in the Tool library window offers built-in tools. Choose
 **Add** beside an available entry to copy it into the document. The copy
-can then be edited. In the editor, the separate **Tool information** section stores
+can then be edited. On the **Details** tab, **Tool information** stores
 part number, vendor, coating, helix angle and notes. These facts travel with
 the tool in a project and in a library. Import matches tools by name, not
 by part number.

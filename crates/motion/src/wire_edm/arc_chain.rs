@@ -165,7 +165,8 @@ impl ArcChain {
         let waste_left = match side {
             WireSide::Die => true,
             WireSide::Punch => false,
-            WireSide::Left | WireSide::Right => return Err(invalid("a closed profile states its die or punch side".into())),
+            // #3216: centre, like left / right, is an open run's side.
+            WireSide::Left | WireSide::Right | WireSide::Centre => return Err(invalid("a closed profile states its die or punch side".into())),
         };
         let mut pts = Vec::new();
         for s in &self.spans {

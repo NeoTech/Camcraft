@@ -9,11 +9,15 @@
 //! from vendor binaries.
 //!
 //! Gate map (M4.4): covers camcraft_sim::stock_sim::iso, stock_sim::dual, stock_sim::qef.
+//! #4107: a cut floor on the lattice meshes to a valid solid by marching
+//! tetrahedra (tet's crossing snaps to the sample).
+
+use std::collections::HashMap;
 
 use camcraft_sim::cl::{Move, MoveKind};
 use camcraft_sim::geometry::{cube, Point3, Triangle};
-use camcraft_sim::stock_sim::iso::{extract, extract_with, open_edges, IsoMethod};
-use camcraft_sim::stock_sim::{dist_seg_tri, SdfField, SdfTool, FIELD_BAND};
+use camcraft_sim::stock_sim::iso::{extract, extract_with, open_edges, unpaired_edges, IsoMethod};
+use camcraft_sim::stock_sim::{dist_seg_tri, Backend, SdfField, SdfTool, SimOp, Stock, FIELD_BAND};
 
 const CELL: f64 = 1.0;
 /// The slot: a flat endmill of radius 2 at tip z 6.2 along y = 5.3, so
@@ -97,6 +101,9 @@ fn a_body_under_one_cell_never_panics_and_never_opens() {
     for method in [IsoMethod::Dual, IsoMethod::Marching] {
         if let Ok(tris) = extract_with(&f, CELL, method) {
             assert_eq!(open_edges(&tris), 0, "{method:?}: closed or empty");
+            // #4122: closed is not enough; the dual mesh here was three
+            // flat fins on one edge, volume 0, with no odd edge.
+            assert_eq!(unpaired_edges(&tris), 0, "{method:?}: every edge on two facets");
             assert!(tris.iter().all(|t| t.a.is_finite() && t.b.is_finite() && t.c.is_finite()));
         }
     }
@@ -127,4 +134,59 @@ fn a_curved_ball_pocket_stays_closed_and_never_bulges() {
     let (vd, vm) = (vol(&dual), vol(&mt));
     eprintln!("ball pocket volume: dual {vd:.3}, marching {vm:.3}, true {truth:.3}");
     assert!((vd - truth).abs() <= (vm - truth).abs().max(0.005 * truth), "dual {vd} vs marching {vm}, truth {truth}");
+}
+
+/// #4107: a 30 x 30 x 20 mm block at cell 0.5, faced by four passes of a
+/// flat tool 6 mm across at height `z`. The lattice samples stand at
+/// (k + 0.5) * 0.5: 15.25 is one, 15.1 is not.
+fn faced(z: f64) -> Stock {
+    let mut s = Stock::block(Backend::Field { band: FIELD_BAND }, 0.0, 0.0, 30.0, 30.0, 20.0, 0.5)
+        .unwrap_or_else(|e| panic!("block: {e}"));
+    let moves: Vec<Move> = (0..4)
+        .map(|k| {
+            let y = 8.0 + 4.0 * k as f64;
+            feed(Point3::new(4.0, y, z), Point3::new(26.0, y, z))
+        })
+        .collect();
+    s.simulate(&[SimOp { moves: &moves, radius: 3.0, ball: false, cone: None, corner: None }])
+        .unwrap_or_else(|e| panic!("cut: {e}"));
+    s
+}
+
+/// Facets that lose a corner at the 1e-9 weld, and edges that are not on
+/// exactly two facets after it. `open_edges` counts only odd edges; an
+/// edge on four facets passes it, so this counts every edge.
+fn weld_defects(tris: &[Triangle]) -> (usize, usize) {
+    let key = |p: Point3| [(p.x * 1e9).round() as i64, (p.y * 1e9).round() as i64, (p.z * 1e9).round() as i64];
+    let mut collapsed = 0;
+    let mut uses: HashMap<([i64; 3], [i64; 3]), u32> = HashMap::new();
+    for t in tris {
+        let k = [key(t.a), key(t.b), key(t.c)];
+        if k[0] == k[1] || k[1] == k[2] || k[0] == k[2] {
+            collapsed += 1;
+        }
+        for (a, b) in [(k[0], k[1]), (k[1], k[2]), (k[2], k[0])] {
+            *uses.entry(if a <= b { (a, b) } else { (b, a) }).or_insert(0) += 1;
+        }
+    }
+    (collapsed, uses.values().filter(|&&n| n != 2).count())
+}
+
+#[test]
+fn a_floor_on_the_lattice_meshes_to_a_valid_solid_by_marching_tetrahedra() {
+    let s = faced(15.25);
+    let f = s.field().expect("a field");
+    assert!(f.distance(Point3::new(15.25, 15.25, 15.25)).abs() < 1e-9, "the floor stands on a lattice sample");
+    let tris = extract_with(f, f.cell(), IsoMethod::Marching).unwrap_or_else(|e| panic!("mesh: {e}"));
+    assert_eq!(weld_defects(&tris), (0, 0), "collapsed facets, edges not on two facets");
+}
+
+#[test]
+fn a_floor_off_the_lattice_stays_valid_by_both_methods() {
+    let s = faced(15.1);
+    let f = s.field().expect("a field");
+    for m in [IsoMethod::Marching, IsoMethod::Dual] {
+        let tris = extract_with(f, f.cell(), m).unwrap_or_else(|e| panic!("mesh: {e}"));
+        assert_eq!(weld_defects(&tris), (0, 0), "{m:?}");
+    }
 }

@@ -232,6 +232,7 @@ fn wire_edm_2axis_and_4axis_ruled_cut_like_baked() {
             SrcRef::Entity("slug".into())
         };
         let op = WireContourOp {
+        overlap: 0.0,
             lead_arc_radius: None,
             top_z: Height::of(HeightReference::TopOfModel, 0.0),
             bottom_z: Height::of(HeightReference::BottomOfModel, 0.0),

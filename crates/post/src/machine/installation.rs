@@ -47,12 +47,42 @@ pub enum ToolChangeMode {
     Changer,
 }
 
+/// How a control numbers the D word of a tool call (#4143). SINUMERIK 840D sl
+/// Fundamentals 12/2018 section 6.6 ("Type of D programming"): with "D number =
+/// cutting edge number" D selects an edge of the active tool (D1 for a one-edge
+/// cutter); with free D numbers the shop assigns them, and some set D equal to T.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DNumberRule {
+    FirstEdge,
+    ToolNumber,
+}
+
+impl DNumberRule {
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::FirstEdge => "first-edge",
+            Self::ToolNumber => "tool-number",
+        }
+    }
+}
+
+/// The installation facts of the file form, by JSON pointer. A file-form
+/// input with one of them is parsed and mirrored, so the script sees each
+/// stated limit.
+pub(crate) const FACT_KEYS: [&str; 4] = [
+    "/controller/identity",
+    "/tooling/tool_change",
+    "/tooling/d_number",
+    "/tooling/max_tool_number",
+];
+
 /// The controller file form and the post engine's static form can both carry
 /// installation facts. A mixed input has two sources for a limit or capability.
 /// Refuse it before the CLI or API can discard a stated limit during mirroring.
 pub(crate) fn check_input_form(v: &Value) -> Result<(), String> {
     if v.pointer("/kinematics/default/parts").is_none()
-        || ["/controller/identity", "/tooling/tool_change"]
+        || FACT_KEYS
             .iter()
             .all(|k| v.pointer(k).is_none_or(Value::is_null))
     {
@@ -102,10 +132,32 @@ pub(crate) fn identity(v: &Value) -> Result<Option<ControllerIdentity>, String> 
     Ok(Some(control))
 }
 
+/// #4087: the highest tool number the control's tool table holds (the
+/// iTNC 530 tool table has MP 7260 lines). A whole number of 1 or more.
+pub(crate) fn max_tool_number(v: &Value) -> Result<Option<u32>, String> {
+    let Some(value) = v.pointer("/tooling/max_tool_number").filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    match value.as_u64().map(u32::try_from) {
+        Some(Ok(n)) if n >= 1 => Ok(Some(n)),
+        _ => Err(format!(
+            "machine file: tooling.max_tool_number must be a whole number of 1 or more, not {value}"
+        )),
+    }
+}
+
 pub(crate) fn tool_change(v: &Value) -> Result<Option<ToolChangeMode>, String> {
     v.pointer("/tooling/tool_change")
         .filter(|v| !v.is_null())
         .map(|value| serde_json::from_value(value.clone()))
         .transpose()
         .map_err(|e| format!("machine file: tooling.tool_change: {e}"))
+}
+
+pub(crate) fn d_number(v: &Value) -> Result<Option<DNumberRule>, String> {
+    v.pointer("/tooling/d_number")
+        .filter(|v| !v.is_null())
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .map_err(|e| format!("machine file: tooling.d_number: {e}"))
 }

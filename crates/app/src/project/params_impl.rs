@@ -1514,8 +1514,10 @@ impl ParamsDto {
                 holes,
                 break_through,
                 pass_start,
+                entry,
                 picks,
             } => ParamsDto::Bore {
+                entry: super::links::entry_dto(*entry),
                 break_through: *break_through,
                 pass_start: (*pass_start).into(),
                 links: links_to_dto(links, &p.default_links()),
@@ -2954,8 +2956,10 @@ impl ParamsDto {
                 holes,
                 break_through,
                 pass_start,
+                entry,
                 picks,
             } => OpParams::Bore {
+                entry: super::links::entry_of(*entry),
                 break_through: *break_through,
                 pass_start: (*pass_start).into(),
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),

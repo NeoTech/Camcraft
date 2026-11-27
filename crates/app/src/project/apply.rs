@@ -561,6 +561,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // is the stamp itself.
         // v81 -> v82 (#2826): the Rotary Flow arm arrives; no v81
         // file names it, so nothing seats or moves - pure step-up.
+        // v82 -> v83 (#4031): a tool may state its cutter hand
+        // (`cutter_hand`, right M3 / left M4); absent is right-hand, as
+        // every v82 file cut. A v82 reader would silently drop a stated
+        // left hand and post M3 for a cutter that must reverse, so the
+        // ladder steps.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {
@@ -729,7 +734,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         world,
         &match file.post {
             // #3537: a hidden alias name reads as the registry name it selects.
-            Some(PostDto::Named(name)) => crate::posting::agie::current_ref(crate::schema::PostRef::Named(name)),
+            Some(PostDto::Named(name)) => crate::posting::aliases::current_ref(crate::schema::PostRef::Named(name)),
             Some(PostDto::File(path)) => crate::schema::PostRef::File(path),
             None => crate::schema::PostRef::Builtin,
         },
@@ -740,6 +745,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // stale singleton from the previous document can never leak in
     // (the theme's law, worn in the pin's clothes).
     crate::ribbon::pinned_set(world, &file.pinned);
+    // #3644: the component table is not in the file yet (#3645): opening
+    // clears it, so no row of the previous document leaks in.
+    crate::tool_assembly::table_set(world, Vec::new());
     // Opening lands the material too - including None (the units law).
     crate::cutting::material_set(world, material);
     // #1094: a raw-stock-only mark lands only when its source model is in

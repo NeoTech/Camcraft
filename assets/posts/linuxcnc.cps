@@ -356,7 +356,7 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // keyword in any case ("Comments", "Messages", "Probe Logging",
 // "Logging", "Debug Messages"). A comment whose text would open with one
 // is led by "- ", so user text stays inert.
-var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
+var ACTIVE = /^\s*(M\s*S\s*G|D\s*E\s*B\s*U\s*G|P\s*R\s*I\s*N\s*T|L\s*O\s*G\s*O\s*P\s*E\s*N|L\s*O\s*G\s*A\s*P\s*P\s*E\s*N\s*D|L\s*O\s*G\s*C\s*L\s*O\s*S\s*E|L\s*O\s*G|P\s*R\s*O\s*B\s*E\s*O\s*P\s*E\s*N|P\s*R\s*O\s*B\s*E\s*C\s*L\s*O\s*S\s*E|A\s*B\s*O\s*R\s*T|A\s*X\s*I\s*S|P\s*Y\s*R\s*E\s*L\s*O\s*A\s*D|P\s*Y\s*R\s*U\s*N|P\s*Y)\b/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
@@ -391,9 +391,17 @@ function toolNote() {  // just before the tool change it describes
 // feed per minute, compensation, tool length and cycle cancelled. Path
 // control on its own line: G64 with a stated P (a bare G64 is "best
 // possible speed, no tolerance"), or G61 exact path.
+// #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
+// Clamp positive tolerances that round to zero under fu() to the smallest
+// positive value (0.001 mm, 0.0001 in). Never write P0.
+function tolP(tol) {
+  var s = fu(tol);
+  return (s === "0" || s === "-0") ? (inch ? "P0.0001" : "P0.001") : "P" + s;
+}
+
 function pathWords() {
   if (optStr("pathControl", "blend") === "exact") return ["G61"];
-  return ["G64", "P" + fu(optNum("blendTolerance", 0.025))];
+  return ["G64", tolP(optNum("blendTolerance", 0.025))];
 }
 // The machine's inverted linear axes (#375): the engine has mirrored the
 // stream into the controller's frame, and the header says so, one note
@@ -537,7 +545,7 @@ function onToolChange(number, name) {
 // tolerance leaks into the next operation.
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G64", "P" + fu(smoothTol)]);
+  block(["G64", tolP(smoothTol)]);
   smoothActive = true;
 }
 function smoothOff() {
@@ -1064,7 +1072,7 @@ function onProbeResult() {
     var op = ex < 0 ? "+" : "-";
     block(["#" + (dev + i) + "=[" + mean + op + fu(Math.abs(ex)) + "]"]);
     var o = nextO();
-    block([o, "if", "[ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]"]);
+    block([o, "if", "[[#<_task> EQ 1] AND [ABS[#" + (dev + i) + "] GT " + fu(p.Tolerance) + "]]"]);
     block(["(MSG, PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
     block(["M2"]);
     block([o, "endif"]);

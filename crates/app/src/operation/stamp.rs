@@ -44,6 +44,12 @@ pub fn current_stamp(
     // rapid verdicts judged it: it reads Stale once and regenerates.
     // Bump this salt again whenever a verify law a cache records changes.
     h.write(b"camcraft-op-stamp-v4");
+    // #4062: cached milling envelopes have no finished-part verdict
+    // for vertical rapids until the operation is generated again.
+    let kind = params.kind().info();
+    if kind.mode == crate::verify::Mode::Envelope && kind.section != Section::Turning {
+        h.write(b"vertical-rapid-part-4062");
+    }
     // #2965: the multi-axis, rotary and cross-drill kinds answer to the
     // first-traverse law now. Only their caches read Stale once; the
     // salt above stays, so no other kind's stamp moves.

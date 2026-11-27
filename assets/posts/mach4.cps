@@ -57,7 +57,7 @@ var justRetracted = false, homedAt = -1;
 
 var planeG = 17;
 var inCycle = false, cycleSig = "", seatKnown = false, cycX = 0, cycY = 0, cycR = 0;
-var smoothTol = 0, smoothMode = "";
+var smoothTol = 0, smoothMode = "", smoothNamed = false;
 var compG = "", compD = "", compOn = false, wearNoted = false;
 var probeBase = 100;
 
@@ -496,6 +496,17 @@ function startPreamble() {
     coolant = nextCoolant;
     if (coolant) block([coolant]);
   }
+  smoothOn();
+}
+
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - MACH4 G64 HAS NO TOLERANCE");
+  smoothNamed = true;
+}
+function smoothOff() {
+  smoothTol = 0;
+  smoothMode = "";
 }
 
 function restorePlane() {
@@ -539,7 +550,7 @@ function onSectionEnd() {
     compG = ""; compD = ""; compOn = false;
   }
   wearNoted = false;
-  smoothTol = 0; smoothMode = "";
+  smoothOff();
   sectionOpen = false;
   wcsFlip = "";
   seatKnown = false;
@@ -809,7 +820,9 @@ function onCycle() {
     }
     g = "G84";
   } else if (p.CycleType === "BORE") g = "G86";
-  else if (p.CycleType === "BACKBORE") g = "G89";
+  // #4142: a back-bore with no dwell is G85 (feed in, feed out): a G89
+  // with no P word would leave the dwell to the control's modal P.
+  else if (p.CycleType === "BACKBORE") g = secDwell > 0 ? "G89" : "G85";
   else if (p.CycleType === "REAM") g = "G85";
   else { msg(who() + "canned cycle " + p.CycleType + " is not supported by Mach4 post"); return; }
 
@@ -838,7 +851,7 @@ function onCycle() {
     block(["G99"]);
     var ws = [g, "X" + fu(qBot[0]), "Y" + fu(qBot[1]), "Z" + fu(qBot[2]), "R" + fu(qR[2])];
     if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && Number(p.Q) > 0) ws.push("Q" + fu(Number(p.Q)));
-    if (secDwell > 0 && (g === "G82" || g === "G89")) ws.push("P" + trimDec(secDwell, 3, false));
+    if (secDwell > 0 && (g === "G82" || g === "G89")) ws.push("P" + trimDec(secDwell, 3, true));
     ws.push(g === "G84" ? "F" + fn(Number(p.FeedRate)) : ff(Number(p.FeedRate)));
     block(ws);
     cycleSig = sig;

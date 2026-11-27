@@ -18,7 +18,7 @@ pub(crate) fn on_machine(machine: &Machine, name: &str, kind: ToolKind, number: 
             return Err(format!(
                 "tool '{name}' (T{number}): {} is reserved for {} on {}",
                 reservation.name.as_deref().map_or_else(|| format!("T{number}"), |n| format!("'{n}'")),
-                reservation.usage, machine.model
+                usage_text(&reservation.usage), machine.model
             ));
         }
     }
@@ -60,14 +60,14 @@ pub(crate) fn allocate(world: &World, name: &str, kind: ToolKind, taken: &[u32])
             r.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(name.trim()))
                 && !(r.usage == "probe" && kind == ToolKind::Probe)
         }) {
-            return Err(format!("tool '{name}': name is reserved for {} on {}", r.usage, machine.model));
+            return Err(format!("tool '{name}': name is reserved for {} on {}", usage_text(&r.usage), machine.model));
         }
         let probe_pockets: Vec<u32> = machine.reserved_tools.iter()
             .filter(|r| r.usage == "probe" && kind == ToolKind::Probe)
             .filter_map(|r| r.number).collect();
         if !probe_pockets.is_empty() {
-            return probe_pockets.into_iter().find(|n| !used.contains(n))
-                .ok_or_else(|| format!("tool '{name}': every reserved probe pocket is occupied on {}", machine.model));
+            return probe_pockets.iter().copied().find(|n| !used.contains(n))
+                .ok_or_else(|| probe_pockets_full(name, &probe_pockets, &machine.model));
         }
     }
     if let Some(machine) = &machine {
@@ -75,6 +75,19 @@ pub(crate) fn allocate(world: &World, name: &str, kind: ToolKind, taken: &[u32])
     }
     (1..=crate::tool_numbers::MAX).find(|n| !used.contains(n))
         .ok_or_else(|| format!("tool '{name}': no free tool numbers remain ({})", crate::tool_numbers::RANGE_TEXT))
+}
+
+/// #3667: the plain name of a reservation's use; the machine file says `tool_setter`.
+fn usage_text(usage: &str) -> &str {
+    if usage == "tool_setter" { "tool setter" } else { usage }
+}
+
+/// #3667: name the full probe pockets and tell the user what to do.
+fn probe_pockets_full(name: &str, pockets: &[u32], model: &str) -> String {
+    let list = pockets.iter().map(|n| format!("T{n}")).collect::<Vec<_>>().join(", ");
+    format!(
+        "tool '{name}': the probe pockets of {model} ({list}) all hold a tool.          Delete or renumber the tool in one of these pockets,          or reserve one more probe pocket in the machine file"
+    )
 }
 
 /// Every operation uses its own setup's machine, also across multiple mounts.

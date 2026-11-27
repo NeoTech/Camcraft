@@ -81,6 +81,7 @@ fn punch_doc(skims: Vec<WireSkim>) -> World {
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
         sharp_corners: false,
+        overlap: 0.0,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

@@ -7,7 +7,7 @@
 //! Provenance: our own tests, specced from the ROADMAP's M6.1 notes.
 //!
 //! Gate map (M4.4): covers ui::egui_app::theme_files, ui::egui_app::theme,
-//! ui::egui_app::contrast.
+//! ui::egui_app::contrast, ui::egui_app (the colour-literal guard, #1120).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,8 +17,14 @@ use camcraft_ui::egui_app::theme::Tokens;
 use camcraft_ui::egui_app::theme_files as tf;
 use egui::Color32;
 
+#[path = "theme_files/colour_literals.rs"]
+mod colour_literals;
+#[path = "theme_files/colour_scan.rs"]
+mod colour_scan;
 #[path = "theme_files/dropdown.rs"]
 mod dropdown;
+#[path = "theme_files/viewport_inks.rs"]
+mod viewport_inks;
 
 fn tmp_dir(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("camcraft_ui_theme_{tag}_{}", std::process::id()));

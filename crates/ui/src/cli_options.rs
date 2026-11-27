@@ -81,6 +81,14 @@ pub const OPTIONS: &[Opt] = &[
         help: "Open the MCP server for AI agents on this local port (0 to 65535).",
     },
     Opt {
+        flag: "--mcp-idle-timeout",
+        short: None,
+        value: Some("<seconds>"),
+        env: Some("CAMCRAFT_MCP_IDLE_TIMEOUT"),
+        default: "300 seconds",
+        help: "Drop an idle live MCP client after this many whole seconds. Zero disables idle expiry; the UI link hello deadline stays in force.",
+    },
+    Opt {
         flag: "--no-activate",
         short: None,
         value: None,

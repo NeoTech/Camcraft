@@ -302,6 +302,33 @@ fn log_names_stamps_and_notes_match_the_old_script() {
     assert_eq!(exec::read_log("", 0).expect("note"), "");
 }
 
+#[test]
+fn gpu_reporting_names_captured_skips_instead_of_claiming_parity() {
+    let log = "running 2 tests\ntest cpu ... ok\ntest parity ... ok\n\nsuccesses:\n\n---- parity stdout ----\n*** cut_onto: GPU parity SKIPPED - NOT a pass: no graphics adapter: unavailable ***\n\nsuccesses:\n    cpu\n    parity\ntest result: ok. 2 passed; 0 failed\n";
+    let note = exec::read_log(log, 0).expect("note");
+    assert!(note.contains("SKIPPED (no adapter): parity"), "{note}");
+    assert!(note.contains("1 GPU test(s) not exercised"), "{note}");
+}
+
+#[test]
+fn gpu_reporting_retains_actual_adapter_identity_and_skip_reasons() {
+    for kind in ["software", "hardware", "unknown"] {
+        let log = format!("---- parity stdout ----\nGPU adapter: {kind} \"test fixture\" via Vulkan\n");
+        assert!(exec::read_log(&log, 0).unwrap().contains(&format!("GPU adapter: {kind} \"test fixture\" via Vulkan")));
+    }
+    let log = "---- off stdout ----\n*** cut_parity: GPU path SKIPPED - NOT a pass: CAMCRAFT_COMPUTE=off ***\n---- absent stdout ----\n*** suite: SKIPPED (no adapter) - NOT a pass ***\n*** suite: SKIPPED (no adapter) - NOT a pass ***\n";
+    let note = exec::read_log(log, 0).unwrap();
+    assert!(note.contains("2 GPU test(s) not exercised"), "{note}");
+    assert!(note.contains("SKIPPED (GPU unavailable): off"), "{note}");
+    assert!(note.contains("SKIPPED (no adapter): absent"), "{note}");
+    assert_eq!(exec::read_log("---- parity stdout ----\nno diagnostic\n", 0).unwrap(), "");
+    assert_eq!(exec::read_log("---- fixture stdout ----\nerror: could not compile `synthetic fixture`\n", 0).unwrap(), "");
+    let fail = "test parity ... FAILED\n---- parity stdout ----\nCAMCRAFT_REQUIRE_GPU=1 but no graphics adapter\ntest result: FAILED\n";
+    let note = exec::read_log(fail, 101).unwrap();
+    assert!(note.contains("failed:"));
+    assert!(!note.contains("SKIPPED"));
+}
+
 /// Names, starts and ends of every scanned test fn, for compact assertions.
 fn spans(text: &str) -> Vec<(String, usize, usize)> {
     scan::test_fns(text).expect("scan").into_iter().map(|t| (t.name, t.start, t.end)).collect()

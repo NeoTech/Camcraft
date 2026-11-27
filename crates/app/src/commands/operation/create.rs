@@ -120,6 +120,7 @@ impl CreateOperation {
             skims: Vec::new(),
             four_axis: None,
             sharp_corners: false,
+            overlap: 0.0,
             lead_arc_radius: None,
         });
         Self::build(world, name, tool, src, params, true, false)
@@ -166,10 +167,7 @@ impl CreateOperation {
         }
         sinker_gate(world, setup.as_deref(), &params)?;
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         // Ordering needs resolved heights, and the world is in hand right
         // here: an operation that would cut upward is refused at creation

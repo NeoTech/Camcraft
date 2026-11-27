@@ -2,7 +2,8 @@
 //! punch cut as true arcs, verified by the wire laws and posted as G2 / G3
 //! with I J through the generic ISO, Sodick and G-EDM wire posts, each to
 //! its golden. TEXT and DIMENSION entities no longer block the cut. A closed SPLINE is read
-//! as tangent arcs (#1865) and cut the same way.
+//! as tangent arcs (#1865) and cut the same way, and a circle in a nested BLOCK posts the
+//! same program as the circle drawn at top level.
 //!
 //! Regenerate the goldens after an intentional change, then read the diff:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test wire_dxf_selection arcs`
@@ -186,12 +187,41 @@ fn arcs_stay_refused_for_taper_and_a_hatch_still_blocks_the_cut() {
     let world = doc(&hatch, FIXTURE, "C110", WireSide::Die, (0.0, 0.0), false);
     let why = refusal(&world);
     assert!(why.contains("skipped 1 HATCH entity"), "{why}");
-    // #1865: a block reference no longer stops the import, but its clearance from the wire
-    // cannot be checked, so the cut is refused by name.
+    // #1865: a block reference is expanded, so one to a block that is not defined stops
+    // the import by name.
     let insert = DIE.replace("0\nENDSEC\n0\nEOF", "0\nINSERT\n8\nnotes\n2\nBOLT\n10\n30\n20\n0\n0\nENDSEC\n0\nEOF");
-    let world = doc(&insert, FIXTURE, "C110", WireSide::Die, (0.0, 0.0), false);
-    let why = refusal(&world);
-    assert!(why.contains("skipped 1 INSERT entity"), "{why}");
+    let world = new_world();
+    let stock = StockShape::Box { dx: 100.0, dy: 100.0, dz: 12.0 };
+    History::default().execute(&world, SetStock::new(&world, stock, Location::default()).expect("stock"));
+    let why = ImportDxf::from_bytes(&world, None, "drawing.dxf", insert.as_bytes(), &DxfOptions::default())
+        .err()
+        .expect("refused")
+        .to_string();
+    assert!(why.contains("INSERT BOLT: block is not defined"), "{why}");
+}
+
+/// The die circle of `DIE` drawn in a block (#1865): a radius 10 circle on layer "0" about
+/// the base point (10, 10), inserted at half scale and turned 90 degrees inside a second
+/// block, which is inserted on the "outline" layer. Layer "0" takes the INSERT's layer.
+const DIE_BLOCK: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nBLOCKS\n\
+    0\nBLOCK\n8\n0\n2\nRing\n70\n0\n10\n10\n20\n10\n30\n0\n0\nCIRCLE\n8\n0\n10\n10\n20\n10\n40\n10\n0\nENDBLK\n\
+    0\nBLOCK\n8\n0\n2\nHolder\n70\n0\n10\n0\n20\n0\n30\n0\n\
+    0\nINSERT\n8\n0\n2\nRing\n10\n0\n20\n0\n41\n0.5\n42\n0.5\n50\n90\n0\nENDBLK\n0\nENDSEC\n\
+    0\nSECTION\n2\nENTITIES\n0\nINSERT\n8\noutline\n2\nHolder\n10\n0\n20\n0\n\
+    0\nTEXT\n8\nnotes\n10\n20\n20\n20\n40\n2\n1\nDIE 10\n\
+    0\nDIMENSION\n8\nnotes\n10\n-5\n20\n-8\n0\nENDSEC\n0\nEOF\n";
+
+#[test]
+fn an_inserted_block_cuts_and_posts_like_the_same_top_level_circle() {
+    let world = doc(DIE_BLOCK, FIXTURE, "C110", WireSide::Die, (0.0, 0.0), false);
+    let (_, drawing) = sketch::find(&world, "drawing").expect("drawing");
+    assert_eq!(drawing.data.chains().closed.len(), 1, "one closed chain on the outline layer");
+    let path = generated(&world);
+    assert_eq!(path.arc_count(), 2, "{:?}", path.moves);
+    let nc = posted(&world, ISO, "die-block");
+    assert!(arc_blocks(&nc).iter().all(|l| l.starts_with("G3")), "{nc}");
+    let want = std::fs::read_to_string("tests/golden/nc/wire-iso/wire_dxf_die_circle.nc").expect("golden present");
+    assert_eq!(nc, want, "the inserted circle posts the top-level circle's program");
 }
 
 /// The X and Y words of `line`, with the modal values of `at` where a word
@@ -219,4 +249,47 @@ fn tangent_arcs_post_arc_to_arc_with_no_block_that_stands_still() {
         assert!((to.0 - at.0).hypot(to.1 - at.1) > 1e-6, "a block with no motion: {l}\n{nc}");
         at = to;
     }
+}
+
+/// The reentrant die of examples/agie/reentrant-die.dxf (#3178) on the
+/// layer this suite picks: R2 and R1 fillets, a tooth with sharp tips and a
+/// tongue with an R4 round tip about the drawing point X0 Y4.
+fn reentrant() -> String {
+    include_str!("../../../../examples/agie/reentrant-die.dxf").replace("\n8\nprofile\n", "\n8\noutline\n")
+}
+
+#[test]
+fn a_reentrant_die_of_lines_and_arcs_passes_the_laws_and_a_2um_gouge_does_not() {
+    let world = doc(&reentrant(), FIXTURE, "C110", WireSide::Die, (0.0, -7.0), false);
+    // The laws accept the generated cut: no finding, captured, one slug.
+    let path = generated(&world);
+    // The tongue tip, offset outward about its centre on the waste side.
+    let c = to_world(&world, 0.0, 4.0);
+    let tip = path
+        .moves
+        .iter()
+        .position(|m| m.arc.is_some_and(|a| (a.center.x - c[0]).hypot(a.center.y - c[1]) < 1e-9))
+        .expect("the tongue tip arc");
+    let r = (path.moves[tip].to.x - c[0]).hypot(path.moves[tip].to.y - c[1]);
+    assert!((r - (4.0 + 0.165)).abs() < 1e-9, "{r}");
+    // Move that arc 2 um toward its centre, into the retained tongue, and
+    // keep the path joined at both of its ends. The first gouging move is
+    // that arc or a line that now leans into the tongue at its end.
+    let mut gouged = path.clone();
+    let pull = |p: Point3| {
+        let k = (r - 0.002) / r;
+        Point3::new(c[0] + (p.x - c[0]) * k, c[1] + (p.y - c[1]) * k, p.z)
+    };
+    let (from, to) = (pull(gouged.moves[tip].from), pull(gouged.moves[tip].to));
+    gouged.moves[tip].from = from;
+    gouged.moves[tip].to = to;
+    gouged.moves[tip - 1].to = from;
+    gouged.moves[tip + 1].from = to;
+    let e = model::find_by_name(&world, "Cut").expect("operation");
+    e.entity_view(&world).set(camcraft_app::schema::Toolpath::new(gouged, Vec::new()));
+    let verdict = operation::wire_verify::wire_verdict(&world, &e).expect("wire").expect("verifiable");
+    assert!(
+        verdict.findings.iter().any(|f| matches!(f, camcraft_app::verify::wire::WireFinding::Gouge { move_no, .. } if (tip..=tip + 2).contains(move_no))),
+        "{verdict:?}"
+    );
 }

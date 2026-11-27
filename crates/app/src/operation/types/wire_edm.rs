@@ -105,6 +105,11 @@ pub struct WireContourOp {
     /// `false` - the default - refuses it by name. A 4-axis cut reads
     /// its heal tolerance instead.
     pub sharp_corners: bool,
+    /// The closing overlap, mm (#3216): how far past the seam the ride
+    /// continues before the lead-out back to the start hole. 0 is the
+    /// plain lap. Unread for an open run or with tabs - the generator
+    /// refuses it stated there.
+    pub overlap: f64,
     /// The lead (#3991): `None` - the default - is the straight lead from
     /// the start hole to the path's nearest point; `Some(r)` is a tangent
     /// arc lead-in and lead-out of radius `r` mm (more than the kerf
@@ -227,6 +232,8 @@ impl WireContourOp {
             && self.lead_arc_radius.is_none_or(|r| r.is_finite() && r > 0.0 && r < 1e6)
             && self.clearance.is_finite()
             && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
+            && self.overlap.is_finite()
+            && (0.0..=1e6).contains(&self.overlap)
             && sane_id(&self.condition)
             && self.skims.len() <= SKIMS_MAX
             && self.skims.iter().all(|s| sane_id(&s.condition))

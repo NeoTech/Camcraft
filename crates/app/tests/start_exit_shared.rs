@@ -6,18 +6,30 @@
 //!
 //! Gate map (#3324): covers app::operation (kinds pick capability,
 //! path_picks accessor, sane), app::mcp (tools schema, job kind list).
+//! Gate map (#3334): covers app::operation (plasma_op, the Plasma Profile
+//! picks), camcraft_motion::plasma (picks, emit).
 //! #3330: app::operation (generate, the 5-Axis Contour arm) and
 //! motion::finishing3d (ring_seam) through the application.
+//! #3330: app::operation (generate, the 5-Axis Parallel arm), app::mcp
+//! (tools schema) and motion::finishing3d (raster_seam).
 //! Gate map (#3331): covers app::operation (generate: the Facing, Profile
 //! Rough and Profile Finish picks), app::commands (EditOperationParams).
+//! Gate map (#3329, `start_exit_shared/pocket3d.rs`): covers
+//! app::operation (generate: the 3D Pocket arm, pick_kinds), app::mcp
+//! (tools schema), motion::machining3d (level_seam, picked).
 //! Gate map (#3333, `start_exit_shared/sinker.rs`): covers
 //! motion::sinker_picks, app::operation (sinker_op, sinker_side_op).
+//! #3329 (`start_exit_shared/finish3d.rs`): app::operation (generate,
+//! the 3D Finish arm; pick_kinds) and motion::finishing3d (finish_seam).
 
 // #3333: the sinker kinds' orbit picks and side-move picks.
 #[path = "start_exit_shared/sinker.rs"]
 mod sinker;
 
 mod common;
+// #3334: the Plasma Profile's picks (the pierce and the torch off).
+#[path = "start_exit_shared/plasma.rs"]
+mod plasma;
 // #3328: the hole order of Drill, Bore and Thread under the picks.
 #[path = "start_exit_shared/hole_order.rs"]
 mod hole_order;
@@ -51,7 +63,7 @@ fn job() -> Server {
 #[test]
 fn a_pick_on_a_kind_that_does_not_take_it_names_the_kind_and_the_reason() {
     let mut s = job();
-    for (kind, label) in [("2D Offset", "2D Offset"), ("2D Pocket", "2D Pocket"), ("3D Pocket", "3D Pocket")] {
+    for (kind, label) in [("2D Offset", "2D Offset"), ("2D Pocket", "2D Pocket"), ("Trace", "Trace")] {
         let (err, r) = call(&mut s, "add_operation", json!({ "kind": kind, "tool": "EM-1000-4FL", "name": "Op" }));
         assert!(!err, "{kind}: {r}");
         for (role, what) in [("start", "start point"), ("exit", "exit point")] {
@@ -75,7 +87,17 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
             OpType::Contour => assert_eq!(cap, PickCapability::Ring, "the contour takes a ring pick"),
             // #3330: the 5-axis contour seats its waterline rings at the pick.
             OpType::Contour5D => assert_eq!(cap, PickCapability::Ring, "the 5-axis contour takes a ring pick"),
+            // #3330: the 5-axis parallel starts at a raster corner.
+            OpType::Parallel5D => assert_eq!(cap, PickCapability::Raster, "the 5-axis parallel takes a raster corner"),
+            // #3329: the 3D Finish starts at a corner of its Parallel raster.
+            OpType::Finish3D => assert_eq!(cap, PickCapability::Raster, "the 3D finish takes a raster corner"),
+            // #3329: the Deburr's chain cut first and its chain cut last.
+            OpType::Deburr => assert_eq!(cap, PickCapability::Chain, "the deburr takes an edge chain pick"),
+            // #3329: the 3D Pocket's descent place and the end of its last pass.
+            OpType::Pocket3D => assert_eq!(cap, PickCapability::Region, "the 3D pocket takes a region pick"),
             OpType::WireContour => assert_eq!(cap, PickCapability::Threading, "the wire takes its threading point"),
+            // #3334: the pierce and the torch-off place on a closed contour.
+            OpType::PlasmaProfile => assert_eq!(cap, PickCapability::Ring, "the plasma profile takes a ring pick"),
             // #3326: the Face takes the corner of its first row and the side of its last.
             OpType::Face => assert_eq!(cap, PickCapability::Raster, "the face takes a raster pick"),
             // #3328: the first hole and the last hole of the list.
@@ -90,8 +112,9 @@ fn every_kind_has_one_pick_capability_and_only_the_taken_ones_take_a_pick() {
             OpType::SinkerBurn => assert_eq!(cap, PickCapability::Ring, "the sinker burn takes a pick on its orbit"),
             OpType::SinkerSideBurn => assert_eq!(cap, PickCapability::Ends, "the side burn takes an end of its side move"),
             _ => {
+                // #4110: pin refusal text naming hole-order and sinker kinds.
                 let PickCapability::NotTaken(why) = cap else {
-                    panic!("{}: only the contour, the wire, the face, the slot and the three turning kinds take a pick", k.label)
+                    panic!("{}: only the contour, the wire, the face, the slot, the three turning kinds, the hole-order kinds and the sinker kinds take a pick", k.label)
                 };
                 assert!(!why.is_empty(), "{}: the reason is named", k.label);
             }
@@ -176,3 +199,19 @@ fn the_mcp_doors_name_the_pick_fields_and_the_kinds_that_take_them() {
 // #3330: the 5-Axis Contour takes a start and an exit pick.
 #[path = "start_exit_shared/contour5d.rs"]
 mod contour5d;
+
+// #3330: the 5-Axis Parallel takes a start and an exit pick.
+#[path = "start_exit_shared/parallel5d.rs"]
+mod parallel5d;
+
+// #3329: the 3D Finish takes a start and an exit pick on its Parallel raster.
+#[path = "start_exit_shared/finish3d.rs"]
+mod finish3d;
+
+// #3329: the Deburr takes a start and an exit pick.
+#[path = "start_exit_shared/deburr.rs"]
+mod deburr;
+
+// #3329: the 3D Pocket takes a start and an exit pick.
+#[path = "start_exit_shared/pocket3d.rs"]
+mod pocket3d;

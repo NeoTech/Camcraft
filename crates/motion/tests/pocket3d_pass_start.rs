@@ -193,3 +193,7 @@ fn zigzag_plunge_restarts_feed_only_from_the_plunge_height() {
         }
     }
 }
+
+// #3329: the start and exit points of the 3D Pocket seat these levels.
+#[path = "pocket3d_pass_start/picks.rs"]
+mod picks;

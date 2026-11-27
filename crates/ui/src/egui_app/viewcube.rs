@@ -330,7 +330,7 @@ pub(crate) fn draw(
         let m = d[0].abs().max(d[1].abs()).max(d[2].abs()).max(f64::EPSILON);
         let q = [d[0] / m, d[1] / m, d[2] / m];
         ui.painter()
-            .circle_filled(point_screen(cam, h, q), 3.0, egui::Color32::from_rgb(255, 217, 102));
+            .circle_filled(point_screen(cam, h, q), 3.0, super::theme::current().viewport_hover);
     }
 
     viewport_bar::draw(ui, h.bar, &h.nav, state, hover);

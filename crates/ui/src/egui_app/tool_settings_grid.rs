@@ -169,6 +169,26 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
 pub(super) fn kind_rows(ui: &mut Ui, state: &mut State) {
     let u = state.units();
     let kind = state.tool_ui.kind;
+    // #4031: every cutter that turns a spindle states its hand. The
+    // kinds that turn none (probe, torch, waterjet, electrode, wire)
+    // state none; a post that cannot reverse refuses the left hand by
+    // name at the operation door.
+    if !matches!(
+        state.tool_ui.tool_kind(),
+        tools::ToolKind::Probe
+            | tools::ToolKind::Torch
+            | tools::ToolKind::Waterjet
+            | tools::ToolKind::Electrode
+            | tools::ToolKind::Wire
+    ) {
+        let mut left = state.tool_ui.cutter_hand == camcraft_app::tools::CutterHand::Left;
+        check_row(ui, "Left-hand cutter (spindle reverse, M4)", &mut left);
+        state.tool_ui.cutter_hand = if left {
+            camcraft_app::tools::CutterHand::Left
+        } else {
+            camcraft_app::tools::CutterHand::Right
+        };
+    }
     if kind == 3 {
         prop_row_hint(ui, "Point angle (deg)", "cone tip, 60 to 180; standard twist drill is 118", |ui| {
             num_plain_row(ui, &mut state.tool_ui.tip_angle)

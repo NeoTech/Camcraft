@@ -14,9 +14,21 @@
 //! and poses and links the passes radially on the retract cylinders
 //! (`rotary_flow_emit`) - ball-center ladders, tool tips out.
 //!
-//! This first slice needs at least two chains and a ball-nose tool;
-//! empty, off-model, on-axis, reversed and degenerate picks are
-//! refused by name, never guessed past.
+//! This first slice needed a ball-nose tool and clean picks: empty,
+//! off-model, on-axis and degenerate picks are refused by name,
+//! never guessed past, and a chain wound against its pair is walked
+//! backwards (the feature layer reads a chain's direction from the
+//! mesh, never from the pick). The #2829 slice reads the chains as
+//! ONE ordered set: the complete set is wound one way before any
+//! band is cut, and the same normalized guide bounds both adjacent
+//! bands (`rotary_flow_set::normalize_set`); three or more machine
+//! one band per adjacent pair with the SHARED boundary chain cut
+//! once; a single chain machines the full revolution as its own
+//! next lap, unless it turns at one station and one radius - a ring
+//! whose lap sweeps no band area, refused by name; and a set that
+//! cannot tile - any two chains that meet or cross (#4032), bands
+//! that double back - is refused by name (`rotary_flow_set`,
+//! `rotary_flow_cross`).
 //!
 //! Provenance: cylindrical unwrapping and iso-parametric flow-line
 //! CAM on developed rotary surfaces from published 4-axis machining
@@ -31,10 +43,14 @@ use crate::tools::{Tool, ToolKind};
 
 use super::axis::Axis;
 use super::retip::radial_at;
+use super::rotary_flow_cross::refuse_crossed_set;
 use super::rotary_flow_emit::Emitter;
 use super::rotary_flow_guard::prove_path;
 use super::rotary_flow_pass::{boxes_of, flow_pass};
-use super::rotary_flow_unwrap::{self, Basis, Unwrapped};
+use super::rotary_flow_set::{
+    band_shape, lap_of, meet_or_cross, normalize_set, refuse_backtrack, refuse_ring_lap,
+};
+use super::rotary_flow_unwrap::{self, Basis, Unwrapped, TAU};
 use super::tilt::AxisControl;
 
 #[cfg(test)]
@@ -46,9 +62,6 @@ mod rotary_flow_tests;
 const DUST: f64 = 1e-6;
 /// Matched-place samples that read a band's width and alignment.
 const BAND_SAMPLES: usize = 33;
-/// Most flow passes one band may take: a band that needs more is a
-/// wrong pick or a wrong stepover, refused by name.
-pub const MAX_PASSES: usize = 4096;
 
 /// The pass's numbers. Heights read as BALL-CENTER radii about the
 /// stated axis - the retract cylinders the links ride - never as
@@ -79,15 +92,16 @@ pub struct RotaryFlowParams<'a> {
     pub climb: bool,
 }
 
-/// The Rotary Flow program: the picked guide chains of one helical
-/// band (or several bands, one per adjacent chain pair), machined
-/// by flow lines between each pair.
+/// The Rotary Flow program: the picked guide chains of the work's
+/// helical ground, machined by flow lines.
 ///
 /// The chains are 3D polylines ON the model - the picked edge
 /// chains of the selection, each running ALONG the band (a helix of
-/// the rotor). Two chains span one band; three or more machine one
-/// band per adjacent pair (a shared chain is walked once per band
-/// that uses it).
+/// the rotor), picked in band order. One chain machines the full
+/// revolution between it and its own next lap (#2829, a single-start
+/// screw or an auger). Two chains span one band. Three or more
+/// machine one band per adjacent pair, and the shared boundary chain
+/// is cut once - the band above already walked it.
 pub fn rotary_flow(
     chains: &[Vec<Point3>],
     facets: &[Triangle],
@@ -103,12 +117,12 @@ pub fn rotary_flow(
         ));
     }
     validate_facets(facets)?;
-    if chains.len() < 2 {
-        return Err(GenError::Invalid(format!(
-            "Rotary Flow needs at least two picked guide chains to span a band; got {} - pick \
-             the two edges of the helical band",
-            chains.len()
-        )));
+    if chains.is_empty() {
+        return Err(GenError::Invalid(
+            "Rotary Flow needs at least one picked guide chain; got 0 - pick one helical edge \
+             for a full revolution, or the two edges that bound the band"
+                .into(),
+        ));
     }
     let basis: Basis = rotary_flow_unwrap::basis(ax)?;
     let boxes = boxes_of(facets);
@@ -127,7 +141,8 @@ pub fn rotary_flow(
     let diag = rotary_flow_unwrap::extent(facets);
     let cell = (diag * DUST).max(1e-9);
     let eps2 = (4.0 * cell) * (4.0 * cell);
-    let mut tracks: Vec<Unwrapped> = Vec::with_capacity(chains.len());
+    let mut tracks: Vec<Unwrapped> = Vec::with_capacity(chains.len() + 1);
+    let mut clean: Vec<Vec<Point3>> = Vec::with_capacity(chains.len());
     for (ci, ch) in chains.iter().enumerate() {
         let pts = rotary_flow_unwrap::clean_chain(ch, ci, eps2)?;
         for (j, q) in pts.iter().enumerate() {
@@ -155,30 +170,60 @@ pub fn rotary_flow(
             }
         }
         tracks.push(rotary_flow_unwrap::unwrap(ax, &basis, &pts));
+        clean.push(pts);
     }
-    // The passes: one band per adjacent chain pair, hop-linked inside
-    // a band, clearance-linked between bands.
+    // The #2829 set normalization, ONE pass over the complete
+    // ordered set: each guide's winding is resolved against its
+    // pair-neighbour before the first band is cut, and the SAME
+    // normalized guide bounds both adjacent bands. Never per band:
+    // a band-by-band copy leaves the next band's lower boundary at
+    // the original winding, and the cutting direction flips between
+    // bands without a change to climb (PR #4018).
+    let mut notes: Vec<String> = Vec::new();
+    for k in normalize_set(&mut tracks) {
+        notes.push(format!(
+            "Rotary Flow: guide chain {} winds against guide chain {} - walked backwards",
+            k + 1,
+            k
+        ));
+    }
+    // The #2829 single-chain case: the chain's own next lap is the
+    // second boundary, exact by construction - no arbitrary branch
+    // to align away. The lap's two edges are the SAME world curve,
+    // so the band closes on itself: the picked chain emits once, at
+    // the band's opening edge, and the closing pass is dropped. A
+    // chain that turns at one axial station and one radius - a
+    // ring, closed or open - sweeps no band when turned a lap:
+    // refused by name before a pass is generated (PR #4018).
+    // The #4032 complete-set law: two guides that are NOT neighbours
+    // in the pick never meet or cross - the band loop below reads
+    // only the adjacent pairs. Refused by name before a band is cut.
+    refuse_crossed_set(&clean, eps2)?;
+    let lap = clean.len() == 1;
+    if lap {
+        refuse_ring_lap(&tracks[0], cell)?;
+        tracks.push(lap_of(&tracks[0]));
+    }
+    // The passes: one band per adjacent chain pair, the shared
+    // boundary of consecutive bands cut once, hop-linked inside a
+    // band, clearance-linked between bands.
     let step = match p.stepover {
         Some(s) => s,
         None => scallop_stepover(r, p.tolerance),
     };
     let tol_chord = ARC_FIT_TOL.min(p.tolerance);
     let mut emit = Emitter::new(ax, &basis, c, r, p.clearance, p.feed, p.plunge_feed);
-    let mut notes: Vec<String> = Vec::new();
     let mut opened = false;
     let mut prev_last: Option<Point3> = None;
+    let mut prev_dir: Option<(f64, f64)> = None;
     for k in 0..tracks.len() - 1 {
         let a = &tracks[k];
         let mut b = tracks[k + 1].clone();
-        if rotary_flow_unwrap::opposite_sense(a, &b) {
-            return Err(GenError::Invalid(format!(
-                "Rotary Flow: guide chains {} and {} advance about the axis in opposite senses \
-                 - reverse one pick so both run the same way along the band",
-                k + 1,
-                k + 2
-            )));
-        }
-        let shift = rotary_flow_unwrap::align_pair(a, &mut b, BAND_SAMPLES);
+        let shift = if lap && k == 0 {
+            0.0
+        } else {
+            rotary_flow_unwrap::align_pair(a, &mut b, BAND_SAMPLES)
+        };
         let r_ref = a
             .rho
             .iter()
@@ -193,10 +238,24 @@ pub fn rotary_flow(
                 k + 2
             )));
         }
-        let count = pass_count(width, step)?;
-        let mut band: Vec<Vec<Point3>> = Vec::with_capacity(count);
+        if !lap {
+            meet_or_cross(&clean[k], &clean[k + 1], k, eps2)?;
+        }
+        let (dir, count) = band_shape(a, &b, r_ref, width, step, BAND_SAMPLES)?;
+        if let Some(prev) = prev_dir {
+            refuse_backtrack(prev, dir, k)?;
+        }
+        prev_dir = Some(dir);
+        // The shared boundary chain of band k > 0 is band k - 1's own
+        // last pass: cut once, this band starts at its first
+        // interior pass. A lap band's own two edges are one world
+        // curve: it closes on itself, and the closing pass is
+        // dropped - the picked chain emits once.
+        let start = if k == 0 { 0 } else { 1 };
+        let end = count - usize::from(lap);
+        let mut band: Vec<Vec<Point3>> = Vec::with_capacity(end - start);
         let mut capped = false;
-        for i in 0..count {
+        for i in start..end {
             let t = i as f64 / (count - 1) as f64;
             let out = flow_pass(ax, &basis, facets, &boxes, a, &b, t, r, tol_chord)?;
             capped |= out.depth_capped;
@@ -213,12 +272,12 @@ pub fn rotary_flow(
                 k + 1
             ));
         }
-        for (i, centers) in band.iter().enumerate() {
+        for (e, centers) in band.iter().enumerate() {
             let Some(first) = centers.first().copied() else { continue };
             if !opened {
                 emit.open(first)?;
                 opened = true;
-            } else if i == 0 {
+            } else if e == 0 {
                 // Between bands the hop is the clearance cylinder.
                 let last = prev_last.ok_or_else(|| {
                     GenError::Invalid("Rotary Flow lost the last pass's end".into())
@@ -240,10 +299,18 @@ pub fn rotary_flow(
         } else {
             "no whole-turn alignment".into()
         };
+        let tail = if lap {
+            format!("; one guide chain, morphed a full revolution ({:.3} rad) in theta", TAU)
+        } else if k > 0 {
+            format!("; the boundary chain shared with band {k} is cut once")
+        } else {
+            String::new()
+        };
         notes.push(format!(
-            "Rotary Flow: band {} spans {width:.3} mm developed at R {r_ref:.3} mm; {count} \
-             flow passes at a {step:.3} mm stepover, {span}",
-            k + 1
+            "Rotary Flow: band {} spans {width:.3} mm developed at R {r_ref:.3} mm; {} flow \
+             passes at a {step:.3} mm stepover, {span}{tail}",
+            k + 1,
+            band.len(),
         ));
     }
     if let Some(last) = prev_last {
@@ -351,33 +418,4 @@ fn validate_axis(ax: &Axis) -> Result<(), GenError> {
         )));
     }
     Ok(())
-}
-
-/// The pass count a band's developed width needs at `step`: one pass
-/// at each edge, one per `step` in between; the ceiling is the
-/// runaway guard, refused by name.
-fn pass_count(width: f64, step: f64) -> Result<usize, GenError> {
-    if !(step.is_finite() && step > 0.0) {
-        return Err(GenError::Invalid(
-            "Rotary Flow: the scallop law collapsed to a zero stepover - check the tolerance"
-                .into(),
-        ));
-    }
-    // CEILING: the last span may be short, never long - a pass a
-    // stepover and a half wide is a broken promise.
-    let spans = (width / step).ceil();
-    if !spans.is_finite() || spans < 0.0 {
-        return Err(GenError::Invalid(format!(
-            "Rotary Flow: the band's developed width {width:.3} mm does not divide at a \
-             {step:.3} mm stepover"
-        )));
-    }
-    if spans + 1.0 > MAX_PASSES as f64 {
-        return Err(GenError::Invalid(format!(
-            "Rotary Flow: the band needs {} passes at a {step:.3} mm stepover - more than the \
-             {MAX_PASSES} pass ceiling; widen the stepover, or pick a narrower band",
-            spans + 1.0
-        )));
-    }
-    Ok((spans as usize + 1).max(2))
 }

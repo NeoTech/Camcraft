@@ -58,7 +58,11 @@
 //!   non-finite tool parameter, a nonsense axis, or a move whose
 //!   swept window - clipped to the region a cut can matter in (M7.3,
 //!   `field_batch`) - would span more than `MAX_CELLS_PER_MOVE` cells
-//!   refuses by name before a single brick is written.
+//!   beyond the window of the tool at rest at the chord's start (the
+//!   same clipping) refuses by name before a single brick is written.
+//!   The ceiling bounds what segmenting can bound: a wide tool's own
+//!   footprint can pass the ceiling, and a short move of it cuts (the
+//!   column arm cuts it too); a long chord still refuses.
 
 use super::field::SdfField;
 use super::field_arc::arc_sweeps;
@@ -72,8 +76,9 @@ use crate::cl::{Move, MoveKind};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
-/// Refusal ceiling for one chord's window scan (the seed law's
-/// `MAX_CELLS_PER_FACET` in the cutter's clothing).
+/// Refusal ceiling for the cells one chord's travel adds to the
+/// tool's window at rest (the seed law's `MAX_CELLS_PER_FACET` in the
+/// cutter's clothing).
 const MAX_CELLS_PER_MOVE: u64 = 1 << 22;
 
 /// The tool solids of the field's vocabulary - the same ones the
@@ -194,13 +199,16 @@ impl SdfField {
                     .collect::<Result<Vec<_>, _>>()?,
             };
             for sw in built {
-                // The ceiling bounds the WORK: the window as clipped
-                // to the cut region, the only cells the walk can visit.
+                // The ceiling bounds the WORK the travel adds: the
+                // window as clipped to the cut region (the only cells
+                // the walk can visit), beyond the tool's own window at
+                // rest. Segmenting shrinks the first, never the second.
                 let window = self.clipped(sw.window(self.cell, self.cap, ax));
-                let work = window.map_or(0, window_cells);
+                let rest = sw.rest_window(self.cell, self.cap, ax).and_then(|w| self.clipped(w));
+                let work = window.map_or(0, window_cells).saturating_sub(rest.map_or(0, window_cells));
                 if work > MAX_CELLS_PER_MOVE {
                     return Err(StockError::Invalid(format!(
-                        "field subtract: a chord's swept window spans more than {MAX_CELLS_PER_MOVE} cells at cell size {} - the move is too long for one field update; segment it",
+                        "field subtract: a chord's swept window spans more than {MAX_CELLS_PER_MOVE} cells beyond the tool at rest at cell size {} - the move is too long for one field update; segment it",
                         self.cell
                     )));
                 }
