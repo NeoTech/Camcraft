@@ -53,7 +53,7 @@ fn old_is_sane(t: &Tool) -> bool {
         && t.shank_len >= 0.0
         && t.holder_d >= 0.0
         && t.holder_len >= 0.0
-        && (if matches!(t.kind, ToolKind::Torch | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Wire) {
+        && (if matches!(t.kind, ToolKind::Torch | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Laser | ToolKind::Wire) {
             t.rpm == 0.0
         } else {
             t.rpm > 0.0
@@ -90,6 +90,7 @@ fn old_is_sane(t: &Tool) -> bool {
             }
             ToolKind::Torch => t.corner_r == 0.0,
             ToolKind::Waterjet => crate::waterjet::refusal(t).is_none(),
+            ToolKind::Laser => crate::laser::refusal(t).is_none(),
             ToolKind::Wire => crate::wire::refusal(t).is_none(),
             ToolKind::Electrode => crate::electrode::is_sane(t),
             ToolKind::ThreadMill | ToolKind::ThreadMillSingle => crate::thread_mill::is_sane(t),
@@ -100,7 +101,7 @@ fn old_is_sane(t: &Tool) -> bool {
         }
 }
 
-const KINDS: [ToolKind; 22] = [
+const KINDS: [ToolKind; 23] = [
     ToolKind::EndMill,
     ToolKind::BallNose,
     ToolKind::BullNose,
@@ -123,6 +124,7 @@ const KINDS: [ToolKind; 22] = [
     ToolKind::Keyseat,
     ToolKind::Dovetail,
     ToolKind::Lollipop,
+    ToolKind::Laser,
 ];
 
 /// Each kind's place, with no catch-all: a new `ToolKind` does not compile
@@ -154,7 +156,8 @@ fn kind_slot(kind: ToolKind) -> usize {
         ToolKind::Lollipop => 21,
         // #3369: the form mill's law is new (no old verdict to agree
         // with); `form_mill_tests` pins it, so it stays out of KINDS.
-        ToolKind::FormMill => 22,
+        ToolKind::Laser => 22,
+        ToolKind::FormMill => 23,
     }
 }
 

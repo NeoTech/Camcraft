@@ -22,9 +22,7 @@ pub(super) const OPTIMAL_LOAD_LABEL: &str = "Optimal load (% of D)";
 pub(super) fn optimal_load_field(ui: &mut Ui, load: &mut f64) {
     let mut pct = *load * 100.0;
     let changed = super::layout::prop_row(ui, OPTIMAL_LOAD_LABEL, |ui| {
-        let h = ui.spacing().interact_size.y;
-        ui.add_sized([super::layout::CTRL_W, h], DragValue::new(&mut pct).speed(0.1).max_decimals(2).suffix(" %"))
-            .changed()
+        super::layout::drag_sized_row(ui, DragValue::new(&mut pct).speed(0.1).max_decimals(2).suffix(" %")).changed()
     });
     if changed {
         *load = pct / 100.0;

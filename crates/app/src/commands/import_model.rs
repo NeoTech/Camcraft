@@ -36,6 +36,9 @@ pub struct ImportModel {
     /// the UI checks while the project is open. `None` for a mesh handed
     /// in or a browser pick, which have no file to check again.
     pub source: Option<crate::schema::ModelSource>,
+    /// SolidCraft's face names over the facets of a `.sc` design (#3915,
+    /// `import::Graded::source_faces`). `None` otherwise.
+    pub source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
 }
 
 impl ImportModel {
@@ -136,6 +139,7 @@ impl ImportModel {
         cmd.notes = graded.notes;
         cmd.hole = graded.open;
         cmd.step_source = graded.step_source;
+        cmd.source_faces = graded.source_faces;
         cmd
     }
 
@@ -150,6 +154,7 @@ impl ImportModel {
             hole: None,
             step_source: None,
             source: None,
+            source_faces: None,
         }
     }
 
@@ -264,6 +269,7 @@ impl Command for ImportModel {
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::step_source::set(world, &entity, self.step_source.as_deref());
         crate::model_source::set(world, &entity, self.source.as_ref());
+        crate::source_faces::set(world, &entity, self.source_faces.as_ref());
     }
 
     fn invert(&self, world: &World) {

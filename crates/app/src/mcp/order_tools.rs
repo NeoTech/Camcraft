@@ -10,6 +10,7 @@
 //! Provenance: our own tool surface over this repo's command layer.
 
 use super::edit::find_op;
+use super::pattern_tools::find_row;
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{MarkOperationReviewed, RenameOperation, ReorderOperation};
 use crate::model;
@@ -25,7 +26,8 @@ pub(super) const TOOLS: &[Tool] = &[
 ];
 
 fn rename_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let key = find_op(env, req_str(a, "name")?)?;
+    // #3012: a pattern folder takes a display name too.
+    let key = find_row(env, req_str(a, "name")?)?;
     let label = req_str(a, "new_name")?;
     let cmd = RenameOperation::new(&env.world, &key, label).map_err(|e| e.to_string())?;
     env.history.execute(&env.world, cmd);
@@ -34,8 +36,9 @@ fn rename_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
 }
 
 fn reorder_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let key = find_op(env, req_str(a, "name")?)?;
-    let target = find_op(env, req_str(a, "target")?)?;
+    // #3012: a pattern folder moves with its members.
+    let key = find_row(env, req_str(a, "name")?)?;
+    let target = find_row(env, req_str(a, "target")?)?;
     let after = match opt_str(a, "place")? {
         Some("after") => true,
         Some("before") | None => false,

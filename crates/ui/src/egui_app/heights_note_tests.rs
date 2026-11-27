@@ -101,7 +101,7 @@ fn chamfer_geometry_exposes_tip_offset() {
         harness.query_by_label("Tip offset").is_some(),
         "the Geometry page exposes the cone-band offset"
     );
-    harness.get_by_label("Tip offset").hover();
+    harness.get_by_role_and_label(egui::accesskit::Role::Label, "Tip offset").hover();
     harness.run_steps(8);
     assert!(
         harness.query_by_label_contains("moves the tool away from the selected edge and lowers it").is_some(),

@@ -43,16 +43,13 @@ fn a_cfg_test_module_reaches_only_the_unit_tests_of_its_crate() {
 
 #[test]
 fn library_code_keeps_the_crate_reach() {
-    // A normal module of motion still reaches every motion and app heavy target.
-    let wide = names(&["crates/motion/src/drilling/boss.rs"]);
-    let lib_rs = names(&["crates/motion/src/lib.rs"]);
-    let mod_rs = names(&["crates/motion/src/drilling/mod.rs"]);
-    assert_eq!(wide, lib_rs);
-    assert_eq!(wide, mod_rs);
+    // The crate root of motion still reaches every motion and app heavy target. (A library module
+    // that a Gate map names is narrower: heavy_gate_map_tests.rs pins it and its fallback.)
+    let wide = names(&["crates/motion/src/lib.rs"]);
     assert!(wide.contains(&"app heavy: lib".to_string()) && wide.contains(&"app heavy: doc".to_string()), "{wide:?}");
     assert!(wide.iter().any(|n| n.starts_with("motion heavy: ") && n != "motion heavy: lib"), "{wide:?}");
-    // A test-only file and a library file together: the library file decides.
-    assert_eq!(names(&["crates/motion/src/ring_zig_tests.rs", "crates/motion/src/drilling/boss.rs"]), wide);
+    // A test-only file and the crate root together: the crate root decides.
+    assert_eq!(names(&["crates/motion/src/ring_zig_tests.rs", "crates/motion/src/lib.rs"]), wide);
 }
 
 #[test]

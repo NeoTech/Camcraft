@@ -180,6 +180,12 @@ pub(super) fn get_job(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
     });
+    // #3012: pattern folders, only when the document has one (a document
+    // without folders reads exactly as before).
+    let folders = super::pattern_tools::folders_view(w);
+    if !folders.is_empty() {
+        job["pattern_folders"] = json!(folders);
+    }
     if summary {
         super::compact::summarize_job(&mut job);
     }

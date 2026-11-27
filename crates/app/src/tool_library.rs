@@ -33,6 +33,14 @@
 //! judge a different tool; it must refuse the file. A cutter is judged as
 //! the project loader judges one (`cutter_profile::check`); one that
 //! disagrees with its tool's numbers refuses the whole file by name.
+//!
+//! #3645: a tool built from tool components rides its definition with its
+//! stack as `assembly`, and the file holds the rows the stacks name as a
+//! top-level `components` array; the file then says version 8
+//! (`ASSEMBLY_VERSION`): a reader that predates the keys would drop the
+//! stacks without a word. The table and the stacks are read whole and
+//! strict ([`assembly`]); [`crate::commands::ImportTools`] lands the rows
+//! and the tools in its one undo step.
 
 use flecs_ecs::prelude::World;
 use serde_json::{Value, json};
@@ -44,6 +52,9 @@ use crate::spun::{SpunPoint, SpunProfile};
 use crate::tool_body;
 use crate::tool_cutter;
 use crate::tools::Tool;
+
+mod assembly;
+pub use assembly::LibraryAssembly;
 
 /// The envelope's `format` tag.
 pub const FORMAT: &str = "camcraft-tools";
@@ -71,6 +82,10 @@ pub const TIP_FORM_VERSION: u64 = 6;
 /// and post M3 for a cutter that must reverse. A library without one
 /// keeps its older number.
 pub const CUTTER_HAND_VERSION: u64 = 7;
+/// #3645: older readers must refuse libraries whose tools are built from
+/// tool components (`assembly`, with the file's `components` table): they
+/// would drop the stacks. A library without one keeps its older number.
+pub const ASSEMBLY_VERSION: u64 = 8;
 /// The extension the file dialogs offer.
 pub const EXTENSION: &str = "camtools";
 
@@ -102,13 +117,16 @@ pub struct LibraryTool {
     /// #3904: the drawn cutter the file carries for this tool (already
     /// judged against it), `None` for the outline its numbers draw.
     pub cutter: Option<SpunProfile>,
+    /// #3645: the component stack the file carries for this tool and the
+    /// rows it names (already checked to resolve), `None` for none.
+    pub assembly: Option<LibraryAssembly>,
 }
 
 impl LibraryTool {
     /// A library tool with no body and no explicit controller number.
     #[must_use]
     pub fn bare(name: impl Into<String>, tool: Tool) -> Self {
-        Self { name: name.into(), tool, body: None, number: None, cutter: None }
+        Self { name: name.into(), tool, body: None, number: None, cutter: None, assembly: None }
     }
 }
 
@@ -117,10 +135,12 @@ impl LibraryTool {
 /// document stores them, whatever the display units. Refuses an empty
 /// document: a library with no tools is never what the user meant.
 /// #889: a tool's body rides its definition as `body`; #3904: its drawn
-/// cutter as `cutter`.
+/// cutter as `cutter`; #3645: its component stack as `assembly`, with the
+/// rows the stacks name in the file's `components`.
 pub fn export_tool_library(world: &World) -> Result<String, String> {
     let mut tools: Vec<Value> = Vec::new();
     let mut version = VERSION;
+    let mut used: Vec<String> = Vec::new();
     for (n, e) in model::named_entities(world) {
         let Some(t) = model::tool_of(world, &e) else { continue };
         if t.kind == crate::tools::ToolKind::Tap
@@ -159,12 +179,23 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
                 o.insert("cutter".into(), json!(pts));
             }
         }
+        if let Some(stack) = assembly::stack_value(world, &e, &n, &mut used)? {
+            version = version.max(ASSEMBLY_VERSION);
+            if let Value::Object(o) = &mut def {
+                o.insert("assembly".into(), stack);
+            }
+        }
         tools.push(json!({ "name": n, "definition": def }));
     }
     if tools.is_empty() {
         return Err("the document has no tools to export".into());
     }
-    let doc = json!({ "format": FORMAT, "version": version, "units": "mm", "tools": tools });
+    let mut doc = json!({ "format": FORMAT, "version": version, "units": "mm", "tools": tools });
+    if !used.is_empty()
+        && let Value::Object(o) = &mut doc
+    {
+        o.insert("components".into(), assembly::table_value(world, &used)?);
+    }
     serde_json::to_string_pretty(&doc).map_err(|e| format!("tool library not written: {e}"))
 }
 
@@ -176,6 +207,7 @@ pub fn export_tool_library(world: &World) -> Result<String, String> {
 /// (what MCP's `get_job` lists), so either can be pasted into a file.
 pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
     let root: Value = serde_json::from_str(text).map_err(|e| format!("not a tool library (bad JSON: {e})"))?;
+    let mut version: Option<u64> = None;
     let rows = match &root {
         Value::Array(rows) => rows,
         Value::Object(o) => {
@@ -187,11 +219,11 @@ pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
             match o.get("version").and_then(Value::as_u64) {
                 Some(
                     VERSION | LEFT_HAND_VERSION | CUTTING_STEPS_VERSION | HOLDER_REF_VERSION | CUTTER_VERSION
-                        | TIP_FORM_VERSION | CUTTER_HAND_VERSION,
-                ) => {}
+                        | TIP_FORM_VERSION | CUTTER_HAND_VERSION | ASSEMBLY_VERSION,
+                ) => version = o.get("version").and_then(Value::as_u64),
                 Some(v) => {
                     return Err(format!(
-                        "tool library version {v} is not supported (this build reads {VERSION} to {CUTTER_HAND_VERSION})"
+                        "tool library version {v} is not supported (this build reads {VERSION} to {ASSEMBLY_VERSION})"
                     ));
                 }
                 None => return Err("not a tool library: no \"version\"".into()),
@@ -207,6 +239,7 @@ pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
         }
         _ => return Err("not a tool library: expected an object or an array".into()),
     };
+    let table = assembly::read_table(&root, version)?;
     let mut out: Vec<LibraryTool> = Vec::with_capacity(rows.len());
     for (i, row) in rows.iter().enumerate() {
         let n = i.saturating_add(1);
@@ -230,11 +263,13 @@ pub fn parse_tool_library(text: &str) -> Result<Vec<LibraryTool>, String> {
         }
         let body = read_body(def, &tool, name)?;
         let cutter = read_cutter(def, &tool, name)?;
-        out.push(LibraryTool { name: name.to_owned(), tool, body, number: None, cutter });
+        let (assembly, body) = assembly::read_assembly(def, name, &table, version, body)?;
+        out.push(LibraryTool { name: name.to_owned(), tool, body, number: None, cutter, assembly });
     }
     if out.is_empty() {
         return Err("the tool library holds no tools".into());
     }
+    assembly::refuse_unused(&table, &out.iter().filter_map(|t| t.assembly.as_ref()).collect::<Vec<_>>())?;
     Ok(out)
 }
 

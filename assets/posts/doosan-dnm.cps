@@ -135,6 +135,7 @@ var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var wcsFlip = "";          // #1649: the flipped WCS axes ("X", "Y", "XY") - the engine mirrored the section
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
+var tcpmLeft = false;      // #4348: the last section ended with G43.4 still active (no G49 written since)
 var lastA = null, lastB = null, lastC = null; // angle words the last block commanded (deg); null: none written yet, so the next A is written (#950)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
 var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a tool change turns nothing
@@ -678,9 +679,14 @@ function centerWords(p) {
 }
 
 // -------------------------------------------------------------- header
+// #4349: FANUC's published operator's manuals (Series 0i-F, "program
+// number") give O0001-O9999. A number outside the range is refused by
+// name, never clamped onto another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var v = typeof programNumber !== "undefined" ? Number(programNumber) : 1;
+  var n = isNaN(v) ? 1 : Math.round(v);
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -745,7 +751,7 @@ function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "DOOSAN DNM";
   writeln("%");
-  rawBlock([oWord(), "(" + nm + ")"]);
+  rawBlock([oWord(), "(" + clean(nm) + ")"]);  // #4349: no nested ( ), no %
   writeHeaderExtras();
   invertedNotes();
   unitBlock();
@@ -865,7 +871,8 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", "G17", wcsWord, "G40", "G49", "G80"]);
+  // #4346: a control left in G95 reads an mm/min F word as mm/rev - state G94.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
   uprightAfterTilt();
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
@@ -948,11 +955,12 @@ function endPreamble() {
   if (!sectionOpen) return;
   restorePlane();
   ensureProbeOff();
+  // #4347: G80 closes the cycle group before any G5.1 word (B-64604EN-2/01, 3.3.2).
+  if (inCycle) block(["G80"]);
+  inCycle = false;
   disableSmoothing();
   ensureRotaryClamped();
   sectionOpen = false;
-  if (inCycle) block(["G80"]);
-  inCycle = false;
   if (wcsRotActive) { block(["G69"]); wcsRotActive = false; }
   wcsYaw = 0;
   wcsRotMode = "";
@@ -972,6 +980,7 @@ function endPreamble() {
   probeSection = false;
   kindProbe = false;         // the next section states its own tool kind
   afterOp();
+  tcpmLeft = tcpmOn;         // #4348: onClose reads it - no next preamble writes G49 there
   tcpmOn = false;
   lastA = null; lastB = null; lastC = null; // #950: never assume A0 - the first A after this is written
 }
@@ -1117,7 +1126,9 @@ function heldAngles(p, tw) {
 }
 function onLinear() {
   startPreamble();
-  enableSmoothing();
+  // #4347: an open cycle group's chain is the cycle's (chainCut below),
+  // and no G5.1 word is legal while G81-G89 is modal.
+  if (!inCycle) enableSmoothing();
   var aChanged = has(properties.A) && (!has(lastA) || properties.A !== lastA);
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
@@ -1140,7 +1151,7 @@ function onCircular() {
   // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
   var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
   if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
-  enableSmoothing();
+  if (!inCycle) enableSmoothing();  // #4347: as onLinear
   var aChanged = has(properties.A) && (!has(lastA) || properties.A !== lastA);
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
@@ -1504,6 +1515,9 @@ function onClose() {
     chipConveyorStarted = false;
   }
   if (!uprightAtEnd() && linesWritten() !== homedAt) {
+    // #4348: a reference return is not permitted in G43.4 mode (FANUC
+    // 30i B-63944EN/02): a section that tilted back to zero left TCPM on.
+    if (tcpmLeft) block(["G49"]);
     retractHome(true);
   }
   var u = endUnitsWord();

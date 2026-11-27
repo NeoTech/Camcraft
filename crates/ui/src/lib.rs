@@ -76,6 +76,9 @@ pub mod locate_pick;
 pub mod move_drag;
 pub mod turn_drag;
 pub mod machined;
+// #4266: the playhead's work turn as the display reads it - membership
+// and the one shared transform.
+pub(crate) mod work_turn;
 mod setup_display;
 mod sketch_chip_memo;
 mod sketch_memo;

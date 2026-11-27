@@ -28,6 +28,8 @@ use flecs_ecs::prelude::{Entity, World};
 
 use camcraft_tools::milling_cutter;
 use camcraft_tools::tool_assembly::{resolve, AssemblyNode};
+/// #3898: how a link sits on its parent, for the callers outside this crate.
+pub use camcraft_tools::tool_assembly::Mount;
 
 use crate::schema::{AssemblyLink, DocumentComponent, DocumentComponents, ToolAssembly, ToolBody};
 use crate::tool_body::{build_spun, BodyFrame, LATHE_HELD};

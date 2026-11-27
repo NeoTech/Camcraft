@@ -5,8 +5,12 @@
 //! shared insert updates two holder assemblies in one undo step, their
 //! turning operations go Stale, and undo and redo are exact; a kind,
 //! a root or a stack that the lathe resolver does not take is refused
-//! by name and changes nothing. Provenance: our own tests over our own
-//! commands.
+//! by name and changes nothing. #3645: the rows with their lathe bodies
+//! save in the `.camproj` and open again identically, byte for byte, and
+//! the reopened document derives the same records and bodies; a corrupt
+//! lathe body refuses the file by name; a component library save of a
+//! row with a lathe body is refused by name. Provenance: our own tests
+//! over our own commands and format.
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, EditDocumentComponent, GenerateOperation, History, ImportModel, LoadMachine,
@@ -32,10 +36,10 @@ use flecs_ecs::prelude::World;
 
 use super::cat;
 
-const A: &str = "OD-M";
+pub(super) const A: &str = "OD-M";
 const B: &str = "OD-K";
 const INSERT: &str = "cnmg";
-const HOLDER_M: &str = "pclnr-2525m";
+pub(super) const HOLDER_M: &str = "pclnr-2525m";
 const HOLDER_K: &str = "pclnr-2020k";
 
 fn bx(lo: [f64; 3], hi: [f64; 3]) -> BodyBox {
@@ -66,7 +70,7 @@ fn holder(id: &str, code: &str, crp: [f64; 3]) -> DocumentComponent {
 }
 
 /// 2525M: l1 = 150 mm, f1 = 32 mm from the shank's +X side face.
-fn holder_m() -> DocumentComponent {
+pub(super) fn holder_m() -> DocumentComponent {
     holder(HOLDER_M, "PCLNR2525M12", [12.5 - 32.0, 0.0, -150.0])
 }
 
@@ -75,25 +79,25 @@ fn holder_k() -> DocumentComponent {
     holder(HOLDER_K, "PCLNR2020K12", [10.0 - 25.0, 0.0, -125.0])
 }
 
-fn insert(code: &str) -> DocumentComponent {
+pub(super) fn insert(code: &str) -> DocumentComponent {
     let spec = InsertSpec::parse(code).expect("insert code");
     let c = ToolComponent::new(INSERT, code, ComponentKind::CuttingItem(CuttingItem::Insert(spec))).expect("insert");
     DocumentComponent::new(c, ComponentGeometry::default())
 }
 
-fn on(parent: usize) -> Option<Mount> {
+pub(super) fn on(parent: usize) -> Option<Mount> {
     Some(Mount { parent, port: None, z_rot_deg: 0.0, projection_mm: None })
 }
 
-fn stack(holder: &str) -> Vec<AssemblyLink> {
+pub(super) fn stack(holder: &str) -> Vec<AssemblyLink> {
     vec![AssemblyLink { component: holder.into(), mount: None }, AssemblyLink { component: INSERT.into(), mount: on(0) }]
 }
 
-fn turning() -> Tool {
+pub(super) fn turning() -> Tool {
     cat("TN-1600-0R8")
 }
 
-fn upsert(w: &World, h: &mut History, row: DocumentComponent) {
+pub(super) fn upsert(w: &World, h: &mut History, row: DocumentComponent) {
     h.execute(w, UpsertDocumentComponent::with_row(w, row).expect("upsert"));
 }
 
@@ -136,7 +140,7 @@ fn facing() -> OpParams {
 
 /// A lathe, a bar, the three components, both tools on their stacks
 /// and a generated Facing operation on each.
-fn lathe_shop() -> (World, History) {
+pub(super) fn lathe_shop() -> (World, History) {
     let w = camcraft_app::world::new_world();
     let mut h = History::default();
     let stock = camcraft_app::stock::StockShape::Box { dx: 40.0, dy: 40.0, dz: 40.0 };
@@ -158,9 +162,9 @@ fn lathe_shop() -> (World, History) {
     (w, h)
 }
 
-type Snapshot = (Vec<DocumentComponent>, Vec<(Tool, Option<ToolBody>, Option<ToolAssembly>)>);
+pub(super) type Snapshot = (Vec<DocumentComponent>, Vec<(Tool, Option<ToolBody>, Option<ToolAssembly>)>);
 
-fn snapshot(w: &World) -> Snapshot {
+pub(super) fn snapshot(w: &World) -> Snapshot {
     let tool = |n: &str| {
         let e = model::find_by_name(w, n).expect("tool");
         (model::tool_of(w, &e).expect("a tool"), body_of(w, &e), assembly_of(w, &e))
@@ -174,9 +178,27 @@ fn op_status(w: &World, tool: &str) -> OpStatus {
 
 #[test]
 fn a_linked_cnmg_in_a_pclnr_equals_the_tools_crate_result() {
+    equals_the_tools_crate_result(0.0);
+}
+
+/// #3643: a holder body with a pad (a meshed body's chord deviation)
+/// gives the app's lathe body the resolver's grown bands, never the
+/// bands of the bare facets.
+#[test]
+fn a_padded_holder_body_keeps_the_grown_bands_in_the_app() {
+    equals_the_tools_crate_result(0.05);
+}
+
+/// The 2525M holder, its body grown by `pad`.
+pub(super) fn holder_m_padded(pad: f64) -> DocumentComponent {
+    let m = holder_m();
+    DocumentComponent { lathe_body: m.lathe_body.map(|b| b.padded(pad).expect("pad")), ..m }
+}
+
+fn equals_the_tools_crate_result(pad: f64) {
     let w = camcraft_app::world::new_world();
     let mut h = History::default();
-    for row in [holder_m(), insert("CNMG120408")] {
+    for row in [holder_m_padded(pad), insert("CNMG120408")] {
         upsert(&w, &mut h, row);
     }
     h.execute(&w, AddTool::new(&w, A, turning()).expect("tool"));
@@ -185,7 +207,7 @@ fn a_linked_cnmg_in_a_pclnr_equals_the_tools_crate_result() {
     let (tool, body) = (model::tool_of(&w, &e).expect("a tool"), body_of(&w, &e).expect("a lathe body"));
 
     // The tools-crate result for the same two components.
-    let (m, i) = (holder_m(), insert("CNMG120408"));
+    let (m, i) = (holder_m_padded(pad), insert("CNMG120408"));
     let nodes = vec![
         LatheNode { node: AssemblyNode { component: m.component, geometry: m.geometry, mount: None }, body: m.lathe_body },
         LatheNode { node: AssemblyNode { component: i.component, geometry: i.geometry, mount: on(0) }, body: None },
@@ -200,9 +222,11 @@ fn a_linked_cnmg_in_a_pclnr_equals_the_tools_crate_result() {
 
     // The body: the resolver's placement, facets and bands.
     assert_eq!(body.source, ASSEMBLY_SOURCE);
-    let BodyFrame::Lathe { place, zone, clearance } = &body.frame else { panic!("a lathe-frame body") };
+    let BodyFrame::Lathe { place, zone, clearance, pad: body_pad } = &body.frame else { panic!("a lathe-frame body") };
     assert_eq!(*place, r.placement, "the nose centre is the tip");
     assert!(zone.is_none(), "the insert plate is left out by the resolver, not by a zone");
+    assert!((r.pad - pad).abs() < 1e-12, "the stack's pad");
+    assert_eq!(*body_pad, r.pad, "the body keeps the stack's pad");
     let want_bands = r.clearance.expect("bands");
     let (a, b): (Vec<f64>, Vec<f64>) = (clearance.words().collect(), want_bands.words().collect());
     assert_eq!(a, b, "the same clearance bands");
@@ -280,4 +304,77 @@ fn a_kind_a_root_or_a_stack_the_lathe_resolver_does_not_take_is_refused_by_name(
         let e = model::find_by_name(&w, n).expect("tool");
         assert!(assembly_of(&w, &e).is_none() && body_of(&w, &e).is_none(), "{n} is bare");
     }
+}
+
+pub(super) fn reopen(text: &str) -> World {
+    let w = camcraft_app::world::new_world();
+    camcraft_app::project::open(&w, text).expect("open");
+    w
+}
+
+#[test]
+fn a_linked_turning_stack_with_its_lathe_body_reopens_identically() {
+    let (w, _h) = lathe_shop();
+    let text = camcraft_app::project::save_text(&w).expect("save");
+    let file: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let row = |id: &str| file["components"].as_array().and_then(|r| r.iter().find(|c| c["id"] == id)).cloned();
+    let facets = row(HOLDER_M).and_then(|r| r["lathe_body"]["facets"].as_array().map(Vec::len));
+    assert_eq!(facets, Some(24), "two boxes, twelve facets each: {:?}", row(HOLDER_M));
+    assert!(row(INSERT).is_some_and(|r| r.get("lathe_body").is_none()), "an insert row writes no lathe body");
+
+    let w2 = reopen(&text);
+    assert_eq!(snapshot(&w2), snapshot(&w), "the rows, the lathe bodies, the Turning records and the bodies");
+    assert_eq!(camcraft_app::project::save_text(&w2).expect("save"), text, "save -> open -> save is byte-stable");
+
+    // The reopened rows derive again: the same edit gives the same result.
+    let mut h1 = History::default();
+    let mut h2 = History::default();
+    h1.execute(&w, EditDocumentComponent::with_row(&w, insert("CNMG120404")).expect("edit"));
+    h2.execute(&w2, EditDocumentComponent::with_row(&w2, insert("CNMG120404")).expect("edit"));
+    assert_eq!(snapshot(&w2), snapshot(&w), "the reopened lathe body derives the same records and bodies");
+}
+
+#[test]
+fn a_corrupt_lathe_body_refuses_the_file_and_a_library_save_refuses_the_row() {
+    let (w, _h) = lathe_shop();
+    let text = camcraft_app::project::save_text(&w).expect("save");
+    let refused = |f: &dyn Fn(&mut serde_json::Value)| {
+        let mut v: serde_json::Value = serde_json::from_str(&text).expect("json");
+        if let Some(r) = v["components"].as_array_mut().and_then(|r| r.iter_mut().find(|c| c["id"] == HOLDER_M)) {
+            f(&mut r["lathe_body"]);
+        }
+        let w = camcraft_app::world::new_world();
+        let Err(e) = camcraft_app::project::open(&w, &v.to_string()) else { panic!("a corrupt lathe body opened") };
+        assert!(components(&w).is_empty(), "no row landed");
+        e.to_string()
+    };
+    let e = refused(&|b| b["facets"] = serde_json::json!([]));
+    assert!(e.contains(HOLDER_M) && e.contains("no facets"), "{e}");
+    let e = refused(&|b| b["facets"][0][0][0] = serde_json::json!("x"));
+    assert!(!e.is_empty(), "a facet that is not a number: {e}");
+    let e = refused(&|b| b["pad"] = serde_json::json!(-0.5));
+    assert!(e.contains(HOLDER_M) && e.contains("lathe body"), "a negative pad: {e}");
+    let e = refused(&|b| b["boxes"] = serde_json::json!([]));
+    assert!(e.contains("boxes"), "an unknown key: {e}");
+
+    let Err(e) = camcraft_app::component_library::LibraryComponent::from_row(holder_m()) else {
+        panic!("a library save took a lathe body")
+    };
+    assert!(e.contains(HOLDER_M) && e.contains("lathe body"), "{e}");
+}
+
+/// #3643: a meshed body's pad saves with its row and opens again, so a
+/// save and an open never shrink the bands to the bare facets.
+#[test]
+fn a_padded_lathe_body_keeps_its_pad_through_save_and_open() {
+    let w = camcraft_app::world::new_world();
+    let mut h = History::default();
+    upsert(&w, &mut h, holder_m_padded(0.05));
+    let text = camcraft_app::project::save_text(&w).expect("save");
+    let file: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let row = file["components"].as_array().and_then(|r| r.iter().find(|c| c["id"] == HOLDER_M)).cloned();
+    assert_eq!(row.as_ref().and_then(|r| r["lathe_body"]["pad"].as_f64()), Some(0.05), "{row:?}");
+    let w2 = reopen(&text);
+    assert_eq!(components(&w2), components(&w), "the row and its padded body");
+    assert_eq!(camcraft_app::project::save_text(&w2).expect("save"), text, "save -> open -> save is byte-stable");
 }

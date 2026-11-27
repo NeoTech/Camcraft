@@ -95,6 +95,11 @@ pub enum ToolKind {
     Torch,
     /// Abrasive waterjet nozzle: diameter is the stream kerf, rpm is zero.
     Waterjet,
+    /// Laser cutting head (#4081): `diameter` is the beam kerf, rpm is
+    /// zero, and it has no corner radius and no cutting data rows (the
+    /// laser operation states the power and the feed). Only the laser
+    /// operations mount it.
+    Laser,
     /// Sinker EDM electrode (#541): a rectangular solid burned straight
     /// down Z. `diameter` is its X size and `width` its Y size (both
     /// across the burning face), `flute_len` its length below the
@@ -162,6 +167,7 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Probe => "touch probe",
             ToolKind::Torch => "plasma torch",
             ToolKind::Waterjet => "waterjet nozzle",
+            ToolKind::Laser => "laser head",
             ToolKind::Electrode => "sinker electrode",
             ToolKind::ThreadMill => "thread mill",
             ToolKind::ThreadMillSingle => "single-form thread mill",
@@ -334,6 +340,9 @@ impl Tool {
         if self.kind == ToolKind::Waterjet {
             return crate::waterjet::refusal(self);
         }
+        if self.kind == ToolKind::Laser {
+            return crate::laser::refusal(self);
+        }
         if self.kind == ToolKind::Wire {
             return crate::wire::refusal(self);
         }
@@ -447,7 +456,7 @@ impl Tool {
             // not off this cylinder.
             ToolKind::EndMill | ToolKind::Tap | ToolKind::Bore | ToolKind::Turning
             | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch
-            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Wire
+            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Laser | ToolKind::Wire
             // A thread mill draws as the cylinder its tooth crests
             // sweep (#894) - the envelope the reach laws read.
             | ToolKind::ThreadMill | ToolKind::ThreadMillSingle

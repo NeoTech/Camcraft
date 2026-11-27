@@ -12,16 +12,6 @@ use crate::interact::ftoz;
 use crate::shade_cache::ModelSrc;
 use crate::state::State;
 
-pub(super) fn world_verts(state: &State, entity: &flecs_ecs::prelude::Entity) -> Vec<[f32; 3]> {
-    world_verts_by(state, entity, [0.0; 3])
-}
-
-/// [`world_verts`] slid by `by` (shown frame) - the handle drag's preview
-/// (#1198 b): display only, the world is untouched until the release.
-fn world_verts_by(state: &State, entity: &flecs_ecs::prelude::Entity, by: [f64; 3]) -> Vec<[f32; 3]> {
-    model_src(state, entity, by).map(|src| (*src.verts).clone()).unwrap_or_default()
-}
-
 /// The facets, the shown pose and the cached world vertices of a body
 /// (#2834: the shade caches key on the first two).
 pub(super) fn model_src(state: &State, entity: &flecs_ecs::prelude::Entity, by: [f64; 3]) -> Option<ModelSrc> {
@@ -48,5 +38,7 @@ pub(super) fn model_src(state: &State, entity: &flecs_ecs::prelude::Entity, by: 
         }
         verts
     });
-    Some(ModelSrc { facets: tris, pose, verts: cached })
+    // #4266: the body's work-turn bits (`NO_TURN` until the scene sets
+    // them - fixed steel and no-playhead frames keep them).
+    Some(ModelSrc { facets: tris, pose, view: crate::work_turn::NO_TURN, verts: cached })
 }

@@ -16,6 +16,21 @@ fn xtask_bin() -> &'static str {
 }
 
 #[test]
+fn gate_summary_reports_preserved_unit_inputs() {
+    let out = Command::new(xtask_bin())
+        .current_dir(workspace_root())
+        .args(["gate", "quick", "--base", "HEAD", "--dry-run"])
+        .env("CARGO_BUILD_TARGET", "aarch64-unknown-linux-gnu")
+        .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS", "-Ctarget-cpu=generic")
+        .output().expect("run dry gate without compiling the selected target");
+    assert!(out.status.success(), "{out:?}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let summary = stdout.split("== gate summary").nth(1).expect("gate summary");
+    assert!(summary.contains("note: CARGO_BUILD_TARGET"), "{stdout}");
+    assert!(summary.contains("note: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS"), "{stdout}");
+}
+
+#[test]
 fn help_lists_docs_images_command() {
     let out = Command::new(xtask_bin())
         .arg("--help")

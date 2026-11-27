@@ -39,6 +39,7 @@ mod linalg;
 mod stamp;
 mod stamp_pose;
 mod stamp_rise;
+mod stamp_sweep;
 #[cfg(test)]
 mod stamp_tests;
 pub mod axis;
@@ -56,6 +57,9 @@ pub mod parallel5d;
 pub mod rough;
 pub mod rotary;
 pub mod rotary_offset;
+pub mod radial_drop;
+#[cfg(test)]
+mod radial_drop_tests;
 mod rotary_seam;
 mod rotary_seam_angle;
 mod rotary_sheet;

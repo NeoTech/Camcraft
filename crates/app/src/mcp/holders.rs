@@ -106,6 +106,9 @@ pub(super) fn list_holder_library(_env: &mut Env, _a: &Map<String, Value>) -> Re
             let takes = match e.clamp {
                 Clamp::Er(er) => json!({ "kind": "ER", "min_shank": er.min_bore, "max_shank": er.max_bore, "nut_d": er.nut_d, "nut_len": er.nut_len }),
                 Clamp::Weldon { bore, body_d } => json!({ "kind": "Weldon", "shank": bore, "body_d": body_d }),
+                Clamp::Shrink { bore, nose_d, body_d } => {
+                    json!({ "kind": "Shrink", "shank": bore, "nose_d": nose_d, "body_d": body_d })
+                }
             };
             json!({
                 "name": e.name(),
@@ -125,7 +128,7 @@ pub(super) fn s_set_tool_holder() -> Value {
         "type": "object",
         "properties": {
             "tool": { "type": "string", "description": "A document tool name (see get_job)." },
-            "library": { "type": "string", "description": "A list_holder_library entry name, e.g. \"BT30 ER20\", or a taper's Weldon pick (\"BT40 Weldon\"): the bore is the one that takes the tool's shank." },
+            "library": { "type": "string", "description": "A list_holder_library entry name, e.g. \"BT30 ER20\", or a taper's Weldon or shrink-fit pick (\"BT40 Weldon\", \"BT40 Shrink\"): the bore is the one that takes the tool's shank." },
             "gauge_len": { "type": "number", "minimum": 0, "description": "With library: gauge line to nose face, mm (default: the entry's)." },
             "projection": { "type": "number", "minimum": 0, "description": "With library: nose face above the tool tip, mm (default: the tool's flute plus shank length)." },
             "points": { "type": "array", "description": "A drawn spun holder profile, tip-up: [{z, r, arc}] (mm; arc 0 = line, else the signed arc radius to the next point).",

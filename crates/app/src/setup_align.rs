@@ -474,7 +474,7 @@ fn verified_for_machine(kind: crate::machine::Kind, params: &crate::operation::O
         Kind::Plasma => matches!(params, OpParams::PlasmaProfile(_)),
         Kind::WireEdm => matches!(params, OpParams::WireContour(_)),
         Kind::SinkerEdm => matches!(params, OpParams::SinkerBurn(_)),
-        Kind::Waterjet => false,
+        Kind::Waterjet | Kind::Laser => false,
     }
 }
 
