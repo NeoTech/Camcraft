@@ -257,7 +257,9 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
             CycleKind::Peck | CycleKind::Deep => {
                 let auto = if kind == CycleKind::Peck { 3.0 * d } else { d };
                 let step = if p.peck > 0.0 { p.peck } else { auto }.max(0.25 * d);
-                if !(step.is_finite() && step > 0.0) || depth / step > 4096.0 {
+                // The pecks run from the R standoff: the budget reads the full travel.
+                let travel = p.r_d - bottom;
+                if !(step.is_finite() && step > 0.0 && travel.is_finite()) || travel / step > 4096.0 {
                     return Err(GenError::Invalid("peck plan unusable".into()));
                 }
                 let mut t = (p.r_d - step).max(bottom);
@@ -272,7 +274,11 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
                         p.r_d
                     };
                     rapid(&mut b, along(h, up));
-                    t = (t - step).max(bottom);
+                    let next = (t - step).max(bottom);
+                    if next >= t {
+                        return Err(GenError::Invalid("peck plan unusable: a peck makes no progress".into()));
+                    }
+                    t = next;
                 }
                 rapid(&mut b, along(h, p.r_d));
             }

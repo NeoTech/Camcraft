@@ -116,3 +116,21 @@ fn a_cross_hole_reads_its_depth_from_the_mouth_and_takes_deep() {
     let t = cross_drill(&radial(&tool, &holes, CycleChoice::Deep)).expect("drills");
     assert_eq!(plunges(&t), 5, "full retracts of 2 mm steps from the standoff: -1, -3, -5, -7, -8");
 }
+
+/// The review case: the depth in material picks the Auto cycle, but the
+/// pecks still run from the R standoff. A far standoff is refused by the
+/// peck budget, never looped over: 30000 mm gives 10,000 pecks, and
+/// 1e20 is a step that cannot move `t`. This holds for an explicit Peck
+/// and for the Peck that Auto chooses.
+#[test]
+fn a_far_radial_standoff_is_refused_by_the_peck_budget() {
+    let tool = drill_tool(2.0);
+    let holes = [cross_hole(-8.0)];
+    for cycle in [CycleChoice::Peck, CycleChoice::Auto, CycleChoice::Deep] {
+        for r_d in [30_000.0, 1e20] {
+            let p = CrossParams { r_d, ..radial(&tool, &holes, cycle) };
+            let e = cross_drill(&p).expect_err("a far standoff is refused");
+            assert!(e.to_string().contains("peck plan unusable"), "{cycle:?} at {r_d}: {e}");
+        }
+    }
+}
