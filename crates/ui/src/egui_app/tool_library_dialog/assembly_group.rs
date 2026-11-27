@@ -39,7 +39,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         notes(ui, state, u);
         super::super::tool_holder_picker::apply_holder_button(ui, state);
     } else {
-        ui.label("A turning tool takes no library holder: import its holder in the Body section.");
+        ui.label("A turning tool takes no library holder: import its holder in the Body section, or build the tool from linked parts in the Component stack.");
     }
     // #3898: the tool's component stack (the document's shared parts).
     super::stack::draw(ui, state);

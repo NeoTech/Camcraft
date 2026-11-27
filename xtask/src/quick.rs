@@ -151,23 +151,9 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
                 p.why.insert(key, format!("shared test input {rest}"));
             }
             p.libs.insert(d);
-        } else if let Some(s) = src_file.captures(&rest) {
+        } else if src_file.is_match(&rest) {
             p.libs.insert(d.clone());
-            let m = s[1].to_string();
-            let sub = match s.get(4).map(|x| x.as_str()) {
-                Some(x) if x != "mod" && x != "tests" => x.to_string(),
-                _ => String::new(),
-            };
-            // #1021: a `#[path]`-included file is also its parent's submodule; both names are
-            // mapped (a union), so resolving the includer can only ever add suites.
-            if let Some((pm, ps)) = path_mods::included_as(root, &d, &rest)?
-                && (pm.as_str(), ps.as_str()) != (m.as_str(), sub.as_str())
-            {
-                p.mods.push((d.clone(), pm, ps));
-            }
-            if !["lib", "main", "bin"].contains(&m.as_str()) {
-                p.mods.push((d, m, sub));
-            }
+            p.mods.extend(src_modules(root, &d, &rest)?);
         }
     }
     p.mods.sort_by(|a, b| {
@@ -186,13 +172,33 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
     Ok(Quick::Plan(plan))
 }
 
-/// src modules -> the suites whose Gate map names them (own crate: `::mod` or `{..mod..}`; others:
-/// `crate::mod`). A file in a submodule picks the suites naming `mod::sub` or `mod (.. sub ..)` when
-/// there are any, else every suite naming the module.
-fn map_modules(root: &Path, p: &mut Picks, notes: &mut Vec<String>) -> Result<(), String> {
-    if p.mods.is_empty() {
-        return Ok(());
+/// The `(crate, module, submodule)` names of a changed `src/` file of crate `d` (`rest` is the path
+/// under the crate dir): the file's own top module and submodule, and (#1021) the parent module that
+/// includes it by `#[path]`. Empty for the crate roots (`src/lib.rs`, `src/main.rs`, `src/bin/..`).
+pub fn src_modules(root: &Path, d: &str, rest: &str) -> Result<Vec<(String, String, String)>, String> {
+    let src_file = re(r"(?i)^src/([^/]+?)(\.rs)?(/([^/]+?)(\.rs)?(/.*)?)?$")?;
+    let Some(s) = src_file.captures(rest) else { return Ok(Vec::new()) };
+    let mut out = Vec::new();
+    let m = s[1].to_string();
+    let sub = match s.get(4).map(|x| x.as_str()) {
+        Some(x) if x != "mod" && x != "tests" => x.to_string(),
+        _ => String::new(),
+    };
+    // #1021: a `#[path]`-included file is also its parent's submodule; both names are
+    // mapped (a union), so resolving the includer can only ever add suites.
+    if let Some((pm, ps)) = path_mods::included_as(root, d, rest)?
+        && (pm.as_str(), ps.as_str()) != (m.as_str(), sub.as_str())
+    {
+        out.push((d.to_string(), pm, ps));
     }
+    if !["lib", "main", "bin"].contains(&m.as_str()) {
+        out.push((d.to_string(), m, sub));
+    }
+    Ok(out)
+}
+
+/// The Gate map text of each integration binary of each crate: `(crate, binary, text)`.
+pub fn gate_maps(root: &Path) -> Result<Vec<(String, String, String)>, String> {
     let mut maps: Vec<(String, String, String)> = Vec::new();
     for d in ALL_CRATES {
         for b in scan::binaries(root, d) {
@@ -206,30 +212,42 @@ fn map_modules(root: &Path, p: &mut Picks, notes: &mut Vec<String>) -> Result<()
             }
         }
     }
-    for (md, m, sub) in p.mods.clone() {
-        let (mm, ms) = (escape(&m), escape(&sub));
-        let own = re(&format!(r"(?i)::{mm}\b|\{{[^}}]*\b{mm}\b"))?;
-        let other = re(&format!(r"(?i)\b(camcraft_)?{md}::{mm}\b"))?;
-        let by_sub_re = re(&format!(
-            r"(?i)(::|\{{[^}}]*\b){mm}(::{ms}\b|\s*\([^)]*\b{ms}\b)"
-        ))?;
-        let (mut by_sub, mut by_mod) = (Vec::new(), Vec::new());
-        for (d, b, gm) in &maps {
-            let hit = if *d == md {
-                own.is_match(gm)
-            } else {
-                other.is_match(gm)
-            };
-            if !hit {
-                continue;
-            }
-            by_mod.push(format!("{d}:{b}"));
-            if !sub.is_empty() && by_sub_re.is_match(gm) {
-                by_sub.push(format!("{d}:{b}"));
-            }
+    Ok(maps)
+}
+
+/// The suites (`crate:binary`) whose Gate map names module `m` (submodule `sub`) of crate `md`, and
+/// `true` when the submodule picked them: the suites naming `m::sub` (or `m (.. sub ..)`) when there
+/// are any, else every suite naming `m`.
+pub fn suites_naming(maps: &[(String, String, String)], md: &str, m: &str, sub: &str) -> Result<(Vec<String>, bool), String> {
+    let (mm, ms) = (escape(m), escape(sub));
+    let own = re(&format!(r"(?i)::{mm}\b|\{{[^}}]*\b{mm}\b"))?;
+    let other = re(&format!(r"(?i)\b(camcraft_)?{}::{mm}\b", escape(md)))?;
+    let by_sub_re = re(&format!(r"(?i)(::|\{{[^}}]*\b){mm}(::{ms}\b|\s*\([^)]*\b{ms}\b)"))?;
+    let (mut by_sub, mut by_mod) = (Vec::new(), Vec::new());
+    for (d, b, gm) in maps {
+        let hit = if d == md { own.is_match(gm) } else { other.is_match(gm) };
+        if !hit {
+            continue;
         }
-        let use_sub = !by_sub.is_empty();
-        let pick = if use_sub { by_sub } else { by_mod };
+        by_mod.push(format!("{d}:{b}"));
+        if !sub.is_empty() && by_sub_re.is_match(gm) {
+            by_sub.push(format!("{d}:{b}"));
+        }
+    }
+    let use_sub = !by_sub.is_empty();
+    Ok((if use_sub { by_sub } else { by_mod }, use_sub))
+}
+
+/// src modules -> the suites whose Gate map names them (own crate: `::mod` or `{..mod..}`; others:
+/// `crate::mod`). A file in a submodule picks the suites naming `mod::sub` or `mod (.. sub ..)` when
+/// there are any, else every suite naming the module.
+fn map_modules(root: &Path, p: &mut Picks, notes: &mut Vec<String>) -> Result<(), String> {
+    if p.mods.is_empty() {
+        return Ok(());
+    }
+    let maps = gate_maps(root)?;
+    for (md, m, sub) in p.mods.clone() {
+        let (pick, use_sub) = suites_naming(&maps, &md, &m, &sub)?;
         let lbl = if use_sub {
             format!("{md}::{m}::{sub}")
         } else {

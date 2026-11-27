@@ -104,11 +104,12 @@ pub(crate) fn users(state: &State) -> HashMap<String, Vec<String>> {
     out
 }
 
-/// The clamp as words: "ER32 collet", "Weldon side lock".
+/// The clamp as words: "ER32 collet", "Weldon side lock", "shrink fit".
 pub(crate) fn clamp_text(e: &HolderEntry) -> String {
     match e.clamp {
         Clamp::Er(er) => format!("{} collet", er.name),
         Clamp::Weldon { .. } => "Weldon side lock".to_owned(),
+        Clamp::Shrink { .. } => "shrink fit".to_owned(),
     }
 }
 
@@ -116,7 +117,7 @@ pub(crate) fn clamp_text(e: &HolderEntry) -> String {
 pub(crate) fn range_text(e: &HolderEntry, u: Unit) -> String {
     match e.clamp {
         Clamp::Er(er) => format!("{} – {}", units::len(er.min_bore, u, 2), units::len(er.max_bore, u, 2)),
-        Clamp::Weldon { bore, .. } => units::len(bore, u, 3),
+        Clamp::Weldon { bore, .. } | Clamp::Shrink { bore, .. } => units::len(bore, u, 3),
     }
 }
 

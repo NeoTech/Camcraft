@@ -72,7 +72,9 @@ pub(crate) use components_ui::library_loads;
 pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
 #[path = "state_component_views.rs"]
 mod component_views;
-pub use component_views::{ComponentRow, ComponentViews, Derived as ComponentDerived, StackView, ViewBuilds, candidates};
+pub use component_views::{
+    ComponentRow, ComponentViews, Derived as ComponentDerived, StackValues, StackView, SwapOffer, ViewBuilds, candidates,
+};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]

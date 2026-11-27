@@ -1,15 +1,22 @@
 //! #3898 (U7 of #3663): what the tool library window's component pages
 //! derive from the document and the component library - each document row
 //! with its library status and its users, the ids that fit the
-//! "compatible" filter, and what "Add component" offers for the stack
-//! draft. Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
+//! "compatible" filter, and for the stack draft: what "Add component"
+//! offers, the resolver's values (gauge length, cutting diameter, corner
+//! radius; for a lathe tool the nose radius, the orientation and the
+//! insert's inscribed circle) or its refusal, and for each row the parts
+//! that "Swap" offers (only the replacements with which the whole stack
+//! still resolves). A lathe tool's empty stack offers only the roots that
+//! the lathe resolver takes (a rectangular shank or a round bar shank,
+//! #3643); a spindle tool's empty stack leaves those out. Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
 //! their input. The component table and the stacks that use each row are
 //! read once for each document version; a set is built again only when
-//! that read differs (`rev`), the library read changes, or the filter or
-//! the stack draft changes. A still frame reads and builds nothing
+//! that read differs (`rev`), the library read changes, or the filter,
+//! the open tool's record or the stack draft changes. A still frame reads and builds nothing
 //! (`ViewBuilds`).
 //! Provenance: our own caches over our own component records
-//! (`component_fit`, `component_library::sync_status`); no HSMWorks
+//! (`component_fit`, `component_library::sync_status`,
+//! `tool_assembly::derive`); no HSMWorks
 //! material involved.
 
 use std::rc::Rc;
@@ -17,8 +24,12 @@ use std::rc::Rc;
 use camcraft_app::component::{ComponentKind, CuttingItem, ToolComponent};
 use camcraft_app::component_fit::{compatible_children, compatible_parents};
 use camcraft_app::component_library::{SyncStatus, sync_status};
+use camcraft_app::connection_code::ConnectionCode;
+use camcraft_app::orientation;
 use camcraft_app::schema::{AssemblyLink, DocumentComponent};
 use camcraft_app::tool_assembly::{self as ta, Mount};
+use camcraft_app::tool_body::LATHE_HELD;
+use camcraft_app::tools::Tool;
 
 use super::State;
 
@@ -33,10 +44,40 @@ pub struct Derived {
     pub rows: Rc<Vec<ComponentRow>>,
 }
 
+/// The values a resolved stack gives its tool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StackValues {
+    /// From the cutting tip to the spindle gauge line (mm).
+    pub gauge_len: f64,
+    /// The cutting diameter (mm).
+    pub diameter: f64,
+    /// The corner radius (mm).
+    pub corner_r: f64,
+    /// For a lathe-held tool, what the lathe resolver gives (#3643).
+    pub lathe: Option<LatheValues>,
+}
+
+/// The values a resolved lathe stack gives its tool: `diameter` above
+/// holds the insert's inscribed circle and the gauge length is 0 (#4278).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LatheValues {
+    /// The insert's nose radius (mm).
+    pub nose_radius: f64,
+    /// The tip orientation code (1-8), stated or derived.
+    pub orientation: Option<u8>,
+}
+
+/// One replacement that "Swap" offers: its label and the whole new stack.
+pub type SwapOffer = (String, Vec<AssemblyLink>);
+
 /// What the stack group derives from the stack draft.
 pub struct StackView {
     /// The parts that can go on the stack next ([`candidates`]).
     pub offer: Vec<(String, AssemblyLink)>,
+    /// The resolver's values, or its named refusal; `None` for no stack.
+    pub values: Option<Result<StackValues, String>>,
+    /// For each row, the replacements with which the stack resolves.
+    pub swaps: Vec<Vec<SwapOffer>>,
 }
 
 /// The document's inputs of the sets: the component table and, for each
@@ -59,7 +100,7 @@ pub struct ViewBuilds {
 
 type RowsKey = (u64, u64);
 type CompatibleKey = (u64, u64, String);
-type StackKey = (u64, Vec<AssemblyLink>);
+type StackKey = (u64, String, Option<Tool>, Vec<AssemblyLink>);
 
 /// The caches. `rev` changes only when a read of the document gives other
 /// inputs; the keys hold it with the library read and the page's input.
@@ -82,17 +123,39 @@ impl ComponentViews {
     }
 }
 
-/// The parts that can go on the stack next, with the link each one adds:
-/// the holding parts for an empty stack, else the parts that fit the last
-/// holding part (a cutting item holds nothing).
+/// The parts that can go on a spindle tool's stack next ([`candidates_for`]).
 #[must_use]
 pub fn candidates(links: &[AssemblyLink], table: &[DocumentComponent]) -> Vec<(String, AssemblyLink)> {
+    candidates_for(links, table, false)
+}
+
+/// Whether row `r` can start the stack of a lathe tool (`lathe`) or of
+/// a spindle tool. The lathe resolver takes a rectangular shank or a round
+/// bar shank as its root and needs an insert after it; a spindle stack
+/// refuses a row with a lathe body, and a rectangular shank is a lathe
+/// holder's.
+fn starts(r: &DocumentComponent, lathe: bool) -> bool {
+    let rect = matches!(r.component.mcs(), Some(ConnectionCode::RectShank { .. }));
+    if lathe {
+        let bar = matches!(r.component.mcs(), Some(ConnectionCode::Cylindrical { .. } | ConnectionCode::Weldon { .. }));
+        (rect || bar) && !matches!(r.component.kind(), ComponentKind::CuttingItem(_))
+    } else {
+        !rect && r.lathe_body.is_none() && !matches!(r.component.kind(), ComponentKind::CuttingItem(CuttingItem::Insert(_)))
+    }
+}
+
+/// The parts that can go on the stack next, with the link each one adds:
+/// the holding parts for an empty stack (the lathe roots for a lathe
+/// tool), else the parts that fit the last holding part (a cutting item
+/// holds nothing).
+#[must_use]
+pub fn candidates_for(links: &[AssemblyLink], table: &[DocumentComponent], lathe: bool) -> Vec<(String, AssemblyLink)> {
     let comps: Vec<&ToolComponent> = table.iter().map(|r| &r.component).collect();
     if links.is_empty() {
-        return comps
-            .into_iter()
-            .filter(|c| !matches!(c.kind(), ComponentKind::CuttingItem(CuttingItem::Insert(_))))
-            .map(|c| (c.name().to_owned(), AssemblyLink { component: c.id().to_owned(), mount: None }))
+        return table
+            .iter()
+            .filter(|r| starts(r, lathe))
+            .map(|r| (r.component.name().to_owned(), AssemblyLink { component: r.component.id().to_owned(), mount: None }))
             .collect();
     }
     let parent = links.iter().enumerate().rev().find_map(|(i, l)| {
@@ -113,6 +176,45 @@ pub fn candidates(links: &[AssemblyLink], table: &[DocumentComponent]) -> Vec<(S
             };
             let mount = Mount { parent: at, port: Some(f.port.clone()), z_rot_deg: 0.0, projection_mm };
             (format!("{} in {} {}", f.component.name(), parent.name(), f.port), AssemblyLink { component: f.component.id().to_owned(), mount: Some(mount) })
+        })
+        .collect()
+}
+
+fn values(name: &str, tool: &Tool, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<StackValues, String> {
+    ta::derive(name, tool, links, table).map(|d| {
+        let lathe = is_lathe(tool).then(|| LatheValues {
+            nose_radius: d.tool.nose_radius,
+            orientation: d.tool.orientation.or_else(|| orientation::default_for(d.tool.kind)),
+        });
+        StackValues { gauge_len: d.gauge_len, diameter: d.tool.diameter, corner_r: d.tool.corner_r, lathe }
+    })
+}
+
+/// Whether the lathe resolver builds `tool`'s stack (`tool_assembly::derive`).
+fn is_lathe(tool: &Tool) -> bool {
+    LATHE_HELD.contains(&tool.kind)
+}
+
+/// The replacements for row `at`: each part that fits where the row's
+/// part sits, put in its place with the row's turn and (when stated) its
+/// stick-out kept, and kept only when the whole stack then resolves.
+fn swaps_at(name: &str, tool: &Tool, links: &[AssemblyLink], at: usize, table: &[DocumentComponent]) -> Vec<SwapOffer> {
+    let (Some(prefix), Some(old)) = (links.get(..at), links.get(at)) else {
+        return Vec::new();
+    };
+    candidates_for(prefix, table, is_lathe(tool))
+        .into_iter()
+        .filter(|(_, c)| c.component != old.component)
+        .filter_map(|(label, mut c)| {
+            if let (Some(m), Some(was)) = (c.mount.as_mut(), old.mount.as_ref()) {
+                m.z_rot_deg = was.z_rot_deg;
+                m.projection_mm = was.projection_mm.or(m.projection_mm);
+            }
+            let mut next = links.to_vec();
+            if let Some(slot) = next.get_mut(at) {
+                *slot = c;
+            }
+            values(name, tool, &next, table).is_ok().then_some((label, next))
         })
         .collect()
 }
@@ -184,19 +286,32 @@ impl State {
         Derived { compatible, rows }
     }
 
-    /// What the stack group offers for the stack draft `links`.
-    pub(crate) fn component_stack_view(&mut self, links: &[AssemblyLink]) -> Rc<StackView> {
+    /// What the stack group derives for the stack draft `links` of tool
+    /// `name`, whose record is now `tool` (`None`: not in the document).
+    pub(crate) fn component_stack_view(&mut self, name: &str, tool: Option<&Tool>, links: &[AssemblyLink]) -> Rc<StackView> {
         self.read_component_inputs();
         let v = &mut self.component_views;
-        if let Some(((rev, kept), view)) = &v.stack
+        if let Some(((rev, kept_name, kept_tool, kept), view)) = &v.stack
             && *rev == v.rev
+            && kept_name == name
+            && kept_tool.as_ref() == tool
             && kept.as_slice() == links
         {
             return Rc::clone(view);
         }
         v.builds.stack = v.builds.stack.saturating_add(1);
-        let view = Rc::new(StackView { offer: candidates(links, &v.inputs.table) });
-        v.stack = Some(((v.rev, links.to_vec()), Rc::clone(&view)));
+        let table = &v.inputs.table;
+        let (values, swaps) = match tool {
+            Some(t) if !links.is_empty() => (
+                Some(values(name, t, links, table)),
+                (0..links.len()).map(|i| swaps_at(name, t, links, i, table)).collect(),
+            ),
+            Some(_) => (None, Vec::new()),
+            None => (Some(Err(format!("tool '{name}' is not in the document"))), Vec::new()),
+        };
+        let lathe = tool.is_some_and(is_lathe);
+        let view = Rc::new(StackView { offer: candidates_for(links, table, lathe), values, swaps });
+        v.stack = Some(((v.rev, name.to_owned(), tool.cloned(), links.to_vec()), Rc::clone(&view)));
         view
     }
 }

@@ -46,6 +46,8 @@ mod heavy_covers_tests;
 mod heavy_files;
 #[cfg(test)]
 mod heavy_files_tests;
+#[cfg(test)]
+mod heavy_gate_map_tests;
 mod lanes;
 mod light;
 #[cfg(test)]
