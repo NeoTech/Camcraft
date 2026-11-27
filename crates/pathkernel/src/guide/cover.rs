@@ -2,7 +2,7 @@
 //! raw curves before they are checked, and the completeness guard of the
 //! record (#3744: the swept discs cover the cutter-centre area up to
 //! 0.1 mm2, else the result is incomplete with each gap named).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2: Guide curves"; the swept area of a disc as the Minkowski sum of
 //! a path and the disc (the published polygon-offsetting literature).
 
@@ -22,6 +22,9 @@ pub const NOT_PLANAR: &str = "this guide planner plans only a planar region";
 pub const NOT_AN_AREA: &str = "this guide planner plans an area: the chains of a trace have no area";
 /// Refusal reason: a polygon operation that cannot be computed.
 pub const GUIDE_GEOMETRY: &str = "the guide geometry cannot be computed: a value is out of range";
+/// Refusal reason: a polygon offset or a boolean refused its input as not
+/// valid geometry (#4407: the kind of the geometry error is kept).
+pub const GUIDE_GEOMETRY_INVALID: &str = "the guide geometry cannot be computed: the geometry refused its input as not valid";
 /// Refusal reason: a stepover larger than the tool diameter.
 pub const STEP_ABOVE_DIAMETER: &str = "the stepover is larger than the tool diameter: material between two curves stays uncut";
 
@@ -78,8 +81,8 @@ pub(crate) fn check_step(step: f64, tool_r: f64) -> Result<f64, Refusal> {
 }
 
 /// A geometry result as a guide refusal.
-pub(crate) fn geo<T, E>(r: Result<T, E>) -> Result<T, Refusal> {
-    r.map_err(|_| Refusal::new(Stage::Guide, GUIDE_GEOMETRY))
+pub(crate) fn geo<T>(r: Result<T, camcraft_geometry::geo2d::GeoError>) -> Result<T, Refusal> {
+    r.map_err(|e| crate::geo_refusal(Stage::Guide, &e, GUIDE_GEOMETRY, GUIDE_GEOMETRY_INVALID))
 }
 
 /// The closed walks of loops, for a sweep.

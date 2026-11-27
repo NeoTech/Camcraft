@@ -3,7 +3,7 @@
 //! `guide/choice.rs`, the planners in the files of `guide/`: rings and rows
 //! (#4176, first part); the medial line, the trace and the helix (second
 //! part).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 2: Guide curves"; contour-parallel and direction-parallel paths as
 //! in Held (1991).
 
@@ -30,7 +30,7 @@ pub use choice::{
     BAD_OFFSET, Circle, GuideChoice, Hand, HelixChoice, MAX_TURNS, RingRef, RingsChoice, RowsChoice, TOO_MANY_TURNS, TraceOffset,
     ZERO_COUNT,
 };
-pub use cover::{BAD_TOL, GUIDE_GEOMETRY, NOT_AN_AREA, NOT_PLANAR, STEP_ABOVE_DIAMETER};
+pub use cover::{BAD_TOL, GUIDE_GEOMETRY, GUIDE_GEOMETRY_INVALID, NOT_AN_AREA, NOT_PLANAR, STEP_ABOVE_DIAMETER};
 pub use helix::HelixPlanner;
 pub use lead::{HELIX_NEEDS_LEAD, Lead, NOT_ON_HELIX};
 pub use mark::{Mark, MarkKind, Span};

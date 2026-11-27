@@ -4,7 +4,7 @@
 //! constructors, and a trait so that a later family can supply its own
 //! stage. This step holds the types only: no stage plans a path yet.
 //!
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! (clean-room); the stage split follows the published offset-pocketing and
 //! engagement literature (Held 1991; Stori & Wright 2000; Held & Spielberger
 //! 2009). No HSMWorks material consulted.
@@ -50,6 +50,7 @@ pub use verdict::{Fallback, Gap, Gaps, Note, Refusal, Stage, Verdict};
 /// The 2D types of the kernel's data, re-exported so that a caller names
 /// one crate.
 pub use camcraft_geometry::geo2d::{Loop, Point2, Region};
+use camcraft_geometry::geo2d::GeoError;
 
 /// The tolerance (mm) of the kernel's own invariant checks: two points
 /// closer than this are the same point.
@@ -94,7 +95,31 @@ pub(crate) fn to_loops(q: Point2, loops: &[Loop]) -> f64 {
     best
 }
 
+/// The refusal of a failed `camcraft-geometry` call, with the kind of the
+/// error (#4407): `range` for a coordinate outside the machinable range,
+/// `invalid` for an input that the geometry refused as not valid.
+pub(crate) fn geo_refusal(stage: verdict::Stage, e: &GeoError, range: &'static str, invalid: &'static str) -> verdict::Refusal {
+    match e {
+        GeoError::OutOfRange => verdict::Refusal::new(stage, range),
+        GeoError::Invalid(_) => verdict::Refusal::new(stage, invalid),
+    }
+}
+
 /// True when every point of every loop of `r` is finite.
 pub(crate) fn region_finite(r: &Region) -> bool {
     r.loops().iter().all(|l| l.points().iter().all(|p| finite(&[p.x, p.y])))
+}
+
+#[cfg(test)]
+mod geo_tests {
+    //! #4407: a geometry error keeps its kind in the refusal.
+    use super::*;
+
+    #[test]
+    fn a_geometry_error_keeps_its_kind() {
+        let range = geo_refusal(verdict::Stage::Region, &GeoError::OutOfRange, "range", "invalid");
+        let invalid = geo_refusal(verdict::Stage::Guide, &GeoError::Invalid("loop crosses itself".into()), "range", "invalid");
+        assert_eq!((range.stage(), range.reason()), (verdict::Stage::Region, "range"));
+        assert_eq!((invalid.stage(), invalid.reason()), (verdict::Stage::Guide, "invalid"));
+    }
 }

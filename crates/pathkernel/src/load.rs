@@ -4,7 +4,7 @@
 //! agrees with a reading. The planner is [`LoadStage`] in `load/` (#4026):
 //! the engagement law (`law.rs`), constant engagement on rings
 //! (`rings.rs`) and trochoidal loops (`trochoid.rs`).
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 3: Load control"; radial engagement as in Stori & Wright (2000)
 //! and Held & Spielberger (2009).
 
@@ -14,7 +14,7 @@ mod stage;
 mod trochoid;
 
 pub use law::NO_RASTER;
-pub use rings::{AT_FLOOR, LOAD_GEOMETRY, NOT_A_RING, NOT_FIXED, TOO_MANY_PASSES};
+pub use rings::{AT_FLOOR, LOAD_GEOMETRY, LOAD_GEOMETRY_INVALID, NOT_A_RING, NOT_FIXED, TOO_MANY_PASSES};
 pub use stage::{DEFAULT_LIMIT, FRESH_CUT, LOAD_NOT_PLANAR, LoadStage, NO_CONTROL, SET_NOT_KEPT, STOCK_REACH_ELSEWHERE};
 pub use trochoid::{LOOP_LEAVES, LOOPS_NOT_A_CURVE, LOOPS_OVER, NO_ROOM, NOT_MARKED, SHAPE_KEPT};
 
