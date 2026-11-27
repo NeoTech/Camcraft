@@ -11,7 +11,7 @@
 //! projection and ray casting from general graphics practice); no vendor
 //! material consulted.
 
-use egui::{Color32, ComboBox, Sense, Shape, Stroke, Ui, Vec2};
+use egui::{ComboBox, Sense, Shape, Stroke, Ui, Vec2};
 
 use camcraft_app::tool_body_view::{self, AXIS_CHOICES};
 use camcraft_app::tool_body;
@@ -19,7 +19,7 @@ use camcraft_app::units::{self, Unit};
 
 use super::fields::num_row;
 use super::layout::prop_row_hint;
-use super::tool_model_view::{self as model_view, BG, View};
+use super::tool_model_view::{self as model_view, tool_ground, View};
 use crate::state::{BodyPickMode, State};
 
 /// The preview's side, logical px.
@@ -188,7 +188,7 @@ pub(super) fn placement_view(ui: &mut Ui, state: &mut State) {
 fn preview_3d(ui: &mut Ui, state: &mut State) {
     let (resp, painter) = ui.allocate_painter(SIDE, Sense::click_and_drag());
     let rect = resp.rect;
-    painter.rect_filled(rect, 4.0, BG);
+    painter.rect_filled(rect, 4.0, tool_ground());
     let d = &state.tool_body_ui;
     let Some(view) = View::new(&d.facets, rect, &d.orbit()) else {
         return;
@@ -197,15 +197,16 @@ fn preview_3d(ui: &mut Ui, state: &mut State) {
     // The placement over it: the axis from the tip up (a lathe draft:
     // the tip with its radial and spindle directions), the tip, and
     // the model origin.
+    let pal = super::theme::current();
     if d.lathe.is_some() {
         super::tool_body_lathe_page::overlay(&painter, d, &|q| view.screen(q), view.reach);
     } else if let Some(a) = model_view::norm(d.axis) {
         let tip = [-d.offset * a[0], -d.offset * a[1], -d.offset * a[2]];
         let top = [0, 1, 2].map(|i| tip[i] + a[i] * view.reach * 2.0);
-        painter.line_segment([view.screen(tip), view.screen(top)], Stroke::new(1.5, Color32::from_rgb(90, 200, 230)));
-        painter.circle_filled(view.screen(tip), 4.0, Color32::from_rgb(240, 150, 40));
+        painter.line_segment([view.screen(tip), view.screen(top)], Stroke::new(1.5, pal.mount_axis));
+        painter.circle_filled(view.screen(tip), 4.0, pal.mount_tip);
     }
-    painter.circle_stroke(view.screen([0.0; 3]), 3.0, Stroke::new(1.0, Color32::from_rgb(160, 160, 170)));
+    painter.circle_stroke(view.screen([0.0; 3]), 3.0, Stroke::new(1.0, pal.mount_origin));
     let mode = d.pick;
     if mode != BodyPickMode::Off {
         painter.text(
@@ -213,7 +214,7 @@ fn preview_3d(ui: &mut Ui, state: &mut State) {
             egui::Align2::LEFT_TOP,
             super::tool_body_lathe_page::pick_hint(mode),
             egui::FontId::proportional(10.0),
-            Color32::from_rgb(240, 200, 120),
+            pal.mount_hint,
         );
     }
     // Zoom about the cursor, fit on a double-click, orbit on a drag.
