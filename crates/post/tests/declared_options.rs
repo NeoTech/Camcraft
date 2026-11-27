@@ -94,6 +94,7 @@ fn shipped_milling_posts_declare_valid_option_schemas() {
         "assets/posts/tinyg.cps",
         "assets/posts/grbl.cps",
         "assets/posts/carvera.cps",
+        "assets/posts/hurco-winmax.cps",
     ] {
         let cps = read(rel);
         let schema = declared_options(&cps).unwrap_or_else(|e| panic!("{rel}: {e}"));

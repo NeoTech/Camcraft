@@ -780,6 +780,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Haas Mini Mill", Kind::Mill),
         ("Haas DT-1", Kind::Mill),
         ("Haas DM-1", Kind::Mill),
+        ("Hurco VM10i", Kind::Mill),
         ("EMCO VMC-200", Kind::Mill),
         ("Sinker EDM 3-axis (template)", Kind::SinkerEdm),
         ("Sodick ALC400G", Kind::WireEdm),

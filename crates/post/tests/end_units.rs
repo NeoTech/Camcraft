@@ -54,6 +54,7 @@ fn writing_mill_posts_emit_end_unit_word_before_program_end() {
         ("fanuc", "G20", "G21", "M30"),
         ("mazak", "G20", "G21", "M30"),
         ("doosan-dnm", "G20", "G21", "M30"),
+        ("hurco-winmax", "G20", "G21", "M30"),
         ("sinumerik", "G700", "G710", "M2"),
     ];
     for (stem, inch_word, mm_word, end_word) in cases {

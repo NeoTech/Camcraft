@@ -66,6 +66,7 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
     ("Mach4", "mach4", "mach4"),
+    ("Hurco WinMax (NC)", "hurco-winmax", "hurco-winmax"),
     ("RichAuto DSP A11", "richauto", "richauto"),
     ("Mach3", "mach3", "mach3"),
 ];
@@ -491,6 +492,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("mach4", "nc"),
+    ("hurco-winmax", "nc"),
     // #1907: the program a Laguna Swift's A11 runs is a .mmg file.
     ("richauto", "mmg"),
     ("mach3", "nc"),

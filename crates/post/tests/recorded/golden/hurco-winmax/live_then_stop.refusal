@@ -1,0 +1,5 @@
+; hurco-winmax.cps refused live_then_stop: 4 warning(s), the program is never released
+warning: operation Cross drill: is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis
+warning: Hurco WinMax (NC) post: rotary or 5-axis tilted move is not supported by the 3-axis Hurco WinMax (NC) post
+warning: Hurco WinMax (NC) post: rotary or 5-axis tilted move is not supported by the 3-axis Hurco WinMax (NC) post
+warning: Hurco WinMax (NC) post: rotary or 5-axis tilted move is not supported by the 3-axis Hurco WinMax (NC) post

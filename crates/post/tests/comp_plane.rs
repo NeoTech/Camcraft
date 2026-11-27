@@ -11,7 +11,7 @@
 use camcraft_post::post::engine;
 use serde_json::Value;
 
-const POSTS: &[&str] = &["fanuc", "haas", "mazak", "sinumerik"];
+const POSTS: &[&str] = &["fanuc", "haas", "mazak", "sinumerik", "hurco-winmax"];
 
 fn post(stem: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../assets/posts/{stem}.cps"));

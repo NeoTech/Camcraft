@@ -17,7 +17,7 @@ use camcraft_post::post::engine;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-const RADIUS_POSTS: &[&str] = &["fanuc", "haas", "mazak", "doosan-dnm", "tormach", "grblhal"];
+const RADIUS_POSTS: &[&str] = &["fanuc", "haas", "mazak", "doosan-dnm", "tormach", "grblhal", "hurco-winmax"];
 
 fn repo(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel)
