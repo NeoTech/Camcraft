@@ -17,23 +17,25 @@ fn model(t: &Tool) -> ToolModel {
     build(&Key { tool: t.clone(), doc: None, cutter: None, body: None, holder: None })
 }
 
-/// The distinct angles of the vertices on the ring at height `z`.
+/// The distinct angle steps (of `RING` around) of the vertices on the
+/// ring at height `z`.
 fn ring_angles(mesh: &[Triangle], z: f64) -> usize {
-    let mut a: Vec<f64> = mesh
+    let step = std::f64::consts::TAU / RING as f64;
+    let mut a: Vec<usize> = mesh
         .iter()
         .flat_map(|t| [t.a, t.b, t.c])
         .filter(|p| (p.z - z).abs() < 1e-9 && p.x.hypot(p.y) > 1e-9)
-        .map(|p| p.y.atan2(p.x).rem_euclid(std::f64::consts::TAU))
+        .map(|p| (p.y.atan2(p.x).rem_euclid(std::f64::consts::TAU) / step).round() as usize % RING)
         .collect();
-    a.sort_by(f64::total_cmp);
-    a.dedup_by(|x, y| (*x - *y).abs() < 1e-9 || (std::f64::consts::TAU - (*x - *y).abs()).abs() < 1e-9);
+    a.sort_unstable();
+    a.dedup();
     a.len()
 }
 
 #[test]
 fn the_preview_revolve_is_finer_than_before() {
     // The revolve took 32 facets around before #4452.
-    assert!(RING >= 96, "the preview ring has {RING} facets");
+    const { assert!(RING >= 96) };
     assert_eq!(RING, super::super::flutes::SEGS, "as many as the fluted steel");
     let t = shipped("EM-1000-4FL");
     let m = model(&t);
