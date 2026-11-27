@@ -5,7 +5,9 @@
 //! measures need: a rapid and a plunge for each entry, a feed along each
 //! cut and each stay-down link, a rapid up for each lift, and one link
 //! note for each lift reason (the note text of `links.rs`).
-//! Pins: no crossing feed, each lift named, and the lift count.
+//! Pins: no crossing feed, each lift named, and the lift count. The test
+//! prints the places of the full-width feeds (load is K3's, #4254 reports
+//! them).
 
 use super::common::law_measure::{Readings, measure};
 use super::fixture::{R, STEP, TOP, Z, parts, planned_deg, spec_round, stock};
@@ -92,18 +94,17 @@ fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
 
 /// The lift count of the kernel for each part and side: (part, side, lifts).
 /// The old planners on the same fixtures (#4154 tables): 2D Pocket 18 on
-/// the disc and 26 on the dog bone, none named; 2D Offset 0. The lifts that
-/// stay are named in `docs/decisions/4177-kernel-order-link.md`: Outside
-/// starts at the stock edge, and the link from one piece there to the next
-/// runs over the uncut strip along the edge (#4234: that strip is not open
-/// ground until a cut clears it). A link may go out through the edge band
-/// into the air (#4241), but the way back in to the next piece's start runs
-/// over stock that no cut has cleared: the counts do not change.
+/// the disc and 26 on the dog bone, none named; 2D Offset 0. Outside starts
+/// at the stock edge. A link leaves a piece there through the edge band
+/// into the air (#4241) and comes back in to the start of the next piece
+/// with an approach from the air whose disc cuts only the swath of that
+/// piece (#4254, `docs/decisions/4254-kernel-air-approach.md`): no lift
+/// stays.
 const LIFTS: [(&str, &str, usize); 4] = [
     ("disc", "Inside", 0),
-    ("disc", "Outside", 13),
+    ("disc", "Outside", 0),
     ("dog bone", "Inside", 0),
-    ("dog bone", "Outside", 15),
+    ("dog bone", "Outside", 0),
 ];
 
 #[test]
@@ -115,6 +116,7 @@ fn kernel_order_and_link_round_the_disc_and_the_dog_bone() {
             let r: Readings = measure(&path, &spec_round(&part, planned_deg(STEP, R))).unwrap();
             eprintln!("{pname} {sname}: {}", r.row());
             eprintln!("  lift reasons {:?} at {:?}", tally.by_reason(), r.lifts.places);
+            eprintln!("  full-width feeds at {:?}", r.full_width.places);
             assert_eq!(r.crossings.count, 0, "{pname} {sname}: no feed crosses another: {:?}", r.crossings.places);
             assert_eq!(r.named_lifts, r.lifts.count, "{pname} {sname}: each lift has a named reason");
             assert_eq!(r.lifts.count, tally.lifts() as usize, "{pname} {sname}: the tally counts each lift");
