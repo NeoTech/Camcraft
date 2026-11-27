@@ -13,11 +13,18 @@ use crate::link::{self, Level};
 use crate::plan::Cut;
 use crate::guide::{Curve, Family, GuideSet, MarkKind, Span};
 use crate::region::{KernelRegion, PlanarRegion};
-use crate::verdict::{Refusal, Stage, Verdict};
+use crate::frame::PlanePoint;
+use crate::verdict::{Note, Refusal, Stage, Verdict};
 use crate::{Point2, Region};
 
 /// Refusal reason: the order stage was given a region that is not planar.
 pub const ORDER_NOT_PLANAR: &str = "the order stage plans planar regions only";
+/// Refusal reason: a curve that the order stage cannot restart or reverse
+/// through the constructor of its family (its circle, its lead and its
+/// points kept).
+pub const NOT_REVERSIBLE: &str = "the order stage cannot restart or reverse this curve and keep its circle, its lead and its points";
+/// Note: a helix runs down its lead, so its hand sets its direction.
+pub const HELIX_HAND_SETS_DIRECTION: &str = "a helix cuts down along its lead, so its hand sets its direction: this helix cuts against the asked direction (climb or conventional); choose the other hand for the other direction";
 
 /// The reach of the chain order, in tool radii (as the air plan's chains).
 const CHAIN_REACH: f64 = 3.0;
@@ -51,6 +58,13 @@ fn dist(a: Point2, b: Point2) -> f64 {
     (a.x - b.x).hypot(a.y - b.y)
 }
 
+/// `c` with the points `pts`, through the constructor of its family
+/// (`Curve::with_points`: a helix keeps its circle and its lead). A curve
+/// that the constructor refuses is refused by the order stage's own reason.
+fn rebuilt(c: &Curve, pts: Vec<PlanePoint>) -> Result<Curve, Refusal> {
+    c.with_points(pts).map_err(|_| Refusal::new(Stage::Order, NOT_REVERSIBLE))
+}
+
 /// `c` in the other direction (a closed curve keeps its start).
 fn reversed(c: &Curve) -> Result<Curve, Refusal> {
     let mut pts = c.pts().to_vec();
@@ -58,15 +72,33 @@ fn reversed(c: &Curve) -> Result<Curve, Refusal> {
         (true, Some(rest)) => rest.reverse(),
         _ => pts.reverse(),
     }
-    Curve::new(pts, c.arc(), c.closed(), c.k(), c.family())
+    rebuilt(c, pts)
 }
 
+/// One curve as the order stage runs it: the curve, whether it was
+/// reversed, and whether the asked direction could not be met.
+type Oriented = (Curve, bool, bool);
+
 /// `c` in the direction that puts the deeper curves on the left when
-/// `want_left` (on the right else); and whether it was reversed.
-fn orient(p: &PlanarRegion, c: &Curve, want_left: bool) -> Result<(Curve, bool), Refusal> {
+/// `want_left` (on the right else); whether it was reversed; and whether
+/// that direction could not be met. A helix always runs down its lead
+/// (reversed when the guide set holds it upward): a reversal in the plane
+/// would also turn it up its lead, so its hand sets its side, and a side
+/// against `want_left` is named, not met (#4176).
+fn orient(p: &PlanarRegion, c: &Curve, want_left: bool) -> Result<Oriented, Refusal> {
+    if c.family() == Family::Helix {
+        let (down, turned) = if c.descends() {
+            (c.clone(), false)
+        } else {
+            let r = reversed(c)?;
+            if r.descends() { (r, true) } else { (c.clone(), false) }
+        };
+        let unmet = side::deeper_left(p, &down).is_some_and(|left| left != want_left);
+        return Ok((down, turned, unmet));
+    }
     match side::deeper_left(p, c) {
-        Some(left) if left != want_left => Ok((reversed(c)?, true)),
-        _ => Ok((c.clone(), false)),
+        Some(left) if left != want_left => Ok((reversed(c)?, true, false)),
+        _ => Ok((c.clone(), false, false)),
     }
 }
 
@@ -110,7 +142,7 @@ fn restarted(c: &Curve, j: usize) -> Result<Curve, Refusal> {
     let mut pts = c.pts().to_vec();
     let n = pts.len();
     pts.rotate_left(j.min(n));
-    Curve::new(pts, c.arc(), true, c.k(), c.family())
+    rebuilt(c, pts)
 }
 
 /// The ways to start `c` from `at`: a closed curve at the end of its
@@ -228,11 +260,12 @@ impl OrderPlanner for OrderStage {
         // Climb puts the uncut material on the right of the travel: the
         // deeper side when the deeper curves come later, else the other.
         let want_left = deep == (o.direction == Direction::Climb);
-        let (runs, turned): (Vec<Curve>, Vec<bool>) =
-            g.curves().iter().map(|c| orient(p, c, want_left)).collect::<Result<Vec<_>, _>>()?.into_iter().unzip();
+        let oriented = g.curves().iter().map(|c| orient(p, c, want_left)).collect::<Result<Vec<_>, _>>()?;
+        let notes = if oriented.iter().any(|o| o.2) { vec![Note::new(Stage::Order, HELIX_HAND_SETS_DIRECTION)?] } else { Vec::new() };
+        let (runs, turned): (Vec<Curve>, Vec<bool>) = oriented.into_iter().map(|(c, t, _)| (c, t)).unzip();
         let heavy = heavy(&g, &turned);
         let seq = walk(p, &runs, &heavy, deep)?;
         let start = seq.first().map_or(Point2::new(0.0, 0.0), first_of);
-        Ok(Verdict::done(OrderedSet::new(&g, seq, start, resolved)?))
+        Ok(Verdict::Done { out: OrderedSet::new(&g, seq, start, resolved)?, fallbacks: Vec::new(), notes })
     }
 }

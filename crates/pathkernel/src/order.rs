@@ -11,7 +11,7 @@ mod chain;
 mod side;
 mod stage;
 
-pub use stage::{ORDER_NOT_PLANAR, OrderStage};
+pub use stage::{HELIX_HAND_SETS_DIRECTION, NOT_REVERSIBLE, ORDER_NOT_PLANAR, OrderStage};
 
 use crate::guide::{Curve, GuideSet, Mark};
 use crate::region::KernelRegion;

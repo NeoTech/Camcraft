@@ -133,11 +133,12 @@ fn each_later_stage_refuses_the_chain_region_of_a_trace_by_name() {
     // the chain region by a named reason: never a panic, never a plan. The
     // follow-up #4236 makes these stages accept it; then this table changes
     // with it. The order stage refuses it; the link stage lifts for a named
-    // reason (it proves no in-plane link on it). The load stage has no
-    // planner on this branch yet (a trait only, K3).
+    // reason (it proves no in-plane link on it). The load stage refuses it
+    // in each of its modes (K3, PR #4265).
     use camcraft_pathkernel::entry::{self, ArcChoice, EntryChoice, EntryKind, EntryPlanner, EntryStage, Heights};
     use camcraft_pathkernel::link::{Hop, Level, LinkPolicy, LinkProof, LinkStage, LinkTally, NOT_PLANAR_LINK};
-    use camcraft_pathkernel::order::{ORDER_NOT_PLANAR, OrderStage};
+    use camcraft_pathkernel::load::{LOAD_NOT_PLANAR, LoadControl, LoadPlanner, LoadStage, Reach, Trochoid};
+    use camcraft_pathkernel::order::{ORDER_NOT_PLANAR, OrderStage, OrderedSet};
     use camcraft_pathkernel::plan::Cut;
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -172,8 +173,16 @@ fn each_later_stage_refuses_the_chain_region_of_a_trace_by_name() {
     let named = |r: Result<(), Refusal>| r.err().map(|e| e.reason());
     let order = OrderChoice { start: StartSide::Auto, direction: Default::default() };
     let cuts = [cut.clone()];
+    // The order stage refuses the region, so the load stage gets the guide
+    // set as an ordered set as it is.
+    let ordered = OrderedSet::new(&set, set.curves().to_vec(), set.curves()[0].pts()[0].at(), StartSide::Inside).unwrap();
+    let stock = ShapeReader(Region::empty());
+    let load = |lc: LoadControl| named(LoadStage::default().control(ordered.clone(), &r, &stock, &lc, 1.0).map(|_| ()));
     let table: Vec<(&str, &str, Call<'_>)> = vec![
         ("order stage", ORDER_NOT_PLANAR, Box::new(|| named(OrderStage.order(set.clone(), &r, &order, None).map(|_| ())))),
+        ("load stage: none", LOAD_NOT_PLANAR, Box::new(|| load(LoadControl::None))),
+        ("load stage: constant engagement", LOAD_NOT_PLANAR, Box::new(|| load(LoadControl::constant(0.25, Reach::Rings).unwrap()))),
+        ("load stage: trochoidal", LOAD_NOT_PLANAR, Box::new(|| load(LoadControl::Trochoidal(Trochoid::new(2.0, 0.8).unwrap())))),
         (
             "link stage",
             NOT_PLANAR_LINK,

@@ -31,6 +31,13 @@ pub const LOOPS_OVER: &str = "the trochoidal loops read above the load limit her
 pub const NOT_MARKED: &str = "trochoidal control changes only the full-width stretches: this cut stays above the load limit";
 /// Refusal reason: a loop point outside the cutter-centre area.
 pub const LOOP_LEAVES: &str = "a trochoidal loop leaves the cutter-centre area";
+/// Over-limit reason: the stretch is on a curve whose shape is data (a
+/// helix with its lead, an exact circle, a curve that changes its depth):
+/// flat loops would drop that data, so the curve stays (#4176).
+pub const SHAPE_KEPT: &str =
+    "trochoidal loops are flat and have no circle: a helix, an exact circle or a curve that changes its depth keeps its shape, and this cut stays above the load limit";
+/// Refusal reason: the loops of a stretch do not make a valid curve.
+pub const LOOPS_NOT_A_CURVE: &str = "the trochoidal loops of this stretch do not make a valid curve";
 
 /// The points of one loop.
 const PER_LOOP: usize = 24;
@@ -164,7 +171,16 @@ fn change(c: &Curve, marks: &[&Mark], center: &Region, pitch: f64, radii: (f64, 
     }
     let z = c.pts().first().map_or(0.0, PlanePoint::depth);
     let pp: Result<Vec<PlanePoint>, Refusal> = out.into_iter().map(|q| PlanePoint::new(q, z)).collect();
-    Curve::new(pp?, None, c.closed(), c.k(), c.family()).map(Some)
+    // `keeps_shape` let only a flat curve without a circle or a lead here,
+    // so the constructor of its family keeps all of its data.
+    c.with_points(pp?).map(Some).map_err(|_| Refusal::new(Stage::Load, LOOPS_NOT_A_CURVE))
+}
+
+/// True when the shape of `c` is data that flat loops cannot keep: the
+/// lead of a helix, an exact circle, or a depth that changes along it.
+fn keeps_shape(c: &Curve) -> bool {
+    let z = c.pts().first().map_or(0.0, PlanePoint::depth);
+    c.lead().is_some() || c.arc().is_some() || c.pts().iter().any(|q| (q.depth() - z).abs() > crate::KERNEL_TOL)
 }
 
 /// Trochoidal control of the ordered set `s` with the stated `limit`.
@@ -173,9 +189,14 @@ pub(crate) fn control(s: &OrderedSet, p: &PlanarRegion, stock: &Stock, t: &Troch
     let radii = (t.width() / 2.0, MIN_LOOP_SHARE * r);
     let mut curves = s.curves().to_vec();
     let mut changed = vec![false; curves.len()];
+    let mut kept = vec![false; curves.len()];
     for (i, c) in s.curves().iter().enumerate() {
         let mine: Vec<&Mark> = s.marks().iter().filter(|m| m.curve() == i && m.kind() == MarkKind::FullWidth).collect();
         if mine.is_empty() {
+            continue;
+        }
+        if keeps_shape(c) {
+            kept[i] = true;
             continue;
         }
         if let Some(n) = change(c, &mine, p.center(), pitch, radii)? {
@@ -189,6 +210,8 @@ pub(crate) fn control(s: &OrderedSet, p: &PlanarRegion, stock: &Stock, t: &Troch
     let reason = |rd: &Read| -> &'static str {
         if changed.get(rd.curve).copied().unwrap_or(false) {
             LOOPS_OVER
+        } else if kept.get(rd.curve).copied().unwrap_or(false) && full(rd) {
+            SHAPE_KEPT
         } else if full(rd) {
             NO_ROOM
         } else {

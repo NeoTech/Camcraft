@@ -56,6 +56,8 @@ mod l5_entry;
 mod l6_load;
 #[path = "laws/l7_move.rs"]
 mod l7_move;
+#[path = "laws/later_stages.rs"]
+mod later_stages;
 #[path = "laws/link_rule.rs"]
 mod link_rule;
 #[path = "laws/load.rs"]

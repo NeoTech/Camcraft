@@ -140,6 +140,27 @@ impl Curve {
         self.lead
     }
 
+    /// This curve with the points `pts`, made again through the constructor
+    /// of its family ([`Curve::helix`] for a helix, [`Curve::new`] else)
+    /// with its index, closure, circle and lead. The one way for a later
+    /// stage to restart or reverse a curve: it keeps all the data of the
+    /// family, or the constructor refuses the points (#4176). The caller
+    /// maps a refusal to a reason of its own stage.
+    pub(crate) fn with_points(&self, pts: Vec<PlanePoint>) -> Result<Self, Refusal> {
+        match (self.family, self.arc, self.lead) {
+            (Family::Helix, Some(circle), Some(lead)) => Self::helix(circle, lead, pts, self.k),
+            (Family::Helix, ..) => Err(Refusal::new(Stage::Guide, HELIX_NEEDS_LEAD)),
+            _ => Self::checked(pts, self.arc, self.closed, self.k, self.family, None),
+        }
+    }
+
+    /// True when the curve goes down along the plane normal from its first
+    /// point to its last (a helix as it cuts).
+    #[must_use]
+    pub(crate) fn descends(&self) -> bool {
+        self.pts.first().zip(self.pts.last()).is_some_and(|(a, b)| b.depth() < a.depth() - KERNEL_TOL)
+    }
+
     /// The canonical form: a closed curve starts at its lowest point (least
     /// y, then x, then depth; among equal lowest points, the start that gives
     /// the least sequence); an open curve runs from its lesser end.

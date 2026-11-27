@@ -189,7 +189,11 @@ enum Step {
 /// The passes to insert before curve `i` (hot at `at`), or the reason
 /// that none can be.
 fn plan_for(curves: &[Curve], i: usize, at: Point2, p: &PlanarRegion, (r, tol, floor): (f64, f64, f64)) -> Result<Step, Refusal> {
-    let Some(c) = curves.get(i) else { return Ok(Step::Named(NOT_A_RING)) };
+    // Only a ring is a level of a distance field: a pass is never inserted
+    // before a row, a medial line, a trace or a helix (#4176), even where
+    // its points are at one distance to the walls (a helix on a circle
+    // round the centre of a hole).
+    let Some(c) = curves.get(i).filter(|c| c.family() == Family::Ring) else { return Ok(Step::Named(NOT_A_RING)) };
     let prev = curves.iter().take(i).map(|e| (poly_dist(at, e), e)).min_by(|a, b| a.0.total_cmp(&b.0));
     let Some((dist, j)) = prev.filter(|(d, _)| *d <= 2.0 * r + tol) else { return Ok(Step::Named(FRESH_CUT)) };
     for f in fields(p) {

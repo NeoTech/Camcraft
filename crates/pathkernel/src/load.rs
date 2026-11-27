@@ -15,8 +15,8 @@ mod trochoid;
 
 pub use law::NO_RASTER;
 pub use rings::{AT_FLOOR, LOAD_GEOMETRY, NOT_A_RING, NOT_FIXED, TOO_MANY_PASSES};
-pub use stage::{DEFAULT_LIMIT, FRESH_CUT, LOAD_NOT_PLANAR, LoadStage, NO_CONTROL, STOCK_REACH_ELSEWHERE};
-pub use trochoid::{LOOP_LEAVES, LOOPS_OVER, NO_ROOM, NOT_MARKED};
+pub use stage::{DEFAULT_LIMIT, FRESH_CUT, LOAD_NOT_PLANAR, LoadStage, NO_CONTROL, SET_NOT_KEPT, STOCK_REACH_ELSEWHERE};
+pub use trochoid::{LOOP_LEAVES, LOOPS_NOT_A_CURVE, LOOPS_OVER, NO_ROOM, NOT_MARKED, SHAPE_KEPT};
 
 use crate::frame::{Positive, Spot};
 use crate::order::OrderedSet;

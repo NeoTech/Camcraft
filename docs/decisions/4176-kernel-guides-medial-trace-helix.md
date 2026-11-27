@@ -201,3 +201,44 @@ dropped without a note"), and keep the exact circle data for the post.
 The chain region variant and `Curve::lead` are public. A later change to
 them changes the callers of the kernel, and there are none before the
 switch-over.
+
+**Later stages keep the data of a family** (the review of PR #4244 at
+33c116cfa): the K4 order stage reversed a curve with `Curve::new`, which
+refuses the helix family, so a valid helix guide set was refused with the
+constructor's reason `HELIX_NEEDS_LEAD`.
+- Chosen, one rule for the class: a later stage that restarts, reverses
+  or replaces a curve makes it again through the constructor of the
+  curve's family (`Curve::with_points`: `Curve::helix` with the same
+  circle and lead, else `Curve::new` with the same circle), or it refuses
+  by a reason of its own stage. The table test
+  `later_stages::each_guide_family_keeps_its_data_or_is_refused_by_the_stage_in_each_later_stage`
+  pins each family (ring, exact circle ring, row, medial, trace, helix of
+  each hand) against each later stage.
+- Order and a helix: a helix always runs down its lead. A reversal in the
+  plane also turns the helix up its lead (the same circle and lead, the
+  other order of points), and up is never a valid cut of a descent (the
+  tool would start at the bottom, in material). So the order stage
+  reverses a helix only when the guide set holds it upward (the canonical
+  guide set has no direction). The hand then sets the side of the
+  material: in a hole, a right hand cuts conventional and a left hand
+  climb. When the asked direction is the other one, the stage keeps the
+  helix down its lead and names it with the order note
+  `HELIX_HAND_SETS_DIRECTION` (choose the other hand). A failed rebuild
+  is `NOT_REVERSIBLE` (an order-stage reason).
+  - Dropped: a refusal for a hand against the direction. The hand is an
+    explicit part of the helix choice (a thread has one hand), and the
+    default direction (climb) would refuse every right-hand helix in a
+    hole. The note keeps the mismatch visible.
+  - Dropped: a mirror of the hand. A helix of the other hand is another
+    curve, not a permutation (law 3).
+- Load and a helix (K3, PR #4265): constant engagement inserts passes
+  only before a ring; a helix on a circle round the centre of a hole is
+  at one distance to the wall, but it is not a level of the field, so it
+  is named `NOT_A_RING`. Trochoidal loops are flat and have no circle:
+  a curve with a lead, an exact circle or a changing depth keeps its
+  shape, and its full-width cut is named `SHAPE_KEPT`. A rebuilt set that
+  is refused is the load stage's `SET_NOT_KEPT`, and loops that make no
+  curve are `LOOPS_NOT_A_CURVE`.
+  - Dropped: loops on an exact circle ring without its circle. The
+    circle is data for the post; the loops would drop it silently.
+- The link and the entry stages read a curve and make no new one.
