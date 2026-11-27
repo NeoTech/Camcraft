@@ -10,11 +10,15 @@
 //! level_order, ring_side, ring_set, ring_links, ring_entry, pocket,
 //! pocket_avoid, ladder_links),
 //! camcraft_geometry::geo2d (clip_line) and
-//! camcraft_pathkernel::guide (rings: `kernel_rings.rs`).
+//! camcraft_pathkernel::guide (rings: `kernel_rings.rs`; trace, medial,
+//! helix: `kernel_guides.rs`), camcraft_geometry::geo2d (medial,
+//! side_offset).
 //! Provenance: our own regression of the second read on PR #3353; no
 //! vendor material consulted.
 
 mod common;
+#[path = "pass_start_levels/kernel_guides.rs"]
+mod kernel_guides;
 #[path = "pass_start_levels/kernel_rings.rs"]
 mod kernel_rings;
 #[path = "pass_start_levels/one_ring_set.rs"]

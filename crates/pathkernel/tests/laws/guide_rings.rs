@@ -4,10 +4,10 @@
 
 use super::guide_kit::{around, center, circle, marks, mark_pts, outline, p, pocket, rect, same_set, to_edge, to_set, all_inside};
 use camcraft_pathkernel::guide::rings::{
-    BAND_NOT_YET, CIRCLE_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS, WALL_STRIP_UNCUT,
+    BAND_NOT_YET, NOT_RINGS, NO_RING, OFFSET_BELOW_CENTER, TOO_MANY_RINGS, WALL_STRIP_UNCUT,
 };
 use camcraft_pathkernel::guide::{
-    BAD_TOL, Circle, FAMILY_NOT_YET, Family, GuideChoice, GuidePlanner, GuideSet, Guides, MarkKind, RingPlanner, RingRef,
+    BAD_TOL, Circle, Family, GuideChoice, GuidePlanner, GuideSet, Guides, MarkKind, RingPlanner, RingRef,
     RingsChoice, RowsChoice, STEP_ABOVE_DIAMETER, Span,
 };
 use camcraft_pathkernel::{KernelRegion, Refusal, Verdict};
@@ -183,7 +183,8 @@ fn each_ring_refusal_is_named() {
     assert_eq!(refused(RingPlanner.guide(&r, &row, TOL)), NOT_RINGS);
     let circ = Circle::new(p(0.0, 0.0), 17.0).unwrap();
     let g = GuideChoice::Rings(RingsChoice::new(RingRef::Boundary, 0.0, 2.0, Some(circ), None).unwrap());
-    assert_eq!(refused(RingPlanner.guide(&r, &g, TOL)), CIRCLE_NOT_YET);
+    // An exact circle goes to the circle rings (#4176, second part).
+    assert!(RingPlanner.guide(&r, &g, TOL).unwrap().postable());
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Band, 0.0, 2.0, None), TOL)), BAND_NOT_YET);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, -0.5, 2.0, None), TOL)), OFFSET_BELOW_CENTER);
     assert_eq!(refused(RingPlanner.guide(&r, &rings(RingRef::Boundary, 18.0, 2.0, Some(1)), TOL)), NO_RING);
@@ -200,7 +201,9 @@ fn the_guide_stage_sends_each_family_to_its_planner_or_refuses_it_by_name() {
     let r = disc();
     let g = rings(RingRef::Boundary, 0.0, 4.0, None);
     assert_eq!(Guides.guide(&r, &g, TOL).unwrap(), plan(&r, &g));
-    assert_eq!(refused(Guides.guide(&r, &GuideChoice::Medial, TOL)), FAMILY_NOT_YET);
+    // Each family goes to its own planner (#4176, second part).
+    let medial = camcraft_pathkernel::guide::MedialPlanner.guide(&r, &GuideChoice::Medial, TOL);
+    assert_eq!(format!("{:?}", Guides.guide(&r, &GuideChoice::Medial, TOL)), format!("{medial:?}"));
 }
 
 #[test]

@@ -1,171 +1,43 @@
 //! Stage 2, Guide curves (K2): the guide choice, the curve type and the
-//! canonical guide set with its named stretches. The planners are in the
-//! files of `guide/`: rings and rows (#4176, first part); the medial line,
-//! the trace and the helix follow.
+//! canonical guide set with its named stretches. The choices are in
+//! `guide/choice.rs`, the planners in the files of `guide/`: rings and rows
+//! (#4176, first part); the medial line, the trace and the helix (second
+//! part).
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 2: Guide curves"; contour-parallel and direction-parallel paths as
 //! in Held (1991).
 
 use std::cmp::Ordering;
 
-use crate::frame::{PlanePoint, Positive, Spot};
+use crate::frame::PlanePoint;
 use crate::region::KernelRegion;
 use crate::verdict::{Refusal, Stage, Verdict};
 use crate::{KERNEL_TOL, finite};
 
 mod all;
+mod choice;
 mod cover;
+pub mod helix;
+mod lead;
 pub mod mark;
+pub mod medial;
 pub mod rings;
 pub mod rows;
+pub mod trace;
 
-pub use all::{FAMILY_NOT_YET, Guides};
-pub use cover::{BAD_TOL, GUIDE_GEOMETRY, NOT_PLANAR, STEP_ABOVE_DIAMETER};
+pub use all::Guides;
+pub use choice::{
+    BAD_OFFSET, Circle, GuideChoice, Hand, HelixChoice, MAX_TURNS, RingRef, RingsChoice, RowsChoice, TOO_MANY_TURNS, TraceOffset,
+    ZERO_COUNT,
+};
+pub use cover::{BAD_TOL, GUIDE_GEOMETRY, NOT_AN_AREA, NOT_PLANAR, STEP_ABOVE_DIAMETER};
+pub use helix::HelixPlanner;
+pub use lead::{HELIX_NEEDS_LEAD, Lead, NOT_ON_HELIX};
 pub use mark::{Mark, MarkKind, Span};
+pub use medial::MedialPlanner;
 pub use rings::RingPlanner;
 pub use rows::RowPlanner;
-
-/// What the rings are offset from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RingRef {
-    /// The selected contour.
-    Part,
-    /// All the walls of the area.
-    Boundary,
-    /// The band between the part and the stock edge.
-    Band,
-}
-
-/// An exact circle, for G2/G3 rings (Circular, Bore): a finite centre and
-/// a positive finite radius.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Circle {
-    center: Spot,
-    radius: Positive,
-}
-
-impl Circle {
-    pub fn new(center: crate::Point2, radius: f64) -> Result<Self, Refusal> {
-        Ok(Self { center: Spot::new(Stage::Guide, center)?, radius: Positive::new(Stage::Guide, radius)? })
-    }
-    #[must_use]
-    pub fn center(&self) -> crate::Point2 {
-        self.center.get()
-    }
-    #[must_use]
-    pub fn radius(&self) -> f64 {
-        self.radius.get()
-    }
-    /// The same circle within [`KERNEL_TOL`].
-    #[must_use]
-    pub fn near(&self, o: &Self) -> bool {
-        crate::near(self.center(), o.center()) && (self.radius() - o.radius()).abs() <= KERNEL_TOL
-    }
-}
-
-/// Refusal reason: an offset or an angle that is not finite.
-pub const BAD_OFFSET: &str = "an offset or an angle of the guide is not a finite number";
-/// Refusal reason: a ring count of zero.
-pub const ZERO_COUNT: &str = "a ring count must be one or more";
-
-/// The rings of a guide: a finite first offset, a positive stepover, an
-/// optional exact circle and an optional count of one or more.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RingsChoice {
-    reference: RingRef,
-    first_offset: f64,
-    stepover: Positive,
-    circle: Option<Circle>,
-    count: Option<u32>,
-}
-
-impl RingsChoice {
-    pub fn new(reference: RingRef, first_offset: f64, stepover: f64, circle: Option<Circle>, count: Option<u32>) -> Result<Self, Refusal> {
-        if !first_offset.is_finite() {
-            return Err(Refusal::new(Stage::Recipe, BAD_OFFSET));
-        }
-        if count == Some(0) {
-            return Err(Refusal::new(Stage::Recipe, ZERO_COUNT));
-        }
-        Ok(Self { reference, first_offset, stepover: Positive::new(Stage::Recipe, stepover)?, circle, count })
-    }
-    #[must_use]
-    pub fn reference(&self) -> RingRef {
-        self.reference
-    }
-    #[must_use]
-    pub fn first_offset(&self) -> f64 {
-        self.first_offset
-    }
-    #[must_use]
-    pub fn stepover(&self) -> f64 {
-        self.stepover.get()
-    }
-    #[must_use]
-    pub fn circle(&self) -> Option<Circle> {
-        self.circle
-    }
-    #[must_use]
-    pub fn count(&self) -> Option<u32> {
-        self.count
-    }
-}
-
-/// Parallel rows: a finite angle (degrees), a positive stepover, and a
-/// closing ring or none.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RowsChoice {
-    angle: f64,
-    stepover: Positive,
-    closing_ring: bool,
-}
-
-impl RowsChoice {
-    pub fn new(angle: f64, stepover: f64, closing_ring: bool) -> Result<Self, Refusal> {
-        if !angle.is_finite() {
-            return Err(Refusal::new(Stage::Recipe, BAD_OFFSET));
-        }
-        Ok(Self { angle, stepover: Positive::new(Stage::Recipe, stepover)?, closing_ring })
-    }
-    #[must_use]
-    pub fn angle(&self) -> f64 {
-        self.angle
-    }
-    #[must_use]
-    pub fn stepover(&self) -> f64 {
-        self.stepover.get()
-    }
-    #[must_use]
-    pub fn closing_ring(&self) -> bool {
-        self.closing_ring
-    }
-}
-
-/// The guide of a strategy. Each variant with data holds a checked choice.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum GuideChoice {
-    Rings(RingsChoice),
-    Rows(RowsChoice),
-    /// The centre line of a slot or a channel.
-    Medial,
-    /// The selection itself (engrave, trace, chamfer), at a finite offset.
-    Trace(TraceOffset),
-}
-
-/// The finite offset of a trace guide.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TraceOffset(f64);
-
-impl TraceOffset {
-    pub fn new(offset: f64) -> Result<Self, Refusal> {
-        if offset.is_finite() { Ok(Self(offset)) } else { Err(Refusal::new(Stage::Recipe, BAD_OFFSET)) }
-    }
-    #[must_use]
-    pub fn get(self) -> f64 {
-        self.0
-    }
-}
+pub use trace::TracePlanner;
 
 /// The family of a curve, for the canonical sort.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -179,7 +51,8 @@ pub enum Family {
 }
 
 /// One guide curve: points with a depth along the plane normal, an exact
-/// circle where it has one, closed or open, its index `k` and its family.
+/// circle where it has one, closed or open, its index `k`, its family,
+/// and the lead of a helix ([`Curve::helix`]; none for other curves).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Curve {
     pts: Vec<PlanePoint>,
@@ -187,6 +60,7 @@ pub struct Curve {
     closed: bool,
     k: u32,
     family: Family,
+    lead: Option<Lead>,
 }
 
 /// Refusal reason: a curve with too few points.
@@ -218,7 +92,15 @@ fn cmp_arc(a: Option<Circle>, b: Option<Circle>) -> Ordering {
 }
 
 impl Curve {
+    /// A curve of any family but [`Family::Helix`] (see [`Curve::helix`]).
     pub fn new(pts: Vec<PlanePoint>, arc: Option<Circle>, closed: bool, k: u32, family: Family) -> Result<Self, Refusal> {
+        if family == Family::Helix {
+            return Err(Refusal::new(Stage::Guide, HELIX_NEEDS_LEAD));
+        }
+        Self::checked(pts, arc, closed, k, family, None)
+    }
+
+    fn checked(pts: Vec<PlanePoint>, arc: Option<Circle>, closed: bool, k: u32, family: Family, lead: Option<Lead>) -> Result<Self, Refusal> {
         let need = if closed { 3 } else { 2 };
         if pts.len() < need {
             return Err(Refusal::new(Stage::Guide, BAD_CURVE));
@@ -230,7 +112,7 @@ impl Curve {
         if !finite(&[length]) || length <= KERNEL_TOL {
             return Err(Refusal::new(Stage::Guide, ZERO_LENGTH));
         }
-        Ok(Self { pts, arc, closed, k, family })
+        Ok(Self { pts, arc, closed, k, family, lead })
     }
     #[must_use]
     pub fn pts(&self) -> &[PlanePoint] {
@@ -251,6 +133,32 @@ impl Curve {
     #[must_use]
     pub fn family(&self) -> Family {
         self.family
+    }
+    /// The pitch and the hand of a helix.
+    #[must_use]
+    pub fn lead(&self) -> Option<Lead> {
+        self.lead
+    }
+
+    /// This curve with the points `pts`, made again through the constructor
+    /// of its family ([`Curve::helix`] for a helix, [`Curve::new`] else)
+    /// with its index, closure, circle and lead. The one way for a later
+    /// stage to restart or reverse a curve: it keeps all the data of the
+    /// family, or the constructor refuses the points (#4176). The caller
+    /// maps a refusal to a reason of its own stage.
+    pub(crate) fn with_points(&self, pts: Vec<PlanePoint>) -> Result<Self, Refusal> {
+        match (self.family, self.arc, self.lead) {
+            (Family::Helix, Some(circle), Some(lead)) => Self::helix(circle, lead, pts, self.k),
+            (Family::Helix, ..) => Err(Refusal::new(Stage::Guide, HELIX_NEEDS_LEAD)),
+            _ => Self::checked(pts, self.arc, self.closed, self.k, self.family, None),
+        }
+    }
+
+    /// True when the curve goes down along the plane normal from its first
+    /// point to its last (a helix as it cuts).
+    #[must_use]
+    pub(crate) fn descends(&self) -> bool {
+        self.pts.first().zip(self.pts.last()).is_some_and(|(a, b)| b.depth() < a.depth() - KERNEL_TOL)
     }
 
     /// The canonical form: a closed curve starts at its lowest point (least
@@ -283,6 +191,7 @@ impl Curve {
             .then(self.closed.cmp(&o.closed))
             .then_with(|| cmp_seq(&self.pts, &o.pts))
             .then_with(|| cmp_arc(self.arc, o.arc))
+            .then_with(|| lead::cmp_lead(self.lead, o.lead))
     }
 
     /// True when `other` is this curve with another start (closed: a cyclic
@@ -305,7 +214,8 @@ impl Curve {
             (Some(a), Some(b)) => a.near(&b),
             _ => false,
         };
-        if self.k != other.k || self.family != other.family || self.closed != other.closed || !arc_same {
+        let lead_same = lead::same_lead(self.lead, other.lead);
+        if self.k != other.k || self.family != other.family || self.closed != other.closed || !arc_same || !lead_same {
             return None;
         }
         let n = self.pts.len();

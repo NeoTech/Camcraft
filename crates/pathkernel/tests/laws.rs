@@ -7,7 +7,7 @@
 //! prove each check (`standins`), and the registry of the 16 phase-1 kinds
 //! (`registry`).
 //!
-//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, selection, guide, guide::rings, guide::rows, guide::cover, guide::mark, guide::all, order, order::side, order::chain, order::stage, load, link, link::proof, link::route, link::approach, entry, entry::air, entry::column, entry::exit, entry::hole, entry::material, entry::proof, entry::room, entry::stage, plan, recipe}.
+//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, region_chain, selection, guide, guide::choice, guide::rings, guide::rows, guide::cover, guide::mark, guide::all, guide::medial, guide::trace, guide::helix, guide::lead, order, order::side, order::chain, order::stage, load, link, link::proof, link::route, link::approach, entry, entry::air, entry::column, entry::exit, entry::hole, entry::material, entry::proof, entry::room, entry::stage, plan, recipe}.
 //! Provenance: our own design record docs/decisions/4024-path-kernel-design.md.
 
 #[path = "laws/air_approach.rs"]
@@ -28,12 +28,20 @@ mod grid;
 mod guide;
 #[path = "laws/guide_guard.rs"]
 mod guide_guard;
+#[path = "laws/guide_helix.rs"]
+mod guide_helix;
 #[path = "laws/guide_kit.rs"]
 mod guide_kit;
+#[path = "laws/guide_laws.rs"]
+mod guide_laws;
+#[path = "laws/guide_medial.rs"]
+mod guide_medial;
 #[path = "laws/guide_rings.rs"]
 mod guide_rings;
 #[path = "laws/guide_rows.rs"]
 mod guide_rows;
+#[path = "laws/guide_trace.rs"]
+mod guide_trace;
 #[path = "laws/kit.rs"]
 mod kit;
 #[path = "laws/l1_guide.rs"]
@@ -50,6 +58,8 @@ mod l5_entry;
 mod l6_load;
 #[path = "laws/l7_move.rs"]
 mod l7_move;
+#[path = "laws/later_stages.rs"]
+mod later_stages;
 #[path = "laws/link_rule.rs"]
 mod link_rule;
 #[path = "laws/load.rs"]

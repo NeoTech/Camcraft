@@ -35,6 +35,7 @@ pub mod plan;
 pub mod recipe;
 pub mod region;
 mod region_build;
+mod region_chain;
 mod region_check;
 pub mod selection;
 pub mod verdict;
@@ -42,7 +43,7 @@ pub mod verdict;
 pub use engine::{PLANNER_ENV, PlannerEngine, engine_from_switch};
 pub use frame::{AxisControl, Disc, PlanarFrame, PlanePoint, Positive, Spot, ToolShape, WorkPlane};
 pub use recipe::Recipe;
-pub use region::{Bounds, KernelRegion, MaterialSide, PlanarRegion, region};
+pub use region::{Bounds, ChainRegion, KernelRegion, MaterialSide, PlanarRegion, chain_region, region};
 pub use selection::{Chain, Selection};
 pub use verdict::{Fallback, Gap, Gaps, Note, Refusal, Stage, Verdict};
 

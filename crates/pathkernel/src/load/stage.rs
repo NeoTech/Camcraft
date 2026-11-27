@@ -28,6 +28,9 @@ pub const LOAD_NOT_PLANAR: &str = "the load stage reads planar regions only";
 /// Refusal reason: the stock reach of constant engagement (Adaptive).
 pub const STOCK_REACH_ELSEWHERE: &str =
     "constant engagement on the in-process stock (Adaptive) is planned by the HSM planner behind the load trait, not by this stage";
+/// Refusal reason: the controlled curves and their marks do not make an
+/// ordered set again (a mark off its curve, a start off the first curve).
+pub const SET_NOT_KEPT: &str = "the load stage cannot keep the controlled curves, their marks and their start as an ordered set";
 /// Over-limit reason of `None`.
 pub const NO_CONTROL: &str = "no load control: this cut is above the load limit";
 /// Over-limit reason: no earlier pass is beside the cut.
@@ -103,9 +106,12 @@ pub(crate) fn poly_dist(p: Point2, c: &Curve) -> f64 {
 /// The ordered set with `curves` in this order and `marks` on their
 /// indices; the start side of `s` stays.
 fn rebuild(s: &OrderedSet, curves: Vec<Curve>, marks: Vec<Mark>) -> Result<OrderedSet, Refusal> {
-    let gs = GuideSet::with_marks(curves.clone(), marks)?;
+    // A refusal of the guide set or of the ordered set is this stage's own
+    // failure: it names the load stage, not the constructor (#4176).
+    let kept = |_| Refusal::new(Stage::Load, SET_NOT_KEPT);
+    let gs = GuideSet::with_marks(curves.clone(), marks).map_err(kept)?;
     let start = curves.first().and_then(|c| c.pts().first()).map_or(s.start(), |q| q.at());
-    OrderedSet::new(&gs, curves, start, s.resolved())
+    OrderedSet::new(&gs, curves, start, s.resolved()).map_err(kept)
 }
 
 /// The controlled set: the readings of `out`, each read above
