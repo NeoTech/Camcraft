@@ -92,6 +92,8 @@ mod level_rings;
 mod levels;
 mod microlift;
 mod pass_start;
+mod kernel_level;
+mod kernel_pocket;
 mod kernel_region;
 mod ring_fill;
 mod ring_links;
@@ -187,6 +189,11 @@ pub use corner_relief::{
 };
 pub use corner_relief_spur::pocket_relief_plan;
 pub use level_rings::level_ring_plan;
+pub use kernel_level::{GUIDE_TOL as KERNEL_GUIDE_TOL, LevelStages, PlannedLevel, fallback_text, plan_level};
+pub use kernel_pocket::{
+    KERNEL_NO_BLEND, KERNEL_POCKET_ADAPTIVE, KERNEL_POCKET_INCOMPLETE, KERNEL_POCKET_NOTE, KERNEL_POCKET_ZIGZAG, KernelPocketPlan, kernel_side, link_policy, pocket_kernel_plans, pocket_on_kernel,
+    resolved_strategy,
+};
 pub use kernel_region::{
     bounds_of as kernel_bounds_of, contour_material, pocket_region as kernel_pocket_region,
     pocket_selection as kernel_pocket_selection, selection_of_area, selection_of_picks,

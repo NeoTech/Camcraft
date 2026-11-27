@@ -50,11 +50,16 @@ pub fn planner_engine() -> PlannerEngine {
     })
 }
 
-/// Lets the dispatch run the old planner of `kind` under `engine`, or
-/// refuses it by name. Under "new", each phase-1 kind is refused until its
-/// kernel planner is added to the dispatch.
+/// The phase-1 kinds that the path kernel plans under "new" (#3752: the
+/// 2D Pocket is the first recipe). The dispatch arm of each kind reads the
+/// engine that [`check_engine`] let through; no arm reads the setting.
+pub const KERNEL_KINDS: [OpType; 1] = [OpType::Pocket];
+
+/// Lets the dispatch run `kind` under `engine`, or refuses it by name.
+/// Under "new", a phase-1 kind is refused until its kernel planner is in
+/// [`KERNEL_KINDS`]: never a silent fallback to the old planner.
 pub fn check_engine(kind: OpType, engine: PlannerEngine) -> Result<(), GenError> {
-    if engine == PlannerEngine::Old || !PHASE1_KINDS.contains(&kind) {
+    if engine == PlannerEngine::Old || !PHASE1_KINDS.contains(&kind) || KERNEL_KINDS.contains(&kind) {
         return Ok(());
     }
     Err(GenError::Invalid(format!(

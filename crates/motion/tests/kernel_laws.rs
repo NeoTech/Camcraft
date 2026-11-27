@@ -11,7 +11,8 @@
 //! camcraft_pathkernel::link; #4177) and the load stage
 //! (camcraft_pathkernel::load; #4026) on the same fixtures, and the
 //! converter from a kernel plan to a toolpath (camcraft_motion::kernel_emit;
-//! #4269).
+//! #4269), and the 2D Pocket recipe on the kernel (machining2d::kernel_pocket,
+//! machining2d::kernel_level; #3752).
 //! Provenance: our own design record (#4024, "the laws as checks" and the
 //! switch-over proof); no vendor material consulted.
 
@@ -34,3 +35,5 @@ mod k4_order_link;
 mod k6a_plan_emit;
 #[path = "kernel_laws/k3_load.rs"]
 mod k3_load;
+#[path = "kernel_laws/k6_pocket.rs"]
+mod k6_pocket;

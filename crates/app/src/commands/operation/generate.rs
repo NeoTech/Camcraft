@@ -78,7 +78,11 @@ fn stage_generation(world: &World, name: &str) -> Result<Staged, CommandError> {
 
 impl Staged {
     fn finish(self) -> Result<GenerateOperation, CommandError> {
-        let (path, warnings) = operation::run_job(self.job).map_err(|e| machining(&self.name, &e))?;
+        self.finish_on(operation::planner_engine())
+    }
+
+    fn finish_on(self, engine: crate::pathkernel::PlannerEngine) -> Result<GenerateOperation, CommandError> {
+        let (path, warnings) = operation::run_job_on(self.job, engine).map_err(|e| machining(&self.name, &e))?;
         let stamp = self.stamp.ok_or_else(|| {
             CommandError::Machining(format!(
                 "{}: its tool or geometry source vanished mid-generation",
@@ -102,6 +106,13 @@ impl Staged {
 impl GenerateOperation {
     pub fn new(world: &World, name: &str) -> Result<Self, CommandError> {
         stage_generation(world, name)?.finish()
+    }
+
+    /// [`Self::new`] with the planner engine given (#4055, #3752): the
+    /// tests of the planner switch pass it directly; the process setting
+    /// is not read.
+    pub fn new_on(world: &World, name: &str, engine: crate::pathkernel::PlannerEngine) -> Result<Self, CommandError> {
+        stage_generation(world, name)?.finish_on(engine)
     }
 
     /// The operation this command generates.

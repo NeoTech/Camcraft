@@ -20,8 +20,19 @@ pub fn generate(
     run_job(job)
 }
 
+/// [`generate`] with the planner engine given, for the tests of the
+/// planner switch (#4055, #3752): the process setting is not read.
+pub fn generate_on(
+    world: &World,
+    op: &Operation,
+    op_name: &str,
+    engine: camcraft_motion::pathkernel::PlannerEngine,
+) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    run_job_on(collect_job(world, op, op_name)?, engine)
+}
+
 mod run_job;
-pub use run_job::run_job;
+pub use run_job::{run_job, run_job_on};
 
 /// #3035: the areas the Offset rings cut in place of the planned order -
 /// a warning, not only a note; advisory (the rings are verified). #3542:
@@ -65,7 +76,7 @@ pub fn entry_not_recommended(path: &Toolpath) -> Option<Warning> {
 }
 
 /// [`run_job`]'s body: every arm, unchanged.
-fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
+fn run_job_arms(job: GenJob, engine: camcraft_motion::pathkernel::PlannerEngine) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
         tool,
         body,
@@ -827,7 +838,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             corner_relief,
             pass_start,
             ..
-        } => {
+        } => 'pocket: {
+            // #3752: under the planner switch "new" the path kernel plans
+            // the pocket (its own refusals by name, never the old planner).
+            let kernel = engine == camcraft_motion::pathkernel::PlannerEngine::New;
+            if kernel {
+                super::pocket_kernel::out_of_scope(*strategy, rest.as_ref(), avoid_spec.is_some(), corner_relief)?;
+            }
             if *strategy == PocketStrategy::Adaptive {
                 return Err(GenError::Invalid(super::POCKET_ADAPTIVE_RETIRED.into()));
             }
@@ -866,6 +883,23 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     blend_radius: *blend_radius,
             };
             pp.validate()?;
+            if kernel {
+                let side = machining2d::StartSide {
+                    start: *pass_start,
+                    stock: around_band
+                        .then(|| super::pass_start_stock::footprint(stock_region.as_ref(), frame.as_ref(), stock_facets.as_deref(), &src, &params, &material))
+                        .flatten(),
+                    around_part: around_band,
+                };
+                let mut path = machining2d::pocket_on_kernel(&region, &pp, &holes, &side)?;
+                if let Some(m) = carry_need!(&region, &path) {
+                    pp.links.approach.material_top = Some(m);
+                    lk = pp.links;
+                    path = machining2d::pocket_on_kernel(&region, &pp, &holes, &side)?;
+                }
+                super::predrilled_entry::say(&mut path, hole_notes);
+                break 'pocket (region, path);
+            }
             let (relieved_region, zones) = super::corner_relief::check_op_relief(
                 &region,
                 &super::corner_relief::JobReliefCtx {

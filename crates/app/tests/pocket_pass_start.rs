@@ -10,7 +10,8 @@
 //!
 //! Gate map: covers app::operation (generate, params digest), app::mcp
 //! (edit_operation, undo), app::project (params, params_impl),
-//! motion::machining2d (pass_start, pocket, waterscan).
+//! motion::machining2d (pass_start, pocket, waterscan, kernel_pocket,
+//! kernel_level), pathkernel (the 2D Pocket recipe under the switch, #3752).
 //! Provenance: our own regression of the #3316 report on the pocket
 //! kind; no vendor material consulted.
 
@@ -18,6 +19,17 @@ mod area_support;
 mod common;
 #[path = "pocket_pass_start/kernel_baseline.rs"]
 mod kernel_baseline;
+#[path = "pocket_pass_start/kernel_route.rs"]
+mod kernel_route;
+mod pocket_support;
+/// The law measures of #4154 (test helpers of `camcraft-motion`, no
+/// generator): the old planner against the kernel on fig8 (#3752).
+#[allow(dead_code)]
+#[path = "../../motion/tests/common"]
+mod motion_common {
+    pub mod law_measure;
+    pub mod mask_grid;
+}
 
 use area_support::*;
 use camcraft_app::machining2d::{PASS_START_REST_NOTE, PASS_START_ZIGZAG_NOTE, PassStart, RestParams, RestSource};

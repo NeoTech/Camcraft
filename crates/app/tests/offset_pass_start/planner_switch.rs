@@ -7,7 +7,7 @@ use super::{PassStart, fig8_world, offset_op_entered};
 use super::Entry3D;
 use crate::common::{gen_to_cltext, write_golden};
 use camcraft_app::pathkernel::{PLANNER_ENV, PlannerEngine, engine_from_switch};
-use camcraft_app::operation::{OpType, PHASE1_KINDS, check_engine, planner_engine};
+use camcraft_app::operation::{KERNEL_KINDS, OpType, PHASE1_KINDS, check_engine, planner_engine};
 
 /// The process of this test run has no switch set: the gate never sets it.
 fn assert_default_process() {
@@ -27,12 +27,15 @@ fn switch_default_passes_each_phase1_kind_to_the_old_planner() {
 
 #[test]
 fn switch_new_refuses_a_kind_it_does_not_plan_yet() {
-    for kind in [OpType::Offset2D, OpType::Pocket, OpType::Pocket3D] {
+    for kind in [OpType::Offset2D, OpType::Pocket3D] {
         let e = check_engine(kind, PlannerEngine::New).expect_err("refused by name, never a silent fallback");
         let text = e.to_string();
         assert!(text.contains(&format!("the new path planner does not plan {kind} yet")), "{text}");
         assert!(text.contains(PLANNER_ENV), "{text}");
     }
+    // #3752: the 2D Pocket is the first kind that the kernel plans.
+    assert_eq!(KERNEL_KINDS, [OpType::Pocket]);
+    assert_eq!(check_engine(OpType::Pocket, PlannerEngine::New), Ok(()));
     // A kind outside phase 1 keeps its own planner under either value.
     assert_eq!(check_engine(OpType::Drill, PlannerEngine::New), Ok(()));
 }

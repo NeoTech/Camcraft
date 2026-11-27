@@ -42,6 +42,8 @@ mod guide_rings;
 mod guide_rows;
 #[path = "laws/guide_trace.rs"]
 mod guide_trace;
+#[path = "laws/kind_pocket.rs"]
+mod kind_pocket;
 #[path = "laws/kit.rs"]
 mod kit;
 #[path = "laws/l1_guide.rs"]
