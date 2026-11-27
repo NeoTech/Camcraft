@@ -1,5 +1,6 @@
-//! #1122: form-seam guard tests — migrated holes pages stay at zero raw
-//! egui control calls. Unmigrated families are outside this PR’s guard.
+//! #1122: form-seam guard tests — the migrated page families (holes,
+//! turning) stay at zero raw egui control calls. Unmigrated families are
+//! outside the guard until their own PR adds them.
 //! Provenance: our own source-level guard over `crates/ui/src/egui_app`.
 
 const RAW_PATTERNS: &[&str] = &[
@@ -40,16 +41,26 @@ const FAMILIES: &[Family<'_>] = &[
             ("thread_page.rs", include_str!("../thread_page.rs")),
         ],
     },
-
+    Family {
+        name: "turning",
+        max_raw: 0,
+        sources: &[
+            ("turning_page.rs", include_str!("../turning_page.rs")),
+            ("turning_more_page.rs", include_str!("../turning_more_page.rs")),
+            ("turning_start_exit_rows.rs", include_str!("../turning_start_exit_rows.rs")),
+            ("thread_infeed_page.rs", include_str!("../thread_infeed_page.rs")),
+        ],
+    },
 ];
 
 #[test]
-fn form_seam_guard_covers_only_the_migrated_holes_family() {
-    assert_eq!(FAMILIES.len(), 1, "unmigrated families must not block the holes migration");
-    assert_eq!(FAMILIES[0].name, "holes");
-    assert_eq!(FAMILIES[0].max_raw, 0);
-    let files: Vec<_> = FAMILIES[0].sources.iter().map(|(name, _)| *name).collect();
-    assert_eq!(files, ["holes_page.rs", "thread_page.rs"]);
+fn form_seam_guard_covers_only_the_migrated_families() {
+    let names: Vec<_> = FAMILIES.iter().map(|f| f.name).collect();
+    assert_eq!(names, ["holes", "turning"], "unmigrated families must not block a migration");
+    assert!(FAMILIES.iter().all(|f| f.max_raw == 0), "a migrated family has no raw call");
+    let files = |i: usize| FAMILIES[i].sources.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+    assert_eq!(files(0), ["holes_page.rs", "thread_page.rs"]);
+    assert_eq!(files(1), ["turning_page.rs", "turning_more_page.rs", "turning_start_exit_rows.rs", "thread_infeed_page.rs"]);
 }
 
 #[test]
