@@ -24,6 +24,8 @@ mod plasma;
 mod post_name;
 mod waterjet;
 pub use waterjet::waterjet_refusals;
+mod laser;
+pub use laser::laser_refusals;
 mod rows;
 mod swing;
 pub use swing::{turns_work, work_length_refusals, WORK_LENGTHS};

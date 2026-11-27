@@ -695,6 +695,8 @@ pub enum ToolKindDto {
     /// file names it.
     Torch,
     Waterjet,
+    /// #4081: a laser head; its `diameter` is the beam kerf.
+    Laser,
     /// The sinker electrode (#541): additive in the same way.
     Electrode,
     /// The thread mills (#894): additive words - no older file names
@@ -736,6 +738,7 @@ impl ToolDto {
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
                 ToolKind::Waterjet => ToolKindDto::Waterjet,
+                ToolKind::Laser => ToolKindDto::Laser,
                 ToolKind::Electrode => ToolKindDto::Electrode,
                 ToolKind::ThreadMill => ToolKindDto::ThreadMill,
                 ToolKind::ThreadMillSingle => ToolKindDto::ThreadMillSingle,
@@ -824,6 +827,7 @@ impl ToolDto {
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
                 ToolKindDto::Waterjet => ToolKind::Waterjet,
+                ToolKindDto::Laser => ToolKind::Laser,
                 ToolKindDto::Electrode => ToolKind::Electrode,
                 ToolKindDto::ThreadMill => ToolKind::ThreadMill,
                 ToolKindDto::ThreadMillSingle => ToolKind::ThreadMillSingle,

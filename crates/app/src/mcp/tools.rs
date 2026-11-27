@@ -99,6 +99,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::outline_text_tools::TOOLS)
         .chain(super::holder_dxf_tools::TOOLS)
         .chain(super::recipe_tools::TOOLS)
+        .chain(super::component_tools::all())
 }
 
 /// The `tools/list` rows.

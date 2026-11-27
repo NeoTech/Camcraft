@@ -62,7 +62,7 @@ pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
         "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
             Some(GateKind::LimitEdit)
         }
-        "save_project" | "export_tool_library" => Some(GateKind::FileWrite),
+        "save_project" | "export_tool_library" | "save_library_component" | "delete_library_component" => Some(GateKind::FileWrite),
         "export_fixture_dxf" if has_non_null_arg(args, "path") => Some(GateKind::FileWrite),
         "import_model"
         | "import_tool_library"
@@ -70,6 +70,9 @@ pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
         | "set_lathe_tool_body"
         | "attach_tool_body_piece" => Some(GateKind::FilePathAccess),
         "import_dxf_fixture" if has_non_null_arg(args, "path") => Some(GateKind::FilePathAccess),
+        "list_tool_components" | "get_tool_assembly" | "sync_tool_component" if has_non_null_arg(args, "library") => {
+            Some(GateKind::FilePathAccess)
+        }
         _ if has_non_null_arg(args, "path") || has_non_null_arg(args, "output") => {
             Some(GateKind::FilePathAccess)
         }

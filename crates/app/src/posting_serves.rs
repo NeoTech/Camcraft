@@ -71,7 +71,7 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
         Kind::Mill => !turning,
         // The mask cannot tell a plasma script from a milling one, so an
         // undeclared script is not proven to serve a torch or a wire.
-        Kind::Plasma | Kind::WireEdm | Kind::SinkerEdm | Kind::Waterjet => false,
+        Kind::Plasma | Kind::WireEdm | Kind::SinkerEdm | Kind::Waterjet | Kind::Laser => false,
     })
 }
 

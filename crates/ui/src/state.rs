@@ -1326,6 +1326,7 @@ impl ToolUi {
                 ToolKind::Dovetail => 20,
                 ToolKind::Lollipop => 21,
                 ToolKind::FormMill => 22,
+                ToolKind::Laser => 23,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1389,6 +1390,7 @@ impl ToolUi {
             20 => ToolKind::Dovetail,
             21 => ToolKind::Lollipop,
             22 => ToolKind::FormMill,
+            23 => ToolKind::Laser,
             _ => ToolKind::EndMill,
         }
     }
@@ -4607,9 +4609,10 @@ impl State {
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
                     let (coarse, budget, hole) = (command.coarse_mm, command.facet_budget, command.hole);
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source).with_source_faces(command.source_faces)) {
                         Ok(upd) => {
-                            let summary = upd.changes().describe();
+                            // #3915: with the picks that followed SolidCraft names.
+                            let summary = upd.summary();
                             self.history.execute(&self.world, upd);
                             self.doc_version += 1;
                             self.note_recent_model(file.as_deref());

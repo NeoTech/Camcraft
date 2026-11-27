@@ -192,6 +192,8 @@ icon_table! {
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
     ToolWaterjet => "tool-waterjet", "icon-tool-waterjet";
+    // #4081: the laser head - a head, its beam and the burst on the sheet.
+    ToolLaser => "tool-laser", "icon-tool-laser";
     ToolElectrode => "tool-electrode", "icon-tool-electrode";
     ToolWire => "tool-wire", "icon-tool-wire";
     // #894: the thread mills - a neck over a toothed head (multi-form)

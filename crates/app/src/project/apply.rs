@@ -803,6 +803,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 crate::step_source::set(world, &entity, dto.step_source.as_deref());
                 // #2463: validate_kind refused a malformed source.
                 crate::model_source::set(world, &entity, dto.source.as_ref().map(super::SourceDto::to_source).as_ref());
+                // #3915: a record that does not tile the facets is dropped.
+                super::source_faces_dto::land(world, &entity, dto.source_faces.as_ref(), &dto.name);
             }
             EntityKind::Stock => {
                 // validate_kind already refused these; Result, never unwrap.

@@ -101,7 +101,7 @@ fn assert_inert(stem: &str, l: &str) {
 fn hostile_names_post_well_formed_comments_in_every_mill_dialect() {
     let stream = mill_stream(8000.0);
     let m = mill(MACHINE);
-    for stem in ["fanuc", "haas", "mazak", "tormach", "grblhal", "tinyg", "grbl", "mach3"] {
+    for stem in ["fanuc", "haas", "mazak", "doosan-dnm", "tormach", "grblhal", "tinyg", "grbl", "mach3"] {
         let nc = post(stem, &m, &stream);
         for l in nc.lines() {
             assert_paren_line(stem, l);
@@ -110,7 +110,7 @@ fn hostile_names_post_well_formed_comments_in_every_mill_dialect() {
             }
         }
         let header = match stem {
-            "fanuc" | "mazak" => "O0001 (MSG, Mill A B*)",
+            "fanuc" | "mazak" | "doosan-dnm" => "O0001 (MSG, Mill A B*)",
             "haas" => "(MSG, Mill A B*)",
             _ => "(- MSG, Mill A B*)",
         };
@@ -137,6 +137,29 @@ fn hostile_names_post_well_formed_comments_in_every_mill_dialect() {
         assert!(!l.contains('(') && !l.contains(')'), "heidenhain: {l:?}");
     }
     assert!(nc.starts_with("%MSG__Mill__A___B_ G71 *\n"), "{nc}");
+}
+
+/// #4349: the Doosan DNM header cleans the machine name (a `%` in it
+/// would end the tape), and a program number outside O0001-O9999 is
+/// refused by name, never clamped onto O9999, another program.
+#[test]
+fn doosan_dnm_header_cleans_the_name_and_refuses_a_number_past_o9999() {
+    let cps = read("assets/posts/doosan-dnm.cps");
+    let stream = mill_stream(8000.0);
+    let nc = post("doosan-dnm", &mill("DNM 5700 (5AX) 100%"), &stream);
+    assert_eq!(nc.lines().nth(1), Some("O0001 (DNM 5700 5AX 100)"), "{nc}");
+    assert_eq!(nc.matches('%').count(), 2, "only the tape's own two %: {nc}");
+    let m = mill("DNM");
+    let id = |number| ProgramId { number, ..Default::default() };
+    let ok = engine::run_program_with(&cps, &m, &stream, &json!({}), &id(9999)).expect("O9999 posts");
+    assert_eq!(ok.program.lines().nth(1), Some("O9999 (DNM)"), "{}", ok.program);
+    for n in [0, 10000] {
+        let err = engine::run_program_with(&cps, &m, &stream, &json!({}), &id(n))
+            .err()
+            .unwrap_or_else(|| panic!("program number {n} must be refused"));
+        let text = err.to_string();
+        assert!(text.contains(&format!("program number {n} is outside O0001-O9999")), "{text}");
+    }
 }
 
 #[test]
@@ -262,10 +285,12 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/posts");
     let mut text_posts = 0;
     let mut native_refusals = 0;
+    let mut shipped = Vec::new();
     for entry in std::fs::read_dir(dir).expect("shipped posts").flatten() {
         let p = entry.path();
         if p.extension().and_then(|s| s.to_str()) != Some("cps") { continue; }
         let stem = p.file_stem().and_then(|s| s.to_str()).expect("post name");
+        shipped.push(stem.to_owned());
         if stem == "heidenhain-klartext" {
             assert_klartext_header_notes(&std::fs::read_to_string(&p).unwrap(), &id, note);
             text_posts += 1;
@@ -319,6 +344,10 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         }
         text_posts += 1;
     }
-    assert_eq!(text_posts, 26, "every shipped text post writes both notes");
+    // #3461: the count comes from the folder, not from a number that each
+    // new post must raise. Two new-post branches that each raised a fixed
+    // count merged with no conflict to a count one too low.
+    assert!(shipped.iter().any(|s| s == "fanuc"), "the read found the shipped posts folder: {shipped:?}");
     assert_eq!(native_refusals, 1, "the native Agie dispatcher refused the notes");
+    assert_eq!(text_posts, shipped.len() - native_refusals, "every shipped text post writes both notes: {shipped:?}");
 }

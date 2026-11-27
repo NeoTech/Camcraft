@@ -19,7 +19,7 @@ use super::fields::{check_row, combo, int_range_row, num_feed, num_plain_row, nu
 use super::layout::{CTRL_W, group_open, prop_row, prop_row_hint, text_row};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors `ToolUi::from_tool`).
-const TOOL_KINDS: [(tools::ToolKind, &str); 23] = [
+const TOOL_KINDS: [(tools::ToolKind, &str); 24] = [
     (tools::ToolKind::EndMill, "End mill"),
     (tools::ToolKind::BallNose, "Ball nose"),
     (tools::ToolKind::BullNose, "Bull nose"),
@@ -50,6 +50,8 @@ const TOOL_KINDS: [(tools::ToolKind, &str); 23] = [
     (tools::ToolKind::Lollipop, "Lollipop cutter"),
     // #3369: a router-style cutter whose edge is a drawn or preset form.
     (tools::ToolKind::FormMill, "Form mill"),
+    // #4081: the kerf is its diameter; it turns no spindle.
+    (tools::ToolKind::Laser, "Laser head"),
 ];
 
 /// The settings grid: the groups, in the order the tool reads.
