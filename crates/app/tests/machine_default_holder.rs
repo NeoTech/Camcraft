@@ -18,7 +18,8 @@
 //! Provenance: our own tests, specced from the issue's "Done means".
 //!
 //! Gate map (M4.4): covers app::commands::tool, app::commands::tool_body,
-//! app::machine, post::machine (tooling keys), post::machine::tooling.
+//! app::machine, post::machine (tooling keys), post::machine::tooling,
+//! tools::holder_library (its tapers as spindle mounts, #4239).
 
 use camcraft_app::commands::{
     AddTool, CommandError, CreateOperation, GenerateOperation, History, HolderPick, LoadMachine, SetStock, TagFixture,
@@ -258,6 +259,32 @@ fn an_unknown_or_mismatched_holder_is_refused_by_file_and_key() {
         assert!(r.iter().any(|r| r.key.starts_with("tooling.") && r.rule.contains(word)), "{r:?}");
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #4239: every taper of the holder library is a mount a machine file
+/// states, in the library's order, and each taper's holders sit in it:
+/// a file with that mount and that holder has no tooling refusal.
+#[test]
+fn every_library_taper_is_a_spindle_mount() {
+    use camcraft_app::holder_library::library;
+    use camcraft_app::machine::{tooling_refusals, SPINDLE_MOUNTS};
+    let mut tapers: Vec<&str> = Vec::new();
+    for e in library() {
+        if let Some(t) = e.taper
+            && !tapers.contains(&t.name)
+        {
+            tapers.push(t.name);
+        }
+    }
+    assert_eq!(tapers, SPINDLE_MOUNTS, "SPINDLE_MOUNTS lists the library's tapers");
+    for e in library() {
+        let Some(t) = e.taper else { continue };
+        let v = serde_json::json!({ "tooling": { "spindle_mount": t.name, "default_holder": e.name() } });
+        assert_eq!(tooling_refusals(&v), Vec::<(String, String)>::new(), "{}", e.name());
+    }
+    // A mount the library has not is still refused by its name.
+    let v = serde_json::json!({ "tooling": { "spindle_mount": "HSK-A100" } });
+    assert!(tooling_refusals(&v).iter().any(|(k, r)| k == "tooling.spindle_mount" && r.contains("HSK-A100")));
 }
 
 #[test]

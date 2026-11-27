@@ -1,15 +1,18 @@
 //! #3898 (U7 of #3663): what the tool library window's component pages
 //! derive from the document and the component library - each document row
 //! with its library status and its users, the ids that fit the
-//! "compatible" filter, and what "Add component" offers for the stack
-//! draft. Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
+//! "compatible" filter, and for the stack draft: what "Add component"
+//! offers, the resolver's values (gauge length, cutting diameter, corner
+//! radius) or its refusal, and for each row the parts that "Swap" offers
+//! (only the replacements with which the whole stack still resolves). Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
 //! their input. The component table and the stacks that use each row are
 //! read once for each document version; a set is built again only when
-//! that read differs (`rev`), the library read changes, or the filter or
-//! the stack draft changes. A still frame reads and builds nothing
+//! that read differs (`rev`), the library read changes, or the filter,
+//! the open tool's record or the stack draft changes. A still frame reads and builds nothing
 //! (`ViewBuilds`).
 //! Provenance: our own caches over our own component records
-//! (`component_fit`, `component_library::sync_status`); no HSMWorks
+//! (`component_fit`, `component_library::sync_status`,
+//! `tool_assembly::derive`); no HSMWorks
 //! material involved.
 
 use std::rc::Rc;
@@ -19,6 +22,7 @@ use camcraft_app::component_fit::{compatible_children, compatible_parents};
 use camcraft_app::component_library::{SyncStatus, sync_status};
 use camcraft_app::schema::{AssemblyLink, DocumentComponent};
 use camcraft_app::tool_assembly::{self as ta, Mount};
+use camcraft_app::tools::Tool;
 
 use super::State;
 
@@ -33,10 +37,28 @@ pub struct Derived {
     pub rows: Rc<Vec<ComponentRow>>,
 }
 
+/// The values a resolved stack gives its tool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StackValues {
+    /// From the cutting tip to the spindle gauge line (mm).
+    pub gauge_len: f64,
+    /// The cutting diameter (mm).
+    pub diameter: f64,
+    /// The corner radius (mm).
+    pub corner_r: f64,
+}
+
+/// One replacement that "Swap" offers: its label and the whole new stack.
+pub type SwapOffer = (String, Vec<AssemblyLink>);
+
 /// What the stack group derives from the stack draft.
 pub struct StackView {
     /// The parts that can go on the stack next ([`candidates`]).
     pub offer: Vec<(String, AssemblyLink)>,
+    /// The resolver's values, or its named refusal; `None` for no stack.
+    pub values: Option<Result<StackValues, String>>,
+    /// For each row, the replacements with which the stack resolves.
+    pub swaps: Vec<Vec<SwapOffer>>,
 }
 
 /// The document's inputs of the sets: the component table and, for each
@@ -59,7 +81,7 @@ pub struct ViewBuilds {
 
 type RowsKey = (u64, u64);
 type CompatibleKey = (u64, u64, String);
-type StackKey = (u64, Vec<AssemblyLink>);
+type StackKey = (u64, String, Option<Tool>, Vec<AssemblyLink>);
 
 /// The caches. `rev` changes only when a read of the document gives other
 /// inputs; the keys hold it with the library read and the page's input.
@@ -113,6 +135,34 @@ pub fn candidates(links: &[AssemblyLink], table: &[DocumentComponent]) -> Vec<(S
             };
             let mount = Mount { parent: at, port: Some(f.port.clone()), z_rot_deg: 0.0, projection_mm };
             (format!("{} in {} {}", f.component.name(), parent.name(), f.port), AssemblyLink { component: f.component.id().to_owned(), mount: Some(mount) })
+        })
+        .collect()
+}
+
+fn values(name: &str, tool: &Tool, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<StackValues, String> {
+    ta::derive(name, tool, links, table).map(|d| StackValues { gauge_len: d.gauge_len, diameter: d.tool.diameter, corner_r: d.tool.corner_r })
+}
+
+/// The replacements for row `at`: each part that fits where the row's
+/// part sits, put in its place with the row's turn and (when stated) its
+/// stick-out kept, and kept only when the whole stack then resolves.
+fn swaps_at(name: &str, tool: &Tool, links: &[AssemblyLink], at: usize, table: &[DocumentComponent]) -> Vec<SwapOffer> {
+    let (Some(prefix), Some(old)) = (links.get(..at), links.get(at)) else {
+        return Vec::new();
+    };
+    candidates(prefix, table)
+        .into_iter()
+        .filter(|(_, c)| c.component != old.component)
+        .filter_map(|(label, mut c)| {
+            if let (Some(m), Some(was)) = (c.mount.as_mut(), old.mount.as_ref()) {
+                m.z_rot_deg = was.z_rot_deg;
+                m.projection_mm = was.projection_mm.or(m.projection_mm);
+            }
+            let mut next = links.to_vec();
+            if let Some(slot) = next.get_mut(at) {
+                *slot = c;
+            }
+            values(name, tool, &next, table).is_ok().then_some((label, next))
         })
         .collect()
 }
@@ -184,19 +234,31 @@ impl State {
         Derived { compatible, rows }
     }
 
-    /// What the stack group offers for the stack draft `links`.
-    pub(crate) fn component_stack_view(&mut self, links: &[AssemblyLink]) -> Rc<StackView> {
+    /// What the stack group derives for the stack draft `links` of tool
+    /// `name`, whose record is now `tool` (`None`: not in the document).
+    pub(crate) fn component_stack_view(&mut self, name: &str, tool: Option<&Tool>, links: &[AssemblyLink]) -> Rc<StackView> {
         self.read_component_inputs();
         let v = &mut self.component_views;
-        if let Some(((rev, kept), view)) = &v.stack
+        if let Some(((rev, kept_name, kept_tool, kept), view)) = &v.stack
             && *rev == v.rev
+            && kept_name == name
+            && kept_tool.as_ref() == tool
             && kept.as_slice() == links
         {
             return Rc::clone(view);
         }
         v.builds.stack = v.builds.stack.saturating_add(1);
-        let view = Rc::new(StackView { offer: candidates(links, &v.inputs.table) });
-        v.stack = Some(((v.rev, links.to_vec()), Rc::clone(&view)));
+        let table = &v.inputs.table;
+        let (values, swaps) = match tool {
+            Some(t) if !links.is_empty() => (
+                Some(values(name, t, links, table)),
+                (0..links.len()).map(|i| swaps_at(name, t, links, i, table)).collect(),
+            ),
+            Some(_) => (None, Vec::new()),
+            None => (Some(Err(format!("tool '{name}' is not in the document"))), Vec::new()),
+        };
+        let view = Rc::new(StackView { offer: candidates(links, table), values, swaps });
+        v.stack = Some(((v.rev, name.to_owned(), tool.cloned(), links.to_vec()), Rc::clone(&view)));
         view
     }
 }

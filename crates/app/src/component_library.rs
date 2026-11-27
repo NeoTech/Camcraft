@@ -139,7 +139,11 @@ pub fn to_text(entries: &[LibraryComponent]) -> Result<String, String> {
 /// The holder library's entries that have a taper, as adaptive items
 /// (machine side the taper, workpiece side the collet or the bore). A
 /// standalone straight-shank chuck states no shank size, so it is not
-/// a built-in component.
+/// a built-in component. A shrink-fit chuck holds a plain shank of its
+/// bore directly, with no collet: its workpiece side is a plain bore
+/// (`CYL <bore>`), which takes a plain or a Weldon shank of that size
+/// and no other. Its body is the holder library's own conservative
+/// outline, as for the other clamps.
 fn builtin_holders() -> Vec<LibraryComponent> {
     let mut out = Vec::new();
     for entry in holder_library::library() {
@@ -147,6 +151,7 @@ fn builtin_holders() -> Vec<LibraryComponent> {
         let csw = match entry.clamp {
             Clamp::Er(er) => ConnectionCode::parse(er.name),
             Clamp::Weldon { bore, .. } => ConnectionCode::parse(&format!("WELDON {bore}")),
+            Clamp::Shrink { bore, .. } => ConnectionCode::parse(&format!("CYL {bore}")),
         };
         let (Ok(mcs), Ok(csw)) = (ConnectionCode::parse(taper.name), csw) else { continue };
         let name = entry.name();
@@ -171,10 +176,42 @@ fn builtin_tools() -> Vec<LibraryComponent> {
     out
 }
 
-/// Every built-in, read-only component: the holders, then the tools.
+/// #3898: the metric ER collets of the holder library's one ER table
+/// (`holder_library::ER_SIZES`, ISO 15488 sizes, DIN 6499 collet
+/// ranges): one collet for each whole millimetre from the series'
+/// smallest stated bore (1 mm at the least) up to its largest. The
+/// machine side is the ER seat, the tool side a plain bore of the
+/// nominal size, so a built-in ER chuck takes the collet and the collet
+/// takes a straight shank of that size. The collet sits inside the
+/// chuck's nose and adds no length: the stick-out is measured from the
+/// chuck's port.
+fn builtin_collets() -> Vec<LibraryComponent> {
+    let mut out = Vec::new();
+    for er in holder_library::ER_SIZES {
+        let Ok(mcs) = ConnectionCode::parse(er.name) else { continue };
+        let Ok(geometry) = ComponentGeometry::axial(ADAPTIVE_PORT, 0.0, None) else { continue };
+        let first = er.min_bore.ceil().max(1.0);
+        // The table's bores are a few tens of mm: the count is small and finite.
+        let mut d = first;
+        while d <= er.max_bore + 1e-9 {
+            let name = format!("{} collet {d} mm", er.name);
+            let id = format!("{BUILTIN_PREFIX}collet:{} {d}", er.name);
+            let kind = ComponentKind::AdaptiveItem { mcs: mcs.clone(), csw: ConnectionCode::Cylindrical { d } };
+            if let Ok(component) = ToolComponent::new(&id, &name, kind) {
+                out.push(LibraryComponent { component, geometry: geometry.clone() });
+            }
+            d += 1.0;
+        }
+    }
+    out
+}
+
+/// Every built-in, read-only component: the holders, the collets, then
+/// the tools.
 #[must_use]
 pub fn builtins() -> Vec<LibraryComponent> {
     let mut out = builtin_holders();
+    out.extend(builtin_collets());
     out.extend(builtin_tools());
     out
 }
