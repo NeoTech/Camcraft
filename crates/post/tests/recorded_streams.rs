@@ -338,6 +338,30 @@ fn every_shipped_post_script_has_its_suite() {
     }
 }
 
+/// #2528: each post with a mill drilling cycle records the full-diameter
+/// depth (12.803) in an NC golden of `drill_full_diameter`, plain or
+/// `_on_machine`. Only a post with no such cycle keeps a refusal alone.
+#[test]
+fn each_drilling_post_records_the_full_diameter_depth() {
+    for e in std::fs::read_dir(recorded::here().join("golden")).expect("the golden dir").filter_map(|e| e.ok()) {
+        let post = e.file_name().to_string_lossy().to_string();
+        let nc = ["drill_full_diameter.nc", "drill_full_diameter_on_machine.nc"]
+            .iter()
+            .find_map(|f| std::fs::read_to_string(e.path().join(f)).ok());
+        if recorded::NO_MILL_DRILL_CYCLE.contains(&post.as_str()) {
+            assert!(nc.is_none(), "{post} is listed with no drilling cycle but posts one");
+            continue;
+        }
+        if let Some((_, why)) = recorded::DRILL_DEPTH_GAP.iter().find(|(p, _)| *p == post) {
+            assert!(nc.is_none(), "{post} now posts the case: remove it from DRILL_DEPTH_GAP");
+            eprintln!("{post}: no recorded drilling depth - {why}");
+            continue;
+        }
+        let nc = nc.unwrap_or_else(|| panic!("{post}: no NC golden of drill_full_diameter records the depth"));
+        assert!(nc.contains("12.803"), "{post}: the full-diameter depth 12.803 is missing:\n{nc}");
+    }
+}
+
 #[test]
 fn a_known_post_bug_has_no_golden() {
     for (script, case, issue) in recorded::KNOWN_BUGS {

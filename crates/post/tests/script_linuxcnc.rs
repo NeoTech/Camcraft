@@ -14,3 +14,14 @@
 mod recorded;
 
 post_suite!("linuxcnc.cps");
+
+/// #2528: the machine-less case stops on the missing safe retract alone,
+/// so the full-diameter depth is recorded on a machine that states one
+/// (`vmc.mch`). The canned cycle goes to the point allowance, Z-12.803.
+#[test]
+fn drill_full_diameter_on_a_machine_posts_the_full_diameter_depth() {
+    let mch = recorded::repo().join("assets/machines/vmc.mch");
+    let nc = recorded::check_on_machine("linuxcnc.cps", "drill_full_diameter", &mch);
+    let cycle = nc.lines().find(|l| l.contains("G73") || l.contains("G83") || l.contains("G81"));
+    assert!(cycle.is_some_and(|l| l.contains("Z-12.803")), "the cycle depth is Z-12.803:\n{nc}");
+}
