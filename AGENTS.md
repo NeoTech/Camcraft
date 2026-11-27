@@ -21,6 +21,8 @@ disagree, this file is correct.
 | Read, file, label, comment on or close an issue | `gh-issues` |
 | Check, mirror, release a claim; work a `needs-research` issue | `issue-claims` |
 | Work one issue from claim to draft PR | `work-issue` |
+| Continue another author's stalled PR | `takeover` |
+| Reproduce a reported bug before fixing it | `repro-first` |
 | Set or check an `effort:*` label | `classify-effort` |
 | Review open pull requests | `review-prs` |
 | Merge a batch of `merge-ready` PRs | `merge-ready` |
@@ -156,6 +158,7 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     issue/N-<slug> .claude/worktrees/issue-N origin/main`.
   - Worktrees are in the gitignored `.claude/worktrees/`, never outside the
     repository. Remove a worktree when its PR is pushed.
+  - A sub-PR of a side branch starts from that branch (**Side branch**).
 - **A worktree agent never touches the main checkout's HEAD or tree.** In the
   main checkout it runs `git fetch origin` and `git worktree add` only. It
   does not run `switch`, `pull`, `merge`, `reset`, `checkout` or `stash`
@@ -193,6 +196,47 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   gated again and merges. Never merge the parent first: `--delete-branch`
   deletes the child's base branch and GitHub closes the child PR. An overlap
   that cannot stack waits for the parent to merge.
+- **Side branch** (#4023, #4042). A side branch `side/<name>` collects the
+  sub-PRs of one large change. Then one PR takes it to `main`. Only the
+  maintainer permits a side branch. `side/path-kernel` is the one that
+  exists. It is made from `main` after this rule merges. Its plan is in
+  `RECOMMENDED.md` under `## #4024 - Path kernel K0`, and its delivery is
+  in `docs/decisions/4325-path-kernel-delivery.md`.
+  - The branch is protected against a force-push and a deletion. It is
+    never rebased. Each change goes to it through a sub-PR.
+  - A sub-PR has one issue. Its worktree is made from `origin/side/<name>`,
+    on a branch `issue/N-<slug>`. It opens as a draft with `--base
+    side/<name>`.
+  - The body of a sub-PR starts with `Side branch: side/<name>`. It ends
+    with `Refs #N`, not `Fixes #N`: a merge into a side branch closes no
+    issue.
+  - A sub-PR gets the quick pass and the collaborator review as each other
+    PR. It merges with a merge commit when its review is clean, also as a
+    `feat`. `--delete-branch` deletes only the sub-PR's own branch.
+  - The issue of a merged sub-PR keeps `in-review` until the switch PR of
+    its kind merges, or until the issue's own work is complete on `main`.
+    The merging session comments `merged to side/<name> in PR #M; closes
+    at the switch of its kind` on the issue.
+  - `main` is merged into the side branch with `git merge`, through a sync
+    PR into the side branch. Never rebase, never force-push. Do this after
+    each merge batch on `main` that touches the code of the side branch,
+    and at least each week. If the two sides changed the same logic, the
+    sync stops and the maintainer decides (`resolve-conflicts` skill).
+  - The gates are local: `post-merge.yml` covers `main` only. Each sub-PR
+    runs its pinning tests, the quick gate of its diff against
+    `origin/side/<name>`, the example catalog suites and the light lane.
+    The head of the side branch gets one local batch gate after each sync,
+    inside the build limit. A red batch is fixed on the side branch before
+    the next sub-PR merges.
+  - The lane and in-flight limits count a sub-PR as each other PR.
+  - One PR takes `side/<name>` to `main`. It can come before the
+    switches. It uses `Refs #N`, not `Fixes #N`. An issue closes with the
+    switch PR of its kind or with its own work. The PR merges without
+    `--delete-branch`. The maintainer's word for that PR says who merges
+    it. For `side/path-kernel` it is the coordinator session (his answer
+    of 2026-11-27). It merges when an independent review is clean on the
+    head, and the batch gate, the heavy `motion` and `app` tests and the
+    example catalog suites are green.
 - **Own blocked PRs first.** Before an agent claims or starts a new issue,
   it lists the open PRs of the current account that have `conflicts` or
   `needs-rework`: `gh pr list --state open --author @me --label conflicts`
@@ -325,10 +369,13 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   adds `claimed` and a claim comment during the work, then sets `in-review`
   again. An issue never has `in-review` without an open PR: a PR closed
   unmerged changes `in-review` to `blocked` (held) or to nothing (dropped),
-  with an issue comment.
+  with an issue comment. A sub-PR of a side branch uses `--base
+  side/<name>` and `Refs #N`, and its issue keeps `in-review` after the
+  merge (**Side branch**).
 - **When PRs merge.** Merges are merge commits (`gh pr merge M --merge
   --delete-branch`; a fork PR without `--delete-branch`). Never squash or
-  rebase. Never merge a draft.
+  rebase. Never merge a draft. Never use `--delete-branch` on a PR whose
+  head is a side branch.
   - A `fix` / `perf` / `refactor` PR merges when its independent review is
     clean and its quick gate is green. No merge waits for a heavy lane run
     ("Heavy lanes at review").
@@ -337,7 +384,8 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   - Nothing merges while a cut is between its step 1 and its tag.
   - The review is always by an agent that did not write the change.
 - **When a PR merges**, remove `in-review` from its issue. GitHub closes the
-  issue from `Fixes #N`.
+  issue from `Fixes #N`. A sub-PR of a side branch is the exception
+  (**Side branch**).
 - **Every PR opens as a draft.** It stays a draft while work, gates and
   review fixes go onto it.
   - Flag it ready (`gh pr ready <M>`) when the maintainer says so, or when a
