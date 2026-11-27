@@ -11,6 +11,7 @@
 
 mod checks;
 mod frame;
+mod fidelity;
 mod tools;
 
 pub use frame::{frame_for, NcFrame};
@@ -27,12 +28,17 @@ use crate::machine::Machine;
 use crate::stock_sim::{Deviation, Planned, SimOp, DEV_TOL};
 use crate::tool_library::LibraryTool;
 
-/// The caller's inputs. Each `None` or empty field reads the document:
-/// the active setup, its mounted machine, its fixtures and its parts.
+/// The caller's inputs. Optional document overrides read the active setup,
+/// its mounted machine, fixtures and parts when absent. The initial tool
+/// position must be explicitly confirmed before any approach is judged.
 #[derive(Clone, Debug, Default)]
 pub struct NcSimOptions {
     /// The setup whose stock, WCS, fixtures and machine are read (`None`: the active one).
     pub setup: Option<String>,
+    /// The caller confirms the parser's initial position is the actual tool
+    /// position in the initial work frame. Required for every motion kind;
+    /// an assumed parser default cannot establish a safe approach.
+    pub initial_position_known: bool,
     /// Explicit `T` number to tool name: a library row's name, else a document tool's.
     pub tool_map: Vec<(u32, String)>,
     /// Rows of a `.camtools` library (`tool_library::parse_tool_library`).
@@ -46,6 +52,7 @@ pub struct NcSimOptions {
     /// The machine, overriding the setup's mounted `.mch`.
     pub machine: Option<Machine>,
     /// The gouge and deviation tolerance, mm (default `DEV_TOL`).
+    /// Reduced mesh fidelity tightens it; an override cannot bypass that guard.
     pub tol: Option<f64>,
 }
 
@@ -197,22 +204,13 @@ fn sections<'a>(
         let tool = map.get(n).ok_or_else(|| NcSimError::UnmappedTools { numbers: vec![n], reasons: Vec::new() })?;
         let frame = frame_for(world, opts, machine, src.work_offset.index())
             .map_err(|e| NcSimError::Refused(format!("line {line}: {e}")))?;
-        let mut moves = src
+        let moves = src
             .toolpath
             .moves
             .iter()
             .zip(&src.move_lines)
             .map(|(m, l)| frame.move_to_world(m).map_err(|e| NcSimError::Refused(format!("line {l}: {e}"))))
             .collect::<Result<Vec<_>, _>>()?;
-        // The program's first move starts from the parser's assumed
-        // position (`Dialect::initial_position`), not from a place the
-        // machine stood: the tool appears at its first commanded point.
-        if out.is_empty()
-            && let Some(m) = moves.first_mut()
-            && m.arc.is_none()
-        {
-            m.from = m.to;
-        }
         out.push(Section { src, tool, frame, moves });
     }
     if out.is_empty() {
@@ -253,16 +251,23 @@ struct Prepared<'a> {
     sections: Vec<Section<'a>>,
     planned: Vec<Planned>,
     machine: Option<Machine>,
+    tol: f64,
 }
 
 fn prepare<'a>(world: &World, program: &'a ParsedProgram, opts: &NcSimOptions, map: &'a NcToolMap) -> Result<Prepared<'a>, NcSimError> {
     if !map.unmapped.is_empty() {
         return Err(NcSimError::UnmappedTools { numbers: map.unmapped.clone(), reasons: map.reasons.clone() });
     }
+    if !opts.initial_position_known {
+        return Err(NcSimError::Refused(
+            "the initial tool position is unknown - supply the actual parser start and confirm initial_position_known before judging the approach".into(),
+        ));
+    }
+    let tol = fidelity::prepare(world, opts, tol_of(opts)?).map_err(NcSimError::Refused)?;
     let machine = machine_of(world, opts)?;
     let sections = sections(world, program, opts, map, machine.as_ref())?;
     let planned = planned(&sections, opts.setup.as_deref())?;
-    Ok(Prepared { sections, planned, machine })
+    Ok(Prepared { sections, planned, machine, tol })
 }
 
 fn tol_of(opts: &NcSimOptions) -> Result<f64, NcSimError> {
@@ -292,12 +297,13 @@ pub fn simulate_nc_text(world: &World, text: &str, parse: &ParseOptions, opts: &
 /// machine limits on every move.
 ///
 /// # Errors
-/// Refuses unmapped tools, a setup with no stock, and the frame refusals
-/// ([`frame_for`]), each by name. A refusal changes nothing.
+/// Refuses an unknown initial position, unsupported tools, missing stock,
+/// unknown or excessive mesh error, and frame refusals ([`frame_for`]),
+/// each by name. A refusal changes nothing.
 pub fn simulate_nc(world: &World, program: &ParsedProgram, opts: &NcSimOptions) -> Result<NcSimReport, NcSimError> {
-    let tol = tol_of(opts)?;
     let map = unmapped_tools(world, program, opts)?;
     let prep = prepare(world, program, opts, &map)?;
+    let tol = prep.tol;
     let setup = opts.setup.as_deref();
     let refused = |e: String| NcSimError::Refused(e);
 
@@ -310,10 +316,7 @@ pub fn simulate_nc(world: &World, program: &ParsedProgram, opts: &NcSimOptions) 
         .collect();
     crate::stock_sim::simulate(&mut dex, &ops).map_err(|e| refused(e.to_string()))?;
 
-    let mut notes = vec![format!(
-        "line {}: the first move starts at its own end point - the position before the program is not known",
-        prep.sections.first().map_or(0, |s| first_line(s.src))
-    )];
+    let mut notes = Vec::new();
     let target = target_of(world, opts);
     let deviation = if target.is_empty() {
         notes.push("no target model - the deviation and the solid law are not judged".to_string());
@@ -371,9 +374,9 @@ pub fn simulate_nc(world: &World, program: &ParsedProgram, opts: &NcSimOptions) 
 /// # Errors
 /// The refusals of [`simulate_nc`], and the field view's own refusals.
 pub fn play_seed(world: &World, program: &ParsedProgram, opts: &NcSimOptions, texels: f64) -> Result<crate::stock_play::PlaySeed, NcSimError> {
-    let tol = tol_of(opts)?;
     let map = unmapped_tools(world, program, opts)?;
     let prep = prepare(world, program, opts, &map)?;
+    let tol = prep.tol;
     let target = target_of(world, opts);
     let part = (!target.is_empty()).then_some(target);
     crate::stock_play::PlaySeed::of_planned(world, prep.planned, opts.setup.clone(), part, tol, texels).map_err(NcSimError::Refused)

@@ -27,6 +27,9 @@ use camcraft_app::world::new_world;
 use camcraft_gcode::{parse_with, ParseOptions};
 use camcraft_sim::fixture::FixtureBox;
 
+#[path = "nc_safety.rs"]
+mod safety;
+
 const TOOL: &str = "EM-0400-2FL";
 
 fn tool(name: &str) -> camcraft_app::tools::Tool {
@@ -78,8 +81,20 @@ fn face(tool: u32, z: f64, shift: [f64; 3], gouge: bool) -> (String, usize) {
     (l.join("\n"), low)
 }
 
+fn known_parse() -> ParseOptions {
+    let mut parse = ParseOptions::default();
+    // The fixture starts above all steel, outside the part's left edge.
+    parse.dialect.initial_position = Point3::new(-34.0, -30.0, 40.0);
+    parse
+}
+
+fn known_opts() -> NcSimOptions {
+    NcSimOptions { initial_position_known: true, ..Default::default() }
+}
+
 fn run(world: &World, text: &str, opts: &NcSimOptions) -> Result<camcraft_app::nc_sim::NcSimReport, NcSimError> {
-    simulate_nc_text(world, text, &ParseOptions::default(), opts)
+    let opts = NcSimOptions { initial_position_known: true, ..opts.clone() };
+    simulate_nc_text(world, text, &known_parse(), &opts)
 }
 
 #[test]
@@ -130,7 +145,7 @@ fn nc_unmapped_tool_is_refused_by_number() {
         other => panic!("wrong refusal: {other}"),
     }
     assert!(err.to_string().contains("T7"), "{err}");
-    let parsed = parse_with(&text, &ParseOptions::default()).expect("parses");
+    let parsed = parse_with(&text, &known_parse()).expect("parses");
     let map = unmapped_tools(&world, &parsed, &NcSimOptions::default()).expect("maps");
     assert_eq!(map.unmapped, vec![7]);
 }
@@ -141,17 +156,18 @@ fn nc_tools_come_from_the_map_and_the_library() {
     let mut row = LibraryTool::bare("LIB-4", tool(TOOL));
     row.number = Some(9);
     let opts = NcSimOptions {
+        initial_position_known: true,
         tool_map: vec![(7, "LIB-4".into())],
         library: vec![row],
         ..Default::default()
     };
     let (text, _) = face(7, 18.0, [0.0; 3], false);
-    let parsed = parse_with(&text, &ParseOptions::default()).expect("parses");
+    let parsed = parse_with(&text, &known_parse()).expect("parses");
     let map = unmapped_tools(&world, &parsed, &opts).expect("maps");
     assert_eq!(map.get(7).map(|t| t.source), Some(NcToolSource::Explicit));
     assert!(simulate_nc(&world, &parsed, &opts).is_ok_and(|r| r.sections[0].tool == "LIB-4"));
     let (text, _) = face(9, 18.0, [0.0; 3], false);
-    let parsed = parse_with(&text, &ParseOptions::default()).expect("parses");
+    let parsed = parse_with(&text, &known_parse()).expect("parses");
     let map = unmapped_tools(&world, &parsed, &opts).expect("maps");
     assert_eq!(map.get(9).map(|t| t.source), Some(NcToolSource::Library));
     let probe = LibraryTool::bare("PROBE", tool("PRB-0400"));
@@ -236,8 +252,8 @@ fn nc_work_offsets_map_by_origin_and_sign() {
 fn nc_play_seed_builds_a_playback_that_plays_to_the_end() {
     let world = world();
     let (text, _) = face(1, 18.0, [0.0; 3], false);
-    let parsed = parse_with(&text, &ParseOptions::default()).expect("parses");
-    let seed = play_seed(&world, &parsed, &NcSimOptions::default(), 20_000.0).expect("seed");
+    let parsed = parse_with(&text, &known_parse()).expect("parses");
+    let seed = play_seed(&world, &parsed, &known_opts(), 20_000.0).expect("seed");
     let total = seed.index().total();
     assert_eq!(total, parsed.sections.iter().map(|s| s.toolpath.moves.len()).sum::<usize>());
     let mut play = FieldPlay::from_seed(seed).expect("plays");

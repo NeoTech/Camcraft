@@ -100,6 +100,12 @@ fn geometry_problem(t: &NcTool) -> Option<String> {
             t.number, t.name, t.tool.kind
         ));
     }
+    if camcraft_tools::taper::is_unread_tip(&t.tool) {
+        return Some(format!(
+            "T{}: '{}' has a {} taper tip - the NC simulation cannot verify this tip geometry",
+            t.number, t.name, t.tool.tip_form
+        ));
+    }
     if !t.tool.is_sane() {
         return Some(format!("T{}: '{}' has no sane cutter geometry", t.number, t.name));
     }

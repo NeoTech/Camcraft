@@ -62,3 +62,35 @@ undoable command. The MCP tool is a follow-up issue.
 
 **Cost to change later.** The runner is one module with one entry point.
 An MCP tool or a UI dialog calls `simulate_nc_text` or `simulate_nc`.
+
+**Review-fix decisions (PR #4470).** These supersede the first-move
+choice above.
+- Require `NcSimOptions::initial_position_known` before simulation or
+  playback. The caller confirms that the parser's initial position is
+  the actual tool position. Preserve the complete first move for straight
+  paths and arcs alike. Collapsing it can hide a collision between clear
+  endpoints; a note cannot make that verdict safe. Inferring knowledge
+  from a nonzero parser start was dropped because zero can be a real
+  start, and any configured value can still be an assumption.
+- Reject `taper::is_unread_tip` after tool resolution, for explicit,
+  document and library mappings. Flat and ball taper tips must not be
+  judged as sharp cones. Implementing their sweep and collision geometry
+  was dropped from this review fix: those shapes need their own verified
+  laws before this door can accept them.
+- Use one fidelity preparation guard for simulation and playback. Check
+  the selected stock, the document target and the selected fixtures;
+  explicit target facets or fixture boxes replace their respective
+  document inputs. Unknown fidelity refuses both entry points. Known
+  coarse fixture boxes retain their existing chord growth. For reduced
+  stock or target fidelity, subtract the maximum excess from the lesser
+  of the requested tolerance and `DEV_TOL`, refusing when no positive
+  budget remains. This uses the strict law because the checks include
+  shanks and holders. Cutting-only tolerance widening and allowing an
+  explicit tolerance to restore an exhausted fidelity budget were
+  dropped: neither supplies an honest body-collision verdict. Playback
+  receives the same adjusted tolerance rather than an unguarded value.
+
+**Cost to change these choices later.** Callers must explicitly confirm
+the parser start. Accepting other taper tips requires verified stock and
+collision shapes. Relaxing the fidelity guard requires laws that preserve
+the same surface and body bounds in both simulation and playback.
