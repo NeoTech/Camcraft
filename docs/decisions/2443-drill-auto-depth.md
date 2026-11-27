@@ -51,6 +51,31 @@ change.
   envelopes). The rule of #3704 names one knob for generator output, and a
   second, kind-specific knob would leave two ways to do the same thing.
 
+- Auto counts uncut stock over a mouth as depth. The quick gate showed
+  that "from the mouth" alone is too short where stock still stands over
+  the hole: a raw bar r20 over a part r10 hid 10 mm of steel, and Auto
+  chose chip breaks where full retracts are needed. Now:
+  - an axial hole reads the highest material over the drill disk (the
+    part, the raw stock, and, only where the raw stock stands above the
+    mouth, the stock the program ahead leaves). The app passes it in as
+    `CycleParams::material_top`; the depth is from the higher of it and
+    the mouth, clamped to the R plane;
+  - a radial hole reads the raw stock's surface over its mouth
+    (`start_d(h, stock_r)`), clamped to `0..=r_d`.
+  The issue's case (stock already faced to the plate top) still reads
+  3.5 mm and drills `G81`. Pinned by `drill_auto_material` and the motion
+  tests `auto_counts_the_material_over_the_mouth` and
+  `a_cross_hole_counts_the_raw_stock_over_its_mouth`.
+- The setup sheet names the cycle the generator chose (the op's current
+  cache), and says `auto` when there is no current cache. It cannot read
+  the stock, so a second, stock-blind reading of Auto there would
+  disagree with the program.
+- Dropped: motion reads the stock itself. That needs a new dependency of
+  motion on the stock model; the caller passes the value in instead
+  ("No new dependency between our crates without a decision").
+- Dropped: the program ahead always read. Its simulation costs time, so
+  it is read only where the raw stock stands above a mouth.
+
 **Effect on programs.** A hole whose R plane is more than one diameter
 above its mouth can change from `G73` to `G81`, or from `G83` to `G73`,
 under Auto. A program that does not use Auto, and a hole whose R plane is

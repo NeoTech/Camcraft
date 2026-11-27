@@ -15,6 +15,7 @@ fn hole(entry: f64, floor: f64) -> Hole {
 
 fn axial<'a>(tool: &'a crate::tools::Tool, holes: &'a [Hole], r_z: f64, cycle: CycleChoice) -> CycleParams<'a> {
     CycleParams {
+        material_top: &[],
         through_clear: THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::default(),
         clearance_z: r_z + 5.0,
@@ -133,4 +134,41 @@ fn a_far_radial_standoff_is_refused_by_the_peck_budget() {
             assert!(e.to_string().contains("peck plan unusable"), "{cycle:?} at {r_d}: {e}");
         }
     }
+}
+
+/// The review case: uncut stock over a mouth is material. The caller's
+/// `material_top` (the part and the stock as the program ahead leaves
+/// them) counts from the higher of it and the mouth, never above the R
+/// plane; an empty list or a non-finite entry is the mouth alone.
+#[test]
+fn auto_counts_the_material_over_the_mouth() {
+    let tool = drill_tool(6.0);
+    let holes = [hole(10.0, 6.5)];
+    let with = |tops: &[f64]| {
+        let p = CycleParams { material_top: tops, ..axial(&tool, &holes, 19.0, CycleChoice::Auto) };
+        kinds(&drill(&p).expect("drills"))
+    };
+    assert_eq!(with(&[17.0]), [CycleKind::Peck], "7 mm of stock over the mouth: 10.5 mm deep");
+    assert_eq!(with(&[10.0]), [CycleKind::Drill], "the stock is cut to the mouth: 3.5 mm");
+    assert_eq!(with(&[]), [CycleKind::Drill], "no reading: the mouth");
+    assert_eq!(with(&[f64::NAN]), [CycleKind::Drill], "a non-finite reading: the mouth");
+    assert_eq!(with(&[40.0]), [CycleKind::Peck], "clamped to the R plane z 19: 12.5 mm");
+}
+
+/// The radial twin: the raw stock (`stock_r`) over a mouth on the part is
+/// material, the standoff outside the stock is not. A 2 mm drill, 8 mm in
+/// the part: with the stock flush at the mouth it chip-breaks (4 x d);
+/// with 10 mm of raw bar over the mouth it is 18 mm deep, full retracts.
+#[test]
+fn a_cross_hole_counts_the_raw_stock_over_its_mouth() {
+    let tool = drill_tool(2.0);
+    let holes = [cross_hole(-8.0)];
+    let at = |stock_r: f64, r_d: f64| {
+        let p = CrossParams { stock_r, r_d, clearance_d: r_d + 1.0, ..radial(&tool, &holes, CycleChoice::Auto) };
+        let t = cross_drill(&p).expect("drills");
+        t.moves.iter().filter(|m| m.kind == crate::cl::MoveKind::Rapid).count()
+    };
+    let flush = at(15.0, 12.0);
+    let buried = at(25.0, 12.0);
+    assert!(buried > flush, "full retracts take more rapids than chip breaks: {buried} vs {flush}");
 }

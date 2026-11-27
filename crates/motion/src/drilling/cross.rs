@@ -231,9 +231,10 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
                 h.origin,
             ));
         }
-        // #2443: the depth in material, from the mouth (d = 0) - the R
-        // standoff outside it is air.
-        let depth = p.r_d.min(0.0) - bottom;
+        // #2443: the depth in material - from the raw stock's surface over
+        // the mouth (`stock_r` along the column), never past the R standoff:
+        // the air outside the stock is not depth, the stock over the part is.
+        let depth = start_d(h, p.stock_r).clamp(0.0, p.r_d) - bottom;
         let kind = match p.cycle {
             CycleChoice::Auto => auto_kind(p.tool.kind, depth, d),
             CycleChoice::Spot => CycleKind::Spot,

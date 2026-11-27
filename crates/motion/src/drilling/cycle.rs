@@ -87,9 +87,10 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
             ));
         }
         let kind = match p.cycle {
-            // #2443: the depth in material, from the hole's mouth (or the
-            // R plane when it stands lower) - never the air above the mouth.
-            CycleChoice::Auto => auto_kind(p.tool.kind, h.entry_z.min(p.r_z) - bottom, d),
+            // #2443: the depth in material - from the higher of the mouth
+            // and the material over it (`material_top`), never above the
+            // R plane: the air between them is not depth, uncut stock is.
+            CycleChoice::Auto => auto_kind(p.tool.kind, material_top(p, i, h) - bottom, d),
             _ => resolve_choice(p),
         };
         refuse_solid_cycle(p.tool, kind, mouth)?;
@@ -257,6 +258,13 @@ pub(super) fn refuse_solid_cycle(tool: &crate::tools::Tool, kind: CycleKind, at:
         ),
         at,
     ))
+}
+
+/// The top of the material over hole `i` (#2443): the higher of its mouth
+/// and the caller's material top there, clamped to the R plane.
+fn material_top(p: &CycleParams, i: usize, h: &Hole) -> f64 {
+    let over = p.material_top.get(i).copied().filter(|z| z.is_finite());
+    over.map_or(h.entry_z, |z| z.max(h.entry_z)).min(p.r_z)
 }
 
 pub(super) fn resolve_choice(p: &CycleParams) -> CycleKind {

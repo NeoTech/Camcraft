@@ -164,6 +164,13 @@ pub struct CycleParams<'a> {
     /// Whether `through_clear` measures from the full cutting diameter
     /// (adding [`drill_point_length`]) or from the drill tip (#2441).
     pub break_through_from: BreakThroughFrom,
+    /// The highest material over each hole, aligned with `holes` (#2443
+    /// review): the part and the stock as the program ahead leaves them,
+    /// read by the caller. Auto chooses its cycle by the depth from the
+    /// higher of this and the mouth, never above the R plane, so uncut
+    /// stock over a mouth counts as material. Empty (or a non-finite
+    /// entry): the mouth alone.
+    pub material_top: &'a [f64],
 }
 
 /// A spot drill's dimple depth below the entry plane, unless the floor
