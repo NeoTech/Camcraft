@@ -4,14 +4,17 @@
 //! first, and each chord of the walk is proved as a link. The walk joins
 //! the loop at the places of the loop nearest to the two ends, or at its
 //! vertices only, so that it can run exactly on a ring that lies on the
-//! loop (a ring at offset 0).
+//! loop (a ring at offset 0). A walk can also run along a loop of the air
+//! (#4241): from an end at the stock edge out through the edge band, along
+//! the air, and back in; the proof of each chord decides if it holds.
 //! Provenance: ported from the edge route of the ring links of
 //! `camcraft-motion` (`machining2d/ring_links.rs`, `edge_route`, #3824);
 //! our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 5: Link".
 
 use super::proof::Proof;
-use crate::{Point2, near, seg_dist};
+use crate::entry::ROOM_TOL;
+use crate::{Loop, Point2, near, seg_dist};
 
 fn dist(a: Point2, b: Point2) -> f64 {
     (a.x - b.x).hypot(a.y - b.y)
@@ -65,12 +68,18 @@ fn length(w: &[Point2]) -> f64 {
     w.windows(2).map(|s| dist(s[0], s[1])).sum()
 }
 
-/// The proved walk from `a` to `b` along a loop of the centre area, the
-/// shortest first; `None` when no walk is proved.
+/// The proved walk from `a` to `b` along a loop of the centre area or of
+/// the air, the shortest first; `None` when no walk is proved. The ends
+/// stand within a tool radius of a centre loop; of an air loop, within the
+/// edge band (a tool radius and the room tolerance: an end on the stock
+/// edge is one tool radius from the air).
 pub(super) fn edge_route(proof: &Proof<'_>, a: Point2, b: Point2) -> Option<Vec<Point2>> {
-    let gap = proof.radius();
+    let r = proof.radius();
+    let centre = proof.region().center().loops().iter().map(|l| (l, r));
+    let air = proof.region().air().loops().iter().map(|l| (l, r + ROOM_TOL));
+    let loops: Vec<(&Loop, f64)> = centre.chain(air).collect();
     let mut ways: Vec<Vec<Point2>> = Vec::new();
-    for l in proof.region().center().loops() {
+    for (l, gap) in loops {
         let pts = l.points();
         if pts.len() < 3 {
             continue;

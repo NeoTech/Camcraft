@@ -28,6 +28,7 @@ pub use proof::{
     PLUNGE_NOT_ALLOWED, Proof, WRONG_PROOF,
 };
 pub use room::{NO_DIRECTION, ROOM_TOL};
+pub(crate) use room::legal_room;
 pub use stage::{
     ArcChoice, BAD_ARC, BAD_HEIGHTS, ENTRY_GEOMETRY, EntryStage, Heights, NO_MATERIAL_ENTRY, NO_SAFE_ENTRY, NOT_PLANAR,
 };

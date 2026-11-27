@@ -1,14 +1,21 @@
 //! The link proof of the kernel (#4177, K4): a hop stays at depth when an
 //! in-plane path is proved clear, else it lifts with the named reason of
 //! the straight link. A path is clear when each of its chords stays in the
-//! cutter-centre area or the air (so it cuts no part wall and no keep-out
-//! area), crosses no cut of the level, and runs only over cleared stock
-//! (within the swath of a cut already made) or the air of the region (the
-//! band outside the stock where the tool does not touch it). The strip just
-//! inside the stock edge is stock as any other: it is open only where the
-//! swath of a cut already made covers it. The tries, in order:
-//! the straight chord; back along the cut just made, then a chord (the
-//! chain link of the air plan); a walk along an edge of the centre area.
+//! cutter-centre area, the air or the edge band (so it cuts no part wall
+//! and no keep-out area), crosses no cut of the level, and runs only over
+//! cleared stock (within the swath of a cut already made) or the air of
+//! the region (the band outside the stock where the tool does not touch
+//! it). The edge band (#4241) is the band outside the stock within one
+//! tool radius of a stock edge, as the entry stage's legal room defines it
+//! (`entry/room.rs`): there the disc overhangs the stock edge. Its part
+//! outside the stock meets no part: the proof asks that the centre is not
+//! inside the part zone (the part grown by the tool radius plus the stock
+//! to leave; a part can touch the stock edge or reach out of it) and not
+//! within a tool radius of a keep-out area. Its part inside the
+//! stock is stock as any other: it is open only where the swath of a cut
+//! already made covers it. The tries, in order: the straight chord; back
+//! along the cut just made, then a chord (the chain link of the air plan);
+//! a walk along an edge of the centre area or of the air.
 //! Provenance: ported from `camcraft-motion` with its named reasons - the
 //! chord proof of the ring links (`machining2d/ring_links.rs`, #3747,
 //! #3822) and the chain link of the Adaptive air plan
@@ -18,10 +25,13 @@
 
 use camcraft_geometry::geo2d::{point_segment_distance, segment_gap, segments_cross};
 
+use std::cell::OnceCell;
+
 use super::{BAD_PATH, CROSSES_CUT, CUTS_PART, HITS_FIXTURE, Hop, LiftReason, LinkPolicy, LinkProof, LinkTally, Level, NOT_PLANAR_LINK, UNCUT_STOCK, USER_RETRACT};
+use crate::entry::legal_room;
 use crate::plan::Cut;
 use crate::region::{KernelRegion, PlanarRegion};
-use crate::{Point2, in_area, near, to_loops};
+use crate::{KERNEL_TOL, Point2, Region, in_area, near, to_loops};
 
 /// The part of the tool radius that a link may stand from a cut already
 /// made and still run over cleared stock (the ring links' swath).
@@ -97,9 +107,32 @@ pub(super) struct Proof<'a> {
     planned: Vec<Line>,
     links: Vec<Line>,
     ends: (Point2, Point2),
+    /// The legal room of the tool centre (`entry::legal_room`), built at
+    /// the first sample outside the centre area and the air. `None` when
+    /// its geometry cannot be computed: then no sample is in the band.
+    room: OnceCell<Option<Region>>,
 }
 
 impl Proof<'_> {
+    /// True when the tool centre `q` stands in the edge band: in the legal
+    /// room of the entry stage, not inside the part zone (so its disc meets
+    /// no part, also a part that reaches out of the stock), and more than a
+    /// tool radius from each keep-out area. A region with no part zone (not
+    /// made by the region builder) or with no air has no band.
+    fn in_band(&self, q: Point2) -> bool {
+        let zone = self.p.part_zone();
+        if zone.is_empty() || self.p.air().is_empty() {
+            return false;
+        }
+        let Some(room) = self.room.get_or_init(|| legal_room(self.p).ok()) else {
+            return false;
+        };
+        let in_zone = zone.contains(q) && to_loops(q, zone.loops()) > KERNEL_TOL;
+        let keep = self.p.keep_out();
+        let clear_of_keep = keep.is_empty() || (!in_area(keep, q) && to_loops(q, keep.loops()) > self.r);
+        !in_zone && clear_of_keep && in_area(room, q)
+    }
+
     /// The samples of the chord `a`-`b`, both ends included.
     fn samples(&self, a: Point2, b: Point2) -> Vec<Point2> {
         let len = (b.x - a.x).hypot(b.y - a.y);
@@ -118,16 +151,19 @@ impl Proof<'_> {
     /// first test that fails.
     ///
     /// Open ground is only what is proved open: the air of the region, or a
-    /// sample within the swath of a cut already made. A centre inside the
-    /// stock near its edge is not open by itself: with no cut made beside
-    /// it, its tool cuts more than the swath into uncut stock (`UNCUT_STOCK`).
+    /// sample within the swath of a cut already made. A centre near the
+    /// stock edge, inside or in the edge band outside, is not open by
+    /// itself: with no cut made beside it, its tool cuts more than the
+    /// swath into uncut stock (`UNCUT_STOCK`). The swath test bounds what
+    /// the disc cuts beyond the disc of a made cut, whatever stock is
+    /// there, so it reads a centre in the band as any other centre.
     pub(super) fn chord(&self, a: Point2, b: Point2, skip: Option<usize>) -> Result<(), LiftReason> {
         if near(a, b) {
             return Ok(());
         }
         let pts = self.samples(a, b);
         let air = self.p.air();
-        if !pts.iter().all(|&q| in_area(self.p.center(), q) || in_area(air, q)) {
+        if !pts.iter().all(|&q| in_area(self.p.center(), q) || in_area(air, q) || self.in_band(q)) {
             let keep = self.p.keep_out();
             let fixture = !keep.is_empty() && pts.iter().any(|&q| in_area(keep, q) || to_loops(q, keep.loops()) <= self.r);
             return Err(LiftReason(if fixture { HITS_FIXTURE } else { CUTS_PART }));
@@ -177,6 +213,7 @@ fn stay_path(from: &Cut, to: &Cut, p: &PlanarRegion, level: Level<'_>) -> Result
         planned: level.planned().iter().map(Line::of).collect(),
         links: level.links().iter().map(|l| Line::path(l.clone())).collect(),
         ends: (a, b),
+        room: OnceCell::new(),
     };
     let why = match proof.chord(a, b, None) {
         Ok(()) => return Ok(vec![a, b]),

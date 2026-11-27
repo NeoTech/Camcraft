@@ -96,7 +96,9 @@ fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
 /// stay are named in `docs/decisions/4177-kernel-order-link.md`: Outside
 /// starts at the stock edge, and the link from one piece there to the next
 /// runs over the uncut strip along the edge (#4234: that strip is not open
-/// ground until a cut clears it).
+/// ground until a cut clears it). A link may go out through the edge band
+/// into the air (#4241), but the way back in to the next piece's start runs
+/// over stock that no cut has cleared: the counts do not change.
 const LIFTS: [(&str, &str, usize); 4] = [
     ("disc", "Inside", 0),
     ("disc", "Outside", 13),
