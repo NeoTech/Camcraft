@@ -74,7 +74,8 @@ fn enclosed(sel: &Selection) -> Result<Region, Refusal> {
 /// then sweeps past every stock edge and corner. Its loops on the stock
 /// outline are the stock edges, each other loop is a part wall. The air is
 /// the band of one tool radius outside the stock where the disc does not
-/// touch it. An `Inside` region is a closed area: its loops are all part
+/// touch it, less the part zone (the part grown by the tool radius plus
+/// `leave`: a part can reach out of the stock, #4241). An `Inside` region is a closed area: its loops are all part
 /// walls and it has no air. A pure function of its inputs.
 pub fn region(
     sel: &Selection,
@@ -107,6 +108,7 @@ pub fn region(
     {
         return Err(Refusal::new(Stage::Region, OFF_STOCK).fix("pick a selection that meets the stock"));
     }
+    let mut part_zone = Region::empty();
     let (center, air) = match material {
         MaterialSide::Inside => (geo(area.offset(-d))?, Region::empty()),
         MaterialSide::Outside => {
@@ -117,7 +119,10 @@ pub fn region(
                 return Err(Refusal::new(Stage::Region, EMPTY_MATERIAL));
             }
             let air = geo(geo(s.offset(2.0 * r))?.difference(&geo(s.offset(r))?))?;
-            (geo(s.difference(&geo(area.offset(d))?))?, geo(air.difference(&keep))?)
+            let zone = geo(area.offset(d))?;
+            let air = geo(geo(air.difference(&keep))?.difference(&zone))?;
+            part_zone = zone;
+            (geo(s.difference(&part_zone))?, air)
         }
     };
     let mut center = if keep.is_empty() { center } else { geo(center.difference(&keep))? };
@@ -136,5 +141,5 @@ pub fn region(
         if on_stock { edge.push(l.clone()) } else { walls.push(l.clone()) }
     }
     let keep_out = bounds.keep_out().clone();
-    PlanarRegion::new(plane, center, material, walls, edge, air, keep_out, tool).map(KernelRegion::Planar)
+    PlanarRegion::new(plane, center, material, walls, edge, air, keep_out, tool)?.with_part_zone(part_zone).map(KernelRegion::Planar)
 }

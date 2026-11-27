@@ -118,6 +118,9 @@ pub struct PlanarRegion {
     air: Region,
     keep_out: Region,
     tool: ToolShape,
+    /// The part grown by the tool radius plus the stock to leave (an
+    /// `Outside` region of [`region`](crate::region()) only; empty else).
+    part_zone: Region,
 }
 
 /// Refusal reason: an empty cutter-centre area (the tool does not fit).
@@ -168,7 +171,18 @@ impl PlanarRegion {
         if let Some(p) = partition(&center, &part_walls, &stock_edge) {
             return Err(Refusal::new(Stage::Region, NOT_A_PARTITION).at(p));
         }
-        Ok(Self { plane, center, material, part_walls, stock_edge, air, keep_out, tool })
+        Ok(Self { plane, center, material, part_walls, stock_edge, air, keep_out, tool, part_zone: Region::empty() })
+    }
+    /// This region with its part zone: the part grown by the tool radius
+    /// plus the stock to leave, where no tool centre may stand. The region
+    /// builder sets it for an `Outside` region; the link stage reads it for
+    /// a link outside the stock (#4241). Refused for a point that is not
+    /// finite.
+    pub(crate) fn with_part_zone(self, part_zone: Region) -> Result<Self, Refusal> {
+        if !region_finite(&part_zone) {
+            return Err(Refusal::new(Stage::Region, NOT_FINITE));
+        }
+        Ok(Self { part_zone, ..self })
     }
     /// The work plane whose axes the 2D coordinates of the region use.
     #[must_use]
@@ -202,5 +216,11 @@ impl PlanarRegion {
     #[must_use]
     pub fn tool(&self) -> ToolShape {
         self.tool
+    }
+    /// The part zone: empty unless the region builder made an `Outside`
+    /// region.
+    #[must_use]
+    pub fn part_zone(&self) -> &Region {
+        &self.part_zone
     }
 }

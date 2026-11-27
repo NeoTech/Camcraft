@@ -1,10 +1,22 @@
 //! Stage 3, Load control (K3, #4026): the load choice, the readings and the
 //! over-limit record, and the stock reader. The `Controlled` constructor
 //! checks law 6: each cut read above the limit is named, and each name
-//! agrees with a reading. K3 adds `control()` and the engagement law.
+//! agrees with a reading. The planner is [`LoadStage`] in `load/` (#4026):
+//! the engagement law (`law.rs`), constant engagement on rings
+//! (`rings.rs`) and trochoidal loops (`trochoid.rs`).
 //! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
 //! "Stage 3: Load control"; radial engagement as in Stori & Wright (2000)
 //! and Held & Spielberger (2009).
+
+mod law;
+mod rings;
+mod stage;
+mod trochoid;
+
+pub use law::NO_RASTER;
+pub use rings::{AT_FLOOR, LOAD_GEOMETRY, NOT_A_RING, NOT_FIXED, TOO_MANY_PASSES};
+pub use stage::{DEFAULT_LIMIT, FRESH_CUT, LOAD_NOT_PLANAR, LoadStage, NO_CONTROL, STOCK_REACH_ELSEWHERE};
+pub use trochoid::{LOOP_LEAVES, LOOPS_OVER, NO_ROOM, NOT_MARKED};
 
 use crate::frame::{Positive, Spot};
 use crate::order::OrderedSet;

@@ -103,8 +103,11 @@ fn k4_order_obeys_l3_with_the_ring_planner() {
 /// crosses the strips between them, and Outside must cross the rings still
 /// planned between the wall and the island. The bands round a part,
 /// Outside (and Auto), lift between the pieces at the stock edge: the
-/// strip along the edge is uncut stock until a cut clears it (#4234), and
-/// the link may not leave the stock into the air there.
+/// strip along the edge is uncut stock until a cut clears it (#4234). A
+/// link may leave the stock through the edge band into the air (#4241),
+/// but the way back in to the start of the next piece runs over stock that
+/// no cut has cleared, so no path is proved there
+/// (`docs/decisions/4241-kernel-link-edge-band.md`).
 const LIFTS: [(&str, [u32; 3]); 4] = [
     ("disc pocket", [0, 0, 0]),
     ("disc, material round it", [13, 0, 13]),
