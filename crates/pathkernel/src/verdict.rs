@@ -1,6 +1,6 @@
 //! The common result types of the stages: a refusal, a fallback, a gap and
 //! the verdict that carries them (record "Common result types").
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`;
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`);
 //! the Prime Directive of AGENTS.md (a result is correct or visibly refused).
 
 use crate::{Point2, finite};
@@ -30,6 +30,7 @@ pub struct Refusal {
     reason: &'static str,
     at: Option<Point2>,
     fix: Option<&'static str>,
+    tried: Vec<&'static str>,
 }
 
 impl Refusal {
@@ -38,7 +39,7 @@ impl Refusal {
     #[must_use]
     pub fn new(stage: Stage, reason: &'static str) -> Self {
         let reason = if reason.trim().is_empty() { NO_REASON } else { reason };
-        Self { stage, reason, at: None, fix: None }
+        Self { stage, reason, at: None, fix: None, tried: Vec::new() }
     }
 
     /// The refusal at one spot. A spot that is not finite is dropped: the
@@ -53,6 +54,20 @@ impl Refusal {
     #[must_use]
     pub fn fix(mut self, fix: &'static str) -> Self {
         self.fix = (!fix.trim().is_empty()).then_some(fix);
+        self
+    }
+
+    /// The refusal with the reasons of the tries that failed before it
+    /// (#4407): a stage that tries several ways and refuses at the end
+    /// names why each try was refused. A blank or repeated reason is
+    /// dropped.
+    #[must_use]
+    pub fn after(mut self, tried: &[&'static str]) -> Self {
+        for t in tried {
+            if !t.trim().is_empty() && !self.tried.contains(t) {
+                self.tried.push(t);
+            }
+        }
         self
     }
     #[must_use]
@@ -71,6 +86,11 @@ impl Refusal {
     pub fn fix_text(&self) -> Option<&'static str> {
         self.fix
     }
+    /// The reasons of the tries that were refused before this refusal.
+    #[must_use]
+    pub fn tried(&self) -> &[&'static str] {
+        &self.tried
+    }
 }
 
 impl std::fmt::Display for Refusal {
@@ -78,6 +98,9 @@ impl std::fmt::Display for Refusal {
         write!(f, "{:?}: {}", self.stage, self.reason)?;
         if let Some(fix) = self.fix {
             write!(f, " ({fix})")?;
+        }
+        if !self.tried.is_empty() {
+            write!(f, "; tries refused: {}", self.tried.join("; "))?;
         }
         Ok(())
     }

@@ -45,13 +45,14 @@ pub(super) fn helix(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
                 let n = if ccw { Point2::new(-u.y, u.x) } else { Point2::new(u.y, -u.x) };
                 let c = Point2::new(s.x + radius * n.x, s.y + radius * n.y);
                 let ring = geo(arc_points(c, s, if ccw { TAU } else { -TAU }, tol))?;
-                if !ctx.holds(&ring) {
+                if !ctx.holds(&ring)? {
                     continue;
                 }
-                let Some(descent) = helix_points(&ring, ctx.stage.heights().start(), h, TAU * radius * tan) else { continue };
+                let Some(descent) = helix_points(&ring, ctx.stage.heights().start(), h, TAU * radius * tan)? else { continue };
                 let pitch = Positive::new(Stage::Entry, TAU * radius * tan)?;
                 let proof = Proof::IntoMaterial { area: disc(c, radius + ROOM_TOL)?, angle_or_pitch: pitch };
-                if let Ok(e) = Entry::new(EntryKind::Helix, vec![ctx.above(s)?], descent, proof, ctx.choice, ctx.tool()) {
+                let made = Entry::new(EntryKind::Helix, vec![ctx.above(s)?], descent, proof, ctx.choice, ctx.tool());
+                if let Some(e) = ctx.checked(EntryKind::Helix, made) {
                     if radius < asked {
                         ctx.note(format!("entry: the helix fits only under its radius - flown at {radius:.3} mm"))?;
                     }
@@ -66,17 +67,18 @@ pub(super) fn helix(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> 
 
 /// The points of a helix on `ring` (a full turn from the cut start back to
 /// it) from depth `top` down by `h` at `pitch` per turn; it ends on the cut
-/// start. `None` above the caps.
-fn helix_points(ring: &[Point2], top: f64, h: f64, pitch: f64) -> Option<Vec<PlanePoint>> {
-    let per = ring.len().checked_sub(1).filter(|n| *n > 0)?;
+/// start. `None` above the caps (the helix does not fit); a point that
+/// is not finite is refused by name (#4407), not taken as "does not fit".
+fn helix_points(ring: &[Point2], top: f64, h: f64, pitch: f64) -> Result<Option<Vec<PlanePoint>>, crate::Refusal> {
+    let Some(per) = ring.len().checked_sub(1).filter(|n| *n > 0) else { return Ok(None) };
     let turns = (h / pitch).ceil().max(1.0);
     if !(turns.is_finite() && turns <= MAX_HELIX_TURNS) {
-        return None;
+        return Ok(None);
     }
     // `turns` is a whole number in [1, MAX_HELIX_TURNS]: the cast is exact.
-    let total = (turns as usize).checked_mul(per).filter(|t| *t <= MAX_DESCENT_POINTS)?;
+    let Some(total) = (turns as usize).checked_mul(per).filter(|t| *t <= MAX_DESCENT_POINTS) else { return Ok(None) };
     let step = h / total as f64;
-    (1..=total).map(|j| PlanePoint::new(ring[j % per], top - step * j as f64).ok()).collect()
+    (1..=total).map(|j| PlanePoint::new(ring[j % per], top - step * j as f64)).collect::<Result<Vec<_>, _>>().map(Some)
 }
 
 /// The ramp entry along the first cut, if one fits.
@@ -85,7 +87,7 @@ pub(super) fn ramp(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> {
     let len: f64 = path.windows(2).map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y)).sum();
     let deg = ctx.choice.material().angle();
     let drop = len * deg.to_radians().tan();
-    if !(drop.is_finite() && drop > KERNEL_TOL) || !ctx.holds(&path) {
+    if !(drop.is_finite() && drop > KERNEL_TOL) || !ctx.holds(&path)? {
         return Ok(None);
     }
     let closed = ctx.cut.curve().closed();
@@ -114,7 +116,8 @@ pub(super) fn ramp(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal> {
     }
     let area = Area::new(geo(Region::sweep(&[path], ROOM_TOL))?)?;
     let proof = Proof::IntoMaterial { area, angle_or_pitch: Positive::new(Stage::Entry, deg)? };
-    Ok(Entry::new(EntryKind::Ramp, vec![ctx.above(ctx.start.at())?], descent, proof, ctx.choice, ctx.tool()).ok())
+    let made = Entry::new(EntryKind::Ramp, vec![ctx.above(ctx.start.at())?], descent, proof, ctx.choice, ctx.tool());
+    Ok(ctx.checked(EntryKind::Ramp, made))
 }
 
 /// The plunge at the cut start: only when the user asked for it and the
@@ -125,5 +128,6 @@ pub(super) fn plunge(ctx: &mut Ctx<'_>) -> Result<Option<Entry>, crate::Refusal>
     }
     let s = ctx.start.at();
     let proof = Proof::IntoMaterial { area: disc(s, ROOM_TOL)?, angle_or_pitch: Positive::new(Stage::Entry, 90.0)? };
-    Ok(Entry::new(EntryKind::Plunge, vec![ctx.above(s)?], vec![ctx.start], proof, ctx.choice, ctx.tool()).ok())
+    let made = Entry::new(EntryKind::Plunge, vec![ctx.above(s)?], vec![ctx.start], proof, ctx.choice, ctx.tool());
+    Ok(ctx.checked(EntryKind::Plunge, made))
 }

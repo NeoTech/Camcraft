@@ -2,13 +2,13 @@
 //! the legal room of the tool centre at the depth of the cut, the air zone
 //! where a descent stays clear of the stock by the approach distance, and
 //! the context of one entry.
-//! Provenance: our own design record `docs/decisions/4024-path-kernel-design.md`
+//! Provenance: our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 6: Entry and exit" and `docs/decisions/4025-kernel-region.md`
 //! (the air band, "Yes, to the edge", a clamp is a keep-out); the
 //! cutter-centre offsets as in Held (1991).
 
 use super::proof::Area;
-use super::stage::{ENTRY_GEOMETRY, EntryStage, NOT_PLANAR};
+use super::stage::{ENTRY_GEOMETRY, ENTRY_GEOMETRY_INVALID, EntryStage, NOT_PLANAR};
 use super::EntryChoice;
 use crate::frame::{PlanePoint, ToolShape};
 use crate::plan::Cut;
@@ -21,8 +21,8 @@ use crate::{KERNEL_TOL, Point2, Region};
 /// cutter-centre area is in the room within it.
 pub const ROOM_TOL: f64 = 0.005;
 
-pub(super) fn geo<T, E>(r: Result<T, E>) -> Result<T, Refusal> {
-    r.map_err(|_| Refusal::new(Stage::Entry, ENTRY_GEOMETRY))
+pub(super) fn geo<T>(r: Result<T, camcraft_geometry::geo2d::GeoError>) -> Result<T, Refusal> {
+    r.map_err(|e| crate::geo_refusal(Stage::Entry, &e, ENTRY_GEOMETRY, ENTRY_GEOMETRY_INVALID))
 }
 
 pub(super) fn planar(r: &KernelRegion) -> Result<&PlanarRegion, Refusal> {
@@ -121,6 +121,10 @@ pub(super) struct Ctx<'a> {
     pub legal: Region,
     pub legal_area: Area,
     pub notes: Vec<Note>,
+    /// The tries that a checked constructor refused, with the kind and the
+    /// named reason (#4407): never dropped, they go to the notes of the
+    /// entry or to the final refusal.
+    pub rejected: Vec<(super::EntryKind, &'static str)>,
 }
 
 /// Refusal reason: a first cut with no direction at its start.
@@ -138,7 +142,7 @@ impl<'a> Ctx<'a> {
             .ok_or_else(|| Refusal::new(Stage::Entry, NO_DIRECTION).at(start.at()))?;
         let legal = legal_room(region)?;
         let legal_area = Area::new(legal.clone())?;
-        Ok(Self { stage, region, choice, cleared, cut, start, dir, legal, legal_area, notes: Vec::new() })
+        Ok(Self { stage, region, choice, cleared, cut, start, dir, legal, legal_area, notes: Vec::new(), rejected: Vec::new() })
     }
     pub fn tool(&self) -> ToolShape {
         self.region.tool()
@@ -158,9 +162,10 @@ impl<'a> Ctx<'a> {
     pub fn at_depth(&self, at: Point2) -> Result<PlanePoint, Refusal> {
         PlanePoint::new(at, self.depth())
     }
-    /// True when no stretch of `path` leaves the legal room.
-    pub fn holds(&self, path: &[Point2]) -> bool {
-        matches!(self.legal.holds_path(path), Ok(true))
+    /// True when no stretch of `path` leaves the legal room. A geometry
+    /// error is a refusal, not a "does not fit" (#4407).
+    pub fn holds(&self, path: &[Point2]) -> Result<bool, Refusal> {
+        geo(self.legal.holds_path(path))
     }
     /// The straight lead at depth from `from` to the cut start, or none
     /// when `from` is the cut start; `Err` when it leaves the legal room.
@@ -175,5 +180,19 @@ impl<'a> Ctx<'a> {
     pub fn note(&mut self, text: String) -> Result<(), Refusal> {
         self.notes.push(Note::new(Stage::Entry, text)?);
         Ok(())
+    }
+    /// The value of a checked constructor of a `kind` try, or `None` with
+    /// its named reason kept in [`Ctx::rejected`] (#4407): the stage may
+    /// try the next place or kind, but the reason is never dropped.
+    pub fn checked<T>(&mut self, kind: super::EntryKind, made: Result<T, Refusal>) -> Option<T> {
+        match made {
+            Ok(v) => Some(v),
+            Err(r) => {
+                if !self.rejected.contains(&(kind, r.reason())) {
+                    self.rejected.push((kind, r.reason()));
+                }
+                None
+            }
+        }
     }
 }
