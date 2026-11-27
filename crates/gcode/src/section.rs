@@ -79,6 +79,7 @@ impl SectionBuilder {
         ParsedSection {
             index: self.index,
             tool_number: self.tool_number,
+            tool_name: None,
             work_offset: self.work_offset,
             length_offset: self.length_offset,
             spindle_rpm: self.spindle_rpm,

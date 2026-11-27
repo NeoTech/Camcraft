@@ -57,13 +57,15 @@ mod list_rows;
 pub(crate) mod model;
 pub(crate) mod preview;
 mod rail;
+pub(crate) mod recipes_actions;
+mod recipes_derived;
 mod recipes_fill;
 pub(crate) mod recipes_tab;
 pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
 pub(crate) mod thumbs;
-mod tool_tab;
+pub(crate) mod tool_tab;
 
 use egui::{Id, Ui, Window};
 

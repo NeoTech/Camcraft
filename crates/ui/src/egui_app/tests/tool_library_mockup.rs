@@ -7,7 +7,6 @@
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 //! Provenance: our own structural tests; no HSMWorks material involved.
 
-use camcraft_app::units::Unit;
 use egui::accesskit::Role;
 
 use super::tool_library_editor::{H, click_window_button, library_window, open_in_window};
@@ -61,7 +60,7 @@ fn the_preview_toggles_hide_the_dimension_lines_and_the_holder() {
     assert!(face(&h).dims && face(&h).holder, "both toggles start on");
     assert!(has(&h, "dimensions in") && has(&h, "holder Ø"), "the side view dimensions the holder: {:?}", painted_texts(&h));
     let done = h.state().state.history.done_len();
-    library_window(&h).get_by_label(preview::HOLDER).click();
+    library_window(&h).get_by_role_and_label(egui::accesskit::Role::CheckBox, preview::HOLDER).click();
     h.run_steps(2);
     assert!(!face(&h).holder, "the Holder toggle is off");
     assert!(has(&h, "dimensions in") && !has(&h, "holder Ø"), "no holder, no holder dimension");
@@ -155,7 +154,8 @@ fn the_window_shows_the_recipes_table_and_the_preview_side_by_side() {
     click_window_button(&mut h, recipes_tab::TAB);
     let win = library_window(&h).rect();
     assert!(win.width() >= dialog::WIDE_W - 1.0, "the window {win:?} opens {} wide", dialog::WIDE_W);
-    let fz = if h.state().state.units() == Unit::Inches { "fz (in)" } else { "fz (mm)" };
+    // #4337: Stepover is the table's last column of numbers.
+    let fz = "Stepover";
     let node = library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
     let (head, view) = (rect(fz), rect("3D"));
@@ -196,7 +196,7 @@ fn the_side_view_draws_the_tool_on_a_960_px_screen() {
     let mut h = narrow_side();
     let win = library_window(&h).rect();
     assert!(win.width() < dialog::WIDE_W, "the window {win:?} is narrow");
-    assert!(win.expand(1.0).contains_rect(library_window(&h).get_by_label(preview::HOLDER).rect()), "the toggles stay in the window");
+    assert!(win.expand(1.0).contains_rect(library_window(&h).get_by_role_and_label(egui::accesskit::Role::CheckBox, preview::HOLDER).rect()), "the toggles stay in the window");
     draws(&mut h);
     // The layout rule: the rail folds, and the preview keeps its least width.
     assert!(dialog::rail_w(win.width()) < dialog::rail_w(dialog::WIDE_W), "the rail folds on a narrow window");

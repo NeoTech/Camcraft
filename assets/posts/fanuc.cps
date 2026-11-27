@@ -809,7 +809,10 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", wcsWord, "G40", "G49", "G80"]);
+  // #4346: the control can keep G18 / G19 or G95 from an earlier program
+  // or MDI (B-64604EN-2, the power-on plane and feed mode) - state both.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
+  planeG = 17;
   uprightAfterTilt();
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);

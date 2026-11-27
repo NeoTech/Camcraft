@@ -59,6 +59,26 @@ pub const PICK_HALO: &str = "pick_halo";
 pub const PLATE_HOLE: &str = "plate_hole";
 pub const PLATE_DOWEL: &str = "plate_dowel";
 pub const GCODE_LINE: &str = "gcode_line";
+pub const TOOL_GROUND: &str = "tool_ground";
+pub const TOOL_AXIS: &str = "tool_axis";
+pub const TOOL_GRID: &str = "tool_grid";
+pub const TOOL_FLUTE: &str = "tool_flute";
+pub const TOOL_SHANK: &str = "tool_shank";
+pub const TOOL_BODY: &str = "tool_body";
+pub const TOOL_EDGE: &str = "tool_edge";
+pub const TOOL_HOLDER: &str = "tool_holder";
+pub const TOOL_NOTE: &str = "tool_note";
+pub const TOOL_DIM: &str = "tool_dim";
+pub const THUMB_FLUTE: &str = "thumb_flute";
+pub const BAD_INK: &str = "bad_ink";
+pub const WARN_INK: &str = "warn_ink";
+pub const MOUNT_AXIS: &str = "mount_axis";
+pub const MOUNT_RADIAL: &str = "mount_radial";
+pub const MOUNT_TIP: &str = "mount_tip";
+pub const MOUNT_ORIGIN: &str = "mount_origin";
+pub const MOUNT_HINT: &str = "mount_hint";
+pub const CLOSE_HOVER: &str = "close_hover";
+pub const CLOSE_INK: &str = "close_ink";
 pub const RIBBON_TAB_H: &str = "ribbon_tab_h";
 pub const RIBBON_CELL_TOP_GAP: &str = "ribbon_cell_top_gap";
 pub const RIBBON_CAPTION_GAP: &str = "ribbon_caption_gap";
@@ -101,6 +121,10 @@ pub const COLOR_NAMES: &[&str] = &[
     MARKER_RING, MARKER_DOT, AXIS_X, AXIS_Y, AXIS_Z, VIEWPORT_HOVER,
     OVERLAY_PANEL, OVERLAY_EDGE, OVERLAY_TEXT, OVERLAY_TRACK, DROP_VEIL,
     EMPTY_HINT, PICK_HALO, PLATE_HOLE, PLATE_DOWEL, GCODE_LINE,
+    TOOL_GROUND, TOOL_AXIS, TOOL_GRID, TOOL_FLUTE, TOOL_SHANK, TOOL_BODY,
+    TOOL_EDGE, TOOL_HOLDER, TOOL_NOTE, TOOL_DIM, THUMB_FLUTE, BAD_INK,
+    WARN_INK, MOUNT_AXIS, MOUNT_RADIAL, MOUNT_TIP, MOUNT_ORIGIN, MOUNT_HINT,
+    CLOSE_HOVER, CLOSE_INK,
 ];
 
 /// The geometry vocabulary (every override is clamped through the

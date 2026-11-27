@@ -271,3 +271,21 @@ fn chip_break_controls_are_conditional_and_apply_and_undo_all_values() {
     state.drain_actions();
     assert_eq!(dips(harness.state()), original, "Undo restores all three original values");
 }
+
+/// #1122: the Spring passes row draws through the form seam, so its
+/// number field carries the row's name for a screen reader, as the
+/// thread milling page's row does.
+#[test]
+fn the_spring_passes_field_is_named_by_its_row() {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::NodeT;
+    let mut h = page(opened());
+    h.run();
+    let named = h.root().children_recursive().any(|n| {
+        let node = n.accesskit_node();
+        node.role() == Role::SpinButton
+            && node.label().as_deref() == Some("Spring passes")
+            && node.labelled_by().next().is_some()
+    });
+    assert!(named, "the Spring passes field is labelled by its row");
+}

@@ -16,6 +16,8 @@
 //! the same eye, still passes `contrast::readable` (WCAG 2.1). A mode
 //! that fails is refused at the pick, never rendered. `Off` is the
 //! house palette byte for byte - the default changes no pixel.
+//! The palette numbers are in the token table (`theme/verdict.rs`, #1120);
+//! this module keeps the types, the gate and the maths.
 //! Provenance: our own module and numbers; the simulation and the
 //! metric are the published models cited in `cvd`; the remap's shape
 //! (meaning on the blue-yellow and lightness axes for the red-green
@@ -78,16 +80,6 @@ pub struct TextInks {
     pub missing: Color32,
 }
 
-impl TextInks {
-    /// The house inks, exactly what the pages drew before: egui's own
-    /// dark-visuals warning (the theme builds on `Visuals::dark()` and
-    /// never respells it), the page red and the chip grey.
-    pub const HOUSE: TextInks = TextInks {
-        warn: Color32::from_rgb(255, 143, 0),
-        error: Color32::from_rgb(0xFF, 0x59, 0x59),
-        missing: Color32::from_rgb(0xB8, 0xB8, 0xC8),
-    };
-}
 
 /// The unselected edge inks the selection must stand off from: the
 /// shaded-mode edge and the wireframe line (viewport `fs_edge`).
@@ -95,87 +87,6 @@ const EDGE_DARK: [f32; 3] = [0.06, 0.07, 0.09];
 pub(super) const EDGE_WIRE: [f32; 3] = [0.62, 0.66, 0.72];
 
 impl Semantic {
-    /// The house palette, exactly what the shell drew before M13.4
-    /// (the overlay's own consts and the shaders' literals).
-    pub const OFF: Semantic = Semantic {
-        clean: [0.42, 0.50, 0.62],
-        rest: [0.98, 0.72, 0.20],
-        gouge: [0.90, 0.18, 0.14],
-        unjudged: [0.45, 0.46, 0.48],
-        feed: crate::interact::FEED_RGB,
-        rapid: crate::interact::RAPID_RGB,
-        plunge: crate::interact::PLUNGE_RGB,
-        select_hot: [0.98, 0.72, 0.20],
-        select_warm: [0.55, 0.35, 0.05],
-        bound_include: [0.20, 0.75, 0.95],
-        bound_exclude: [0.92, 0.25, 0.60],
-        bound_open: [0.98, 0.62, 0.12],
-        text_dark: TextInks::HOUSE,
-        text_light: TextInks::HOUSE,
-    };
-
-    /// Protan and deutan share the red-green confusion line, so one
-    /// remap serves both (each is still gated under its own eye):
-    /// rest goes lemon, gouge a dark oxblood, feed yellow against the
-    /// unchanged blue rapid, plunge a dark burnt orange - lightness
-    /// does the work the lost red-green axis did - and the unjudged
-    /// grey lifts clear of the steel.
-    pub const RED_GREEN: Semantic = Semantic {
-        clean: [0.42, 0.50, 0.62],
-        rest: [0.98, 0.85, 0.20],
-        gouge: [0.75, 0.10, 0.10],
-        unjudged: [0.80, 0.80, 0.80],
-        feed: [0.95, 0.85, 0.25],
-        rapid: [0.30, 0.50, 0.95],
-        plunge: [0.75, 0.30, 0.00],
-        select_hot: [0.98, 0.85, 0.20],
-        select_warm: [0.55, 0.48, 0.10],
-        bound_include: [0.25, 0.45, 1.00],
-        bound_exclude: [0.95, 0.90, 0.30],
-        bound_open: [0.95, 0.95, 0.95],
-        // Warning on the yellow end, refusal on the violet end of the
-        // surviving blue-yellow axis; the missing chip reads as a warning.
-        text_dark: TextInks {
-            warn: Color32::from_rgb(255, 230, 51),
-            error: Color32::from_rgb(204, 140, 255),
-            missing: Color32::from_rgb(255, 230, 51),
-        },
-        text_light: TextInks {
-            warn: Color32::from_rgb(140, 77, 0),
-            error: Color32::from_rgb(140, 0, 217),
-            missing: Color32::from_rgb(140, 77, 0),
-        },
-    };
-
-    /// Tritan loses blue-yellow: rest moves to pink (red-cyan survives),
-    /// gouge to a deeper red, rapid to a dark slate so lightness parts
-    /// it from the green feed.
-    pub const TRITAN: Semantic = Semantic {
-        clean: [0.42, 0.50, 0.62],
-        rest: [1.00, 0.45, 0.70],
-        gouge: [0.80, 0.05, 0.05],
-        unjudged: [0.80, 0.80, 0.80],
-        feed: crate::interact::FEED_RGB,
-        rapid: [0.20, 0.40, 0.60],
-        plunge: crate::interact::PLUNGE_RGB,
-        select_hot: [1.00, 0.45, 0.70],
-        select_warm: [0.56, 0.25, 0.40],
-        bound_include: [0.10, 0.70, 0.75],
-        bound_exclude: [0.90, 0.15, 0.20],
-        bound_open: [0.95, 0.95, 0.95],
-        // Red-cyan survives: warning goes cyan, refusal stays red.
-        text_dark: TextInks {
-            warn: Color32::from_rgb(77, 217, 217),
-            error: Color32::from_rgb(255, 128, 128),
-            missing: Color32::from_rgb(77, 217, 217),
-        },
-        text_light: TextInks {
-            warn: Color32::from_rgb(0, 107, 107),
-            error: Color32::from_rgb(179, 0, 26),
-            missing: Color32::from_rgb(0, 107, 107),
-        },
-    };
-
     /// The pairs whose difference IS the message (the boundary roles since
 /// M11.5's pick UX), named for the gate's
     /// refusal sentence.

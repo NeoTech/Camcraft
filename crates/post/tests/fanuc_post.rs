@@ -12,6 +12,8 @@
 //! arithmetic, #377), assets/posts/fanuc.cps.
 
 mod recorded;
+#[path = "fanuc_post/preamble.rs"]
+mod preamble; // #4346: G17 and G94 in the Fanuc-family preamble
 // #1357: the legacy goldens dressed the way app's tests post them (a
 // cycle's own chain feed; a real program's tool and spindle).
 #[path = "../../app/tests/common/legacy_program.rs"]

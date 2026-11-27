@@ -14,9 +14,10 @@
 //! plain numbers (a `[u8; 3]` const, a table of tuples) is not seen; the
 //! #1120 family PRs move those by name.
 //!
-//! The permanent rows are the token tables themselves, the contrast
-//! maths and a colour that only measures text. Each other row is a site
-//! family that a later #1120 PR moves to tokens.
+//! The permanent rows are the token tables themselves (the theme columns
+//! and the verdict palettes), the contrast maths and a colour that only
+//! measures text. Each row is permanent: the draw sites of #1120 all
+//! read tokens, so a new row needs a reason that is not a theme choice.
 //! Provenance: our own test over our own source tree.
 //!
 //! A module of the `theme_files` suite (#3187: no new test binary). Its
@@ -28,26 +29,14 @@ use std::path::{Path, PathBuf};
 use super::colour_scan::count;
 
 /// `(path under crates/ui/src, literal count, why)`. Keep it sorted by
-/// path. A `keep:` row is not a colour choice for a theme; a `move`
-/// row names the #1120 family PR that moves it to tokens and lowers it.
+/// path. Each row is a `keep:` row: a colour that is not a choice for
+/// a theme, with the reason.
 #[rustfmt::skip]
 const ALLOWED: &[(&str, usize, &str)] = &[
-    ("egui_app/colorvision.rs", 15, "move (#1120 verdict palettes): into the token table, values unchanged; the colour-vision maths stays"),
     ("egui_app/contrast.rs", 4, "keep: contrast maths (black or white text on a fill)"),
-    ("egui_app/error_text.rs", 1, "move (#1120 status inks): the red fallback of an error line"),
-    ("egui_app/theme/tables.rs", 82, "keep: the token tables themselves"),
-    ("egui_app/tool_body_lathe_page.rs", 3, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_body_page.rs", 4, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_holder_picker.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_library_dialog/assembly_group.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_library_dialog/holder_view.rs", 5, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_library_dialog/side_view.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_library_dialog/thumbs.rs", 2, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_model_view.rs", 1, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_preview.rs", 8, "move (#1120 tool drawings): tool, holder and profile previews"),
-    ("egui_app/tool_profile_page.rs", 10, "move (#1120 tool drawings): tool, holder and profile previews"),
+    ("egui_app/theme/tables.rs", 122, "keep: the token tables themselves"),
+    ("egui_app/theme/verdict.rs", 15, "keep: the verdict palette table (#1120: ours, held to the colour-vision gate, no theme key)"),
     ("egui_app/viewport_layout.rs", 1, "keep: the colour only measures text, it is not drawn"),
-    ("egui_app/window_chrome.rs", 2, "move (#1120 window chrome): the close button hover and its ink"),
 ];
 
 fn src_root() -> PathBuf {

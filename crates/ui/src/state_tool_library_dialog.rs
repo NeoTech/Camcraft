@@ -62,9 +62,9 @@ pub enum ToolEditorTab {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreviewMode {
     /// The orbitable 3D model: the imported body, or the revolved profile.
-    #[default]
     Model,
-    /// The to-scale side view with dimension lines.
+    /// The to-scale side view with dimension lines (#4336: the default).
+    #[default]
     Side,
 }
 
@@ -181,6 +181,30 @@ pub struct ToolLibraryView {
     pub component_edit: Option<ComponentDraft>,
     /// #3898: the component stack draft of the tool open in the editor.
     pub stack: Option<StackDraft>,
+    /// #4337: the Recipes tab's derived lines.
+    pub recipes: RecipesView,
+}
+
+/// #4337: the Recipes tab's derived lines (surface speed and chip load of
+/// each row), kept with their input: a still frame computes nothing (the
+/// frame-cost rule, #2238); `computes` counts the misses.
+#[derive(Clone, Debug, Default)]
+pub struct RecipesView {
+    pub derived: Option<(Vec<DerivedKey>, Vec<String>)>,
+    pub computes: u64,
+}
+
+/// #4337: the input of the Recipes tab's derived line: the row (by its
+/// material), the tool's diameter and flute count, the row's rpm and
+/// feed, the display unit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedKey {
+    pub material: Option<camcraft_app::tools::WorkMaterial>,
+    pub diameter: f64,
+    pub rpm: f64,
+    pub feed: f64,
+    pub flutes: Option<u32>,
+    pub unit: camcraft_app::units::Unit,
 }
 
 impl ToolLibraryView {

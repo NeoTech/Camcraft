@@ -6,7 +6,8 @@
 //! HSMWorks material involved.
 
 use super::page_layout_windows::assert_window_layout;
-use crate::egui_app::tool_library_dialog::recipes_tab::{MARK, SUGGEST, TAB};
+use crate::egui_app::tool_library_dialog::recipes_actions::{ADD, COPY, SUGGEST};
+use crate::egui_app::tool_library_dialog::recipes_tab::TAB;
 use crate::egui_app::tool_library_dialog::{HOLDERS_PAGE, TOOLS_PAGE, categories, frame, holder_view, holders, preview};
 use super::*;
 use egui_kittest::kittest::NodeT;
@@ -113,8 +114,9 @@ fn the_tool_library_window_closes_and_opens_again() {
 /// #3893: a tool open in the window. The list folds into a rail on the
 /// left; the editor stands right of it: (#4334) the header with the way
 /// back and the name, the Tool and Details tabs, the rows, then the footer
-/// with Duplicate, Cancel and Apply (at the right). #3897: the preview (its 3D /
-/// Side toggle and the Dimensions and Holder toggles) stands right of the
+/// with Duplicate, Cancel and Apply (at the right). #4336: the Tool tab's
+/// rows and groups in the mock-up's order. #3897: the preview (its Side /
+/// 3D toggle and the Dimensions and Holder toggles) stands right of the
 /// rows, under the heading. #3896: the Recipes tab stands between Tool and Details, and
 /// its Suggest row stands under the tabs. The window still leaves the
 /// Properties pane free. Queries stay inside the window, because a tool
@@ -175,13 +177,35 @@ fn layout_window_tool_editor() {
     let body = rect(crate::egui_app::tool_library_dialog::assembly_group::BODY);
     assert!(body.top() > group.top(), "the Body section {body:?} stands under the assembly group {group:?}");
     assert!(node.query_all_by_label("Import body…").next().is_none(), "the Body section starts folded");
-    let (view, dims, holder) = (rect("3D"), rect(preview::DIMS), rect(preview::HOLDER));
+    // #4336: Side (the default) comes before 3D, then the check boxes.
+    // The Tool tab has a "Holder" and a "Flutes" row too: the toggles are
+    // the check boxes of those names.
+    let toggle = |l: &str| node.get_by_role_and_label(egui::accesskit::Role::CheckBox, l).rect();
+    let (view, dims, holder) = (rect("Side"), toggle(preview::DIMS), toggle(preview::HOLDER));
     assert!(view.top() > rect(&heading).top(), "the preview {view:?} stands under the heading");
     assert!(view.left() > rect("Diameter").right(), "the preview {view:?} stands right of the rows");
-    assert!(dims.left() > view.left() && holder.left() > dims.left(), "3D, Dimensions, Holder on one row");
+    let three = rect("3D");
+    assert!(three.left() > view.left() && dims.left() > three.left() && holder.left() > dims.left(), "Side, 3D, Dimensions, Holder on one row");
+    // #4336: the Tool tab reads Name, Type, Tool number, then the CUTTER
+    // group, the SHANK group and the assembly group, top to bottom.
+    use crate::egui_app::tool_library_dialog::tool_tab::{CUTTER, NAME, SHANK};
+    let mut prev: Option<(&str, f32)> = None;
+    for l in [NAME, "Type", "Tool number", CUTTER, "Diameter", "Flute length", "Corner radius", "Flutes", "Helix angle", "Tool material", SHANK, "Shank diameter"] {
+        let r = node
+            .query_all_by_label(l)
+            .map(|n| n.rect())
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+            .unwrap_or_else(|| panic!("the Tool tab has no {l:?}"));
+        assert!(r.right() < view.left(), "{l:?} {r:?} stands in the rows, left of the preview");
+        if let Some((p, y)) = prev {
+            assert!(r.top() > y, "{l:?} (top {}) stands under {p:?} (top {y})", r.top());
+        }
+        prev = Some((l, r.top()));
+    }
+    assert!(rect(crate::egui_app::tool_library_dialog::assembly_group::HEADING).top() > rect("Shank diameter").top(), "the assembly group follows the SHANK group");
     assert!(win.expand(1.0).contains_rect(holder), "the toggles {holder:?} stay in the window {win:?}");
     // #3908: Flutes follows Holder on its row, or wraps under it.
-    let flutes = rect(preview::FLUTES);
+    let flutes = toggle(preview::FLUTES);
     let beside = flutes.left() > holder.left() && (flutes.center().y - holder.center().y).abs() < 2.0;
     assert!(beside || flutes.top() >= holder.bottom() - 1.0, "Flutes {flutes:?} follows Holder {holder:?}");
     assert!(win.expand(1.0).contains_rect(flutes), "the Flutes toggle {flutes:?} stays in the window {win:?}");
@@ -214,10 +238,25 @@ fn layout_window_tool_editor() {
             .unwrap_or_else(|| panic!("the Recipes tab has no widget labelled {label:?}"))
             .rect()
     };
-    let (tab, suggest, apply) = (rect(TAB), rect(SUGGEST), rect("Apply"));
-    assert!(win.expand(1.0).contains_rect(suggest), "Suggest {suggest:?} stays in the window {win:?}");
-    assert!(tab.top() < suggest.top() && suggest.top() < apply.top(), "Suggest {suggest:?} stands between the tabs and Apply");
-    assert!(node.query_all_by_label(MARK).next().is_none() || rect(MARK).top() > suggest.top(), "the table follows the Suggest row");
+    // #4337 (U11): the explanation, then the table's columns, then the
+    // three buttons on one row, then the units note - all above Apply.
+    let line = |part: &str| {
+        node.query_by_label_contains(part)
+            .unwrap_or_else(|| panic!("the Recipes tab has no line with {part:?}"))
+            .rect()
+    };
+    let (tab, explain, apply) = (rect(TAB), line("One recipe for each work material."), rect("Apply"));
+    let (material, rpm, stepdown) = (rect("Material"), rect("Spindle rpm"), rect("Stepdown"));
+    let (add, suggest, copy, units) = (rect(ADD), rect(SUGGEST), rect(COPY), line("Units: feed"));
+    assert!(tab.top() < explain.top() && explain.bottom() <= material.top() + 1.0, "the explanation {explain:?} heads the table {material:?}");
+    assert!(material.left() < rpm.left() && rpm.left() < stepdown.left(), "Material, Spindle rpm, Stepdown read left to right");
+    assert!(add.top() > material.bottom(), "the buttons {add:?} follow the table");
+    assert!((add.top() - suggest.top()).abs() < 2.0 && add.right() <= suggest.left() + 1.0, "Add {add:?} then Suggest {suggest:?} on one row");
+    assert!(copy.top() >= suggest.top() - 2.0, "Copy {copy:?} follows Suggest, on its row or under it");
+    assert!(units.top() > copy.top() && units.bottom() < apply.top(), "the units note {units:?} follows the buttons, above Apply");
+    for b in [add, suggest, copy] {
+        assert!(win.expand(1.0).contains_rect(b), "the button {b:?} stays in the window {win:?}");
+    }
     assert!(node.query_all_by_label("Diameter").next().is_none(), "the geometry rows stay on the Tool tab");
 }
 
