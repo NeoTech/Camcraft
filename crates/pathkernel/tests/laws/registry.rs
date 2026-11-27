@@ -4,11 +4,17 @@
 //! to `Moved` and registers its recipe (its planners and cases, with the
 //! record fixtures and the recorded old output); `each_moved_kind_obeys_every_law`
 //! then runs every law check on it. No new law test is written for a kind.
+//!
+//! #4406: only a held law passes. A law that is refused (a stage refused
+//! the case, or the check had nothing to read) fails the runner, unless the
+//! kind registers that refusal by its reason for that case: a case that the
+//! kind must refuse is a registered expected refusal, and any other
+//! refusal is a failure. A broken law always fails.
 
 use camcraft_pathkernel::order::StartSide;
 use camcraft_pathkernel::{Refusal, Stage};
 
-use super::kit::{Case, Law, LawVerdict, NO_OUTPUT, Planners, plan_cuts, refused_held, run};
+use super::kit::{Case, Law, LawVerdict, NO_OUTPUT, Outcome, Planners, refused, run};
 use super::l1_guide::check_l1;
 use super::l2_sides::check_l2;
 use super::l3_order::check_l3;
@@ -17,6 +23,7 @@ use super::l5_entry::check_l5;
 use super::l6_load::check_l6;
 use super::l7_move::check_l7;
 use super::link_rule::check_link;
+use super::l7_move::recorded;
 use super::standins::{good, island_case, square_case};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,10 +34,19 @@ pub enum State {
     Moved,
 }
 
-/// The planners of a kind and its cases.
+/// A refusal that a kind must give on one of its cases: the case name and
+/// the exact refusal reason.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExpectedRefusal {
+    pub case: &'static str,
+    pub reason: &'static str,
+}
+
+/// The planners of a kind, its cases, and the refusals that it must give.
 pub struct KindRecipe {
     pub planners: Planners,
     pub cases: Vec<Case>,
+    pub refusals: Vec<ExpectedRefusal>,
 }
 
 pub struct Kind {
@@ -83,20 +99,20 @@ pub fn check_all(p: &Planners, c: &Case) -> Vec<LawVerdict> {
     let mut v = Vec::new();
     match (c.region)(c.material) {
         Ok(r) => v.push(check_l1(p.guide.as_ref(), &r, &c.recipe.guide(), &[])),
-        Err(e) => v.push(refused_held(Law::L1, &e)),
+        Err(e) => v.push(refused(Law::L1, &e)),
     }
     let auto = run(p, c, StartSide::Auto);
     match &auto {
         Ok(r) => match r.guide.out() {
             Some(g) => v.push(check_l2(c.region, p.order.as_ref(), g, c.recipe.order())),
-            None => v.push(refused_held(Law::L2, &Refusal::new(Stage::Guide, NO_OUTPUT))),
+            None => v.push(refused(Law::L2, &Refusal::new(Stage::Guide, NO_OUTPUT))),
         },
-        Err(e) => v.push(refused_held(Law::L2, e)),
+        Err(e) => v.push(refused(Law::L2, e)),
     }
     v.push(check_l3(p, c));
     match &auto {
         Ok(r) => v.push(check_l4(r, &c.recipe)),
-        Err(e) => v.push(refused_held(Law::L4, e)),
+        Err(e) => v.push(refused(Law::L4, e)),
     }
     v.push(check_l5(&auto, c));
     v.push(check_l6(&auto, c));
@@ -105,11 +121,27 @@ pub fn check_all(p: &Planners, c: &Case) -> Vec<LawVerdict> {
     v
 }
 
-fn assert_all_held(kind: &str, c: &Case, verdicts: &[LawVerdict]) {
-    assert_eq!(verdicts.len(), 8, "each law and the link rule");
-    for v in verdicts {
-        assert!(v.held, "{kind} / {}: {v}", c.name);
+/// The law failures of one kind on each of its cases: each verdict that is
+/// broken, or refused with a reason that the kind did not register for
+/// that case. Empty when the kind obeys every law.
+pub fn law_failures(kind: &str, kr: &KindRecipe) -> Vec<String> {
+    let mut out = Vec::new();
+    for c in &kr.cases {
+        let v = check_all(&kr.planners, c);
+        if v.len() != 8 {
+            out.push(format!("{kind} / {}: {} verdicts, not one for each law and the link rule", c.name, v.len()));
+        }
+        for x in &v {
+            let expected = |r: &str| kr.refusals.iter().any(|e| e.case == c.name && e.reason == r);
+            match &x.outcome {
+                Outcome::Held => {}
+                Outcome::Refused(r) if expected(r) => {}
+                Outcome::Refused(_) => out.push(format!("{kind} / {}: an unexpected refusal: {x}", c.name)),
+                Outcome::Broken => out.push(format!("{kind} / {}: {x}", c.name)),
+            }
+        }
     }
+    out
 }
 
 #[test]
@@ -141,33 +173,31 @@ fn the_registry_guard_names_a_moved_kind_without_a_recipe() {
 
 #[test]
 fn each_moved_kind_obeys_every_law() {
+    let mut failures = Vec::new();
     for k in KINDS.iter().filter(|k| k.state == State::Moved) {
         let Some(make) = k.recipe else { continue };
-        let kr = make();
-        for c in &kr.cases {
-            let v = check_all(&kr.planners, c);
-            for x in &v {
-                assert!(x.held, "{} / {}: {x}", k.name, c.name);
-            }
-        }
+        failures.extend(law_failures(k.name, &make()));
     }
+    assert!(failures.is_empty(), "the law suite:\n{}", failures.join("\n"));
 }
 
-/// The obeying stand-ins as one registered kind, with the old output
-/// recorded from their own run: the path that a moved kind takes.
-fn stand_in_kind() -> KindRecipe {
+/// The obeying stand-ins as one registered kind, with the old output read
+/// from the record files (#4406: not from their own run): the path that a
+/// moved kind takes.
+pub fn stand_in_kind() -> KindRecipe {
     let mut cases = vec![square_case().expect("fixture"), island_case().expect("fixture")];
-    for c in &mut cases {
-        let r = run(&good(), c, StartSide::Auto).expect("the stand-ins plan the fixture");
-        c.recorded = Some(plan_cuts(&r.plan).into_iter().cloned().collect());
+    for (c, file) in cases.iter_mut().zip(["square_pocket.txt", "pocket_with_an_island.txt"]) {
+        c.recorded = Some(recorded(file).expect("the record file of the stand-in case"));
     }
-    KindRecipe { planners: good(), cases }
+    KindRecipe { planners: good(), cases, refusals: vec![] }
 }
 
 #[test]
 fn the_law_runner_passes_a_registered_kind_that_obeys_every_law() {
     let kr = stand_in_kind();
+    let f = law_failures("stand-in", &kr);
+    assert!(f.is_empty(), "{}", f.join("\n"));
     for c in &kr.cases {
-        assert_all_held("stand-in", c, &check_all(&kr.planners, c));
+        assert!(check_all(&kr.planners, c).iter().all(LawVerdict::held), "{}", c.name);
     }
 }

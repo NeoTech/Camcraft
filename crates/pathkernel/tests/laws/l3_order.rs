@@ -5,6 +5,10 @@
 //! side (within 1 um). The kernel's `OrderedSet` already refuses a set that
 //! is not a permutation of its input; this check also catches an order
 //! stage that gives the set another input.
+//!
+//! #4406: a start side that refuses where another side plans is a broken
+//! measure (the side changed more than the order). When each side refuses,
+//! or a run has no curve to order, L3 is refused (not measured, never held).
 
 use camcraft_pathkernel::guide::{Curve, GuideSet};
 use camcraft_pathkernel::order::{OrderChoice, OrderPlanner, OrderedSet, StartSide};
@@ -29,12 +33,22 @@ pub fn check_l3(p: &Planners, c: &Case) -> LawVerdict {
     let runs: Vec<(StartSide, Result<Run, Refusal>)> = SIDES.iter().map(|&s| (s, run(p, c, s))).collect();
     let mut m = Vec::new();
     let ok: Vec<&Run> = runs.iter().filter_map(|(_, r)| r.as_ref().ok()).collect();
+    if ok.is_empty() {
+        for (s, r) in &runs {
+            if let Err(e) = r {
+                m.push(Measure::refusal(format!("start side {s:?}"), e));
+            }
+        }
+        return judge(Law::L3, m);
+    }
     if ok.len() != runs.len() {
         let refused: Vec<String> = runs.iter().filter_map(|(s, r)| r.as_ref().err().map(|e| format!("{s:?} ({})", e.reason()))).collect();
-        let n = if ok.is_empty() { 0 } else { refused.len() };
-        m.push(Measure::count(n, format!("refused for {}", refused.join(", ")), None));
+        m.push(Measure::count(refused.len(), format!("refused for {}", refused.join(", ")), None));
     }
     for r in &ok {
+        if order_curves_of(r).is_empty() {
+            m.push(Measure::unread(format!("start side {:?}", r.side), "the run has no curve to order"));
+        }
         let (g, at) = set_gap(&order_curves_of(r), &guide_curves(r));
         m.push(Measure::new(g, MATCH_TOL, format!("start side {:?}: the ordered curves against the guide, {at}", r.side), None));
     }

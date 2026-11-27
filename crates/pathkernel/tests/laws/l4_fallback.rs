@@ -6,6 +6,8 @@
 //! an entry into air, a pre-drilled hole or a cleared column where an entry
 //! into material was asked is the safer entry of the record's order of
 //! tries, not a fallback. The entry verdicts of the run carry the records.
+//! #4406: a run with no guide curve, or an entry verdict with no entry, is
+//! not measured (refused, never held).
 
 use camcraft_pathkernel::entry::{Entry, EntryChoice, EntryKind, EntryPlanner, Exit, named as named_entry, needs_fallback};
 use camcraft_pathkernel::guide::{Family, GuideChoice, GuidePlanner, GuideSet, RowsChoice};
@@ -46,10 +48,17 @@ pub fn check_l4(run: &Run, recipe: &Recipe) -> LawVerdict {
     let other = used.iter().filter(|&&f| Some(f) != asked && !rows_ring(f)).count();
     let names = named(&run.guide, Stage::Guide);
     let silent = if other > 0 && names == 0 { other } else { 0 };
-    m.push(Measure::count(silent, format!("guide: {other} curves of another family than asked ({asked:?}), {names} named"), None));
+    if used.is_empty() {
+        m.push(Measure::unread("guide", "the guide stage gave no curves"));
+    } else {
+        m.push(Measure::count(silent, format!("guide: {other} curves of another family than asked ({asked:?}), {names} named"), None));
+    }
     let asked = recipe.entry().asked();
     for (i, v) in run.entries.iter().enumerate() {
-        let Some(e) = v.out() else { continue };
+        let Some(e) = v.out() else {
+            m.push(Measure::unread(format!("entry {i}"), "the entry verdict has no entry"));
+            continue;
+        };
         let n = named(v, Stage::Entry);
         let wrong = needs_fallback(asked, e.kind()) && n == 0;
         let at = e.descent().first().map(|p| p.at());
