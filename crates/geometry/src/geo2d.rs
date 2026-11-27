@@ -17,11 +17,13 @@ use thiserror::Error;
 
 mod arc;
 mod clip_line;
+mod segments;
 mod slivers;
 mod sweep;
 
 pub use arc::{MAX_ARC_CHORDS, arc_points};
 pub use clip_line::RingClip;
+pub use segments::{point_segment_distance, segment_gap, segments_cross};
 
 use clipper2_rust::{
     EndType, FillRule, JoinType, Path64, Paths64, Point64, inflate_paths_64, intersect_64,

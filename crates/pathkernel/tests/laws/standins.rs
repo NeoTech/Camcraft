@@ -7,7 +7,7 @@
 
 use camcraft_pathkernel::entry::{Area, Entry, EntryChoice, EntryKind, EntryPlanner, Exit, Proof};
 use camcraft_pathkernel::guide::{Curve, Family, GuideChoice, GuidePlanner, GuideSet, RingRef, RingsChoice};
-use camcraft_pathkernel::link::{Hop, LinkPolicy, LinkProof, LinkTally, USER_RETRACT};
+use camcraft_pathkernel::link::{Hop, Level, LinkPolicy, LinkProof, LinkTally, USER_RETRACT};
 use camcraft_pathkernel::load::{Controlled, LoadControl, LoadPlanner, OverLimit, PLAN_TOL, Reach, Reading, StockRead};
 use camcraft_pathkernel::order::{Direction, OrderChoice, OrderPlanner, OrderedSet, StartSide};
 use camcraft_pathkernel::plan::Cut;
@@ -249,7 +249,7 @@ pub fn end_of(c: &Cut) -> Point2 {
 pub struct StraightLink;
 
 impl LinkProof for StraightLink {
-    fn link(&self, from: &Cut, to: &Cut, r: &KernelRegion, _planned: &[Cut], policy: LinkPolicy, tally: &mut LinkTally) -> Hop {
+    fn link(&self, from: &Cut, to: &Cut, r: &KernelRegion, _level: Level<'_>, policy: LinkPolicy, tally: &mut LinkTally) -> Hop {
         let (a, b) = (end_of(from), start_of(to));
         let inside = |p: &PlanarRegion| samples(&[a, b], 0.05).iter().all(|(q, _)| outside(p.center(), *q) <= 1e-3);
         let hop = match (policy, planar(r)) {
