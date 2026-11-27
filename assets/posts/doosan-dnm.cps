@@ -564,6 +564,18 @@ function tilt(p) {  // words to append, [] if none, null if refused
     if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect posts the stream's angle unnegated, so it would leave the travel the machine check judged"); }
     return null;
   }
+  // #4417: the words are the joint angles of the machine's own nest
+  // (prelude chainAngles), which the machine check judges - on a chain
+  // whose outer rotary is A they differ from the pose letters. The
+  // record takes them, so the feed cap and the held angles read them too.
+  if (!p.jointAngles) {
+    var j = chainAngles(p);
+    if (j === null) {
+      if (!tiltRefused) { tiltRefused = true; msg(tiltChainWhy); }
+      return null;
+    }
+    p.A = j.A; p.B = j.B; p.C = j.C; p.jointAngles = true;
+  }
   if (!tcpmOn) {
     block(["G43.4", "H" + pad2(tNo)]);
     tcpmOn = true;

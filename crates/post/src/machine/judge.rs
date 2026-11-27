@@ -79,9 +79,10 @@ pub fn say(out: &mut MachineCheck, s: String) {
 ///
 /// A machine whose ONLY rotary is about X (a 4th-axis table) is judged
 /// through the tool axis: [`x_rotary_problem`]. Every other machine is
-/// judged on the canonical letters, each by its own name - a machine
-/// whose tilt lives under another letter (an A trunnion asked for a B
-/// turn) is refused by name too; that gate never does IK.
+/// judged on the joint angles of its nest (#4417, `tilt_chain`): the
+/// canonical letters, except on an A-and-B chain whose outer rotary is
+/// A, each by its own name - a machine whose tilt lives under another
+/// letter (an A trunnion asked for a B turn) is refused by name too.
 pub(super) fn pose_problems(machine: &Machine, i: usize, axis: [f64; 3]) -> Vec<String> {
     let mut out = Vec::new();
     if !super::can_tilt(machine) {
@@ -92,6 +93,15 @@ pub(super) fn pose_problems(machine: &Machine, i: usize, axis: [f64; 3]) -> Vec<
         out.extend(x_rotary_problem(machine, ax, i, [da, db, dc]));
         return out;
     }
+    // #4417: the angles the rotaries hold for the machine's own nest -
+    // the words a G43.4 post writes (`post::tilt_chain`), not the letters.
+    let [da, db, dc] = match super::tilt_chain::joint_angles(machine, [da, db, dc]) {
+        Ok(j) => j,
+        Err(why) => {
+            out.push(format!("move {i}: {why}"));
+            return out;
+        }
+    };
     for (letter, ang) in [('A', da), ('B', db), ('C', dc)] {
         if ang.abs() <= 1e-9 {
             continue; // that letter holds nothing to check
