@@ -8,7 +8,7 @@
 //! `docs/decisions/4269-kernel-plan-converter.md`.
 
 use super::pen::EMIT_TOL;
-use super::{ARC_NOT_MONOTONE, ARC_OFF_CIRCLE};
+use super::{ARC_EMPTY, ARC_NOT_MONOTONE, ARC_OFF_CIRCLE};
 use crate::geometry::Point3;
 use camcraft_pathkernel::guide::Circle;
 
@@ -56,7 +56,7 @@ pub(super) fn arc_runs(pts: &[Point3], c: Circle) -> Result<Vec<(Point3, bool)>,
     }
     out.extend(pending);
     if out.is_empty() {
-        return Err(ARC_NOT_MONOTONE);
+        return Err(ARC_EMPTY);
     }
     Ok(out)
 }

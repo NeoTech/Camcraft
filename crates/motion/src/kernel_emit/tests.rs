@@ -49,8 +49,14 @@ fn ring(r: f64, n: u32, circle: bool) -> Step {
     Step::Cut(Cut::new(Curve::new(pts, arc, true, 0, Family::Ring).unwrap(), None).unwrap())
 }
 
+/// The exit of a plan on the level Z -2: straight up to the clearance
+/// height (12 above the level).
 fn exit() -> Step {
-    Step::Exit(Exit::new(None, 5.0).unwrap())
+    exit_to(CLEAR - LEVEL)
+}
+
+fn exit_to(retract: f64) -> Step {
+    Step::Exit(Exit::new(None, retract).unwrap())
 }
 
 fn run(steps: Vec<Step>) -> Result<Emitted, EmitRefusal> {
@@ -100,7 +106,7 @@ fn each_step_kind_gives_its_moves() {
     assert_eq!(m[1].to.z, LEVEL, "the descent to the level");
     assert_eq!(m[3].to, Point3::new(10.0, 5.0, LEVEL), "the stay-down link stays at depth");
     assert_eq!(m[5].to, Point3::new(0.0, 5.0, CLEAR), "the lift is a retract to the clearance height");
-    assert_eq!(m[10].to, Point3::new(10.0, 10.0, CLEAR), "the exit retracts to the clearance height at least");
+    assert_eq!(m[10].to, Point3::new(10.0, 10.0, CLEAR), "the exit retracts to its height, the clearance height");
     assert_eq!((out.entries, out.stays, out.lifts, out.exits), (2, 1, 1, 1));
     assert_eq!(out.cut_moves, vec![2..3, 4..5, 9..10]);
     assert_eq!(m[2].feed, Some(1000.0));
@@ -148,7 +154,7 @@ fn levels_are_emitted_in_the_given_order() {
     // The caller plans each level: the approach of the lower level is 2
     // deeper in plan units, so that it stays 1 above the stock top.
     let upper = Plan::new(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
-    let lower = Plan::new(vec![entry_at(0.0, 0.0, 5.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
+    let lower = Plan::new(vec![entry_at(0.0, 0.0, 5.0), line((0.0, 0.0), (10.0, 0.0)), exit_to(CLEAR + 4.0)]).unwrap();
     let levels = [
         LevelPlan { plan: &upper, plane: WorkPlane::setup_xy(-2.0).unwrap() },
         LevelPlan { plan: &lower, plane: WorkPlane::setup_xy(-4.0).unwrap() },
@@ -223,4 +229,36 @@ fn a_step_that_cannot_be_emitted_is_refused_by_name() {
 fn an_empty_plan_gives_an_empty_path() {
     let out = run(vec![]).unwrap();
     assert!(out.path.moves.is_empty() && out.cut_moves.is_empty());
+}
+
+/// #4407: the converter never raises a retract in silence. An exit under
+/// the clearance height is refused by name; at it or above, the tool goes
+/// to the exit's own height.
+#[test]
+fn an_exit_under_the_clearance_height_is_refused_by_name() {
+    let low = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit_to(5.0)]).map(|_| ()).unwrap_err();
+    assert_eq!((low.reason(), low.step()), (EXIT_UNDER_CLEARANCE, Some(2)));
+    let high = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit_to(15.0)]).unwrap();
+    assert_eq!(high.path.moves.last().map(|m| m.to.z), Some(13.0), "the exit goes to its own height");
+}
+
+/// #4407: an exit with no lead-out where one was asked writes its named
+/// fallback to the notes.
+#[test]
+fn an_exit_fallback_goes_to_the_notes() {
+    use camcraft_pathkernel::entry::NO_LEAD_OUT_ROOM;
+    let x = Exit::new(None, CLEAR - LEVEL).unwrap().without_lead_out(NO_LEAD_OUT_ROOM).unwrap();
+    let out = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), Step::Exit(x)]).unwrap();
+    assert_eq!(out.path.notes, vec![format!("exit: straight retract instead of the arc lead-out - {NO_LEAD_OUT_ROOM}")]);
+    let plain = run(vec![entry_at(0.0, 0.0, 3.0), line((0.0, 0.0), (10.0, 0.0)), exit()]).unwrap();
+    assert!(plain.path.notes.is_empty(), "{:?}", plain.path.notes);
+}
+
+/// #4407: a circle cut whose chords are all under the tolerance gives no
+/// arc. It is refused as empty, not as a turn fault.
+#[test]
+fn a_circle_cut_with_no_chord_above_the_tolerance_is_refused_as_empty() {
+    let r = 2e-6;
+    let out = run(vec![entry_at(r, 0.0, 3.0), ring(r, 8, true), exit()]).map(|_| ()).unwrap_err();
+    assert_eq!(out.reason(), ARC_EMPTY);
 }
