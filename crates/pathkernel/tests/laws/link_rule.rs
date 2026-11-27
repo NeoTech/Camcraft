@@ -235,8 +235,13 @@ fn a_link_leaves_a_cut_at_the_stock_edge_runs_in_the_air_and_comes_back_over_cle
     let from = line(&[(-30.0, 22.0), (-20.0, 22.0), (-20.0, 25.0)]);
     let to = line(&[(20.0, 25.0), (20.0, 22.0), (30.0, 22.0)]);
     // With no cut made at the start of the next cut, the way back in from
-    // the air runs over uncut stock: refused.
-    assert_eq!(lift_reason(&hop(&r, std::slice::from_ref(&from), &to)), UNCUT_STOCK);
+    // the air runs over stock that no cut has cleared. It stays only as an
+    // approach from the air (#4254, `air_approach.rs`): straight in to the
+    // start of the piece, the disc cutting only the swath of that piece.
+    let h = hop(&r, std::slice::from_ref(&from), &to);
+    let Hop::Stay(p) = &h else { panic!("the approach from the air must stay: {h:?}") };
+    let pts = p.points();
+    assert!(pts.len() >= 2 && (pts[pts.len() - 2].x - 20.0).abs() < 1e-6 && pts[pts.len() - 2].y >= 29.0 - 1e-6, "in from the air above the start: {pts:?}");
     // A cut already made along the edge at the start of the next cut
     // clears the stock there: the link goes out into the air, along it,
     // and back in, at depth.
