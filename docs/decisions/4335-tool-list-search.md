@@ -59,9 +59,11 @@ the unit changes. A still frame builds nothing (`ListBuilds`, pinned by
    components, not tools, so the same box filters the component rows (name,
    id, kind, the machine and tool sides; a solid tool's diameters). Its own
    "Component filter" box is gone (and `ComponentsView::filter`).
-5. *Catalog rows draw the row icon, not the cached drawing.* The drawing
-   cache is keyed by the tool name; a catalog tool of the same name as a
-   document tool would rebuild it on each source change.
+5. *Catalog rows draw the kind's glyph beside the name, not the cached
+   drawing.* The drawing cache is keyed by the tool name; a catalog tool of
+   the same name as a document tool would rebuild it on each source change.
+   The glyph shares the name's cell, so #661's wiring test still finds it
+   in the row.
 6. *Rows have no stripes.* The design rules of #4245 ask for flat panes and
    structure from type; the heads are small and dim.
 

@@ -161,7 +161,7 @@ fn rows(ui: &mut Ui, state: &mut State, source: ToolSource, rows: &[&ToolRow]) {
             if source == ToolSource::Document {
                 super::thumbs::draw(ui, &r.name, t);
             } else {
-                tool_icons::glyph(ui, tool_icons::catalog_row_icon(t));
+                ui.label("");
             }
             ui.label(r.number.map_or_else(|| "-".to_owned(), |n| n.to_string()));
             if source == ToolSource::Document {
@@ -169,7 +169,11 @@ fn rows(ui: &mut Ui, state: &mut State, source: ToolSource, rows: &[&ToolRow]) {
                     edit = Some(r.name.clone());
                 }
             } else {
-                ui.label(r.name.as_str());
+                // The kind's glyph and the name share one cell (#661).
+                ui.horizontal(|ui| {
+                    tool_icons::glyph(ui, tool_icons::catalog_row_icon(t));
+                    ui.label(r.name.as_str());
+                });
             }
             ui.label(kind_name(t.kind));
             ui.label(compact(t.diameter, u));
