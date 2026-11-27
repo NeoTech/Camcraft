@@ -75,7 +75,9 @@ fn by_part_posts_every_member_at_one_copy_then_the_next() {
     // One file per operation cannot hold the by-part order: refused by name.
     let dir = tmp_dir("pattern-per-op");
     let cps = posting::builtin_post_text("Fanuc").expect("a built-in");
-    let err = posting::post_per_op_script(&world, &dir, "1001", cps).err().expect("per-op files refused");
+    let Err(err) = posting::post_per_op_script(&world, &dir, "1001", cps) else {
+        panic!("per-op files must refuse a by-part folder");
+    };
     let _ = std::fs::remove_dir_all(&dir);
     assert!(err.contains("Face2") && err.contains("by-part pattern folder"), "{err}");
 }
