@@ -53,7 +53,7 @@ fn fixture(default: Option<&str>, overrides: [Option<&str>; 3]) -> Machine {
     parse_mch(&raw.to_string()).expect("original user-machine fixture parses")
 }
 
-fn output(post: &str, m: &Machine, stream: &str) -> String {
+fn run_post(post: &str, m: &Machine, stream: &str) -> engine::PostOutput {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../assets/posts/{post}.cps"));
     let script = std::fs::read_to_string(path).expect("shipped post");
     let options = if post == "doosan-dnm" {
@@ -61,7 +61,11 @@ fn output(post: &str, m: &Machine, stream: &str) -> String {
     } else {
         json!({})
     };
-    let out = engine::run_with(&script, &machine::mirror(m), stream, &options).expect("post runs");
+    engine::run_with(&script, &machine::mirror(m), stream, &options).expect("post runs")
+}
+
+fn output(post: &str, m: &Machine, stream: &str) -> String {
+    let out = run_post(post, m, stream);
     assert!(
         out.warnings.is_empty(),
         "{post}: {:?}\n{}",
@@ -276,4 +280,54 @@ fn tormach_refuses_its_own_word_outside_the_signed_travel() {
         out.program
     );
     assert!(!has_word(&out.program, 'A', 20.0), "{}", out.program);
+}
+
+#[test]
+fn g43_4_posts_refuse_explicit_c_live_tool_work() {
+    let mut path = leaning_path('A');
+    for mv in &mut path.moves {
+        mv.axis = None;
+        mv.rotary = Some(20.0);
+    }
+    let dump = Dump {
+        op_name: "SignC",
+        tool_number: 1,
+        tool_name: "T1",
+        rpm: 6000.0,
+        clearance_z: 20.0,
+        ..Default::default()
+    };
+    let records = post::dump(&path, &dump);
+    assert!(records.iter().any(|record| matches!(record,
+        cnc::Record::Param { name, value } if name == "LiveTool" && value == &json!("radial")
+    )));
+    let stream = cnc::serialize(&records);
+    for (default, overrides) in [
+        (None, [None; 3]),
+        (Some("table_rh"), [None; 3]),
+        (None, [None, None, Some("table_rh")]),
+        (Some("table_rh"), [None, None, Some("tool_rh")]),
+    ] {
+        for center in [-20.0, 20.0] {
+            let mut m = fixture(default, overrides);
+            m.axes[2].travel = Some((center - 5.0, center + 5.0));
+            let verdict = check(&m, &path);
+            assert_eq!(
+                verdict.is_ok(),
+                center > 0.0,
+                "the distinct live-tool C check keeps its direction-only contract: {:?}",
+                verdict.problems
+            );
+            for post in POSTS {
+                let out = run_post(post, &m, &stream);
+                assert!(
+                    out.warnings.iter().any(|warning| warning
+                        .contains("operation SignC: is C-axis live-tool work")
+                        && warning.contains("does not declare liveTooling")),
+                    "{post}: actual Move::rotary input must return the blocking capability warning: {:?}",
+                    out.warnings
+                );
+            }
+        }
+    }
 }

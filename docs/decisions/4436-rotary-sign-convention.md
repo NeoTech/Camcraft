@@ -14,6 +14,17 @@ remains in both G43.4 posts. Its text now distinguishes the axis direction
 from the sign convention. The separate explicit `Move::rotary` C-angle
 contract does not change.
 
+An explicit `Move::rotary` is C-axis live-tool work. The dump states
+`LiveTool`, and the engine returns a capability warning because neither
+G43.4 post declares `liveTooling`. The app blocks posting on that warning.
+A pin passes the actual dumped
+input to both posts, with both asymmetric travel windows and each
+convention source. It also preserves the distinct direction-only C
+travel check. The engine can retain program text as a preview with that
+warning. The standalone post CLI can also write that text with a warning;
+it does not enforce the app's `Posted` contract. This adds no live-tool
+feature or conversion to the shared spindle C check.
+
 **Why.** The machine schema defines `tool_rh` as a tool rotation relative
 to the work and `table_rh` as a work rotation about the stated axis. Those
 rotations have opposite signs. The old posts ignored the convention, and
