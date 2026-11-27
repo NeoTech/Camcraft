@@ -1,11 +1,5 @@
 ## #2870 - One small model for the five-axis catalog case
 
-**Status:** Held and incomplete.
-The project generates, and `cam.verify()` returns a clean result.
-Posting refuses the first tilted feed because the opening rapid moves do not establish the initial A angle.
-Issue [#3300](https://github.com/NeoTech/Camcraft/issues/3300) tracks this blocker.
-The branch has no committed NC program and no passing catalog gate.
-
 **What was decided:** Use one closed faceted cylinder for Swarf, 5-Axis Contour, and 5-Axis Flow.
 The cylinder has a 12 mm radius and extends from X = -24 mm to X = 24 mm.
 Its original analytic generator uses 16 circumference sections and six length sections.
@@ -13,19 +7,24 @@ The OBJ generator writes each vertex once and indexes the shared vertex list to 
 The operations cut between Z = 11 mm and Z = 5 mm, with clearance at Z = 25 mm.
 Use the Tilt-head 5-axis machine and a BN-0600 ball-nose cutter with a 60 mm flute and a 6 mm shank.
 Select no holder and disable the optional Contour and Flow shank-avoidance search.
+The case was held on #3300 (no opening rotary pose).
+That fix is on main, so the case now posts with no change to any check.
 
 **Why:** One model gives all three strategies a common tilted wall and surface.
 It avoids neighboring bodies that these per-source checks do not test.
-The coarse mesh and small path set limit the intended catalog runtime.
+The coarse mesh and small path set keep the case inside its 60 s catalog budget (about 11 s in debug).
 The long flute and narrow shank keep the modeled tool clear above the selected wall region.
 Generation, verification, and posting remain required steps in the script.
 The README states the limits of this modeled tool assembly and the checks.
+The Swarf passes lie along the cylinder's rulings (parallel to X) with the tool axis along the ruling.
+This is the documented law of the Swarf kernel (`crates/motion/src/multiaxis/swarf.rs`), not a defect.
+The README tells the reader to expect `B90.` / `B-90.` there.
 
-**Considered and dropped:** Separate wall and cap bodies would show more geometry, but would add a neighboring body outside each operation's source.
-A second cap demonstration also added work without improving the three required strategy examples.
+**Considered and dropped:** A vertical or drafted wall for Swarf. The ruling finder (`crates/motion/src/multiaxis/ruling.rs`) refuses a wall ruled along Z by design and sends it to 5-Axis Contour.
+Separate wall and cap bodies would show more geometry, but would add a neighboring body outside each operation's source.
 A finer mesh and denser paths would increase the case runtime without adding a required behavior.
 Physical machine validation and posed stock-removal simulation are outside this example's scope.
-An unrelated positioning operation or a machine without rated rotary limits would hide the posting defect.
+An unrelated positioning operation or a machine without rated rotary limits would have hidden the #3300 posting defect.
 Both workarounds were dropped.
 No safety check is bypassed.
 
