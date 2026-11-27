@@ -1,0 +1,66 @@
+// Example catalog case: 3d/rest (#2867).
+// Builds rest.camproj and posts rest.nc headlessly through CamCraft's
+// undoable command verbs: a 3D Pocket with a 12 mm end mill roughs the
+// part, then a 3D Pocket with a 6 mm end mill removes only the material
+// that the 12 mm tool left in the 8 mm channel between the ribs.
+// Run with CWD = this case directory:
+//   camcraft-cli script build.camscript
+
+cam.import("model/rest.obj", "rest");
+
+cam.call("set_stock", {
+  box: { dx: 60.0, dy: 50.0, dz: 18.0 }
+});
+
+cam.call("add_tool", { catalog: "EM-1200-2FL", holder: "none" });
+cam.call("add_tool", { catalog: "EM-0600-4FL", holder: "none" });
+
+cam.call("add_operation", {
+  kind: "3D Pocket",
+  name: "3D Pocket D12",
+  tool: "EM-1200-2FL",
+  source: "rest",
+  params: {
+    stepover: 6.0,
+    stock_to_leave: 0.2,
+    clearance_z: { reference: "top_of_stock", offset: 25.0 },
+    top_z: { reference: "top_of_stock", offset: 0.0 },
+    bottom_z: { reference: "bottom_of_model", offset: 4.0 },
+    stepdown: 2.0,
+    feed: 1200.0,
+    plunge_feed: 300.0,
+    climb: true,
+    strategy: "auto",
+    entry: "helix",
+    helix_radius: 2.5
+  }
+});
+
+cam.call("add_operation", {
+  kind: "3D Pocket",
+  name: "3D Pocket D6 rest",
+  tool: "EM-0600-4FL",
+  source: "rest",
+  params: {
+    stepover: 3.0,
+    stock_to_leave: 0.2,
+    clearance_z: { reference: "top_of_stock", offset: 25.0 },
+    top_z: { reference: "top_of_stock", offset: 0.0 },
+    bottom_z: { reference: "bottom_of_model", offset: 4.0 },
+    stepdown: 2.0,
+    feed: 1200.0,
+    plunge_feed: 300.0,
+    climb: true,
+    strategy: "auto",
+    entry: "ramp"
+  }
+});
+
+cam.generate();
+var verdict = cam.verify();
+if (!verdict.ok) {
+  throw new Error("catalog verify failed: " + JSON.stringify(verdict));
+}
+cam.save("rest.camproj");
+cam.post({ to: "rest.nc" });
+cam.report();

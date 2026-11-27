@@ -51,6 +51,7 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 <!-- catalog:examples:start -->
 **Example cases**
 
+- [3d/rest](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rest)
 - [3d/rough-finish](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rough-finish)
 <!-- catalog:examples:end -->
 
