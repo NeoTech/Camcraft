@@ -30,6 +30,7 @@ pub mod break_through;
 pub mod entry;
 pub mod entry_arc;
 pub mod links;
+pub mod kernel_emit;
 // #1558: a zig-zag ramp flown as the ring's own helical arcs.
 pub mod ring_zig;
 #[cfg(test)]
