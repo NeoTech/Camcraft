@@ -27,7 +27,9 @@ pub(super) fn seed(draft: &mut ToolUi) {
     if !undercut::is_kind(kind) {
         return;
     }
-    draft.corner_r = 0.0;
+    if kind != ToolKind::Dovetail || !draft.corner_r.is_finite() || draft.corner_r < 0.0 {
+        draft.corner_r = 0.0;
+    }
     if kind == ToolKind::Dovetail
         && (draft.tip_angle.is_nan() || !(draft.tip_angle > 0.0 && draft.tip_angle < 90.0))
     {
@@ -47,6 +49,9 @@ pub(super) fn seed(draft: &mut ToolUi) {
         draft.shank_len = sl;
         if kind == ToolKind::Dovetail {
             draft.tip_angle = 60.0;
+            if undercut::refusal(&draft.to_tool()).is_some() {
+                draft.corner_r = 0.0;
+            }
         }
     }
 }
@@ -101,5 +106,27 @@ mod tests {
         let tool = draft.to_tool();
         assert_eq!(tool.why_not_sane(), None, "{tool:?}");
         assert_eq!(tool.tip_angle, 60.0);
+    }
+
+    #[test]
+    fn switching_from_bull_nose_to_dovetail_keeps_valid_corner_r_and_clears_oversized_one() {
+        let bull = catalog()
+            .into_iter()
+            .find(|(_, t)| t.kind == ToolKind::BullNose)
+            .map(|(_, t)| t)
+            .expect("bull nose in catalog");
+        let mut ok = ToolUi::from_tool("B", &bull, false);
+        ok.kind = 20;
+        ok.corner_r = 0.5;
+        seed(&mut ok);
+        assert_eq!(ok.to_tool().why_not_sane(), None);
+        assert_eq!(ok.corner_r, 0.5);
+
+        let mut too_big = ToolUi::from_tool("B", &bull, false);
+        too_big.kind = 20;
+        too_big.corner_r = 4.0;
+        seed(&mut too_big);
+        assert_eq!(too_big.to_tool().why_not_sane(), None);
+        assert_eq!(too_big.corner_r, 0.0);
     }
 }

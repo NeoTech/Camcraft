@@ -19,7 +19,7 @@ mod undercut_support;
 
 use serde_json::{json, Value};
 use std::path::Path;
-use undercut_support::{tmp_dir, write_box_stl, write_tslot_stl, Client};
+use undercut_support::{tmp_dir, write_box_stl, write_dovetail_slot_stl, write_tslot_stl, Client};
 
 /// The T-slot block in a stock of its own size, a 6 mm end mill and a
 /// 20 x 6 mm T-slot cutter on an 8 mm neck (`TS-20`).
@@ -248,5 +248,74 @@ fn list_operation_types_and_edit_operation_keep_zero_bulge_and_neck_slot() {
         .expect("Undercut");
     assert_eq!(op["params"]["slot_undercut"]["bulge"], json!(0.0));
     assert_eq!(op["params"]["slot_undercut"]["neck_slot"], json!(0.0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_dovetail_corner_radius_catches_the_24mm_slot_gouge_and_holds_the_post() {
+    // Issue #4004: 24 mm wide, 30 deg per side dovetail slot (9 mm head,
+    // entry slot above), cut with a Ø19.05 mm, 60 deg, 9.525 mm height
+    // dovetail cutter. Clean at corner_r 0.0; gouge at 0.254 and 3.0.
+    let dir = tmp_dir("dovetail-cr");
+    let stl = dir.join("dove.stl");
+    write_dovetail_slot_stl(&stl);
+    let mut c = Client::new();
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 40.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "EM-0600-4FL" }));
+    let job = c.ok("get_job", json!({}));
+    let mut def = job["tools"][0]["definition"].clone();
+    def["kind"] = json!("dovetail");
+    def["diameter"] = json!(19.05);
+    def["corner_r"] = json!(0.0);
+    def["tip_angle"] = json!(60.0);
+    def["flute_len"] = json!(9.525);
+    def["shank_d"] = json!(8.0);
+    def["shank_len"] = json!(30.0);
+    def["rpm"] = json!(1500.0);
+    def["feed"] = json!(120.0);
+    if let Some(o) = def.as_object_mut() {
+        o.remove("cutting_data");
+    }
+    c.ok("add_tool", json!({ "name": "DT-1905", "definition": def, "holder": "none" }));
+    c.ok("add_operation", json!({
+        "kind": "Slot", "tool": "EM-0600-4FL", "source": "dove", "name": "Neck",
+        "params": {
+            "a": [-30.0, 0.0], "b": [30.0, 0.0], "width": 13.6,
+            "clearance_z": 30.0, "top_z": 20.0, "bottom_z": 14.0, "stepdown": 3.0, "stepover": 2.0
+        }
+    }));
+    c.ok("add_operation", json!({
+        "kind": "Slot Undercut", "tool": "DT-1905", "source": "dove", "name": "Undercut",
+        "params": {
+            "a": [-30.0, 0.0], "b": [30.0, 0.0], "width": 24.0, "run_in": 15.0, "neck_slot": 13.6,
+            "clearance_z": 30.0, "retract_z": 25.0, "top_z": 20.0, "bottom_z": 5.0, "stepover": 2.0,
+            "feed": 120.0, "plunge_feed": 60.0
+        }
+    }));
+
+    c.ok("generate", json!({}));
+    let ver = c.ok("verify", json!({}));
+    assert_eq!(ver["ok"], json!(true), "sharp dovetail verifies clean: {ver}");
+    c.ok("post", json!({ "output": dir.join("sharp.nc").display().to_string(), "post": "Fanuc" }));
+
+    for cr in [0.254, 3.0] {
+        c.ok("set_tool_cutter_params", json!({ "tool": "DT-1905", "params": { "corner_r": cr } }));
+        c.ok("generate", json!({}));
+        let ver = c.ok("verify", json!({}));
+        assert_eq!(ver["ok"], json!(false), "corner_r {cr} must catch gouge: {ver}");
+        assert!(kinds_of(&ver, "Undercut").contains(&"gouge".to_owned()), "corner_r {cr}: {ver}");
+        let nc = dir.join(format!("cr-{cr}.nc"));
+        c.refused("post", json!({ "output": nc.display().to_string(), "post": "Fanuc" }));
+        assert!(!nc.exists(), "corner_r {cr} gouge must hold post");
+    }
+
+    // Save/open round-trips corner_r on a dovetail cutter.
+    let camproj = dir.join("dove.camproj");
+    c.ok("save_project", json!({ "path": camproj.display().to_string() }));
+    c.ok("open_project", json!({ "path": camproj.display().to_string() }));
+    let opened = c.ok("get_job", json!({}));
+    let tool = opened["tools"].as_array().and_then(|t| t.iter().find(|t| t["name"] == json!("DT-1905"))).cloned().expect("DT-1905");
+    assert_eq!(tool["definition"]["corner_r"], json!(3.0));
     let _ = std::fs::remove_dir_all(&dir);
 }

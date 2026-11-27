@@ -81,3 +81,14 @@ fn a_dovetail_keep_out_covers_the_rim_over_the_z_range() {
     assert!(keep(-1.0).contains(Point2::new(-11.0, 0.0)), "clearance ball below the range");
     assert!(!keep(-1.0).contains(Point2::new(-11.6, 0.0)), "no keep-out past the ball");
 }
+
+#[test]
+fn a_rounded_dovetail_keeps_clearance_on_its_corner_and_flank() {
+    // Ø19.05 (r = 9.525), 60 deg, fl = 9.525, corner_r = 3.0:
+    // Zone [0, 4.5] has rho_max 9.525; Dove [4.5, 9.525] has rho_max 9.123.
+    let rounded = Tool { corner_r: 3.0, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) };
+    assert_eq!(hits(&rounded, 0.5, 9.9, 3.0).len(), 1, "corner equator + 0.5 clearance");
+    assert!(hits(&rounded, 0.5, 10.1, 3.0).is_empty(), "clear of corner equator");
+    assert_eq!(hits(&rounded, 0.5, 9.0, 9.0).len(), 1, "upper flank cylinder + 0.5 clearance");
+    assert!(hits(&rounded, 0.5, 9.7, 9.0).is_empty(), "clear of upper flank cylinder");
+}

@@ -9,7 +9,9 @@ use camcraft_tools::holder_profile::HolderStack;
 use camcraft_tools::undercut::{Head, Undercut};
 
 use super::body_bands::{BodyBands, NeckBands};
-use crate::geometry::{Point3, Triangle};
+#[path = "probe_frame.rs"]
+mod probe_frame;
+pub(super) use probe_frame::Frame;
 use crate::tools::{Tool, ToolGeom, ToolKind};
 
 /// The tool assembly: the cutting atom (radius, corner, point cone)
@@ -167,6 +169,10 @@ impl Cutter {
             Prof::Cone { k, .. } => rho / k,
             // A dovetail's bottom is flat; a ball rises as a sphere.
             Prof::Dove { .. } => 0.0,
+            Prof::Zone { rc, sc, rad } => {
+                let e = rho - rc;
+                if e <= 0.0 { 0.0 } else if e >= rad { sc } else { sc - (rad * rad - e * e).max(0.0).sqrt() }
+            }
             Prof::Ball(r) => if rho >= r { r } else { r - (r * r - rho * rho).max(0.0).sqrt() },
         };
         if s.is_finite() { s.clamp(0.0, a.z1.max(0.0)) } else { 0.0 }
@@ -191,12 +197,14 @@ impl Cutter {
         // union, and the neck leaves the ball inside it).
         let head = self.undercut.and_then(|u| match u.head {
             Head::Disc => None,
-            Head::Dove { cot } => Some(Atom { z0: 0.0, z1: fl, prof: Prof::Dove { r, k: cot }, cap: true }),
-            Head::Ball => Some(Atom { z0: 0.0, z1: 2.0 * r, prof: Prof::Ball(r), cap: false }),
+            Head::Dove { cot, corner_r } => Some(dove_atoms(r, fl, cot, corner_r)),
+            Head::Ball => Some(vec![Atom { z0: 0.0, z1: 2.0 * r, prof: Prof::Ball(r), cap: false }]),
         });
-        if let Some(a) = head {
-            if a.z1 > 0.0 {
-                v.push(a);
+        if let Some(atoms) = head {
+            for a in atoms {
+                if a.z1 > a.z0 {
+                    v.push(a);
+                }
             }
             z = fl;
         } else if self.tip_angle > 0.0 && tan_half.is_finite() && tan_half > 0.0 {
@@ -247,8 +255,29 @@ pub(super) enum Prof {
     Cone { k: f64, r: f64 },
     /// Dovetail head (#1444): rho = r - k s, widest at its bottom.
     Dove { r: f64, k: f64 },
+    /// Torus zone (#4004): rho = rc + sqrt(rad^2 - (s - sc)^2), a
+    /// dovetail corner arc continuing past its equator.
+    Zone { rc: f64, sc: f64, rad: f64 },
     /// Lollipop head (#1444): the whole ball of radius r over [0, 2r].
     Ball(f64),
+}
+
+fn dove_atoms(r: f64, fl: f64, cot: f64, corner_r: f64) -> Vec<Atom> {
+    if corner_r <= 0.0 {
+        return vec![Atom { z0: 0.0, z1: fl, prof: Prof::Dove { r, k: cot }, cap: true }];
+    }
+    let h = 1.0_f64.hypot(cot);
+    let s_tan = corner_r * (1.0 + cot / h);
+    let r_tan = r - corner_r + corner_r / h;
+    let zone = Prof::Zone { rc: r - corner_r, sc: corner_r, rad: corner_r };
+    if fl - s_tan < camcraft_tools::meridian::MIN_LEN {
+        vec![Atom { z0: 0.0, z1: fl, prof: zone, cap: true }]
+    } else {
+        vec![
+            Atom { z0: 0.0, z1: s_tan, prof: zone, cap: false },
+            Atom { z0: s_tan, z1: fl, prof: Prof::Dove { r: r_tan, k: cot }, cap: true },
+        ]
+    }
 }
 
 /// One convex solid of revolution about the tool axis over local
@@ -279,17 +308,25 @@ impl Atom {
             }
             Prof::Cone { k, r } => (k * s).min(r),
             Prof::Dove { r, k } => (r - k * s).max(0.0),
+            Prof::Zone { rc, sc, rad } => {
+                let e = s - sc;
+                (rc + (rad * rad - e * e).max(0.0).sqrt()).max(0.0)
+            }
             Prof::Ball(r) => (2.0 * r * s - s * s).max(0.0).sqrt(),
         }
     }
 
     /// The largest radius over heights `[lo, hi]`: the top's for the
     /// non-decreasing profiles, the bottom's for a dovetail, the
-    /// equator's for a ball whose span holds it.
+    /// equator's for a ball or torus zone whose span holds it.
     pub(super) fn rho_peak(&self, lo: f64, hi: f64) -> f64 {
         match self.prof {
             Prof::Flat(_) | Prof::Bull { .. } | Prof::Cone { .. } => self.rho(hi),
             Prof::Dove { .. } => self.rho(lo),
+            Prof::Zone { rc, sc, rad } => {
+                let eq = self.z0 + sc;
+                if lo <= eq && eq <= hi { (rc + rad).max(0.0) } else { self.rho(lo).max(self.rho(hi)) }
+            }
             Prof::Ball(r) => {
                 let eq = self.z0 + r;
                 if lo <= eq && eq <= hi { r } else { self.rho(lo).max(self.rho(hi)) }
@@ -301,86 +338,11 @@ impl Atom {
         match self.prof {
             Prof::Flat(r) | Prof::Cone { r, .. } | Prof::Dove { r, .. } | Prof::Ball(r) => r,
             Prof::Bull { flat, cr } => flat + cr,
+            Prof::Zone { rc, rad, .. } => (rc + rad).max(0.0),
         }
     }
 
     pub(super) fn is_flat(&self) -> bool {
         matches!(self.prof, Prof::Flat(_))
     }
-}
-
-/// The tool frame of a tip and axis: local coordinates of world points
-/// (tip at the origin, tool axis +z).
-#[derive(Clone, Copy)]
-pub(super) struct Frame {
-    o: Point3,
-    u: [f64; 3],
-    v: [f64; 3],
-    a: [f64; 3],
-}
-
-impl Frame {
-    pub(super) fn new(o: Point3, axis: Option<[f64; 3]>) -> Self {
-        let Some(a) = axis else {
-            return Self { o, u: [1.0, 0.0, 0.0], v: [0.0, 1.0, 0.0], a: [0.0, 0.0, 1.0] };
-        };
-        let e = if a[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
-        let u = norm(cross(a, e));
-        let v = cross(a, u);
-        Self { o, u, v, a }
-    }
-
-    pub(super) fn local(&self, p: Point3) -> [f64; 3] {
-        let d = [p.x - self.o.x, p.y - self.o.y, p.z - self.o.z];
-        [dot(d, self.u), dot(d, self.v), dot(d, self.a)]
-    }
-
-    pub(super) fn tri(&self, t: &Triangle) -> [[f64; 3]; 3] {
-        [self.local(t.a), self.local(t.b), self.local(t.c)]
-    }
-
-    pub(super) fn seg(&self, a: Point3, b: Point3) -> [[f64; 3]; 2] {
-        [self.local(a), self.local(b)]
-    }
-
-    /// The world point `h` up the axis from the tip.
-    pub(super) fn up(&self, h: f64) -> Point3 {
-        Point3::new(self.o.x + self.a[0] * h, self.o.y + self.a[1] * h, self.o.z + self.a[2] * h)
-    }
-
-    /// The world displacement of local displacement `d`.
-    pub(super) fn end(&self, d: [f64; 3]) -> Point3 {
-        let c = |k: usize| self.u[k] * d[0] + self.v[k] * d[1] + self.a[k] * d[2];
-        Point3::new(c(0), c(1), c(2))
-    }
-
-    pub(super) fn is_upright(&self) -> bool {
-        self.a == [0.0, 0.0, 1.0]
-    }
-
-    /// The local XY of the line through `at` along `dir` when it runs
-    /// along this frame's axis (within 1e-9 of parallel, either sense);
-    /// `None` for any other line, or one that is not finite (#1205).
-    pub(super) fn axis_xy(&self, at: Point3, dir: [f64; 3]) -> Option<[f64; 2]> {
-        let len = dot(dir, dir).sqrt();
-        if !(len.is_finite() && len > 0.0 && at.is_finite()) {
-            return None;
-        }
-        let c = dot(dir, self.a) / len;
-        let p = self.local(at);
-        (c.abs() >= 1.0 - 1e-9 && p[0].is_finite() && p[1].is_finite()).then_some([p[0], p[1]])
-    }
-}
-
-fn cross(p: [f64; 3], q: [f64; 3]) -> [f64; 3] {
-    [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]]
-}
-
-fn dot(p: [f64; 3], q: [f64; 3]) -> f64 {
-    p[0] * q[0] + p[1] * q[1] + p[2] * q[2]
-}
-
-fn norm(p: [f64; 3]) -> [f64; 3] {
-    let l = dot(p, p).sqrt();
-    if l > 0.0 { [p[0] / l, p[1] / l, p[2] / l] } else { [1.0, 0.0, 0.0] }
 }

@@ -352,3 +352,82 @@ fn the_column_arm_cuts_nothing_and_bad_input_is_refused_by_name() {
     let e = f.simulate_undercut(&tilted, &u, 30.0).unwrap_err();
     assert!(format!("{e:?}").contains("posed moves"), "{e:?}");
 }
+
+/// Closed 30-degree dovetail wall bounding a 24 mm slot along X (y_wall(z) =
+/// 12 - (z - FLOOR) * tan(30°), 9 mm head height above FLOOR = -12).
+fn dovetail_slot_wall() -> Vec<Triangle> {
+    let slope = 30.0_f64.to_radians().tan();
+    let (y_bot, y_top, y_out) = (12.0, 12.0 - 9.0 * slope, 20.0);
+    let (z0, z1) = (FLOOR, FLOOR + 9.0);
+    let (x0, x1) = (0.0, 40.0);
+    let p = |x, y, z| Point3::new(x, y, z);
+    let mut tris = Vec::new();
+    let mut quad = |a: Point3, b: Point3, c: Point3, d: Point3| {
+        tris.push(Triangle { a, b, c });
+        tris.push(Triangle { a, b: c, c: d });
+    };
+    quad(p(x0, y_bot, z0), p(x1, y_bot, z0), p(x1, y_out, z0), p(x0, y_out, z0)); // bottom
+    quad(p(x0, y_top, z1), p(x0, y_out, z1), p(x1, y_out, z1), p(x1, y_top, z1)); // top
+    quad(p(x0, y_bot, z0), p(x0, y_top, z1), p(x1, y_top, z1), p(x1, y_bot, z0)); // sloped wall
+    quad(p(x0, y_out, z0), p(x1, y_out, z0), p(x1, y_out, z1), p(x0, y_out, z1)); // outer wall
+    quad(p(x0, y_bot, z0), p(x0, y_out, z0), p(x0, y_out, z1), p(x0, y_top, z1)); // x0 cap
+    quad(p(x1, y_bot, z0), p(x1, y_top, z1), p(x1, y_out, z1), p(x1, y_out, z0)); // x1 cap
+    tris
+}
+
+#[test]
+fn a_rounded_dovetail_flank_gouges_the_24mm_slot_and_cuts_wider_in_field_stock() {
+    // Issue #4004 example: Ø19.05 mm, 30° flank off axis (tip_angle 60),
+    // head height 9.525 mm, cutting along a 24 mm slot at y = 2.475 mm.
+    let base = cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0);
+    let wall = dovetail_slot_wall();
+    let path = Toolpath::new(vec![mv(MoveKind::Feed, (-15.0, 2.475, FLOOR), (40.0, 2.475, FLOOR))]);
+    let law = SolidLaw { step: 0.25, allow: 0.01, hole_walls: false };
+
+    // Sharp cone matches the 30-degree wall cleanly.
+    assert!(solid_hits(&path, &wall, &Cutter::of(&base), &law).is_empty());
+    // corner_r = 0.254 pushes the flank 0.186 mm outside; 3.0 pushes 2.196 mm outside.
+    for cr in [0.254, 3.0] {
+        let tool = Tool { corner_r: cr, ..base.clone() };
+        assert_eq!(
+            solid_hits(&path, &wall, &Cutter::of(&tool), &law),
+            vec![Warning::Gouge { at: 0 }],
+            "corner_r {cr} must catch the wall gouge"
+        );
+    }
+
+    // Field stock sim cuts the wider flank and rounded bottom corner.
+    let s_sharp = cut_field(&base);
+    let s_254 = cut_field(&Tool { corner_r: 0.254, ..base.clone() });
+    let s_3 = cut_field(&Tool { corner_r: 3.0, ..base });
+    // At s = 5.75 mm above floor (exact cell center (20.25, 6.25, -6.25)):
+    // sharp radius is 6.205 (< 6.25), 0.254 is 6.391 (> 6.25).
+    assert!(!air(&s_sharp, 20.25, 6.25, -6.25));
+    assert!(air(&s_254, 20.25, 6.25, -6.25), "0.254 corner flank must cut (20.25, 6.25, -6.25)");
+    // At s = 5.75 mm, 3.0 corner flank radius is 8.401 (> 7.75).
+    assert!(!air(&s_254, 20.25, 7.75, -6.25));
+    assert!(air(&s_3, 20.25, 7.75, -6.25), "3.0 corner flank must cut (20.25, 7.75, -6.25)");
+    // At s = 0.25 mm above floor (exact cell center (20.25, 8.75, -11.75)):
+    // 3.0 corner arc radius is 7.724 (< 8.75), sharp is 9.381 (> 8.75).
+    assert!(air(&s_sharp, 20.25, 8.75, -11.75));
+    assert!(!air(&s_3, 20.25, 8.75, -11.75), "3.0 corner arc must leave stock at y 8.75 near the tip");
+
+    // Curved XY arc sweep (`field_arc::ArcKind::Rev(RevKind::Dove)`):
+    // quarter circle of radius 25 around (0, 25) from (0, 0) to (25, 25) at FLOOR.
+    let mut s_arc = Stock::block(FIELD, -15.0, -15.0, 40.0, 40.0, TOP, 0.5).unwrap();
+    let u3 = Undercut::of(&Tool { corner_r: 3.0, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) }).unwrap();
+    let arc_move = Move {
+        rotary: None,
+        kind: MoveKind::Feed,
+        from: Point3::new(0.0, 0.0, FLOOR),
+        to: Point3::new(25.0, 25.0, FLOOR),
+        feed: Some(80.0),
+        arc: Some(camcraft_sim::cl::ArcMove::xy(Point2::new(0.0, 25.0), true)),
+        axis: None,
+    };
+    s_arc.simulate_undercut(&[arc_move], &u3, 30.0).unwrap();
+    // At x = 0.25 (near start of arc, y ~ 0): s = 5.75 (z = -6.25) cuts y = -7.75
+    // (radius 8.401), while at s = 0.25 (z = -11.75) y = -8.75 stays material.
+    assert!(air(&s_arc, 0.25, -7.75, -6.25), "curved arc cuts wider rounded flank");
+    assert!(!air(&s_arc, 0.25, -8.75, -11.75), "curved arc keeps rounded corner stock");
+}

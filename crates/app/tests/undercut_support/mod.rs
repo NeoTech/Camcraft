@@ -135,3 +135,57 @@ pub fn write_box_stl(path: &Path, lo: [f64; 3], hi: [f64; 3]) {
     s.push_str("endsolid box\n");
     std::fs::write(path, s).expect("write box stl");
 }
+
+/// A 24 mm wide, 30-degree-per-side dovetail slot block (9 mm head over
+/// z 5..14, entry slot above over z 14..20), x -30..30, y -20..20, z 0..20.
+pub fn write_dovetail_slot_stl(path: &Path) {
+    let slope = 30.0_f64.to_radians().tan();
+    let w_top = 12.0 - 9.0 * slope;
+    let (x0, x1) = (-30.0, 30.0);
+    // Cross-section polygon vertices CCW in (y, z), free of T-junctions.
+    let loop_yz = [
+        (-20.0, 0.0),
+        (20.0, 0.0),
+        (20.0, 5.0),
+        (20.0, 14.0),
+        (20.0, 20.0),
+        (w_top, 20.0),
+        (w_top, 14.0),
+        (12.0, 5.0),
+        (-12.0, 5.0),
+        (-w_top, 14.0),
+        (-w_top, 20.0),
+        (-20.0, 20.0),
+        (-20.0, 14.0),
+        (-20.0, 5.0),
+    ];
+    let mut s = String::from("solid dove_slot\n");
+    let mut quad = |q: [[f64; 3]; 4]| {
+        for tri in [[q[0], q[1], q[2]], [q[0], q[2], q[3]]] {
+            s.push_str(" facet normal 0 0 0\n  outer loop\n");
+            for p in tri {
+                s.push_str(&format!("   vertex {} {} {}\n", p[0], p[1], p[2]));
+            }
+            s.push_str("  endloop\n endfacet\n");
+        }
+    };
+    let n = loop_yz.len();
+    for i in 0..n {
+        let (y0, z0) = loop_yz[i];
+        let (y1, z1) = loop_yz[(i + 1) % n];
+        quad([[x0, y0, z0], [x1, y0, z0], [x1, y1, z1], [x0, y1, z1]]);
+    }
+    let cap_quads = [
+        [(-20.0, 0.0), (20.0, 0.0), (20.0, 5.0), (-20.0, 5.0)],
+        [(-20.0, 5.0), (-12.0, 5.0), (-w_top, 14.0), (-20.0, 14.0)],
+        [(-20.0, 14.0), (-w_top, 14.0), (-w_top, 20.0), (-20.0, 20.0)],
+        [(12.0, 5.0), (20.0, 5.0), (20.0, 14.0), (w_top, 14.0)],
+        [(w_top, 14.0), (20.0, 14.0), (20.0, 20.0), (w_top, 20.0)],
+    ];
+    for q in cap_quads {
+        quad([[x0, q[0].0, q[0].1], [x0, q[3].0, q[3].1], [x0, q[2].0, q[2].1], [x0, q[1].0, q[1].1]]);
+        quad([[x1, q[0].0, q[0].1], [x1, q[1].0, q[1].1], [x1, q[2].0, q[2].1], [x1, q[3].0, q[3].1]]);
+    }
+    s.push_str("endsolid dove_slot\n");
+    std::fs::write(path, s).expect("write dovetail slot stl");
+}

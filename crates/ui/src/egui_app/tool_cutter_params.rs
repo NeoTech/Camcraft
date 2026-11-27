@@ -55,8 +55,13 @@ pub(super) fn params_block(ui: &mut Ui, state: &mut State, u: Unit) {
         ui.end_row();
         ui.label("flutes");
         size_cell(ui, u, &mut t.flute_len, form);
-        ui.label("");
-        ui.label("");
+        if t.tool_kind() == ToolKind::Dovetail {
+            ui.label("corner R");
+            len_cell(ui, u, &mut t.corner_r);
+        } else {
+            ui.label("");
+            ui.label("");
+        }
         ui.end_row();
         ui.label("shank Ø");
         len_cell(ui, u, &mut t.shank_d);

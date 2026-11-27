@@ -151,7 +151,6 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
             | tools::ToolKind::ThreadMillSingle
             | tools::ToolKind::TSlot
             | tools::ToolKind::Keyseat
-            | tools::ToolKind::Dovetail
             | tools::ToolKind::Lollipop
             | tools::ToolKind::FormMill
     ) {

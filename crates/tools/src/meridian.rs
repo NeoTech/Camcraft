@@ -253,10 +253,7 @@ impl Tool {
                         },
                         line(2.0 * r, 0.0),
                     ],
-                    ToolKind::Dovetail => {
-                        let cot = 1.0 / self.tip_angle.to_radians().tan();
-                        vec![line(0.0, 0.0), line(0.0, r), line(fl, r - fl * cot)]
-                    }
+                    ToolKind::Dovetail => undercut::dovetail_meridian_points(self, r, fl),
                     _ => square,
                 }
             }
@@ -295,7 +292,7 @@ impl Tool {
                 return Err(MeridianError::Short(i + 1));
             }
         }
-        if self.kind == ToolKind::BullNose {
+        if matches!(self.kind, ToolKind::BullNose | ToolKind::Dovetail) {
             if !self.corner_r.is_finite() {
                 return Err(MeridianError::NonFinite(1));
             }
@@ -324,7 +321,7 @@ impl Tool {
         }
         if matches!(
             self.kind,
-            ToolKind::BallNose | ToolKind::BullNose | ToolKind::Lollipop
+            ToolKind::BallNose | ToolKind::BullNose | ToolKind::Lollipop | ToolKind::Dovetail
         ) && [self.diameter, self.flute_len, self.corner_r]
             .iter()
             .any(|v| v.abs() > MAX_ARC_COORD)

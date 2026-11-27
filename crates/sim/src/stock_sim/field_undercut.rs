@@ -31,7 +31,7 @@ use crate::cl::{Move, MoveKind};
 fn pieces(cutter: &Undercut, neck_len: f64) -> [(f64, SdfTool); 2] {
     let head = match cutter.head {
         Head::Disc => SdfTool::Flat { r: cutter.r, flank: cutter.height },
-        Head::Dove { cot } => SdfTool::Dovetail { r: cutter.r, cot, flank: cutter.height },
+        Head::Dove { cot, corner_r } => SdfTool::Dovetail { r: cutter.r, cot, corner: corner_r, flank: cutter.height },
         Head::Ball => SdfTool::Ball { r: cutter.r },
     };
     [(0.0, head), (cutter.height, SdfTool::Flat { r: cutter.neck_r, flank: neck_len })]

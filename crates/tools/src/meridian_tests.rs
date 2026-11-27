@@ -38,6 +38,9 @@ fn meridian_agrees_with_profile_on_the_cutting_band() {
         cutter(ToolKind::TSlot, 20.0, 5.0, 10.0, 10.0, 0.0),
         cutter(ToolKind::Keyseat, 25.0, 3.0, 10.0, 15.0, 0.0),
         cutter(ToolKind::Dovetail, 20.0, 5.0, 8.0, 10.0, 60.0),
+        Tool { corner_r: 0.254, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) },
+        Tool { corner_r: 3.0, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) },
+        Tool { corner_r: 2.0, ..cutter(ToolKind::Dovetail, 20.0, 3.0, 8.0, 10.0, 60.0) },
         cutter(ToolKind::Lollipop, 10.0, 6.0, 4.0, 20.0, 0.0),
     ];
     for t in tools {
@@ -232,11 +235,15 @@ fn tool_meridian_checks_inputs_before_shape_fallbacks() {
         }
     }
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let t = mill(ToolKind::BullNose, 10.0, bad, 0.0, 20.0);
-        assert!(matches!(t.meridian(), Err(MeridianError::NonFinite(_))));
+        for kind in [ToolKind::BullNose, ToolKind::Dovetail] {
+            let t = mill(kind, 10.0, bad, 60.0, 20.0);
+            assert!(matches!(t.meridian(), Err(MeridianError::NonFinite(_))));
+        }
     }
-    let t = mill(ToolKind::BullNose, 10.0, -1.0, 0.0, 20.0);
-    assert!(matches!(t.meridian(), Err(MeridianError::Negative(_))));
+    for kind in [ToolKind::BullNose, ToolKind::Dovetail] {
+        let t = mill(kind, 10.0, -1.0, 60.0, 20.0);
+        assert!(matches!(t.meridian(), Err(MeridianError::Negative(_))));
+    }
 }
 
 #[test]

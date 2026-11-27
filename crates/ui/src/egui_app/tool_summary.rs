@@ -84,7 +84,6 @@ fn reads_corner(kind: ToolKind) -> bool {
             | ToolKind::ThreadMillSingle
             | ToolKind::TSlot
             | ToolKind::Keyseat
-            | ToolKind::Dovetail
             | ToolKind::Lollipop
             | ToolKind::FormMill
     )

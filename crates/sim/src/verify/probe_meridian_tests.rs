@@ -26,6 +26,9 @@ fn cases() -> Vec<(&'static str, Tool)> {
         ("t-slot", cutter(ToolKind::TSlot, 20.0, 5.0, 10.0, 10.0, 0.0)),
         ("keyseat", cutter(ToolKind::Keyseat, 25.0, 3.0, 10.0, 15.0, 0.0)),
         ("dovetail", cutter(ToolKind::Dovetail, 20.0, 5.0, 8.0, 10.0, 60.0)),
+        ("dovetail 0.254", Tool { corner_r: 0.254, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) }),
+        ("dovetail 3.0", Tool { corner_r: 3.0, ..cutter(ToolKind::Dovetail, 19.05, 9.525, 8.0, 30.0, 60.0) }),
+        ("dovetail arc-top", Tool { corner_r: 2.0, ..cutter(ToolKind::Dovetail, 20.0, 3.0, 8.0, 10.0, 60.0) }),
         ("lollipop", cutter(ToolKind::Lollipop, 10.0, 6.0, 4.0, 20.0, 0.0)),
     ]
 }

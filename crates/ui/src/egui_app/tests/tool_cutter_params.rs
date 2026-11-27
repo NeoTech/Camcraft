@@ -66,7 +66,18 @@ fn each_milling_kind_shows_the_parameters_its_outline_is_drawn_from() {
         harness.run();
         harness.run();
         assert!(harness.query_by_label(tip).is_some(), "kind {kind} shows {tip}");
-        assert!(tips.iter().filter(|l| **l != tip).all(|l| harness.query_by_label(l).is_none()), "kind {kind} shows only {tip}");
+        let extra = if kind == 20 { Some("corner R") } else { None };
+        assert_eq!(
+            harness.query_by_label("corner R").is_some(),
+            kind == 2 || kind == 20,
+            "kind {kind} corner R visibility"
+        );
+        assert!(
+            tips.iter()
+                .filter(|l| **l != tip && extra != Some(**l))
+                .all(|l| harness.query_by_label(l).is_none()),
+            "kind {kind} shows only its tip fields"
+        );
         // The drawn outline keeps agreeing with the numbers it shows.
         assert!(harness.query_all_by_label_contains("cutter Ø 6.00").next().is_some(), "kind {kind} validates live");
     }

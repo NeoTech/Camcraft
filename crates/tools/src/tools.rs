@@ -134,10 +134,12 @@ pub enum ToolKind {
     /// Keyseat (Woodruff) cutter (#1444): the same disc-on-a-neck solid
     /// as the T-slot cutter, thinner, read the same way.
     Keyseat,
-    /// Dovetail cutter (#1444): a head widest at the tip that narrows
-    /// upward. `tip_angle` is the angle between the bottom face and the
-    /// flank in degrees (60 for a 60 degree dovetail), `diameter` the
-    /// head's at the tip, `flute_len` the head's height.
+    /// Dovetail cutter (#1444): a head widest at its corner radius
+    /// equator (at the tip when `corner_r` is 0) that narrows upward.
+    /// `tip_angle` is the angle between the bottom face and the flank
+    /// in degrees (60 for a 60 degree dovetail), `diameter` the widest
+    /// head diameter, `corner_r` the bottom corner radius, and
+    /// `flute_len` the head's height.
     Dovetail,
     /// Lollipop (undercut ball) cutter (#1444): a ball of `diameter` on
     /// a narrower neck. `flute_len` is the height above the tip where
