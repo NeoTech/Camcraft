@@ -85,8 +85,10 @@ fn the_3d_view_is_the_default_and_shows_an_imported_body() {
         camcraft_app::tool_body::body_of(&st.world, &e).unwrap_or_else(|| panic!("the body landed: {}", st.status))
     };
     open(&mut h, TOOL);
-    assert_eq!(face(&h).preview, PreviewMode::Model, "the 3D view is the default");
+    // #4336: the side drawing is the default; the 3D view is the option.
+    assert_eq!(face(&h).preview, PreviewMode::Side, "the side drawing is the default");
     assert!(has_label(&h, "3D") && has_label(&h, "Side"), "the toggle offers the two views");
+    click_window_button(&mut h, "3D");
     assert!(has_label(&h, "Model: the tool with its body holder.stl"), "the caption names the body");
     let m = last();
     let n = body.facets.len();
@@ -109,6 +111,7 @@ fn a_tool_without_a_body_shows_a_revolved_model() {
         h.run_steps(2);
     }
     open(&mut h, TOOL);
+    click_window_button(&mut h, "3D");
     assert_eq!(face(&h).preview, PreviewMode::Model);
     assert!(has_label(&h, "Model: revolved from the tool profile"), "the caption says the model is revolved");
     let (t, m) = (tool(&h, TOOL), last());
@@ -126,6 +129,7 @@ fn a_landed_drawn_cutter_shows_in_both_views() {
     h.run_steps(2);
     let landed = land_neck(&mut h);
     open(&mut h, TOOL);
+    click_window_button(&mut h, "3D");
     assert_eq!(last().steel, landed, "the 3D model revolves the landed cutter");
     let neck = last().mesh.iter().flat_map(|q| [q.a, q.b, q.c]).any(|p| (p.x.hypot(p.y) - 2.5).abs() < 1e-6);
     assert!(neck, "the 3D model has the Ø 5 neck");
@@ -157,7 +161,7 @@ fn the_side_view_paints_the_dimension_labels() {
         format!("dimensions in {}", u.suffix()),
     ];
     if let Some((hd, hl)) = d.holder {
-        want.push(format!("gauge {}", len(d.gauge)));
+        want.push(format!("gauge length {}", len(d.gauge)));
         want.push(format!("holder Ø {} × {}", len(hd), len(hl)));
     }
     for w in &want {
@@ -171,6 +175,7 @@ fn a_still_frame_computes_no_mesh() {
     let mut h = shell_harness();
     h.run_steps(2);
     open(&mut h, TOOL);
+    click_window_button(&mut h, "3D");
     let (b, p) = (preview_model::builds(), preview::projects());
     h.run_steps(3);
     assert_eq!(preview_model::builds() - b, 0, "a still frame builds no model");
@@ -273,6 +278,7 @@ fn the_flutes_toggle_shows_and_hides_the_helical_flutes() {
     let mut h = shell_harness();
     h.run_steps(2);
     open(&mut h, TOOL);
+    click_window_button(&mut h, "3D");
     let m = fluted_draft(&mut h, Some(4), "30");
     assert!(face(&h).flutes, "the Flutes toggle starts on");
     let (Some(all), Some(bare)) = (m.fluted.clone(), m.fluted_bare.clone()) else {
@@ -286,7 +292,7 @@ fn the_flutes_toggle_shows_and_hides_the_helical_flutes() {
     let deep = bare.iter().flat_map(|t| [t.a, t.b, t.c]).filter(|p| (p.z - z).abs() < m.tool.flute_len * 0.05).map(|p| r(&p));
     assert!(deep.fold(f64::INFINITY, f64::min) < m.tool.diameter * 0.5 * 0.7, "grooves cut into the fluted length");
     let (done, p) = (h.state().state.history.done_len(), preview::projects());
-    library_window(&h).get_by_label(preview::FLUTES).click();
+    library_window(&h).get_by_role_and_label(egui::accesskit::Role::CheckBox, preview::FLUTES).click();
     h.run_steps(2);
     assert!(!face(&h).flutes, "the Flutes toggle is off");
     assert!(preview::projects() > p, "the toggle projects the plain model");
@@ -326,6 +332,7 @@ fn a_changed_helix_rebuilds_the_fluted_model_once() {
     let mut h = shell_harness();
     h.run_steps(2);
     open(&mut h, TOOL);
+    click_window_button(&mut h, "3D");
     let m0 = fluted_draft(&mut h, Some(4), "30");
     let (b, p) = (preview_model::builds(), preview::projects());
     h.run_steps(3);

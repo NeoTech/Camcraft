@@ -366,17 +366,12 @@ fn lathe_and_entry(ui: &mut Ui, state: &mut State) {
     centre_cutting_row(ui, state);
 }
 
-/// M11.3: the centre-cutting flag. #4336: the window's Tool tab draws it
-/// in its CUTTER group.
+/// M11.3: the centre-cutting flag (#4336: also in the Tool tab's CUTTER group).
 pub(super) fn centre_cutting_row(ui: &mut Ui, state: &mut State) {
-    check_row(ui, CENTRE_CUTTING, &mut state.tool_ui.center_cutting);
+    check_row(ui, "Centre cutting (may plunge into solid)", &mut state.tool_ui.center_cutting);
 }
 
-/// The centre-cutting row's label.
-pub(crate) const CENTRE_CUTTING: &str = "Centre cutting (may plunge into solid)";
-
 /// The catalog facts, the workpiece material and the tool-table number.
-/// #3893: the tool library window's Details tab draws these same rows.
 pub(super) fn catalog(ui: &mut Ui, state: &mut State) {
     catalog_facts(ui, state, true);
     number_row(ui, state);

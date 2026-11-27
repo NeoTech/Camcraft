@@ -79,7 +79,7 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
     let (lo, hi) = margins(rect.size(), show.dims);
     let mut inner = egui::Rect::from_min_max(rect.min + lo, rect.max - hi);
     // #4336: room for the spindle nose above the holder, when it fits.
-    let nose = show.holder && m.dims.holder.is_some() && inner.height() > 4.0 * NOSE_H;
+    let nose = show.holder && m.dims.holder.is_some() && inner.height() >= MIN_DRAW + 2.0 * NOSE_H;
     if nose {
         inner.min.y += NOSE_H;
     }
