@@ -260,8 +260,10 @@ fn a_sc_import_names_every_face_and_patch() {
         assert!(!set.is_empty() && set.iter().all(|n| !n.is_empty()), "{row}");
     }
     // A face that looks up, picked into a 2D Pocket: the pick shows the
-    // name keys of its `list_features` row.
+    // name keys of its `list_features` row. The pocket's top is fixed 1 mm
+    // above the face, so its heights do not depend on the stock.
     let up = f["faces"].as_array().expect("faces").iter().find(|r| r["facing"] == json!("up")).expect("an up face");
+    let face_z = up["bounds"]["max"][2].as_f64().expect("the face's top z");
     c.ok("set_stock", json!({ "from_model": "plate" }));
     c.ok("add_tool", json!({ "catalog": "EM-0400-2FL" }));
     c.ok(
@@ -269,7 +271,7 @@ fn a_sc_import_names_every_face_and_patch() {
         json!({
             "kind": "pocket", "tool": "EM-0400-2FL", "name": "P1", "source": "plate",
             "params": {
-                "top_z": { "reference": "top_of_stock", "offset": 0.0 },
+                "top_z": { "reference": "fixed", "offset": face_z + 1.0 },
                 "bottom_z": { "reference": "bottom_of_selection", "offset": 0.0 },
                 "stepdown": 2.5,
             },
