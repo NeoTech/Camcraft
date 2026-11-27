@@ -105,6 +105,7 @@ mod recipe_tools;
 mod assembly_tools;
 mod component_library_tools;
 mod component_tools;
+mod convert_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

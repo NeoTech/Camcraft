@@ -208,6 +208,8 @@ pub use camcraft_tools::holder_library;
 pub mod tool_body;
 // #3644: the document component table and each tool's component stack.
 pub mod tool_assembly;
+// #4339: the plan that converts standalone tools to component stacks.
+pub mod tool_convert;
 // #3644: the records the table holds, for the callers outside this crate.
 pub use camcraft_tools::{component, component_geometry, connection_code};
 // #3898: the fit queries and the records a component is built from, for the

@@ -82,6 +82,8 @@ pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
 pub mod tool_assembly;
+// #4339: standalone tools converted to component stacks in one step.
+pub mod tool_convert;
 // #3645: the undoable pull of a user library component.
 pub mod component_sync;
 // #93 slice 2: a milling tool's drawn cutter outline.
@@ -167,6 +169,7 @@ pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
 pub use component_sync::SyncDocumentComponent;
+pub use tool_convert::ConvertToComponents;
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use electrode::ElectrodeFromFaces;
