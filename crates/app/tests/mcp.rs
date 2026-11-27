@@ -27,6 +27,9 @@ mod mcp_open;
 #[path = "mcp/op_type_fields.rs"]
 mod op_type_fields;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
+// #2074: list_posts, select_post, preview_post and save_post_script.
+#[path = "mcp/post_tools.rs"]
+mod post_tools;
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;
 #[path = "mcp/slot_tool_fit.rs"]

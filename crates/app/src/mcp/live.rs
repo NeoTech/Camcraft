@@ -34,10 +34,10 @@ pub enum GateKind {
     Posting,
     /// Machine mount or machine definition edits (`load_machine`, `edit_machine`). Never auto-approved.
     MachineEdit,
-    /// Setup post or workholding limit edits (`set_setup_post`, `set_workholding_max_rpm`, `set_setup_nose_to_axis`,
+    /// Post choice or workholding limit edits (`set_setup_post`, `select_post`, `set_workholding_max_rpm`, `set_setup_nose_to_axis`,
     /// `set_sheet_job`: its allowance is a floor the post holds the program to).
     LimitEdit,
-    /// File writes (`save_project`, `export_tool_library`, `export_fixture_dxf` with `path`).
+    /// File writes (`save_project`, `export_tool_library`, `save_post_script`, `export_fixture_dxf` with `path`).
     FileWrite,
     /// File-path reads or arguments (`import_model`, `import_tool_library`, `set_tool_body`,
     /// `set_lathe_tool_body`, `attach_tool_body_piece`, `import_dxf_fixture` with `path`,
@@ -59,10 +59,10 @@ pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
     match tool {
         "post" | "export_agie_inspection" => Some(GateKind::Posting),
         "load_machine" | "edit_machine" => Some(GateKind::MachineEdit),
-        "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
+        "set_setup_post" | "select_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
             Some(GateKind::LimitEdit)
         }
-        "save_project" | "export_tool_library" => Some(GateKind::FileWrite),
+        "save_project" | "export_tool_library" | "save_post_script" => Some(GateKind::FileWrite),
         "export_fixture_dxf" if has_non_null_arg(args, "path") => Some(GateKind::FileWrite),
         "import_model"
         | "import_tool_library"
@@ -245,6 +245,7 @@ pub fn answer_live_with(
             posted: None,
             last_value: Value::Null,
             selection: options.selection.clone(),
+            user_posts: None,
         },
         // The live bridge answers one line at a time: no background lane.
         bg: None,

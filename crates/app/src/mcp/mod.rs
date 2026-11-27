@@ -67,6 +67,8 @@ mod pockets;
 // #1534: document and per-setup post options (`SetPostOptions` / `SetSetupPostOptions`).
 mod agie_inspection;
 mod post_options_tools;
+mod post_files;
+mod post_tools;
 mod post_offer_view;
 mod render;
 mod selection;
@@ -160,6 +162,13 @@ impl Server {
         let (tx, rx) = std::sync::mpsc::channel();
         self.gate = Some(std::sync::Arc::new(std::sync::Mutex::new(rx)));
         tx
+    }
+
+    /// Test hook (#2074): the post tools read and write `.cps` files in
+    /// `dir` instead of the process's user posts folder.
+    #[doc(hidden)]
+    pub fn set_user_posts_dir(&mut self, dir: std::path::PathBuf) {
+        self.env.user_posts = Some(dir);
     }
 
     /// One wire line in, at most one wire line out (notifications get
