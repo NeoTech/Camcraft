@@ -2087,7 +2087,6 @@ fn egui_shell_snapshot_light() {
 /// #4336: the tool library window's Diameter field - the spin button on
 /// the row of the "Diameter" label.
 fn diameter_spin(win: &egui_kittest::Node<'_>) -> egui::Rect {
-    use egui_kittest::kittest::NodeT;
     let row = win.query_all_by_label("Diameter").next().expect("the window has a Diameter row").rect();
     win.query_all_by_role(egui::accesskit::Role::SpinButton)
         .map(|n| n.rect())
@@ -3083,17 +3082,18 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
         "a drag must not touch the world"
     );
 
-    tool_library_editor::library_window(&harness)
-        .query_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the window owns DragValues")
-        .click();
+    // #4336: the Diameter's field (the tool number's stands above it).
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").click();
+    }
     harness.run();
-    tool_library_editor::library_window(&harness)
-        .query_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the window owns DragValues")
-        .type_text("0.5");
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").type_text("0.5");
+    }
     harness.run();
     assert_eq!(
         tool_library_editor::draft(&mut harness).diameter,
