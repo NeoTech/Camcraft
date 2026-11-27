@@ -32,6 +32,25 @@ change.
   It is appended (index 10), so the combo indices and the digest bytes of
   older operations do not change.
 
+**Review fixes (PR #4316).**
+
+- The radial peck budget reads the full travel from the R standoff
+  (`r_d - bottom`), not the depth in material. Auto still picks the cycle
+  by the depth in material. The pecks run from the standoff, so a budget
+  that reads only the material let a far standoff (30000 mm) make 10,000
+  pecks, and a step that cannot move `t` (R at 1e20) loop for ever. Both
+  are refused as `peck plan unusable`. The loop also refuses a peck that
+  makes no progress.
+- `GENERATOR_OUTPUT_VERSION` goes from 1 to 2 (the #3704 rule). Auto's
+  output changes and its parameter digest does not, so without the bump a
+  cache saved on main reads current and posts the old cycle. Every cache
+  saved under version 1 reads Stale once and clears on regenerate. The
+  committed catalog caches are rebuilt and the pinned stamp constants of
+  `deburr_cache_stamp` and `wire_stamp` are captured again, as #3704 did.
+- Dropped: a salt only on Drill stamps (the way #4062 salts the milling
+  envelopes). The rule of #3704 names one knob for generator output, and a
+  second, kind-specific knob would leave two ways to do the same thing.
+
 **Effect on programs.** A hole whose R plane is more than one diameter
 above its mouth can change from `G73` to `G81`, or from `G83` to `G73`,
 under Auto. A program that does not use Auto, and a hole whose R plane is
