@@ -9,6 +9,8 @@
 //! directory. Cargo never removes the old one: one `camcraft-app` variant is about 600 units of ~190 MB.
 
 use std::fs;
+#[path = "unit_env/config.rs"]
+mod config;
 use std::path::Path;
 use std::process::Command;
 
@@ -22,7 +24,11 @@ pub fn is_removed(name: &str) -> bool {
 }
 
 /// Caller variables that the gate keeps but reports: they also enter the unit hash.
-pub const NOTED: [&str; 3] = ["RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS"];
+pub const NOTED: [&str; 4] = ["RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS", "CARGO_BUILD_TARGET"];
+
+fn is_noted(name: &str) -> bool {
+    NOTED.contains(&name) || name.strip_prefix("CARGO_TARGET_").and_then(|s| s.strip_suffix("_RUSTFLAGS")).is_some_and(|s| !s.is_empty())
+}
 
 /// The variables of `vars` that the gate removes from its cargo calls, sorted.
 pub fn removed(vars: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -42,16 +48,29 @@ pub fn apply(cmd: &mut Command) {
 /// The lines that a gate prints at its start: the pin, and each caller variable that it removes or notes.
 pub fn notes(vars: &[(String, String)]) -> Vec<String> {
     let mut out = vec![format!(
-        "unit env: {} for every cargo step (#3150: one fixed profile, so a second run reuses the units)",
+        "unit env: {} for every cargo step (#3150: fixed profile environment; target, rustflags and configuration are preserved)",
         PINNED.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")
     )];
     let gone = removed(vars.iter().map(|(k, _)| k.clone()));
     if !gone.is_empty() {
         out.push(format!("unit env: removed {} (it changes the profile and gives each unit a new directory)", gone.join(", ")));
     }
-    for (k, _) in vars.iter().filter(|(k, v)| NOTED.contains(&k.as_str()) && !v.is_empty()) {
+    for (k, _) in vars.iter().filter(|(k, v)| is_noted(k) && !v.is_empty()) {
         out.push(format!("unit env: note: {k} is set; each other value gives each unit a new directory"));
     }
+    out
+}
+
+/// Notes for the actual Cargo working directories in a gate plan, including UI-only config.
+pub fn plan_notes(vars: &[(String, String)], root: &Path, plan: &crate::plan::Plan) -> Vec<String> {
+    let mut dirs = vec![root.to_path_buf()];
+    if plan.steps.iter().any(|s| s.in_ui) {
+        dirs.push(root.join("crates/ui"));
+    }
+    let home = std::env::var_os("CARGO_HOME").filter(|s| !s.is_empty()).map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|p| std::path::PathBuf::from(p).join(".cargo")));
+    let mut out = notes(vars);
+    out.extend(config::notes(&dirs, home.as_deref()));
     out
 }
 
@@ -149,6 +168,69 @@ mod tests {
         assert!(n.iter().any(|l| l.contains("note: RUSTFLAGS")));
         assert!(!n.iter().any(|l| l.contains("CARGO_ENCODED_RUSTFLAGS")), "an empty value is no flag");
         assert_eq!(notes(&[]).len(), 1);
+    }
+
+    #[test]
+    fn target_inputs_are_noted_without_changing_or_printing_values() {
+        let vars = vec![
+            ("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS".into(), "private flags".into()),
+            ("CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS".into(), "".into()),
+            ("CARGO_BUILD_TARGET".into(), "aarch64-unknown-linux-gnu".into()),
+            ("CARGO_TARGET_DIR".into(), "target".into()),
+            ("CARGO_TARGET_X_LINKER".into(), "cc".into()),
+        ];
+        let text = notes(&vars).join("\n");
+        assert!(text.contains("note: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS"));
+        assert!(text.contains("note: CARGO_BUILD_TARGET"));
+        assert!(!text.contains("WASM32"));
+        assert!(!text.contains("CARGO_TARGET_DIR"));
+        assert!(!text.contains("LINKER"));
+        assert!(!text.contains("private flags"));
+        assert!(vars.iter().all(|(name, _)| !is_removed(name)));
+        assert_eq!(notes(&[("CARGO_BUILD_TARGET".into(), String::new())]).len(), 1);
+        assert!(!is_noted("CARGO_TARGET__RUSTFLAGS"));
+    }
+
+    #[test]
+    fn inherited_profile_values_are_removed_from_the_child() {
+        const PHASE: &str = "CAMCRAFT_UNIT_ENV_TEST_PHASE";
+        const PROFILE: &str = "CARGO_PROFILE_DEV_DEBUG";
+        let phase = std::env::var(PHASE).unwrap_or_default();
+        if phase == "clean" {
+            assert!(std::env::var_os(PROFILE).is_none());
+            assert!(std::env::var_os("CARGO_BUILD_INCREMENTAL").is_none());
+            assert_eq!(std::env::var("CARGO_INCREMENTAL").unwrap(), "0");
+            assert_eq!(std::env::var("CARGO_BUILD_TARGET").unwrap(), "aarch64-unknown-linux-gnu");
+            assert_eq!(std::env::var("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS").unwrap(), "-Ctarget-cpu=generic");
+            return;
+        }
+        let mut cmd = Command::new(std::env::current_exe().unwrap());
+        cmd.args(["--exact", "unit_env::tests::inherited_profile_values_are_removed_from_the_child", "--nocapture"]);
+        if phase == "caller" {
+            assert_eq!(std::env::var(PROFILE).unwrap(), "true");
+            apply(&mut cmd);
+            cmd.env(PHASE, "clean");
+        } else {
+            cmd.env(PROFILE, "true").env("CARGO_BUILD_INCREMENTAL", "true").env("CARGO_INCREMENTAL", "1").env(PHASE, "caller");
+            cmd.env("CARGO_BUILD_TARGET", "aarch64-unknown-linux-gnu").env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS", "-Ctarget-cpu=generic");
+        }
+        let output = cmd.output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+    }
+
+    #[test]
+    fn plan_notes_only_scan_ui_config_for_ui_steps() {
+        let root = std::env::temp_dir().join(format!("xtask-plan-config-{}", std::process::id()));
+        let ui = root.join("crates/ui/.cargo");
+        fs::create_dir_all(&ui).unwrap();
+        fs::write(ui.join("config.toml"), "[profile.test]\ndebug = true\n").unwrap();
+        let mut plan = crate::plan::Plan::default();
+        let ui_path = ui.join("config.toml").display().to_string();
+        assert!(!plan_notes(&[], &root, &plan).iter().any(|s| s.contains(&ui_path)));
+        plan.steps.push(crate::plan::Step::new("UI test", &["test"], "ui"));
+        assert!(plan_notes(&[], &root, &plan).iter().any(|s| s.contains(&ui_path)));
+        assert_eq!(fs::read_to_string(ui.join("config.toml")).unwrap(), "[profile.test]\ndebug = true\n");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

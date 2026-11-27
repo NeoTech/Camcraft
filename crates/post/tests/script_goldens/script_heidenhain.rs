@@ -161,4 +161,89 @@ mod picomax {
         let why = engine::run(&script("heidenhain"), &manual, &two_tools()).err().map(|e| e.to_string()).unwrap_or_default();
         assert!(why.contains("the Heidenhain TNC post handles only the manual tool change modes manual-retract-top"), "{why}");
     }
+
+    /// #4226: the G62 filter mode (P01) and the T range, by profile
+    /// (docs/decisions/4226-g62-smoothing.md).
+    mod g62 {
+        use super::*;
+
+        fn smoothed(tol: &str, mode: &str) -> String {
+            STREAM.replace("PARAM Coolant off\n", &format!("PARAM Coolant off\nPARAM Smoothing {tol}\nPARAM SmoothingMode {mode}\n"))
+        }
+
+        /// The Picomax file with an edit; a stated control other than the
+        /// Picomax's takes the automatic change (the manual change is verified
+        /// for the Picomax control only).
+        fn with(edit: impl Fn(&mut Value)) -> Value {
+            let mut file: Value = serde_json::from_str(MCH).expect("JSON");
+            edit(&mut file);
+            machine::mirror(&parse_mch(&file.to_string()).expect("machine"))
+        }
+
+        fn control(model: &str, nc: &str) -> Value {
+            with(|f| {
+                f["tooling"]["tool_change"] = "changer".into();
+                f["controller"]["identity"] = serde_json::json!({ "model": model, "nc_software": nc });
+            })
+        }
+
+        fn g62_lines(m: &Value, tol: &str, mode: &str) -> (Vec<String>, Vec<String>) {
+            let out = engine::run(&script("heidenhain"), m, &smoothed(tol, mode)).unwrap_or_else(|e| panic!("{tol} {mode}: {e}"));
+            let lines = bodies(&out.program).into_iter().map(str::trim).filter(|b| b.starts_with("G62")).map(str::to_owned).collect();
+            (lines, out.warnings)
+        }
+
+        fn refusal(m: &Value, tol: &str) -> String {
+            engine::run(&script("heidenhain"), m, &smoothed(tol, "finish")).err().map(|e| e.to_string()).unwrap_or_default()
+        }
+
+        #[test]
+        fn picomax_g62_stays_t_only_without_option_2() {
+            let (lines, warnings) = g62_lines(&picomax(), "0.02", "finish");
+            assert_eq!(lines, ["G62 T0.02", "G62"]);
+            assert!(warnings.is_empty(), "{warnings:?}");
+            let (lines, warnings) = g62_lines(&picomax(), "0.02", "rough");
+            assert_eq!(lines, ["G62 T0.02", "G62"]);
+            assert!(
+                warnings.iter().any(|w| w.contains("smoothing mode rough is not written")
+                    && w.contains("only with software option 2 (HSC machining)")),
+                "{warnings:?}"
+            );
+        }
+
+        #[test]
+        fn g62_writes_the_finish_or_rough_mode_where_the_control_takes_it() {
+            let opt2 = with(|f| f["controller"]["identity"]["installed_options"] = serde_json::json!(["2"]));
+            let tnc640 = control("TNC 640", "340595-08");
+            for m in [&opt2, &tnc640, &Value::Null] {
+                let (fin, w) = g62_lines(m, "0.02", "finish");
+                assert_eq!(fin, ["G62 T0.02 P01 0 P02 0", "G62"]);
+                assert!(w.is_empty(), "{w:?}");
+                let (rough, _) = g62_lines(m, "0.1", "rough");
+                assert_eq!(rough, ["G62 T0.1 P01 1 P02 0", "G62"]);
+            }
+            // TNC 426/430: no documented P01 - T only, and a rough ask is told.
+            let (rough, w) = g62_lines(&control("TNC 430", "280476-01"), "0.1", "rough");
+            assert_eq!(rough, ["G62 T0.1", "G62"]);
+            assert!(w.iter().any(|w| w.contains("has no documented G62 P01")), "{w:?}");
+        }
+
+        #[test]
+        fn g62_refuses_a_t_outside_the_documented_range_by_name() {
+            let tnc640_08 = control("TNC 640", "340595-08");
+            assert_eq!(g62_lines(&tnc640_08, "10", "finish").0[0], "G62 T10 P01 0 P02 0");
+            let why = refusal(&tnc640_08, "10.001");
+            assert!(why.contains("smoothing tolerance T10.001 mm is above the largest T of TNC 640 NC 340595-08") && why.contains("(10 mm)"), "{why}");
+            // 34059x-07 documents 0 to 99999.9999.
+            assert_eq!(g62_lines(&control("TNC 640", "340595-07"), "12", "finish").0[0], "G62 T12 P01 0 P02 0");
+            // The Picomax manual states no range: the narrowest documented one (10 mm).
+            assert!(refusal(&picomax(), "12").contains("above the largest T of iTNC 530 NC 340490-03"));
+            // A T that rounds to 0 is the builder's tolerance on the control.
+            let why = refusal(&Value::Null, "0.0004");
+            assert!(why.contains("writes T0 at 0.001 mm") && why.contains("refused, not posted"), "{why}");
+            // TNC 410: no cycle 32.
+            let why = refusal(&control("TNC 410", "286060-01"), "0.02");
+            assert!(why.contains("has no tolerance cycle (cycle 32 / G62)"), "{why}");
+        }
+    }
 }

@@ -53,11 +53,14 @@ fn click_apply_holder(h: &mut H) {
 #[test]
 fn the_holder_library_heads_the_assembly_group_not_the_shape_window() {
     let mut h = editor();
-    for label in ["Holder library", "Library holder", "Apply holder"] {
-        assert!(library_window(&h).query_by_label(label).is_some(), "{label} stands in the window's assembly group");
+    // #4336: the pick is the group's "Holder" row; the group's heading
+    // says what it is for.
+    for label in ["Holder", "Apply holder"] {
+        assert!(library_window(&h).query_all_by_label(label).next().is_some(), "{label} stands in the window's assembly group");
     }
     let heading = library_window(&h).get_by_label(crate::egui_app::tool_library_dialog::assembly_group::HEADING).rect();
-    assert!(library_window(&h).get_by_label("Holder library").rect().top() > heading.top(), "the picker is under the group heading");
+    let pick = library_window(&h).query_all_by_label("Holder").map(|n| n.rect()).find(|r| r.top() > heading.top());
+    assert!(pick.is_some(), "the picker is under the group heading");
     assert!(apply_disabled(&h), "nothing picked yet");
     crate::actions::open_tool_shape_editor(&mut h.state_mut().state, TOOL);
     h.run_steps(3);
@@ -65,7 +68,7 @@ fn the_holder_library_heads_the_assembly_group_not_the_shape_window() {
         .query_all_by_role(egui::accesskit::Role::Window)
         .find(|n| n.accesskit_node().label().as_deref() == Some("Tool shape: EM-0600-4FL"))
         .expect("shape window");
-    for label in ["Holder library", "Library holder", "Apply holder"] {
+    for label in ["Stick-out", "Holder gauge length", "Apply holder"] {
         assert!(win.query_by_label(label).is_none(), "the shape window has no {label}");
     }
     assert!(win.query_by_label("Body").is_some(), "the Body tab is the default");
@@ -121,7 +124,7 @@ fn a_shank_the_holder_cannot_take_is_refused_by_name() {
 fn the_projection_lands_through_apply_holder_and_undoes() {
     let mut harness = editor();
     pick(&mut harness, "ER20 chuck");
-    assert!(shows(&harness, "Projection"), "the projection field stands");
+    assert!(shows(&harness, "Stick-out"), "the projection (stick-out) field stands");
     assert!(shows(&harness, "straight-shank chuck"), "the pick says what it is");
     let d = holder(&mut harness).clone();
     assert_eq!((d.gauge, d.projection), (45.0, 55.0), "entry gauge, tool stickout");

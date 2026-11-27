@@ -4,6 +4,8 @@
 //! and the close button - and one footer that all pages share: a hint on
 //! the left; Close on a list page; Duplicate, Cancel and Apply on the tool
 //! editor. The pages draw between the two and do not change here.
+//! #4338 (U12): a user holder in the holder form has Duplicate, Cancel and
+//! Apply too, and the hint says how many tools Apply updates.
 //! Provenance: our own dialog frame after the #3663 mock-ups and the egui
 //! panel docs; no HSMWorks material involved.
 
@@ -30,6 +32,7 @@ pub(crate) const HINT_HOLDERS: &str = "Click a holder to see its facts and the t
 pub(crate) const HINT_HOLDER: &str = "Copy as user holder to make a holder that you can edit.";
 pub(crate) const HINT_APPLY: &str = "Apply is one undo step.";
 pub(crate) const HINT_COMPONENT: &str = "Apply component changes each tool built from it in one undo step.";
+pub(crate) const HINT_USER_HOLDER: &str = "Apply updates each tool that uses the holder. It is one undo step.";
 /// The `frame_cost` names of the header and the footer (crates/ui/AGENTS.md "Frame cost").
 pub(crate) const HEADER_SPAN: &str = "ui/tool_library.header";
 pub(crate) const FOOTER_SPAN: &str = "ui/tool_library.footer";
@@ -48,6 +51,9 @@ pub(crate) enum Face {
     Tool { name: String, kind: ToolKind, number: u32 },
     /// The component editor, by the draft's name.
     Component(String),
+    /// #4338: a user holder in the holder form: the draft's name and the
+    /// count of the tools that use the holder.
+    UserHolder { name: String, users: usize },
 }
 
 impl Face {
@@ -65,6 +71,8 @@ pub(crate) enum Ask {
     Close,
     Cancel,
     Apply,
+    /// #4338: copy the open user holder as a new user holder.
+    Duplicate,
 }
 
 /// The face of the open window, or `None` when it is closed.
@@ -72,7 +80,8 @@ pub(crate) enum Ask {
 pub(crate) fn face(state: &State) -> Option<Face> {
     let v = state.tool_library.as_ref()?;
     if let Some(d) = &v.component_edit {
-        return Some(Face::Component(d.name.clone()));
+        // The count of users is the window's to fill (`body`).
+        return Some(if d.shape.is_some() { Face::UserHolder { name: d.name.clone(), users: 0 } } else { Face::Component(d.name.clone()) });
     }
     Some(match v.page {
         LibraryPage::Tools => match &v.editor {
@@ -112,6 +121,10 @@ pub(crate) fn header(ui: &mut Ui, state: &State, face: &Face) -> Option<Ask> {
                 ui.label(title(ui, name));
                 ui.weak("component");
             }
+            Face::UserHolder { name, users } => {
+                ui.label(title(ui, name));
+                ui.weak(format!("holder · used by {}", super::holder_view::count(*users)));
+            }
         }
         ui.add_space(12.0);
         let mut picked = page;
@@ -133,9 +146,18 @@ pub(crate) fn header(ui: &mut Ui, state: &State, face: &Face) -> Option<Ask> {
     ask
 }
 
+/// What the footer reads that the frame cannot: whether the component or
+/// holder draft differs, and why the holder draft cannot be applied.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Draft {
+    pub changed: bool,
+    pub holder_refusal: Option<String>,
+}
+
 /// The footer: the tool editor's refusal (if any), then the hint on the
 /// left and the face's buttons on the right.
-pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, component_changed: bool) -> Option<Ask> {
+pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, draft: &Draft) -> Option<Ask> {
+    let component_changed = draft.changed;
     let _s = crate::frame_cost::span(FOOTER_SPAN);
     if matches!(face, Face::Tool { .. })
         && let Some(msg) = state.error_for(ErrorScope::Tool)
@@ -144,7 +166,14 @@ pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, component_changed:
     }
     let mut ask = None;
     ui.horizontal(|ui| {
-        ui.weak(hint(face));
+        match face {
+            Face::UserHolder { users, .. } if *users > 0 => {
+                ui.weak(format!("Apply updates {}. It is one undo step.", super::holder_view::count(*users)));
+            }
+            _ => {
+                ui.weak(hint(face));
+            }
+        }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| match face {
             Face::List(..) | Face::Holder(_) => {
                 if ui.button(CLOSE).on_hover_text("close the tool library").clicked() {
@@ -177,6 +206,22 @@ pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, component_changed:
                     ask = Some(Ask::Cancel);
                 }
             }
+            Face::UserHolder { .. } => {
+                let why = draft.holder_refusal.clone().unwrap_or_else(|| "the draft does not differ from the holder".to_owned());
+                if primary(ui, APPLY, component_changed && draft.holder_refusal.is_none())
+                    .on_hover_text("write this draft to the holder and derive each tool that uses it again (one undo step)")
+                    .on_disabled_hover_text(why)
+                    .clicked()
+                {
+                    ask = Some(Ask::Apply);
+                }
+                if ui.button(CANCEL).on_hover_text("drop the unapplied draft and go back to the list").clicked() {
+                    ask = Some(Ask::Cancel);
+                }
+                if ui.button(DUPLICATE).on_hover_text("a new user holder, copied from this holder as it is applied (one undo step)").clicked() {
+                    ask = Some(Ask::Duplicate);
+                }
+            }
         });
     });
     ask
@@ -193,6 +238,7 @@ pub(crate) fn hint(face: &Face) -> &'static str {
         Face::Holder(_) => HINT_HOLDER,
         Face::Tool { .. } => HINT_APPLY,
         Face::Component(_) => HINT_COMPONENT,
+        Face::UserHolder { .. } => HINT_USER_HOLDER,
     }
 }
 

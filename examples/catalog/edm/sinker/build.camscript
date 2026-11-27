@@ -1,0 +1,86 @@
+// Provenance: original sinker EDM catalog case (#2872) using CamCraft's public commands.
+// Builds sinker.camproj and posts sinker.nc headlessly through CamCraft's
+// undoable command verbs. Run with CWD = this case directory:
+//   camcraft-cli script build.camscript
+
+cam.import("model/sinker.obj", "sinker");
+cam.call("set_model_link", { model: "sinker", path: null });
+cam.call("fit_stock", { shape: "box", margin: 0.0 });
+cam.call("load_machine", { builtin: "Sinker EDM 3-axis (template)" });
+
+// The shipped template states no conditions and no codes: a real machine
+// takes them from its control's manual. These values and words are
+// invented for this example. They are not the codes of any control.
+cam.call("edit_machine", {
+  patch: {
+    edm: {
+      conditions: [
+        { id: "R1", name: "example rough", gap: 0.10, undersize: 0.25, role: "rough" },
+        { id: "F1", name: "example finish", gap: 0.03, undersize: 0.03, role: "finish" }
+      ],
+      codes: {
+        metric: "G21",
+        inch: "G20",
+        pickup: "T{tool} M06",
+        reference: "M100 H{offset}",
+        condition: "E{id}",
+        depth: "M101 Z{z} F{f}",
+        side: "M102 X{x} Y{y} Z{z} F{f}",
+        end: "M02"
+      }
+    }
+  }
+});
+cam.call("add_setup", { name: "Sinker" });
+cam.call("set_setup_post", { post: "Sinker EDM (ISO)" });
+
+// The cavity's floor and four walls: the faces inside its 20 x 12 mm box,
+// below the work top.
+var rows = cam.call("list_features", { model: "sinker", kinds: ["faces"] });
+var picks = [];
+for (var i = 0; i < rows.faces.length; i++) {
+  var f = rows.faces[i];
+  var lo = f.bounds.min, hi = f.bounds.max;
+  if (lo[0] >= -5.0 - 1e-6 && hi[0] <= 15.0 + 1e-6 && lo[1] >= -6.0 - 1e-6 && hi[1] <= 6.0 + 1e-6 && lo[2] >= 17.0 - 1e-6) {
+    picks.push({ model: "sinker", id: f.id });
+  }
+}
+if (picks.length !== 5) {
+  throw new Error("expected the cavity floor and four walls, got " + picks.length + " faces");
+}
+
+// The electrode: the cavity outline made smaller by the rough
+// condition's undersize (0.25 mm per side).
+var electrode = cam.call("electrode_from_faces", {
+  name: "E-19.5x11.5", picks: picks, condition: "R1", stub: 10.0, pickup: 15.0
+});
+
+// Sinker Burn: the rough burn sinks the electrode to the cavity floor.
+var burn = electrode.burn;
+burn.condition = "R1";
+burn.pass = "rough";
+cam.call("add_operation", {
+  kind: "Sinker Burn", name: "Rough burn", tool: "E-19.5x11.5", source: "stock", params: burn
+});
+
+// Sinker Side Burn: the finish condition burns to the floor again, then
+// moves the same electrode 0.22 mm toward +X and back. That moves the +X
+// wall out to its drawn size: 0.25 undersize - 0.03 finish gap = 0.22.
+var side = electrode.burn;
+side.condition = "F1";
+delete side.pass;
+side.direction = "plus_x";
+side.amount = 0.22;
+side.undersize = 0.25;
+cam.call("add_operation", {
+  kind: "Sinker Side Burn", name: "Side burn +X", tool: "E-19.5x11.5", source: "stock", params: side
+});
+
+cam.generate();
+var verdict = cam.verify();
+if (!verdict.ok) {
+  throw new Error("sinker catalog verify failed: " + JSON.stringify(verdict));
+}
+cam.save("sinker.camproj");
+cam.post({ to: "sinker.nc" });
+cam.report();

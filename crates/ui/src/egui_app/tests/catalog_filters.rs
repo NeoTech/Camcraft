@@ -1,9 +1,13 @@
 //! PR #2029: catalog filters are temporary view state and compose together.
+//! #4335 (U9): the filters are the category rail and the one search box.
 //! Provenance: our own tests of the requested catalog controls.
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 
 use egui::accesskit::Role;
 use super::*;
+use crate::egui_app::tool_library_dialog::categories::ALL;
+use crate::egui_app::tool_library_dialog::list::{ADD, NO_MATCH};
+use crate::egui_app::tool_library_dialog::list_header::SEARCH;
 
 fn catalog() -> Harness<'static, ShellUi> {
     let mut h = Harness::builder()
@@ -17,15 +21,13 @@ fn catalog() -> Harness<'static, ShellUi> {
     h
 }
 
-fn choose_type(h: &mut Harness<'static, ShellUi>, name: &str) {
-    h.get_by_role_and_label(Role::ComboBox, "Tool type").click();
-    h.run_steps(2);
+fn choose_category(h: &mut Harness<'static, ShellUi>, name: &str) {
     h.get_by_role_and_label(Role::Button, name).click();
     h.run_steps(3);
 }
 
 fn search(h: &mut Harness<'static, ShellUi>, name: &str) {
-    h.get_by_role_and_label(Role::TextInput, "Name filter").click();
+    h.get_by_role_and_label(Role::TextInput, SEARCH).click();
     h.run();
     h.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND));
     h.input_mut().events.push(Event::Key {
@@ -34,22 +36,22 @@ fn search(h: &mut Harness<'static, ShellUi>, name: &str) {
     });
     h.run();
     h.input_mut().events.push(Event::ModifiersChanged(Modifiers::NONE));
-    h.get_by_role_and_label(Role::TextInput, "Name filter").type_text(name);
+    h.get_by_role_and_label(Role::TextInput, SEARCH).type_text(name);
     h.run_steps(3);
 }
 
 fn has(h: &Harness<'static, ShellUi>, name: &str) -> bool {
-    h.query_by_label_contains(&format!("{name}  Ø")).is_some()
+    h.query_all_by_label(name).next().is_some()
 }
 
 #[test]
-fn catalog_type_filter_and_all_types_reset() {
+fn catalog_category_filter_and_all_tools_reset() {
     let mut h = catalog();
     assert!(has(&h, "EM-0600-4FL") && has(&h, "BN-0600"));
-    choose_type(&mut h, "ball nose");
+    choose_category(&mut h, "Ball nose");
     assert!(has(&h, "BN-0600") && has(&h, "BN-1000"));
     assert!(!has(&h, "EM-0600-4FL") && !has(&h, "DR-0600"));
-    choose_type(&mut h, "All types");
+    choose_category(&mut h, ALL);
     assert!(has(&h, "EM-0600-4FL") && has(&h, "DR-0600"));
 }
 
@@ -67,7 +69,7 @@ fn catalog_filters_apply_together_without_changing_the_document_or_history() {
     let before = camcraft_app::project::save_text(&h.state().state.world).unwrap();
     search(&mut h, "0600");
     assert!(has(&h, "BN-0600") && has(&h, "EM-0600-4FL"));
-    choose_type(&mut h, "ball nose");
+    choose_category(&mut h, "Ball nose");
     assert!(has(&h, "BN-0600"));
     assert!(!has(&h, "BN-1000") && !has(&h, "EM-0600-4FL"));
     assert_eq!(camcraft_app::project::save_text(&h.state().state.world).unwrap(), before);
@@ -80,9 +82,9 @@ fn catalog_filters_apply_together_without_changing_the_document_or_history() {
 fn catalog_no_match_shows_message_and_preserves_the_catalog() {
     let mut h = catalog();
     search(&mut h, "no such tool");
-    assert!(h.query_by_label("No tools match the filters.").is_some());
-    assert!(h.query_by_label("Add").is_none());
+    assert!(h.query_by_label(NO_MATCH).is_some());
+    assert!(h.query_by_label(ADD).is_none());
     search(&mut h, "0600");
-    assert!(h.query_by_label("No tools match the filters.").is_none());
+    assert!(h.query_by_label(NO_MATCH).is_none());
     assert!(has(&h, "BN-0600") && has(&h, "EM-0600-4FL"));
 }

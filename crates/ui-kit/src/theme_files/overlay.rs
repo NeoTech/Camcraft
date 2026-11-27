@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use egui::Color32;
 
 use super::names;
-use crate::egui_app::theme::{Tokens, clamp};
+use crate::theme::{Tokens, clamp};
 
 /// Overlay the parsed maps on the base table. The destructuring is the
 /// M6.1 A exhaustiveness law, restated for files: a token added to
@@ -38,6 +38,7 @@ pub(super) fn apply_overlay(
         menu_width, recent_width, menu_gap, menu_pad_x,
         overlay_panel, overlay_edge, overlay_text, overlay_track, drop_veil, empty_hint, pick_halo, plate_hole, plate_dowel, gcode_line,
         tool_ground, tool_axis, tool_grid, tool_flute, tool_shank, tool_body, tool_edge, tool_holder, tool_note, tool_dim, thumb_flute, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
+        close_hover, close_ink,
         // The viewport furniture reads `ground` below, not `base`.
         cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
     } = base;
@@ -56,7 +57,7 @@ pub(super) fn apply_overlay(
     // dark) gets the built-in set of that ground for each key it leaves
     // out - the furniture followed the ground before it was a token.
     let viewport = c(names::VIEWPORT, viewport);
-    let light = crate::egui_app::ground_ink::light_ground;
+    let light = crate::contrast::light_ground;
     let ground = match (light(viewport), light(base.viewport)) {
         (now, was) if now == was => base,
         (true, _) => Tokens::LIGHT,
@@ -123,6 +124,8 @@ pub(super) fn apply_overlay(
         mount_tip: c(names::MOUNT_TIP, mount_tip),
         mount_origin: c(names::MOUNT_ORIGIN, mount_origin),
         mount_hint: c(names::MOUNT_HINT, mount_hint),
+        close_hover: c(names::CLOSE_HOVER, close_hover),
+        close_ink: c(names::CLOSE_INK, close_ink),
         radius_widget: rad(names::RADIUS_WIDGET, radius_widget, clamp::RADIUS as f32),
         radius_window: rad(names::RADIUS_WINDOW, radius_window, f32::from(clamp::RADIUS_WINDOW)),
         radius_menu: rad(names::RADIUS_MENU, radius_menu, f32::from(clamp::RADIUS_WINDOW)),
