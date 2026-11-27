@@ -162,6 +162,56 @@ fn revolve(prof: &[(f64, f64)], at: impl Fn(f64, f64, f64) -> f64) -> Vec<Triang
     out
 }
 
+/// #4336 (U10): the most samples along one flute of the side view.
+pub(crate) const SIDE_STEPS: usize = 96;
+
+/// #4336 (U10): the flutes of the side view, display only - the centre
+/// line of each groove where it faces the viewer, as polylines of
+/// `(z, x)` in model units (x across the axis). A groove at angle `th`
+/// shows at `x = r(z) * sin(th)` while `cos(th) > 0`; the helix turns `th`
+/// by `twist` per unit of height, so a helix draws as the slanted curves
+/// of a technical drawing and a straight flute as a vertical line. The
+/// lines stop where the run-out starts. `None` when `t` shows no flutes.
+/// Built with the model (when the tool changes), never on a still frame.
+pub(crate) fn side_lines(t: &Tool, prof: &[(f64, f64)]) -> Option<Vec<Vec<(f64, f64)>>> {
+    let g = Grooves::of(t)?;
+    let top = g.len * (1.0 - RUN_OUT);
+    let pitch = TAU / f64::from(g.n);
+    let mut out = Vec::new();
+    for k in 0..g.n {
+        let phase = pitch * (f64::from(k) + GROOVE * 0.5);
+        let mut line: Vec<(f64, f64)> = Vec::new();
+        for i in 0..=SIDE_STEPS {
+            let z = top * i as f64 / SIDE_STEPS as f64;
+            let th = z * g.twist + phase;
+            if th.cos() > 0.0 {
+                line.push((z, radius_at(prof, z).unwrap_or(t.diameter * 0.5) * th.sin()));
+            } else if line.len() > 1 {
+                out.push(std::mem::take(&mut line));
+            } else {
+                line.clear();
+            }
+        }
+        if line.len() > 1 {
+            out.push(line);
+        }
+    }
+    Some(out)
+}
+
+/// The radius of the meridian `prof` (`(z, r)`, tip up) at height `z`.
+fn radius_at(prof: &[(f64, f64)], z: f64) -> Option<f64> {
+    prof.windows(2).find_map(|w| {
+        let ((z0, r0), (z1, r1)) = (w[0], w[1]);
+        let (lo, hi) = (z0.min(z1), z0.max(z1));
+        if !(lo <= z && z <= hi) || !(r0.is_finite() && r1.is_finite()) {
+            return None;
+        }
+        let s = if hi - lo > 1e-12 { (z - z0) / (z1 - z0) } else { 1.0 };
+        Some(r0 + (r1 - r0) * s)
+    })
+}
+
 #[cfg(test)]
 #[path = "flutes_tests.rs"]
 mod tests;

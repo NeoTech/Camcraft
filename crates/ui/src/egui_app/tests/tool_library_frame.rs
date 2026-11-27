@@ -143,6 +143,7 @@ fn each_face_has_its_hint() {
             true,
         ),
         (Face::Component("holder".into()), frame::HINT_COMPONENT, true),
+        (Face::UserHolder { name: "BT40 ER32".into(), users: 0 }, frame::HINT_USER_HOLDER, true),
     ];
     for (face, hint, back) in faces {
         assert_eq!(frame::hint(&face), hint, "{face:?}");
