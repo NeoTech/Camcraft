@@ -22,13 +22,23 @@
    - `of` now returns `None` when a wider body or a narrower nose draws the
      same outline. The holder then opens in the generic component editor,
      as an outline from elsewhere does.
-   - The exception is a library shrink chuck at its library gauge length.
-     It reads back as the library's own nose and body: those are the values
-     that the user saw in the read-only view.
+   - There is no exception for a copy of a library shrink chuck. A user
+     holder with a wider hidden body can draw the same outline as the
+     library chuck (the form before this fix and `edit_user_holder` could
+     write one), and the component records no library source. A read-back
+     of the library's body would then be smaller than that holder's steel.
+     44 of the 117 built-in shrink chucks have a covered body at their
+     library gauge length (for example "BT40 Shrink 20 mm"). Their copies
+     open in the generic component editor. The other shrink chucks (for
+     example "BT40 Shrink 25 mm") show their body and open in the form.
    - `HolderShape::component` builds the kind and the geometry, and refuses
      (`ShapeError::NotKept`) a shape whose outline does not read back as
      the same values. The form's check and Apply use it. Thus the form
      never writes an outline that it cannot show again.
+   - The MCP tool `edit_user_holder` (#4438) writes through
+     `HolderShape::component` too. It refuses `NotKept` with the form's
+     text, and it refuses a held holder with a covered body ("no holder
+     shape outline").
 
 **Why.** The Prime Directive: the holder outline goes into the collision
 checks. A value that the form shows must be the steel that the outline
@@ -45,7 +55,16 @@ a guess draws can be smaller than the real steel.
 - Accept a covered body at any gauge length when it is the library's body.
   A user holder that was written before this fix, at another gauge length,
   can have another body. It now opens in the generic editor.
+- Accept a covered body at the library's gauge length when the outline is
+  the library chuck's outline (the first form of this PR). A look-alike
+  user holder with a wider hidden body has the same outline, so the form
+  would show the library's smaller body and draw it after a gauge length
+  edit.
+- Mark a copy "from the library" and accept the library's body only on a
+  marked copy. The marker is a new field of the project file: a format
+  change for one convenience. Not done without the maintainer.
 
 **Cost to change later.** Small. If a holder component gets its own
-recorded shape (for example a STEP import in #4390), `of` can read that
-record first and the refusal can go away for those holders.
+recorded shape or source (for example a STEP import in #4390, or a "from
+the library" marker), `of` can read that record first, and the copies of
+the covered library chucks can open in the form again.

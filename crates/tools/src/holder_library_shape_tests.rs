@@ -39,7 +39,7 @@ fn er32(taper: Taper, gauge_len: f64, nose_d: f64) -> HolderShape {
 
 #[test]
 fn each_builtin_taper_holder_reads_back_as_its_shape() {
-    let mut n = 0;
+    let (mut n, mut covered) = (0, 0);
     for e in library() {
         let Some(taper) = e.taper else { continue };
         let csw = match e.clamp {
@@ -50,7 +50,15 @@ fn each_builtin_taper_holder_reads_back_as_its_shape() {
         let (Ok(mcs), Ok(csw)) = (ConnectionCode::parse(taper.name), csw) else { continue };
         let kind = ComponentKind::AdaptiveItem { mcs, csw };
         let g = ComponentGeometry::holder(&e, ADAPTIVE_PORT, e.gauge_len).expect("the library draws it");
-        let s = HolderShape::of(&kind, &g, ADAPTIVE_PORT).unwrap_or_else(|| panic!("{} reads back", e.name()));
+        let Some(s) = HolderShape::of(&kind, &g, ADAPTIVE_PORT) else {
+            // #4455: only a shrink-fit body that the flange envelope covers
+            // does not read back - a wider body draws the same outline.
+            let Clamp::Shrink { bore, nose_d, body_d } = e.clamp else { panic!("{} reads back", e.name()) };
+            let wider = HolderShape { taper, clamp: ShapeClamp::Shrink, bore, gauge_len: e.gauge_len, nose_d, largest_d: body_d + 1.0 };
+            assert!(close(&zr(&wider.geometry(ADAPTIVE_PORT).expect("draws")), &zr(&g)), "{}: not read back, but its body shows", e.name());
+            covered += 1;
+            continue;
+        };
         assert_eq!(s.kind().expect("codes"), kind, "{}", e.name());
         assert!(close(&zr(&s.geometry(ADAPTIVE_PORT).expect("draws")), &zr(&g)), "{}: the same outline", e.name());
         assert!((s.gauge_len - e.gauge_len).abs() < 1e-9);
@@ -67,6 +75,7 @@ fn each_builtin_taper_holder_reads_back_as_its_shape() {
         n += 1;
     }
     assert!(n > 50, "the built-in taper holders read back ({n})");
+    assert!(covered > 0 && covered < n, "covered shrink-fit bodies: {covered}, read back: {n}");
 }
 
 #[test]
@@ -160,15 +169,21 @@ fn a_body_the_flange_envelope_covers_is_not_read_back_smaller() {
     let long = HolderShape { gauge_len: 120.0, ..hidden };
     let (_, g) = long.component(ADAPTIVE_PORT).expect("kept");
     assert_eq!(HolderShape::of(&kind, &g, ADAPTIVE_PORT), Some(long));
-    // A library chuck whose body the envelope covers reads back as the
-    // library's steel at the library's gauge length only.
+    // #4455: a library chuck whose body the envelope covers is no form
+    // shape either. A user holder with a wider hidden body draws the same
+    // outline, and the component records no source: a read-back of the
+    // library's Ø42 would be smaller than that holder's steel.
     let lib = library()
         .into_iter()
         .find(|e| e.name() == "BT40 Shrink 20 mm")
         .expect("BT40 Shrink 20 mm");
     let lg = ComponentGeometry::holder(&lib, ADAPTIVE_PORT, lib.gauge_len).expect("draws");
-    let back = HolderShape::of(&kind, &lg, ADAPTIVE_PORT).expect("the library chuck reads back");
-    assert_eq!((back.nose_d, back.largest_d), (33.0, 42.0), "the table's nose and body");
+    let back = HolderShape { gauge_len: lib.gauge_len, nose_d: 33.0, largest_d: 42.0, ..hidden };
+    let look_alike = HolderShape { largest_d: 50.0, ..back }.geometry(ADAPTIVE_PORT).expect("draws");
+    assert!(close(&zr(&look_alike), &zr(&lg)), "the Ø50 look-alike draws the library chuck's outline");
+    assert_eq!(HolderShape::of(&kind, &lg, ADAPTIVE_PORT), None, "the library chuck is not read back as Ø42");
+    assert_eq!(HolderShape::of(&kind, &look_alike, ADAPTIVE_PORT), None, "the look-alike is not read back as Ø42");
+    assert_eq!(back.component(ADAPTIVE_PORT), Err(ShapeError::NotKept), "the form does not write the covered library body");
     let off = HolderShape { gauge_len: lib.gauge_len - 2.0, ..back };
     assert_eq!(off.component(ADAPTIVE_PORT), Err(ShapeError::NotKept), "a covered body off the library length is refused");
 }
@@ -182,3 +197,4 @@ fn an_outline_from_elsewhere_is_not_a_form_shape() {
     assert_eq!(HolderShape::of(&kind, &g, ADAPTIVE_PORT), None);
     assert!(tapers().iter().any(|t| t.name == "BT40"));
 }
+

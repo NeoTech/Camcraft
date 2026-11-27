@@ -12,9 +12,10 @@
 //! component's outline, point for point, and no other shape makes it
 //! (#4455): a shrink-fit body under the flange envelope shows nowhere in
 //! the outline, so a read-back value could be smaller than the steel. Such
-//! an outline is not a form shape, unless it is a library holder's own;
-//! `HolderShape::component` refuses to write a shape that does not read
-//! back as itself.
+//! an outline is not a form shape, also when it is a library chuck's: a
+//! user holder with a wider hidden body draws the same outline, and the
+//! component records no source. `HolderShape::component` refuses to write
+//! a shape that does not read back as itself.
 //! Provenance: our own model over our own holder library (ISO 15488 ER
 //! sizes, DIN 1835 Weldon bores, DIN 69882-8 shrink chucks as recorded in
 //! docs/decisions/793-taper-holders.md and 792-er-collets.md); no HSMWorks
@@ -134,7 +135,8 @@ pub(crate) fn settled(points: &[crate::spun::SpunPoint]) -> Vec<(f64, f64)> {
 }
 
 /// The step (mm, on a diameter) that tells a value the outline fixes from
-/// one it does not show: 50 times the outline's tolerance.
+/// one it does not show. It moves a radius by 0.5 µm: 50 times the 1e-5 mm
+/// tolerance of the outline compare, which is on a radius.
 const NUDGE: f64 = 1e-3;
 
 fn positive(v: f64, what: &'static str) -> Result<f64, ShapeError> {
@@ -236,8 +238,7 @@ impl HolderShape {
     /// shape makes and no other shape makes it (a holder copied from the
     /// library, or one this form wrote). `None` for any other outline: the
     /// form cannot edit it. A shrink-fit body that the flange envelope
-    /// covers is the library's own body at the library's gauge length, or
-    /// no form shape (#4455).
+    /// covers is no form shape, also on a copy of a library chuck (#4455).
     #[must_use]
     pub fn of(kind: &ComponentKind, geometry: &ComponentGeometry, port: &str) -> Option<Self> {
         let ComponentKind::AdaptiveItem { mcs, csw } = kind else {
@@ -272,22 +273,6 @@ impl HolderShape {
             })
         };
         let base = Self { taper, clamp, bore, gauge_len, nose_d: 0.0, largest_d: 0.0 };
-        if clamp == ShapeClamp::Shrink {
-            // A copy of a library chuck keeps the library's steel, also where
-            // its outline does not show the body.
-            for e in library() {
-                if let (Some(t), Clamp::Shrink { bore: b, nose_d, body_d }) = (e.taper, e.clamp)
-                    && t.name == taper.name
-                    && (b - bore).abs() < 1e-9
-                    && (e.gauge_len - gauge_len).abs() < 1e-9
-                {
-                    let s = Self { nose_d, largest_d: body_d, ..base };
-                    if same(&s) {
-                        return Some(s);
-                    }
-                }
-            }
-        }
         // A shrink-fit value the outline does not fix: a wider body or a
         // narrower nose draws the same outline.
         let fixed = |s: &Self| {

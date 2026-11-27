@@ -5,7 +5,8 @@
 //! `HolderShape::geometry` of the stated shape; the refusals (a value that
 //! cannot be steel, a broken fit, a holder that is not a shape outline,
 //! an unknown clamp, an edit that changes nothing) name their reason and
-//! change nothing.
+//! change nothing. #4455: a shrink-fit body that the flange envelope
+//! covers is refused by name, on the way in and on a held holder.
 //! Provenance: our own tests over our own tools.
 
 use camcraft_app::component::{ADAPTIVE_PORT, ToolComponent};
@@ -42,14 +43,21 @@ impl Mcp {
     }
 }
 
+/// A shrink-fit holder whose Ø44 body shows in its outline: at gauge 80 the
+/// flange envelope covers it (#4455).
 fn shrink20() -> HolderShape {
-    HolderShape { taper: BT40, clamp: ShapeClamp::Shrink, bore: 20.0, gauge_len: 80.0, nose_d: 32.0, largest_d: 44.0 }
+    HolderShape { taper: BT40, clamp: ShapeClamp::Shrink, bore: 20.0, gauge_len: 120.0, nose_d: 32.0, largest_d: 44.0 }
 }
 
 /// The document row of `shape`, as `upsert_tool_component` takes it.
 fn shaped(shape: &HolderShape) -> Value {
+    shaped_as(ID, "Shrink 20", shape)
+}
+
+/// The document row `id` of `shape`.
+fn shaped_as(id: &str, name: &str, shape: &HolderShape) -> Value {
     let kind = shape.kind().expect("kind");
-    let c = ToolComponent::new(ID, "Shrink 20", kind).expect("holder");
+    let c = ToolComponent::new(id, name, kind).expect("holder");
     let g = shape.geometry(ADAPTIVE_PORT).expect("geometry");
     serde_json::to_value(component_to_dto(&DocumentComponent::new(c, g))).expect("dto")
 }
@@ -90,10 +98,10 @@ fn mcp_edits_a_user_holder_by_its_shape_in_one_undo_step() {
     let mut m = shop();
     let before_row = row(&mut m);
     let before_gauge = gauge(&mut m);
-    let r = m.ok("edit_user_holder", json!({ "id": ID, "gauge_len": 90.0, "largest_d": 48.0 }));
+    let r = m.ok("edit_user_holder", json!({ "id": ID, "gauge_len": 130.0, "largest_d": 48.0 }));
     assert_eq!(r["updated_tools"], json!([A]), "the tool on the holder is derived again: {r}");
-    assert_eq!(r["shape"], json!({ "taper": "BT40", "clamp": "shrink", "bore": 20.0, "gauge_len": 90.0, "nose_d": 32.0, "largest_d": 48.0 }));
-    let want = HolderShape { gauge_len: 90.0, largest_d: 48.0, ..shrink20() };
+    assert_eq!(r["shape"], json!({ "taper": "BT40", "clamp": "shrink", "bore": 20.0, "gauge_len": 130.0, "nose_d": 32.0, "largest_d": 48.0 }));
+    let want = HolderShape { gauge_len: 130.0, largest_d: 48.0, ..shrink20() };
     assert_eq!(row(&mut m), shaped(&want), "the outline is HolderShape::geometry of the stated shape");
     assert!((gauge(&mut m) - before_gauge - 10.0).abs() < 1e-9, "the tool follows the holder's gauge length");
 
@@ -105,7 +113,7 @@ fn mcp_edits_a_user_holder_by_its_shape_in_one_undo_step() {
 
     let r = m.ok("edit_user_holder", json!({ "id": ID, "name": "Shrink 20 long" }));
     assert_eq!(r["name"], json!("Shrink 20 long"));
-    assert_eq!(r["shape"]["gauge_len"], json!(90.0), "an unstated field keeps the holder's value");
+    assert_eq!(r["shape"]["gauge_len"], json!(130.0), "an unstated field keeps the holder's value");
 }
 
 #[test]
@@ -128,9 +136,39 @@ fn mcp_edit_user_holder_refuses_by_name_and_changes_nothing() {
     assert!(m.refused("edit_user_holder", json!({ "id": ID, "clamp": "ER99" })).contains("unknown clamp 'ER99'"));
     assert!(m.refused("edit_user_holder", json!({ "id": ID, "taper": "XYZ" })).contains("unknown taper 'XYZ'"));
     assert!(m.refused("edit_user_holder", json!({ "id": ID, "name": "  " })).contains("needs a name"));
-    assert!(m.refused("edit_user_holder", json!({ "id": ID, "gauge_len": 80.0 })).contains("already so"));
+    assert!(m.refused("edit_user_holder", json!({ "id": ID, "gauge_len": 120.0 })).contains("already so"));
     assert!(m.refused("edit_user_holder", json!({ "id": ID, "colour": "red" })).contains("unknown argument \"colour\""));
 
     assert_eq!(row(&mut m), before_row, "no refusal changes the holder");
     assert_eq!(m.ok("get_tool_assembly", json!({ "tool": A })), before, "or the tool");
+}
+
+/// #4455: a shrink-fit body that the flange envelope covers shows nowhere in
+/// the outline. `edit_user_holder` does not write one (the form's
+/// `NotKept` text), and does not edit a held one: its body would read back
+/// smaller than the steel. Nothing changes.
+#[test]
+fn mcp_edit_user_holder_refuses_a_body_the_flange_envelope_covers() {
+    let mut m = shop();
+    let before_row = row(&mut m);
+    let before = m.ok("get_tool_assembly", json!({ "tool": A }));
+    let e = m.refused("edit_user_holder", json!({ "id": ID, "gauge_len": 80.0 }));
+    assert!(e.contains("holder not changed") && e.contains("the flange envelope covers the body") && e.contains("give a longer gauge length"), "{e}");
+    assert_eq!(row(&mut m), before_row, "the refusal changes nothing");
+    assert_eq!(m.ok("get_tool_assembly", json!({ "tool": A })), before, "nor the tool");
+
+    // A held holder with a covered body (written outside the form).
+    const COVERED: &str = "user:holder:covered";
+    let covered = HolderShape { gauge_len: 80.0, ..shrink20() };
+    m.ok("upsert_tool_component", json!({ "component": shaped_as(COVERED, "Covered", &covered) }));
+    let covered_row = |m: &mut Mcp| {
+        let rows = m.ok("list_tool_components", json!({ "scope": "document", "kind": "adaptive" }));
+        rows["components"].as_array().expect("rows").iter().find(|r| r["component"]["id"] == json!(COVERED)).expect("the covered row")["component"].clone()
+    };
+    let held = covered_row(&mut m);
+    for edit in [json!({ "id": COVERED, "gauge_len": 120.0 }), json!({ "id": COVERED, "name": "Covered 2" })] {
+        let e = m.refused("edit_user_holder", edit);
+        assert!(e.contains(&format!("'{COVERED}'")) && e.contains("no holder shape outline"), "{e}");
+    }
+    assert_eq!(covered_row(&mut m), held, "the covered holder stays as it is");
 }

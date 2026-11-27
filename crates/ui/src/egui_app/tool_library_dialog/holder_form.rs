@@ -2,8 +2,9 @@
 //! user holder of the document with its name, its machine side (the
 //! spindle taper), its tool side (the clamp and the shank range it
 //! clamps) and its shape (gauge length, body and nose diameter) as
-//! inputs, the holder's largest diameter as the drawing states it (#4455), the drawing to scale with the spindle nose and the shank range,
-//! and the tools that use it. The values are the window's own draft
+//! inputs, the holder's largest diameter as the drawing states it
+//! (#4455), the drawing to scale with the spindle nose and the shank
+//! range, and the tools that use it. The values are the window's own draft
 //! (`ComponentDraft::shape`); only the footer's Apply lands them, as one
 //! undoable `EditDocumentComponent` that derives each of those tools again
 //! in the same undo step - or refuses by name, and changes nothing, when a

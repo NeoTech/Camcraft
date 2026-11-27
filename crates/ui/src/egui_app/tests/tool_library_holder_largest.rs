@@ -40,8 +40,8 @@ fn a_copied_holder_shows_the_largest_diameter_of_its_outline_and_applies_as_it_i
     h.run_steps(2);
     click_window_button(&mut h, HOLDERS_PAGE);
     // (built-in, its body steel): an ER32 nut Ø50, a Weldon body, the
-    // DIN 69882-8 Ø42 body of a shrink chuck that its flange envelope covers.
-    for (name, body) in [("BT40 ER32", Some(50.0)), ("BT40 Weldon 12 mm", None), ("BT40 Shrink 20 mm", Some(42.0))] {
+    // DIN 69882-8 Ø53 body of a shrink chuck on the BT40 flange.
+    for (name, body) in [("BT40 ER32", Some(50.0)), ("BT40 Weldon 12 mm", None), ("BT40 Shrink 25 mm", Some(53.0))] {
         let id = copy(&mut h, name);
         assert!(shows(&h, holder_form::BODY) && shows(&h, holder_form::LARGEST), "{name}: the form opens on the copy");
         let shape = h.state().state.tool_library.as_ref().and_then(|v| v.component_edit.as_ref()).and_then(|d| d.shape);
@@ -65,4 +65,9 @@ fn a_copied_holder_shows_the_largest_diameter_of_its_outline_and_applies_as_it_i
         assert_eq!(g1, Some(g0), "{name}: the outline stays byte for byte");
         click_window_button(&mut h, frame::BACK);
     }
+    // A shrink chuck whose body the flange envelope covers is no form shape
+    // (#4455): a wider hidden body draws the same outline.
+    copy(&mut h, "BT40 Shrink 20 mm");
+    let shape = h.state().state.tool_library.as_ref().and_then(|v| v.component_edit.as_ref()).map(|d| d.shape);
+    assert_eq!(shape, Some(None), "the copy opens in the generic editor, not in the holder form");
 }
