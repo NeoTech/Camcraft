@@ -285,7 +285,7 @@ time. The current, authoritative tool list is whatever the client's
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
-| Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
+| Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `list_posts`, `select_post`, `preview_post`, `save_post_script`, `post` |
 | Agie nominal inspection | `create_agie_inspection`, `export_agie_inspection` |
 
 `list_operation_types` returns each operation kind's parameters, their
@@ -331,6 +331,25 @@ option fields. The options include `skip_stops`, `per_op`, `threading`
 `detect_holes` reports holes it does not create in its `skipped` field.
 Read that field before assuming that every detected hole became an
 operation. A refused Bore is not silently replaced by Drill.
+
+### Post scripts
+
+`list_posts {}` lists the built-in posts and the `.cps` files in your user
+posts folder. Each row gives the machine kinds that the post serves, its
+program units, its file extension and its declared options.
+`select_post {"post":"Haas"}` selects the document's post as one undo
+step. Give a `.cps` path for a script of your own, or `null` for the
+default post.
+
+`preview_post` runs a script and returns the program text. It writes no
+file. Give the script as `source` or `path`, and a `sample` (`Facing`,
+`Contour`, `Pocket`, `Drilling`) or no sample for the document's
+operations. A script that fails returns `ok: false` and the 1-based line
+of the error. `save_post_script {"file":"my-post","source":"..."}` saves
+the script in the user posts folder (`CAMCRAFT_POSTS`, or the per-user
+data folder `camcraft/posts`). The file name must be a plain name. An
+existing file is replaced only with `"overwrite": true`. In a live app
+session, the app asks you before `save_post_script` and `select_post`.
 
 ### Agie nominal inspection
 
