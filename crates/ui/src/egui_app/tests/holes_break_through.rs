@@ -176,15 +176,18 @@ fn drill_break_through_from_is_disabled_where_it_has_no_effect() {
     use super::super::holes_page::break_through_from_idle as idle;
     let through = [through_hole()];
     let blind = [camcraft_app::drilling::Hole { through: false, ..through_hole() }];
-    assert_eq!(idle(false, false, &through, &C::Auto), None, "a through hole on a mill");
-    assert_eq!(idle(false, false, &through, &C::Peck), None);
-    assert!(idle(true, false, &through, &C::Auto).is_some_and(|w| w.contains("lathe")));
-    assert!(idle(false, true, &through, &C::Auto).is_some_and(|w| w.contains("Bottom")));
+    let drill = catalog_tool("DR-0400");
+    let d = Some(&drill);
+    assert_eq!(idle(false, false, &through, &C::Auto, d), None, "a through hole on a mill");
+    assert_eq!(idle(false, false, &through, &C::Peck, d), None);
+    assert_eq!(idle(false, false, &through, &C::Auto, None), None, "no tool: the choice stays live");
+    assert!(idle(true, false, &through, &C::Auto, d).is_some_and(|w| w.contains("lathe")));
+    assert!(idle(false, true, &through, &C::Auto, d).is_some_and(|w| w.contains("Bottom")));
     for c in [C::Spot, C::Tap, C::FloatingTap, C::Ream] {
-        assert!(idle(false, false, &through, &c).is_some_and(|w| w.contains("spot, tap or ream")), "{c:?}");
+        assert!(idle(false, false, &through, &c, d).is_some_and(|w| w.contains("spot, tap or ream")), "{c:?}");
     }
-    assert!(idle(false, false, &blind, &C::Auto).is_some_and(|w| w.contains("no hole in the list is through")));
-    assert!(idle(false, false, &[], &C::Auto).is_some());
+    assert!(idle(false, false, &blind, &C::Auto, d).is_some_and(|w| w.contains("no hole in the list is through")));
+    assert!(idle(false, false, &[], &C::Auto, d).is_some());
 
     // On the page: disabled with the reason, enabled once a hole is through.
     let _g = snapshot_guard();
@@ -210,4 +213,84 @@ fn drill_break_through_from_is_disabled_where_it_has_no_effect() {
     assert!(!disabled(&h), "a through hole: the combo is live");
     assert!(!hover_says(&mut h, "no hole in the list is through"), "{:?}", structural::painted(&h));
     assert!(hover_says(&mut h, "adds the drill point cone"), "{:?}", structural::painted(&h));
+}
+
+fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
+    camcraft_app::tools::catalog()
+        .into_iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, t)| t)
+        .expect("catalog entry")
+}
+
+/// A drill with a flat bottom: a 180 degree tip has no point cone.
+fn flat_drill() -> camcraft_app::tools::Tool {
+    camcraft_app::tools::Tool { tip_angle: 180.0, ..catalog_tool("DR-0400") }
+}
+
+/// #2528 review: the choice is idle for each tool whose tip run it cannot
+/// change. The rule is the generator's (`through_tip_run`), not the cycle
+/// name: Auto with a tap, a boring bar or an end mill, and a 180 degree
+/// drill on each drilling cycle, add no point cone. A refused tip angle
+/// stays live.
+#[test]
+fn drill_break_through_from_is_idle_for_a_tool_without_a_point() {
+    use camcraft_app::drilling::CycleChoice as C;
+    use super::super::holes_page::break_through_from_idle as idle;
+    let through = [through_hole()];
+    let no_cone = |w: Option<&str>| w.is_some_and(|w| w.contains("no point cone"));
+    for name in ["TAP-M6", "BR-1000", "EM-0600-4FL"] {
+        let t = catalog_tool(name);
+        assert!(no_cone(idle(false, false, &through, &C::Auto, Some(&t))), "Auto with {name}");
+    }
+    let flat = flat_drill();
+    for c in [C::Auto, C::Drill, C::Peck] {
+        assert!(no_cone(idle(false, false, &through, &c, Some(&flat))), "flat-bottom drill, {c:?}");
+    }
+    let bad = camcraft_app::tools::Tool { tip_angle: 0.0, ..catalog_tool("DR-0400") };
+    assert_eq!(idle(false, false, &through, &C::Auto, Some(&bad)), None, "a refused tip angle stays live");
+}
+
+/// #2528 review, on the page: Auto with a Tap tool, and Auto with a
+/// flat end mill (a flat-bottom tool), show the combo disabled with the
+/// reason. The twist drill shows it live.
+#[test]
+fn drill_break_through_from_page_disables_a_tap_and_a_flat_drill_on_auto() {
+    let _g = snapshot_guard();
+    let mut h = page("Drill", Unit::Millimeters);
+    {
+        let st = &mut h.state_mut().state;
+        rack(st, &["TAP-M6"]);
+        crate::actions::target(st, UiTarget::Operation("Drill".into()));
+        st.op_tab = super::super::op_tabs::SEC_HEIGHTS;
+    }
+    h.run_steps(3);
+    set_holes(&mut h, vec![through_hole()]);
+    assert_eq!(h.state().state.op_ui.tool, "DR-0400");
+    let OpParams::Drill { cycle, .. } = &h.state().state.op_ui.params else { panic!("drill params") };
+    assert_eq!(*cycle, camcraft_app::drilling::CycleChoice::Auto, "the quick Drill starts on Auto");
+    let disabled = |h: &Harness<'static, ShellUi>| {
+        let y = h.get_by_label("Break-through from").rect().center().y;
+        h.query_all_by_role(egui::accesskit::Role::ComboBox)
+            .find(|n| (n.rect().center().y - y).abs() < 15.0)
+            .expect("Break-through from combo")
+            .accesskit_node()
+            .is_disabled()
+    };
+    assert!(!disabled(&h), "a twist drill on Auto: the combo is live");
+    // The seeded flat end mill stands for a flat-bottom drilling tool: the
+    // tool check refuses a 180 degree Drill, so no document holds one.
+    for tool in ["TAP-M6", "EM-0600-4FL"] {
+        h.state_mut().state.op_ui.tool = tool.into();
+        h.run_steps(3);
+        assert!(disabled(&h), "Auto with {tool}: the combo is disabled");
+        let at = h.get_by_label("Break-through from").rect().center();
+        h.input_mut().events.push(egui::Event::PointerMoved(at));
+        h.run_steps(60);
+        assert!(
+            structural::painted(&h).iter().any(|(t, _)| t.contains("no point cone")),
+            "{tool}: {:?}",
+            structural::painted(&h)
+        );
+    }
 }
