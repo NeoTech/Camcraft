@@ -36,9 +36,9 @@ pub(crate) const HINT_USER_HOLDER: &str = "Apply updates each tool that uses the
 /// The `frame_cost` names of the header and the footer (crates/ui/AGENTS.md "Frame cost").
 pub(crate) const HEADER_SPAN: &str = "ui/tool_library.header";
 pub(crate) const FOOTER_SPAN: &str = "ui/tool_library.footer";
-/// Why Duplicate is not offered yet (#4340).
-pub(crate) const NO_DUPLICATE: &str =
-    "a copy must keep the holder and the component stack of the tool; until it can, add a tool with New tool…";
+/// What the tool editor's Duplicate does (#4340).
+pub(crate) const DUPLICATE_TOOL_HINT: &str =
+    "a new tool, copied from this tool as it is applied, with its holder and component stack (one undo step)";
 
 /// What the window shows; the header and the footer follow it.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,7 +71,8 @@ pub(crate) enum Ask {
     Close,
     Cancel,
     Apply,
-    /// #4338: copy the open user holder as a new user holder.
+    /// #4338: copy the open user holder as a new user holder; #4340: copy
+    /// the open tool as a new tool.
     Duplicate,
 }
 
@@ -192,7 +193,9 @@ pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, draft: &Draft) -> 
                 if ui.button(CANCEL).on_hover_text("drop the unapplied draft and go back to the list").clicked() {
                     ask = Some(Ask::Cancel);
                 }
-                let _ = ui.add_enabled(false, Button::new(DUPLICATE)).on_disabled_hover_text(NO_DUPLICATE);
+                if ui.button(DUPLICATE).on_hover_text(DUPLICATE_TOOL_HINT).clicked() {
+                    ask = Some(Ask::Duplicate);
+                }
             }
             Face::Component(_) => {
                 if primary(ui, super::component_edit::APPLY, component_changed)

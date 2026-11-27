@@ -291,6 +291,22 @@ impl State {
         }
     }
 
+    /// #4340: copy the stored tool `name` (with its holder and component
+    /// stack) as one `DuplicateTool`, then open the copy in the editor. A
+    /// refusal (no free tool number) is said by name; nothing changes.
+    pub(crate) fn run_duplicate_tool(&mut self, name: &str) {
+        match camcraft_app::commands::DuplicateTool::new(&self.world, name) {
+            Ok(command) => {
+                let (copy, number) = (command.name().to_owned(), command.number());
+                self.history.execute(&self.world, command);
+                self.doc_version += 1;
+                self.status = format!("tool {copy} added (T{number}) - a copy of {name}");
+                self.open_tool_in_library(&copy);
+            }
+            Err(err) => self.refuse(super::ErrorScope::Tool, format!("tool not duplicated: {err}")),
+        }
+    }
+
     /// #3893: run `f` with the window's draft in `tool_ui` (and its sync
     /// key in `tool_synced`; #3895: its holder draft in `tool_profile_ui`;
     /// #3930: its body draft in `tool_body_ui`),

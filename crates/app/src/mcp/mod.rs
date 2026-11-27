@@ -72,6 +72,7 @@ mod render;
 mod selection;
 mod setup_tools;
 mod tool_delete;
+mod tool_duplicate;
 mod tool_edit;
 mod tools;
 mod wcs_circle;

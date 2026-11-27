@@ -386,6 +386,9 @@ pub enum CommandKind {
         number: Option<u32>,
     },
     DeleteTool(String),
+    /// #4340: copy a stored tool with its holder and component stack
+    /// (`DuplicateTool`) and open the copy in the tool library's editor.
+    DuplicateTool(String),
     /// #371: set (`Some`) or clear (`None`) a tool's modelled body - the
     /// tool editor's Apply body / Clear body, one `SetToolBody`.
     SetToolBody {
@@ -3865,6 +3868,7 @@ impl State {
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not deleted: {err}")),
             },
+            CommandKind::DuplicateTool(name) => self.run_duplicate_tool(&name),
             CommandKind::CreateOperation {
                 name,
                 tool,

@@ -1,7 +1,8 @@
 //! #4334 (U8 of #3663): the frame of the tool library window - one header
 //! (the way back, the name, the Cutting tools | Holders tabs, the close
 //! button) and one footer on every page (the hint; Close on a list page;
-//! Duplicate, Cancel and Apply on the tool editor). The tests assert the
+//! Duplicate, Cancel and Apply on the tool editor; #4340: Duplicate copies
+//! the tool). The tests assert the
 //! labels, the roles and the enabled state, and what each button does.
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 //! Provenance: our own structural tests over the AccessKit tree and the
@@ -57,8 +58,7 @@ fn the_tool_list_has_the_header_and_the_close_footer() {
 }
 
 /// The tool editor: the way back and the tool's name head the window; the
-/// footer has Duplicate (disabled, with the reason), Cancel and Apply, and
-/// no Close.
+/// footer has Duplicate (#4340: enabled), Cancel and Apply, and no Close.
 #[test]
 fn the_tool_editor_has_the_back_button_and_the_apply_footer() {
     let mut h = shell_harness();
@@ -71,9 +71,35 @@ fn the_tool_editor_has_the_back_button_and_the_apply_footer() {
     assert!(has(&h, frame::HINT_APPLY), "the footer says that Apply is one undo step");
     assert_eq!(button(&h, frame::APPLY), Some(true), "Apply is enabled");
     assert_eq!(button(&h, frame::CANCEL), Some(true), "Cancel is enabled");
-    assert_eq!(button(&h, frame::DUPLICATE), Some(false), "Duplicate is shown, disabled");
+    assert_eq!(button(&h, frame::DUPLICATE), Some(true), "Duplicate is enabled");
     assert_eq!(button(&h, frame::CLOSE), None, "an editor page has no Close in its footer");
     assert_eq!(button(&h, frame::CLOSE_WINDOW), Some(true), "the header still closes the window");
+}
+
+/// #4340: Duplicate copies the open tool (with its holder body and stack)
+/// as one undo step and opens the copy in the editor; one undo removes it.
+#[test]
+fn duplicate_opens_the_copy_and_is_one_undo_step() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    let name = first_tool(&h);
+    open_in_window(&mut h, &name);
+    let done = h.state().state.history.done_len();
+    click_window_button(&mut h, frame::DUPLICATE);
+    h.run_steps(2);
+    let copy = format!("{name} (2)");
+    assert_eq!(h.state().state.history.done_len(), done + 1, "Duplicate is one undo step");
+    let open = h.state().state.tool_library.as_ref().and_then(|v| v.open_tool()).map(str::to_owned);
+    assert_eq!(open.as_deref(), Some(copy.as_str()), "the window opens the copy");
+    assert_eq!(tool(&h, &copy), tool(&h, &name), "the copy has the definition of the tool");
+    let body = |n: &str| {
+        let w = &h.state().state.world;
+        camcraft_app::model::find_by_name(w, n).and_then(|e| camcraft_app::tool_body::body_of(w, &e)).map(|b| format!("{b:?}"))
+    };
+    assert_eq!(body(&copy), body(&name), "the copy has the holder body of the tool");
+    h.state_mut().state.pending.push_back(crate::state::CommandKind::Undo);
+    h.run_steps(3);
+    assert!(!h.state().state.tool_names().contains(&copy), "one undo removes the copy");
 }
 
 /// Cancel drops the unapplied draft and goes back to the list: no command
