@@ -89,6 +89,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::workholding_tools::TOOLS)
         .chain(super::sheet_job_tools::TOOLS)
         .chain(super::order_tools::TOOLS)
+        .chain(super::pattern_tools::TOOLS)
         .chain(super::sinker_tools::TOOLS)
         .chain(super::machine_tools::TOOLS)
         .chain(super::tool_number_tools::TOOLS)

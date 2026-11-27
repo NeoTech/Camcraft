@@ -7,7 +7,8 @@
 //!
 //! Gate map (M4.4): covers app::mcp, app::script, app::project::json,
 //! app::cli, app::tool_library, app::commands (tool_import),
-//! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
+//! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35),
+//! app::pattern_folder, app::commands::pattern_folder, app::mcp::pattern_tools (#3012).
 
 mod common;
 #[path = "mcp/add_tool_spindle_warning.rs"]
@@ -26,6 +27,11 @@ mod mcp_open;
 // #3449: every accepted field of a kind, optional ones and enum words.
 #[path = "mcp/op_type_fields.rs"]
 mod op_type_fields;
+// #3012: pattern folders - commands, project file, MCP and the post.
+#[path = "mcp/pattern_folder.rs"]
+mod pattern_folder;
+#[path = "mcp/pattern_folder_post.rs"]
+mod pattern_folder_post;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;

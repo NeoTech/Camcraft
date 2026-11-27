@@ -863,6 +863,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 }
             }
             EntityKind::Entry => super::program_entry_dto::apply(world, &entity, dto.entry)?,
+            EntityKind::Pattern => super::pattern_dto::apply(world, &entity, dto.pattern)?,
             EntityKind::Sketch => match sketches.remove(&dto.name) {
                 Some(sketch) => {
                     entity.entity_view(world).set(sketch);
