@@ -107,6 +107,22 @@ these are the same arc leads in the air. The K4 pin does not assert the
 reach. The entry stage plans them in the kernel's air zone, so this is a
 reading of the entry stage, not of the converter.
 
+**The load pin of #4265 (`k3_load`).** It measures the cuts that the
+load stage gives, with the old test pen. With the real converter its
+Outside rows would also hold the arc leads of the entry stage (more
+engagement readings, and feeds out of `centre_reach`). So `k3_load` now
+reads `cuts_path_with`: the same plan, without the entry leads, with the
+moves of the old test pen. A test compared the two paths: they have the
+same moves and the same notes. Dropped: the converted path for `k3_load`
+(it mixes the entry stage into a load reading, and it needs a relaxed
+reach assertion).
+The merge of `side/path-kernel` (df9ec30) into this branch showed that
+`k3_load` is red on the side head itself: #4265 was gated on a branch
+without #4253 (the link edge band). The disc Outside row with constant
+engagement reads 337 moves above the limit and 77 unnamed, not 334 and
+74. The old test pen gives the same 337. This PR pins the row as measured,
+with a comment that names the cause.
+
 **Cost to change later.** A retract plane under the clearance height, or
 exact arcs for leads and helices, are local changes in `pen.rs` and need
 no change of the public surface.
