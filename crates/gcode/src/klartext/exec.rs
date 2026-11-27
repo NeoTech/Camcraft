@@ -262,6 +262,13 @@ impl<'a> Machine<'a> {
 
     /// Start a new section when the tool, offset, spindle or coolant changed after a move.
     pub fn sync_section(&mut self) {
+        // A line that waits for its RND / CHF is not in the builder yet: the
+        // builder start must stay at that line's start. No modal state can
+        // change while it waits (the transition and the line after it take
+        // no M function).
+        if self.pending.is_some() {
+            return;
+        }
         if !self.current.has_moves() {
             self.current = SectionBuilder::new(self.current.index, self.pos, &self.modal);
             self.section_tool_name = self.tool_name.clone();

@@ -164,3 +164,36 @@ fn klartext_transition_elements_refuse_what_is_not_exact() {
         assert_eq!(e.line(), 4, "{bad}: {e}");
     }
 }
+
+#[test]
+fn klartext_rnd_on_the_first_move_of_a_section_starts_at_the_line_start() {
+    // The first move of the program waits for its RND.
+    let p = ok(&pgm(&["L X+20 Y+0 F100", "RND R5", "L X+20 Y+20"]));
+    let m = moves(&p);
+    assert_eq!(m.len(), 3);
+    assert!(
+        near(m[0].from.x, 0.0) && near(m[0].from.y, 0.0),
+        "{:?}",
+        m[0].from
+    );
+    assert_to(m[0], 15.0, 0.0, 0.0);
+    assert_arc(m[1], 15.0, 5.0, true);
+    assert_to(m[2], 20.0, 20.0, 0.0);
+    // The first move after a tool change waits for its RND.
+    let p = ok(&pgm(&[
+        "L X+0 Y+0 Z-1 R0 F100",
+        "TOOL CALL 2 Z S1000",
+        "L X+20 Y+0",
+        "RND R5",
+        "L X+20 Y+20",
+    ]));
+    assert_eq!(p.sections.len(), 2);
+    let s = &p.sections[1].toolpath.moves;
+    assert!(
+        near(s[0].from.x, 0.0) && near(s[0].from.y, 0.0),
+        "{:?}",
+        s[0].from
+    );
+    assert_to(&s[0], 15.0, 0.0, -1.0);
+    assert_arc(&s[1], 15.0, 5.0, true);
+}
