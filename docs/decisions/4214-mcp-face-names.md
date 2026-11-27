@@ -1,4 +1,4 @@
-## #3915 - The `import_model` answer for an update gives `changes`, in MCP only
+## #4214 - The `import_model` answer for an update gives `changes`, in MCP only
 
 **Decided.** When `import_model` updates a model that was there before the call, its answer gets the optional key `changes`:
 
@@ -28,7 +28,7 @@ The hook is in `mcp/tools.rs::import_model` (four lines). The logic is in the ne
 
 **Cost to change later.** One new file and four lines in `import_model`. To move it into `v_import`, call `before` and `add` there instead. The pins are in `crates/app/tests/mcp/reimport_changes.rs`.
 
-## #3915 - No tool description changes in this PR
+## #4214 - No tool description changes in this PR
 
 **Decided.** The descriptions of `import_model`, `list_features` and `get_operation_geometry` stay as they are. The new fields are optional output only.
 
@@ -36,7 +36,7 @@ The hook is in `mcp/tools.rs::import_model` (four lines). The logic is in the ne
 
 **Cost to change later.** Two description strings and the regenerated reference file.
 
-## #3915 - SolidCraft names show as `source_name` or `source_names`, absent when unknown
+## #4214 - SolidCraft names show as `source_name` or `source_names`, absent when unknown
 
 **Decided.** When a model holds the source face record of a `.sc` import (C13 PR 1), each `list_features` face row and patch row, and each face or patch pick that `picks_view` shows, gets one of:
 - `source_name`: a string, when the feature lies on one SolidCraft face;
@@ -57,7 +57,7 @@ A row gets none of these keys when the model has no record, when the record does
 
 **Cost to change later.** One function (`put` in `mcp/source_names.rs`) writes all three keys.
 
-## #3915 - The names use features built from the model's own facets
+## #4214 - The names use features built from the model's own facets
 
 **Decided.** `mcp/source_names.rs` builds the features for the names with `feature::features_of_facets` on the model's facets, once per call. It does not use `features_of_shared` or `feature_graph_shared`.
 
@@ -69,7 +69,7 @@ A row gets none of these keys when the model has no record, when the record does
 
 **Cost to change later.** Two lines in `Named::of`, if the features caches become order-exact.
 
-## #3915 - The name logic is in the geometry crate; the MCP view is in the app
+## #4214 - The name logic is in the geometry crate; the MCP view is in the app
 
 **Decided.** `camcraft_geometry::geometry::source_names` holds the pure part: from a record and a mesh's features, the name set of a face id or a patch. It returns no names when the record does not tile the facets, when an index passes the name list, or when a name is empty. The app's `mcp/source_names.rs` finds the record, builds the features and writes the keys. The hooks are three lines in `mcp/features.rs` (after the compact step, so compact rows keep the names) and two lines in `mcp/pick.rs::picks_view`.
 
