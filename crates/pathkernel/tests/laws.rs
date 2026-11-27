@@ -8,7 +8,9 @@
 //! (`registry`).
 //!
 //! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, region_chain, selection, guide, guide::choice, guide::rings, guide::rows, guide::cover, guide::mark, guide::all, guide::medial, guide::trace, guide::helix, guide::lead, order, order::side, order::chain, order::stage, load, link, link::proof, link::route, link::approach, entry, entry::air, entry::column, entry::exit, entry::hole, entry::material, entry::proof, entry::room, entry::stage, plan, recipe}.
-//! Provenance: our own design record RECOMMENDED.md `## #4024`.
+//! Provenance: our own design record, RECOMMENDED.md heading "#4024 - Path
+//! kernel K0" (the laws as checks), and the delivery plan
+//! docs/decisions/4325-path-kernel-delivery.md.
 
 #[path = "laws/air_approach.rs"]
 mod air_approach;
@@ -44,6 +46,8 @@ mod guide_rows;
 mod guide_trace;
 #[path = "laws/kit.rs"]
 mod kit;
+#[path = "laws/kit_geo.rs"]
+mod kit_geo;
 #[path = "laws/l1_guide.rs"]
 mod l1_guide;
 #[path = "laws/l2_sides.rs"]
@@ -78,6 +82,8 @@ mod order;
 mod order_link;
 #[path = "laws/plan.rs"]
 mod plan;
+#[path = "laws/refusals.rs"]
+mod refusals;
 #[path = "laws/region.rs"]
 mod region;
 #[path = "laws/registry.rs"]

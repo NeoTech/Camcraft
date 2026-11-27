@@ -3,6 +3,7 @@
 //! recipe of choices and a stock), and the run of the stages into a plan.
 //! A kind that moves to the kernel registers its planner set and its cases
 //! in `registry.rs`; each law check reads only what this kit gives it.
+//! A refused or unread leg is a distinct outcome, never held (#4406).
 //! Provenance: our own design record (RECOMMENDED.md "#4024 - Path kernel
 //! K0", "The laws as checks").
 
@@ -16,6 +17,8 @@ use camcraft_pathkernel::order::{OrderChoice, OrderPlanner, OrderedSet, StartSid
 use camcraft_pathkernel::plan::{Cut, Plan, Step};
 use camcraft_pathkernel::region::{KernelRegion, MaterialSide, PlanarRegion};
 use camcraft_pathkernel::{Loop, Point2, Recipe, Refusal, Region, Stage, Verdict};
+
+pub use super::kit_geo::{dist, outside, poly, poly_dist, seq_gap, set_gap};
 
 /// Two curves match within 1 um (record "The laws as checks").
 pub const MATCH_TOL: f64 = 1e-3;
@@ -54,43 +57,91 @@ impl Law {
     }
 }
 
-/// One measured value of a check, the limit that it is held to, and its place.
+/// One measured value of a check, the limit that it is held to, and its
+/// place. A measure that could not be read (a stage refused, or the check
+/// had nothing to read) carries the reason in `refused`: it is never held
+/// and never broken (#4406).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Measure {
     pub value: f64,
     pub limit: f64,
     pub place: String,
     pub at: Option<Point2>,
+    pub refused: Option<String>,
 }
 
 impl Measure {
     pub fn new(value: f64, limit: f64, place: impl Into<String>, at: Option<Point2>) -> Self {
-        Self { value, limit, place: place.into(), at }
+        Self { value, limit, place: place.into(), at, refused: None }
     }
     /// A count of events that must not occur (limit 0).
     pub fn count(n: usize, place: impl Into<String>, at: Option<Point2>) -> Self {
         Self::new(n as f64, 0.0, place, at)
     }
-    fn held(&self) -> bool {
+    /// A leg of a check that a stage refused: not measured.
+    pub fn refusal(place: impl Into<String>, e: &Refusal) -> Self {
+        let place = format!("{}: refused by {:?}: {}", place.into(), e.stage(), e.reason());
+        Self { value: f64::NAN, limit: f64::NAN, place, at: e.place(), refused: Some(e.reason().to_string()) }
+    }
+    /// A leg of a check with nothing to read (no curve, no entry, no cut).
+    pub fn unread(place: impl Into<String>, why: &str) -> Self {
+        let place = format!("{}: not measured: {why}", place.into());
+        Self { value: f64::NAN, limit: f64::NAN, place, at: None, refused: Some(why.to_string()) }
+    }
+    /// At or below the limit (false for a NaN value or limit).
+    fn within(&self) -> bool {
         self.value <= self.limit
     }
+    fn held(&self) -> bool {
+        self.refused.is_none() && self.within()
+    }
+    fn broken(&self) -> bool {
+        self.refused.is_none() && !self.within()
+    }
     fn excess(&self) -> f64 {
-        if self.value.is_nan() { f64::INFINITY } else { self.value - self.limit }
+        if self.value.is_nan() || self.limit.is_nan() { f64::INFINITY } else { self.value - self.limit }
     }
 }
 
-/// The verdict of one law on one case: the law, held or broken, and the
-/// worst measure (its place and value).
+/// The outcome of one law on one case (#4406). Only `Held` is a pass: a
+/// refused or unread law is not held.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Outcome {
+    /// Each measure is at or below its limit, and no leg was refused.
+    Held,
+    /// One or more measures are above their limits.
+    Broken,
+    /// No measure broke, and one or more legs were refused or had nothing
+    /// to read: the law is not measured. The reason of the first such leg.
+    Refused(String),
+}
+
+/// The verdict of one law on one case: the law, its outcome, and the worst
+/// measure (its place and value).
 #[derive(Clone, Debug, PartialEq)]
 pub struct LawVerdict {
     pub law: Law,
-    pub held: bool,
+    pub outcome: Outcome,
     pub worst: Measure,
+}
+
+impl LawVerdict {
+    pub fn held(&self) -> bool {
+        self.outcome == Outcome::Held
+    }
+    /// The reason of a refused verdict.
+    pub fn refused(&self) -> Option<&str> {
+        if let Outcome::Refused(r) = &self.outcome { Some(r) } else { None }
+    }
 }
 
 impl fmt::Display for LawVerdict {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let state = if self.held { "held" } else { "BROKEN" };
+        let state = match self.outcome {
+            Outcome::Held => "held",
+            Outcome::Broken => "BROKEN",
+            Outcome::Refused(_) => "REFUSED (not measured)",
+        };
         let w = &self.worst;
         write!(f, "{:?} {state} ({}): at {}", self.law, self.law.text(), w.place)?;
         if let Some(p) = w.at {
@@ -100,21 +151,37 @@ impl fmt::Display for LawVerdict {
     }
 }
 
-/// The verdict of `law` over its measures: held when each measure is at or
-/// below its limit; the worst measure is the one with the largest excess.
+/// Refusal reason of the kit: a check with no measure at all.
+pub const NOTHING_TO_MEASURE: &str = "the check had nothing to measure";
+
+/// The verdict of `law` over its measures (#4406). Broken when a measure
+/// that was read is above its limit (the worst is the one with the largest
+/// excess). Else refused when a leg was refused or unread, or when there
+/// is no measure. Held only when each leg was read and is at or below its
+/// limit.
 pub fn judge(law: Law, measures: Vec<Measure>) -> LawVerdict {
-    let held = measures.iter().all(Measure::held);
-    let worst = measures
-        .into_iter()
-        .max_by(|a, b| a.excess().total_cmp(&b.excess()))
-        .unwrap_or_else(|| Measure::new(0.0, 0.0, "nothing to measure", None));
-    LawVerdict { law, held, worst }
+    if measures.is_empty() {
+        return LawVerdict { law, outcome: Outcome::Refused(NOTHING_TO_MEASURE.into()), worst: Measure::unread("the check", NOTHING_TO_MEASURE) };
+    }
+    if measures.iter().any(Measure::broken) {
+        let worst = measures.into_iter().filter(Measure::broken).max_by(|a, b| a.excess().total_cmp(&b.excess()));
+        let worst = worst.unwrap_or_else(|| Measure::new(f64::INFINITY, 0.0, "a broken measure", None));
+        return LawVerdict { law, outcome: Outcome::Broken, worst };
+    }
+    if let Some(r) = measures.iter().find(|m| m.refused.is_some()) {
+        let reason = r.refused.clone().unwrap_or_default();
+        return LawVerdict { law, outcome: Outcome::Refused(reason), worst: r.clone() };
+    }
+    debug_assert!(measures.iter().all(Measure::held));
+    let worst = measures.into_iter().max_by(|a, b| a.excess().total_cmp(&b.excess()));
+    let worst = worst.unwrap_or_else(|| Measure::unread("the check", NOTHING_TO_MEASURE));
+    LawVerdict { law, outcome: Outcome::Held, worst }
 }
 
-/// A law that holds because a stage refused with a named reason (the
-/// Prime Directive: refused is a legal result).
-pub fn refused_held(law: Law, e: &Refusal) -> LawVerdict {
-    judge(law, vec![Measure::new(0.0, 0.0, format!("refused by {:?}: {}", e.stage(), e.reason()), e.place())])
+/// The verdict of a law whose run a stage refused: refused with the
+/// reason, never held (#4406; before, a refusal read as held at 0 against 0).
+pub fn refused(law: Law, e: &Refusal) -> LawVerdict {
+    judge(law, vec![Measure::refusal("the run", e)])
 }
 
 /// The five stage planners of one kind.
@@ -240,104 +307,20 @@ pub fn plan_cuts(plan: &Plan) -> Vec<&Curve> {
     plan.steps().iter().filter_map(|s| if let Step::Cut(c) = s { Some(c.curve()) } else { None }).collect()
 }
 
-/// The points of a curve as a polyline (a closed curve repeats its start).
-pub fn poly(c: &Curve) -> Vec<Point2> {
-    let mut v: Vec<Point2> = c.pts().iter().map(|p| p.at()).collect();
-    if let Some(&p) = v.first().filter(|_| c.closed()) {
-        v.push(p);
-    }
-    v
-}
-
-pub fn dist(a: Point2, b: Point2) -> f64 {
-    (a.x - b.x).hypot(a.y - b.y)
-}
-
-pub fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let len2 = dx * dx + dy * dy;
-    let t = if len2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
-    dist(p, Point2::new(a.x + t * dx, a.y + t * dy))
-}
-
-pub fn poly_dist(p: Point2, line: &[Point2]) -> f64 {
-    match line {
-        [only] => dist(p, *only),
-        _ => line.windows(2).map(|w| seg_dist(p, w[0], w[1])).fold(f64::INFINITY, f64::min),
-    }
-}
-
-/// The distance of `p` outside `area` (0 inside).
-pub fn outside(area: &Region, p: Point2) -> f64 {
-    if area.contains(p) {
-        return 0.0;
-    }
-    let ring = |l: &Loop| {
-        let mut v = l.points().to_vec();
-        v.extend(l.points().first().copied());
-        poly_dist(p, &v)
-    };
-    area.loops().iter().map(ring).fold(f64::INFINITY, f64::min)
-}
-
-/// The Hausdorff distance of two curves in the plane, read at the vertices.
-pub fn curve_gap(a: &Curve, b: &Curve) -> f64 {
-    let (pa, pb) = (poly(a), poly(b));
-    let one = |from: &[Point2], to: &[Point2]| from.iter().map(|p| poly_dist(*p, to)).fold(0.0, f64::max);
-    one(&pa, &pb).max(one(&pb, &pa))
-}
-
-/// The gap of two curve multisets (order and direction free): each curve of
-/// `a` matched to its nearest unused curve of `b`. A count that differs is
-/// an infinite gap.
-pub fn set_gap(a: &[&Curve], b: &[&Curve]) -> (f64, String) {
-    if a.len() != b.len() {
-        return (f64::INFINITY, format!("{} curves against {}", a.len(), b.len()));
-    }
-    let (mut used, mut worst) = (vec![false; b.len()], (0.0, String::from("each curve")));
-    for (i, ca) in a.iter().enumerate() {
-        let best = b.iter().enumerate().filter(|(j, _)| !used[*j]).map(|(j, cb)| (curve_gap(ca, cb), j)).min_by(|x, y| x.0.total_cmp(&y.0));
-        let Some((g, j)) = best else {
-            return (f64::INFINITY, format!("curve {i} has no partner"));
-        };
-        used[j] = true;
-        if g > worst.0 {
-            worst = (g, format!("curve {i} (k {})", ca.k()));
-        }
-    }
-    worst
-}
-
-/// The gap of two curve sequences, point by point (order and direction
-/// count). A count that differs is an infinite gap.
-pub fn seq_gap(a: &[&Curve], b: &[&Curve]) -> (f64, String) {
-    if a.len() != b.len() {
-        return (f64::INFINITY, format!("{} cuts against {}", a.len(), b.len()));
-    }
-    let mut worst = (0.0, String::from("each cut"));
-    for (i, (ca, cb)) in a.iter().zip(b).enumerate() {
-        let g = if ca.pts().len() == cb.pts().len() {
-            let d = |(p, q): (&camcraft_pathkernel::PlanePoint, &camcraft_pathkernel::PlanePoint)| {
-                dist(p.at(), q.at()).max((p.depth() - q.depth()).abs())
-            };
-            ca.pts().iter().zip(cb.pts()).map(d).fold(0.0, f64::max)
-        } else {
-            f64::INFINITY
-        };
-        if g > worst.0 {
-            worst = (g, format!("cut {i} (k {})", ca.k()));
-        }
-    }
-    worst
-}
-
 pub fn assert_held(v: &LawVerdict) {
     eprintln!("{v}");
-    assert!(v.held, "{v}");
+    assert!(v.held(), "{v}");
 }
 
 /// Asserts that the check broke `law` at a place whose text holds `place`.
 pub fn assert_broken(v: &LawVerdict, law: Law, place: &str) {
     eprintln!("{v}");
-    assert!(!v.held && v.law == law && v.worst.place.contains(place), "expected {law:?} broken at '{place}', got: {v}");
+    assert!(v.outcome == Outcome::Broken && v.law == law && v.worst.place.contains(place), "expected {law:?} broken at '{place}', got: {v}");
+}
+
+/// Asserts that `law` is refused (not measured, never held) with a reason
+/// that holds `reason`.
+pub fn assert_refused(v: &LawVerdict, law: Law, reason: &str) {
+    eprintln!("{v}");
+    assert!(v.law == law && v.refused().is_some_and(|r| r.contains(reason)), "expected {law:?} refused for '{reason}', got: {v}");
 }

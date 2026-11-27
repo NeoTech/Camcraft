@@ -265,11 +265,26 @@ impl LinkProof for StraightLink {
 /// cleared and that is not air), with its proof.
 pub struct ProvedEntry;
 
+/// The points of the helix descent: one turn of radius half the tool radius
+/// that ends at `at`, from 5 mm above the level down to it (#4406: a descent
+/// into material moves in the plane; one point is a plunge).
+const HELIX_POINTS: u32 = 16;
+
 pub fn helix(at: Point2, r: &KernelRegion, e: &EntryChoice, kind: EntryKind) -> Result<Entry, Refusal> {
     let tool = planar(r)?.tool();
     let area = Area::new(square_area(at, 4.0 * tool.radius())?)?;
     let proof = Proof::IntoMaterial { area, angle_or_pitch: Positive::new(Stage::Entry, 1.0)? };
-    Entry::new(kind, vec![PlanePoint::new(at, 5.0)?], vec![PlanePoint::flat(at)?], proof, e, tool)
+    let rh = tool.radius() / 2.0;
+    let descent = (0..=HELIX_POINTS)
+        .map(|i| {
+            let t = f64::from(i) / f64::from(HELIX_POINTS);
+            let a = std::f64::consts::TAU * t + std::f64::consts::PI;
+            let q = if i == HELIX_POINTS { at } else { Point2::new(at.x + rh + rh * a.cos(), at.y + rh * a.sin()) };
+            PlanePoint::new(q, 5.0 * (1.0 - t))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let top = descent.first().map(|p| p.at()).unwrap_or(at);
+    Entry::new(kind, vec![PlanePoint::new(top, 5.0)?], descent, proof, e, tool)
 }
 
 impl EntryPlanner for ProvedEntry {

@@ -6,7 +6,7 @@
 //! Provenance: our own design record; the radial engagement ae/D from the
 //! contact angle of the cutting edge (Stori & Wright 2000).
 
-use camcraft_pathkernel::entry::Proof;
+use camcraft_pathkernel::entry::{EntryKind, Proof};
 use camcraft_pathkernel::plan::{Plan, Step};
 use camcraft_pathkernel::{Point2, Region};
 
@@ -112,12 +112,17 @@ impl Grid {
     }
 }
 
-/// One read of an entry descent point: the material share under the tool.
+/// One read of an entry descent point: the material share under the tool,
+/// the proof, and how far the descent of its entry moves in the plane
+/// (#4406: a descent into material that does not move is a plunge).
 pub struct EntryRead {
     pub index: usize,
     pub at: Point2,
     pub fill: f64,
     pub into_material: bool,
+    pub kind: EntryKind,
+    /// The largest distance of a descent point from the end of the descent.
+    pub travel: f64,
 }
 
 /// One read of a cut point: its engagement on the stock of that moment.
@@ -165,8 +170,11 @@ pub fn walk(plan: &Plan, stock: &Region, r: f64) -> Option<Walk> {
         match s {
             Step::Entry(e) => {
                 let into_material = matches!(e.proof(), Proof::IntoMaterial { .. });
+                let end = e.descent().last().map(|p| p.at());
+                let travel = end.map_or(0.0, |q| e.descent().iter().map(|p| dist(p.at(), q)).fold(0.0, f64::max));
                 for p in e.descent() {
-                    w.entries.push(EntryRead { index: ne, at: p.at(), fill: g.fill(p.at(), r), into_material });
+                    let read = EntryRead { index: ne, at: p.at(), fill: g.fill(p.at(), r), into_material, kind: e.kind(), travel };
+                    w.entries.push(read);
                 }
                 for p in e.descent() {
                     g.clear_disc(p.at(), r);
