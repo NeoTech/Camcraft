@@ -6,6 +6,10 @@
 #[path = "../recorded/mod.rs"]
 mod recorded;
 
+#[path = "../../../app/tests/common/legacy_program.rs"]
+#[allow(dead_code)]
+mod legacy_program;
+
 mod comment_escape;
 mod control_feed_decimal_point;
 mod decimal_point_fanuc_family;

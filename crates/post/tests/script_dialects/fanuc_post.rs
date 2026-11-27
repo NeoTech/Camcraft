@@ -16,9 +16,7 @@ use crate::recorded;
 mod preamble; // #4346: G17 and G94 in the Fanuc-family preamble
 // #1357: the legacy goldens dressed the way app's tests post them (a
 // cycle's own chain feed; a real program's tool and spindle).
-#[path = "../../../app/tests/common/legacy_program.rs"]
-#[allow(dead_code)]
-mod legacy_program;
+use crate::legacy_program;
 
 use camcraft_post::post::{self, cnc, engine};
 use std::path::{Path, PathBuf};

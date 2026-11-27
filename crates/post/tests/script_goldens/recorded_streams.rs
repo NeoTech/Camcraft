@@ -328,13 +328,17 @@ fn the_stream_dir_holds_exactly_the_recorded_cases() {
 
 #[test]
 fn every_shipped_post_script_has_its_suite() {
-    let tests = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    // #3188: each script's suite is a module of the `script_goldens` directory suite.
+    let tests = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/script_goldens");
+    let main = std::fs::read_to_string(tests.join("main.rs")).expect("script_goldens/main.rs");
     for e in std::fs::read_dir(recorded::repo().join("assets/posts")).expect("assets/posts").filter_map(|e| e.ok()) {
         let name = e.file_name().to_string_lossy().to_string();
         let Some(stem) = name.strip_suffix(".cps") else { continue };
-        let suite = tests.join(format!("script_{}.rs", stem.replace('-', "_")));
+        let module = format!("script_{}", stem.replace('-', "_"));
+        let suite = tests.join(format!("{module}.rs"));
         let src = std::fs::read_to_string(&suite).unwrap_or_else(|_| panic!("{name} has no suite {}", suite.display()));
         assert!(src.contains(&format!("post_suite!(\"{name}\")")), "{} runs another script", suite.display());
+        assert!(main.lines().any(|l| l.trim() == format!("mod {module};")), "script_goldens/main.rs does not run {module}");
     }
 }
 

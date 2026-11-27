@@ -6,6 +6,10 @@
 #[path = "../recorded/mod.rs"]
 mod recorded;
 
+#[path = "../coincident_arcs/reader.rs"]
+#[allow(dead_code)]
+mod reader;
+
 mod arc_planes;
 mod cnc_arc_lattice;
 mod coincident_arcs;

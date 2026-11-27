@@ -29,8 +29,7 @@ use camcraft_post::post::engine;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-#[path = "../coincident_arcs/reader.rs"]
-mod reader;
+use crate::reader;
 use reader::{arc_blocks, collapsed};
 
 fn repo(rel: &str) -> PathBuf {

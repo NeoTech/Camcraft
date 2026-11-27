@@ -30,9 +30,7 @@ use camcraft_post::post::{dump, engine, Dump};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-#[path = "../coincident_arcs/reader.rs"]
-#[allow(dead_code)]
-mod reader;
+use crate::reader;
 use reader::arc_blocks;
 
 /// Every shipped mill post that writes XY arcs from a mill stream.

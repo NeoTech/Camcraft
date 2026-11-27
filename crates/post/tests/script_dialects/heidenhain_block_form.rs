@@ -23,9 +23,7 @@ fn read(rel: &str) -> String {
 
 // #1359: the legacy goldens as the programs a real operation streams
 // (tool change, spindle speed) - a cut with the spindle stopped is refused.
-#[path = "../../../app/tests/common/legacy_program.rs"]
-#[allow(dead_code)]
-mod legacy_program;
+use crate::legacy_program;
 
 fn run(stream: &str) -> engine::PostOutput {
     let mch: serde_json::Value =
