@@ -1,4 +1,4 @@
-//! #868: the Makera Z1, a desktop mill with a manual quick-change and an
+//! #868: the Makera Z1 (and the Z1 Pro, the same frame at 2000 mm/min), a desktop mill with a manual quick-change and an
 //! air blast (M7), posted through the Carvera post. Pins the file's
 //! published figures, its place in the built-in list, an op's M7 / M9
 //! through carvera.cps, and the travel / spindle refusals by name.
@@ -21,10 +21,14 @@ use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::world::new_world;
 
 const Z1: &str = "Makera Z1";
+const Z1_PRO: &str = "Makera Z1 Pro";
 
-fn z1() -> Machine {
-    let text = posting::builtin_machine_text(Z1).expect("Z1 is shipped");
-    parse_mch(text).expect("the Z1 parses")
+/// Each shipped Z1 model with its published feed / rapid ceiling (mm/min).
+const MODELS: [(&str, f64); 2] = [(Z1, 1200.0), (Z1_PRO, 2000.0)];
+
+fn z1(model: &str) -> Machine {
+    let text = posting::builtin_machine_text(model).expect("shipped");
+    parse_mch(text).expect("parses")
 }
 
 fn face(cut_z: f64) -> OpParams {
@@ -44,11 +48,11 @@ fn face(cut_z: f64) -> OpParams {
     }
 }
 
-/// A world on the Z1 with one generated face op over a `dx` x 60 stock.
-fn world_on_z1(dx: f64, tool: Option<Tool>) -> World {
+/// A world on `model` with one generated face op over a `dx` x 60 stock.
+fn world_on_z1(model: &str, dx: f64, tool: Option<Tool>) -> World {
     let world = new_world();
     let mut h = History::default();
-    h.execute(&world, LoadMachine::new(&world, "z1.mch".into(), Some(z1())).expect("sane"));
+    h.execute(&world, LoadMachine::new(&world, "z1.mch".into(), Some(z1(model))).expect("sane"));
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx, dy: 60.0, dz: 20.0 }, Default::default()).expect("stock"));
     let name = "EM-0600-4FL";
     let tool = tool.unwrap_or_else(|| catalog().into_iter().find(|(n, _)| *n == name).map(|(_, t)| t).expect("catalog"));
@@ -59,54 +63,63 @@ fn world_on_z1(dx: f64, tool: Option<Tool>) -> World {
 }
 
 #[test]
-fn the_z1_is_listed_and_states_makeras_figures() {
-    assert!(posting::MACHINES.iter().any(|(n, _)| *n == Z1), "listed as a built-in");
-    let m = z1();
-    assert_eq!(m.model, Z1);
-    assert_eq!(m.kind.as_deref(), Some("mill"));
-    assert_eq!(m.units, None, "mm");
-    let want = [200.0, 200.0, 100.0];
-    assert_eq!(m.axes.len(), 3);
-    for (a, w) in m.axes.iter().zip(want) {
-        let (lo, hi) = a.travel.expect("travel");
-        assert!((hi - w).abs() < 1e-6 && (lo + w).abs() < 1e-6, "{} {lo}..{hi}", a.name);
-        assert_eq!((a.feed, a.rapid), (Some(1200.0), Some(1200.0)), "{}", a.name);
+fn the_z1_models_are_listed_and_state_makeras_figures() {
+    for (model, rate) in MODELS {
+        assert!(posting::MACHINES.iter().any(|(n, _)| *n == model), "{model} listed as a built-in");
+        let m = z1(model);
+        assert_eq!(m.model, model);
+        assert_eq!(m.kind.as_deref(), Some("mill"));
+        assert_eq!(m.units, None, "mm");
+        let want = [200.0, 200.0, 100.0];
+        assert_eq!(m.axes.len(), 3);
+        for (a, w) in m.axes.iter().zip(want) {
+            let (lo, hi) = a.travel.expect("travel");
+            assert!((hi - w).abs() < 1e-6 && (lo + w).abs() < 1e-6, "{} {lo}..{hi}", a.name);
+            assert_eq!((a.feed, a.rapid), (Some(rate), Some(rate)), "{model} {}", a.name);
+        }
+        assert_eq!((m.spindle_min, m.spindle_max, m.spindle_power), (None, Some(13000.0), Some(0.15)));
+        assert_eq!(m.tool_count, None, "manual quick-change: no changer stated");
+        let codes: Vec<_> = m.coolants.iter().map(|c| (c.name.as_str(), c.m_code.as_str())).collect();
+        assert_eq!(codes, [("Air", "M7")]);
+        assert_eq!(m.post.as_deref(), Some("Makera Carvera"), "{model} names the shared post");
     }
-    assert_eq!((m.spindle_min, m.spindle_max, m.spindle_power), (None, Some(13000.0), Some(0.15)));
-    assert_eq!(m.tool_count, None, "manual quick-change: no changer stated");
-    let codes: Vec<_> = m.coolants.iter().map(|c| (c.name.as_str(), c.m_code.as_str())).collect();
-    assert_eq!(codes, [("Air", "M7")]);
 }
 
 #[test]
 fn a_default_op_on_the_z1_posts_m7_m9_through_the_carvera_post() {
-    let world = world_on_z1(60.0, None);
-    let op = camcraft_app::model::find_by_name(&world, "Face1")
-        .and_then(|e| camcraft_app::model::operation_of(&world, &e))
-        .expect("op");
-    assert_eq!(op.coolant, CoolantMode::Air);
-    assert!(posting::verification_gate(&world).is_empty(), "{:?}", posting::verification_gate(&world));
-    let script = posting::builtin_post_text("Makera Carvera").expect("post");
-    let records = posting::stream_records(&world).expect("streams");
-    let out = post::post(script, &posting::machine_value(&world), &cnc::serialize(&records)).expect("runs");
-    assert!(out.warnings.is_empty(), "{:?}\n{}", out.warnings, out.program);
-    let count = |c: &str| out.program.lines().filter(|l| l.split_whitespace().any(|w| w == c)).count();
-    assert_eq!((count("M7"), count("M9"), count("M8")), (1, 1, 0), "{}", out.program);
+    for (model, _) in MODELS {
+        let world = world_on_z1(model, 60.0, None);
+        let op = camcraft_app::model::find_by_name(&world, "Face1")
+            .and_then(|e| camcraft_app::model::operation_of(&world, &e))
+            .expect("op");
+        assert_eq!(op.coolant, CoolantMode::Air);
+        assert!(posting::verification_gate(&world).is_empty(), "{:?}", posting::verification_gate(&world));
+        let script = posting::builtin_post_text("Makera Carvera").expect("post");
+        let records = posting::stream_records(&world).expect("streams");
+        let out = post::post(script, &posting::machine_value(&world), &cnc::serialize(&records)).expect("runs");
+        assert!(out.warnings.is_empty(), "{:?}\n{}", out.warnings, out.program);
+        let count = |c: &str| out.program.lines().filter(|l| l.split_whitespace().any(|w| w == c)).count();
+        assert_eq!((count("M7"), count("M9"), count("M8")), (1, 1, 0), "{model}\n{}", out.program);
+    }
 }
 
 #[test]
 fn travel_past_the_z1_refuses_by_name() {
     // A 500 mm stock faced end to end runs X past the 200 mm half-stroke.
-    let world = world_on_z1(500.0, None);
-    let gate = posting::verification_gate(&world).join("\n");
-    assert!(gate.contains("machine Makera Z1") && gate.contains("in X, the stroke is -200.000..200.000"), "{gate}");
+    for (model, _) in MODELS {
+        let world = world_on_z1(model, 500.0, None);
+        let gate = posting::verification_gate(&world).join("\n");
+        assert!(gate.contains(&format!("machine {model}")) && gate.contains("in X, the stroke is -200.000..200.000"), "{gate}");
+    }
 }
 
 #[test]
 fn a_tool_past_the_z1s_spindle_ceiling_refuses_by_name() {
     let (_, mut fast) = catalog().into_iter().find(|(n, _)| *n == "EM-0600-4FL").expect("catalog");
     fast.rpm = 18000.0;
-    let world = world_on_z1(60.0, Some(fast));
-    let gate = posting::verification_gate(&world).join("\n");
-    assert!(gate.contains("machine Makera Z1") && gate.contains("above the machine's 13000"), "{gate}");
+    for (model, _) in MODELS {
+        let world = world_on_z1(model, 60.0, Some(fast.clone()));
+        let gate = posting::verification_gate(&world).join("\n");
+        assert!(gate.contains(&format!("machine {model}")) && gate.contains("above the machine's 13000"), "{gate}");
+    }
 }
