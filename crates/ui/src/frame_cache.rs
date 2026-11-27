@@ -42,6 +42,10 @@ struct FrameCacheInner {
 #[derive(Default)]
 pub(crate) struct FrameCache {
     inner: Mutex<FrameCacheInner>,
+    /// The path lines turned by the playhead's work turn (#4266).
+    pub(crate) turned_lines: TurnedCache<[f32; 6]>,
+    /// The model, stock and fill vertices turned by it.
+    pub(crate) turned_verts: TurnedCache<[f32; 3]>,
     /// The toolpath overlay lines and the chevron arm (#2201).
     pub(crate) paths: crate::path_overlay::PathLineCache,
     /// The DXF profile overlay lines (#1863).
@@ -107,3 +111,101 @@ impl FrameCache {
 #[cfg(test)]
 #[path = "frame_cache_tests.rs"]
 mod tests;
+
+// ------------------------------------------------------------ work turn
+
+/// The work turn's bit pattern as the turned caches key it
+/// (`crate::work_turn::NO_TURN` when there is none).
+pub(crate) type TurnBits = [u64; 8];
+
+const TURNED_CAP: usize = 64;
+
+/// One turned-geometry entry: keyed on the source's identity (its
+/// allocation pointer and length, a probe of its first and last
+/// elements) and the work turn's bits (crates/ui/AGENTS.md "Frame
+/// cost": the key is the input, never a document counter). The probe
+/// and the bounded table keep a recycled allocation from serving a
+/// foreign answer: a hit must match them all.
+struct TurnedEntry<T> {
+    src: u64,
+    len: usize,
+    view: TurnBits,
+    probe: [u64; 6],
+    verts: Arc<Vec<T>>,
+}
+
+/// The cache of source geometry under the playhead's work turn (#4266):
+/// the transformed vertices are computed when an input changes and read
+/// on every other frame, a paused playhead included.
+pub(crate) struct TurnedCache<T> {
+    inner: Mutex<TurnedInner<T>>,
+}
+
+struct TurnedInner<T> {
+    entries: Vec<TurnedEntry<T>>,
+    builds: u64,
+}
+
+impl<T> Default for TurnedCache<T> {
+    fn default() -> Self {
+        TurnedCache { inner: Mutex::new(TurnedInner { entries: Vec::new(), builds: 0 }) }
+    }
+}
+
+/// The identity probe of a vertex source: its first and last
+/// elements' bit patterns.
+pub(crate) fn probe3(a: [f32; 3], b: [f32; 3]) -> [u64; 6] {
+    let mut out = [0u64; 6];
+    for (i, f) in a.into_iter().chain(b).enumerate() {
+        out[i] = u64::from(f.to_bits());
+    }
+    out
+}
+
+/// The same for overlay lines (`[x, y, z, r, g, b]`): the first and the
+/// last line's floats, two per slot.
+pub(crate) fn probe6(a: [f32; 6], b: [f32; 6]) -> [u64; 6] {
+    let mut out = [0u64; 6];
+    for i in 0..6 {
+        out[i] = u64::from(a[i].to_bits()) | (u64::from(b[i].to_bits()) << 32);
+    }
+    out
+}
+
+impl<T: Send + Sync + 'static> TurnedCache<T> {
+    /// The source geometry `src` (`src` names its allocation, `probe`
+    /// its ends) turned by `view`, computed once and read after: `Arc`
+    /// vertices whose key is the input itself. The turn's writer (the
+    /// playhead move) invalidates by changing the bits; no page or
+    /// widget holds this cache.
+    pub(crate) fn turned(
+        &self,
+        src: u64,
+        len: usize,
+        view: TurnBits,
+        probe: [u64; 6],
+        build: impl FnOnce() -> Vec<T>,
+    ) -> Arc<Vec<T>> {
+        let matches =
+            |e: &TurnedEntry<T>| e.src == src && e.len == len && e.view == view && e.probe == probe;
+        let mut inner = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(i) = inner.entries.iter().position(matches) {
+            inner.entries[i..].rotate_left(1);
+            let last = inner.entries.len() - 1;
+            return Arc::clone(&inner.entries[last].verts);
+        }
+        let verts = Arc::new(build());
+        inner.builds = inner.builds.saturating_add(1);
+        if inner.entries.len() >= TURNED_CAP {
+            inner.entries.remove(0);
+        }
+        inner.entries.push(TurnedEntry { src, len, view, probe, verts: Arc::clone(&verts) });
+        verts
+    }
+
+    /// How many turn builds this cache ran (the counter pin).
+    #[cfg(test)]
+    pub(crate) fn builds(&self) -> u64 {
+        self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner).builds
+    }
+}

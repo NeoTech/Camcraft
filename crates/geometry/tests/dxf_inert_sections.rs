@@ -52,7 +52,6 @@ fn layout_wrappers_refuse_geometry_external_content_and_broken_structure() {
     let model = "0\nBLOCK\n2\n*Model_Space\n";
     for body in [
         layout("*Paper_SpaceCAD"),
-        layout("Fixture"),
         format!("{model}1\nremote.dwg\n0\nENDBLK\n"),
         format!("{model}70\n4\n0\nENDBLK\n"),
         format!("{model}3\nOther\n0\nENDBLK\n"),

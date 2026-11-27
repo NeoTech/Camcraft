@@ -26,6 +26,7 @@ fn params(side: WireSide) -> WireParams {
         clearance: 1.0,
         sharp_corners: false,
         tabs: None,
+        overlap: 0.0,
     }
 }
 
@@ -95,7 +96,7 @@ fn a_slot_from_the_edge_rides_inside_at_the_kerf_offset() {
 fn every_open_run_refusal_is_named() {
     let line = run(&[(60.0, 0.0), (60.0, 50.0)]);
     let why = refusal(&line, &params(WireSide::Die));
-    assert!(why.contains("no punch or die side") && why.contains("left or right"), "{why}");
+    assert!(why.contains("no punch or die side") && why.contains("left, right, or the centre"), "{why}");
     let why = refusal(&line, &WireParams { stock: None, ..params(WireSide::Left) });
     assert!(why.contains("states no stock"), "{why}");
     let why = refusal(&run(&[(60.0, 10.0), (60.0, 50.0)]), &params(WireSide::Left));
@@ -123,6 +124,34 @@ fn every_open_run_refusal_is_named() {
     let tabs = TabParams { count: Some(1), width: Some(2.0), at: vec![Point2::new(60.0, 25.0)], cutoff: None };
     let why = refusal(&line, &WireParams { tabs: Some(tabs), ..params(WireSide::Left) });
     assert!(why.contains("tabs are stated on an open run"), "{why}");
+}
+
+/// #3216: a centre-line slit rides the run itself - the wire centre on
+/// the line, threaded and run out in the air, no side kept - and takes
+/// skims, each from the air in the run's own direction; a reversed one
+/// is refused by name.
+#[test]
+fn a_centre_slit_rides_the_run_itself_and_takes_skims_from_the_air() {
+    let line = run(&[(60.0, 0.0), (60.0, 50.0)]);
+    let path = wire_contour(&[], &line, &params(WireSide::Centre)).unwrap();
+    let v = pts(&path);
+    assert!(v.iter().all(|q| (q.x - 60.0).abs() < 1e-9), "{v:?}");
+    assert!((v[0].y + (K + 1.0)).abs() < 1e-6, "threaded {:?}", v[0]);
+    assert!((v[v.len() - 1].y - (50.0 + K + 1.0)).abs() < 1e-6, "run out {:?}", v[v.len() - 1]);
+    assert!(path.notes.iter().any(|n| n.contains("kerf on the centre") && n.contains("no side kept")), "{:?}", path.notes);
+    // Left and right stand a kerf offset either side of the centre line.
+    let left = wire_contour(&[], &line, &params(WireSide::Left)).unwrap();
+    assert!(((left.moves[0].from.x - path.moves[0].from.x).abs() - K).abs() < 1e-9);
+    // Two passes, each threaded in the air once, at its own offset.
+    let skim = WirePass { condition: "S21".into(), wire_diameter: 0.25, gap: 0.02, reverse: false };
+    let two = wire_passes(&[], &line, &params(WireSide::Centre), &[skim]).unwrap();
+    let threads: Vec<crate::geometry::Point3> = two.moves.iter().filter(|m| m.from.y < 0.0).map(|m| m.from).collect();
+    assert_eq!(threads.len(), 2, "each pass is threaded in the air once: {threads:?}");
+    assert!((threads[1].x - 60.0).abs() < 1e-9 && (threads[1].y + 1.145).abs() < 1e-6, "the skim runs its own offset: {threads:?}");
+    // The slit is walked in the run's own direction; reversed is refused.
+    let skim = WirePass { condition: "S21".into(), wire_diameter: 0.25, gap: 0.02, reverse: true };
+    let err = wire_passes(&[], &line, &params(WireSide::Centre), &[skim]).unwrap_err().to_string();
+    assert!(err.contains("walked in its own direction"), "{err}");
 }
 
 /// #536 x #1109 (M3's review): a tapered open run is refused by name.

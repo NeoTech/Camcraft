@@ -235,3 +235,16 @@ fn the_switch_undoes_redoes_and_round_trips_the_project_file() {
     assert!(!off.contains("smoothing"), "off writes no key");
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn linuxcnc_and_tormach_smoothing_tolerance_never_writes_g64_p0() {
+    // #4147: PathPilot / LinuxCNC reads G64 P0 as G64 with no deviation limit.
+    // When a smoothing tolerance is under the written format resolution,
+    // the post must clamp to the smallest positive value and never write P0.
+    let small_smooth = Some(Smoothing { tol_mm: 0.0001, finish: true });
+    for post in ["Tormach PathPilot", "LinuxCNC"] {
+        let prog = program(post, small_smooth);
+        assert!(prog.contains("\nG64 P0.001\n"), "{post} clamped to smallest positive mm: {prog}");
+        assert!(!prog.contains("G64 P0\n") && !prog.contains("G64 P0.000\n"), "{post} never P0: {prog}");
+    }
+}

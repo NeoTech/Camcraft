@@ -55,13 +55,13 @@ fn adaptive_2d_readings_of_the_old_planner() {
          "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 33 worst 180 full 1 | fallback 1",
          "L6"),
         ("disc Outside",
-         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 13 worst 118 full 0 | fallback 1",
+         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 11 worst 118 full 0 | fallback 1",
          "L6"),
         ("dog bone Inside",
          "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 54 worst 180 full 1 | fallback 1",
          "L6"),
         ("dog bone Outside",
-         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 41 worst 167 full 0 | fallback 1",
+         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 39 worst 167 full 0 | fallback 1",
          "L6"),
     ];
     pin("2D Adaptive", false, TABLE, ring_cases("2D Adaptive", PocketStrategy::Adaptive));
@@ -74,13 +74,13 @@ fn offset_2d_readings_of_the_old_planner() {
          "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 33 worst 180 full 1 | fallback 0",
          "L6"),
         ("disc Outside",
-         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 13 worst 118 full 0 | fallback 0",
+         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 11 worst 118 full 0 | fallback 0",
          "L6"),
         ("dog bone Inside",
          "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 54 worst 180 full 1 | fallback 0",
          "L6"),
         ("dog bone Outside",
-         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 41 worst 167 full 0 | fallback 0",
+         "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 39 worst 167 full 0 | fallback 0",
          "L6"),
     ];
     pin("2D Offset", false, TABLE, ring_cases("2D Offset", PocketStrategy::Waterline));

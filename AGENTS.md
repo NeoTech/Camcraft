@@ -21,6 +21,8 @@ disagree, this file is correct.
 | Read, file, label, comment on or close an issue | `gh-issues` |
 | Check, mirror, release a claim; work a `needs-research` issue | `issue-claims` |
 | Work one issue from claim to draft PR | `work-issue` |
+| Continue another author's stalled PR | `takeover` |
+| Reproduce a reported bug before fixing it | `repro-first` |
 | Set or check an `effort:*` label | `classify-effort` |
 | Review open pull requests | `review-prs` |
 | Merge a batch of `merge-ready` PRs | `merge-ready` |
@@ -198,7 +200,8 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   sub-PRs of one large change. Then one PR takes it to `main`. Only the
   maintainer permits a side branch. `side/path-kernel` is the one that
   exists. It is made from `main` after this rule merges. Its plan is in
-  `docs/decisions/4024-path-kernel-design.md`.
+  `RECOMMENDED.md` under `## #4024 - Path kernel K0`, and its delivery is
+  in `docs/decisions/4325-path-kernel-delivery.md`.
   - The branch is protected against a force-push and a deletion. It is
     never rebased. Each change goes to it through a sub-PR.
   - A sub-PR has one issue. Its worktree is made from `origin/side/<name>`,
@@ -210,9 +213,10 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
   - A sub-PR gets the quick pass and the collaborator review as each other
     PR. It merges with a merge commit when its review is clean, also as a
     `feat`. `--delete-branch` deletes only the sub-PR's own branch.
-  - The issue of a merged sub-PR keeps `in-review` until the switch-over PR
-    merges. The merging session comments `merged to side/<name> in PR #M;
-    closes at the switch-over` on the issue.
+  - The issue of a merged sub-PR keeps `in-review` until the switch PR of
+    its kind merges, or until the issue's own work is complete on `main`.
+    The merging session comments `merged to side/<name> in PR #M; closes
+    at the switch of its kind` on the issue.
   - `main` is merged into the side branch with `git merge`, through a sync
     PR into the side branch. Never rebase, never force-push. Do this after
     each merge batch on `main` that touches the code of the side branch,
@@ -225,10 +229,14 @@ with `gh`. `ROADMAP.md` and `DONE.md` are retired; read them only for history
     inside the build limit. A red batch is fixed on the side branch before
     the next sub-PR merges.
   - The lane and in-flight limits count a sub-PR as each other PR.
-  - The switch-over is one PR from `side/<name>` to `main`. It lists
-    `Fixes #N` for each issue that it closes. It merges only on the
-    maintainer's word: an agent review is not enough. It merges without
-    `--delete-branch`.
+  - One PR takes `side/<name>` to `main`. It can come before the
+    switches. It uses `Refs #N`, not `Fixes #N`. An issue closes with the
+    switch PR of its kind or with its own work. The PR merges without
+    `--delete-branch`. The maintainer's word for that PR says who merges
+    it. For `side/path-kernel` it is the coordinator session (his answer
+    of 2026-11-27). It merges when an independent review is clean on the
+    head, and the batch gate, the heavy `motion` and `app` tests and the
+    example catalog suites are green.
 - **Own blocked PRs first.** Before an agent claims or starts a new issue,
   it lists the open PRs of the current account that have `conflicts` or
   `needs-rework`: `gh pr list --state open --author @me --label conflicts`

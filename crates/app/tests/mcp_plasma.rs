@@ -163,6 +163,37 @@ fn plasma_mcp_refuses_a_non_torch_nonzero_rpm_and_a_milling_post() {
 
 /// Corrupt only the saved path cache: keep sane torch spans, but lay the
 /// outline before its hole. This is a post-gate backstop, not an MCP edit.
+/// #3334: `edit_operation` sets the start and the exit pick of a Plasma
+/// Profile, the generation holds them, and a pick that no profile is near
+/// is refused by name.
+#[test]
+fn plasma_mcp_edit_operation_sets_the_start_and_exit_picks() {
+    let dir = tmp_dir("picks");
+    let mut c = plasma_job(&dir);
+    let kinds = c.ok("list_operation_types", json!({}));
+    let rows = kinds["kinds"].as_array().expect("the kinds");
+    let row = rows.iter().find(|k| k.to_string().contains("Plasma Profile")).expect("the plasma row").clone();
+    assert_eq!(row["start_exit"], json!({ "start": true, "exit": true, "field": "picks" }), "{row}");
+    let before = c.params();
+    let picks = json!({ "start": [[20.0, -8.0]], "exit": [[20.0, -14.0]] });
+    c.ok("edit_operation", json!({ "name": "Plasma1", "params": { "picks": picks } }));
+    assert_eq!(c.params()["picks"], picks, "the edited params carry the picks");
+    let generated = c.ok("generate", json!({ "name": "Plasma1" }));
+    assert_eq!(generated["generated"][0]["status"], json!("ok"), "{generated}");
+    let notes = generated.to_string();
+    assert!(notes.contains("start point (20.000, -8.000)") && notes.contains("exit point (20.000, -14.000)"), "{generated}");
+    // Undo the generation and the edit: no pick.
+    c.ok("undo", json!({}));
+    c.ok("undo", json!({}));
+    assert_eq!(c.params(), before);
+    // A pick far from each profile is refused by name, never moved.
+    c.ok("edit_operation", json!({ "name": "Plasma1", "params": { "picks": { "start": [[60.0, 0.0]] } } }));
+    let (_, far) = c.call("generate", json!({ "name": "Plasma1" }));
+    let far = far.to_string();
+    assert!(far.contains("start point (60.000, 0.000)") && far.contains("from the nearest closed profile"), "{far}");
+    std::fs::remove_dir_all(dir).expect("clean temporary files");
+}
+
 fn save_bad_cut_order(path: &Path) {
     let world = camcraft_app::world::new_world();
     project::load(&world, path).expect("load generated document");

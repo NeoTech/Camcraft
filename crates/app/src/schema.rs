@@ -333,6 +333,81 @@ impl ToolBody {
     }
 }
 
+/// #3644: one shared tool component of the document: the catalog fact
+/// (`ToolComponent`, checked when made) and where its ports, cutting
+/// point and body sit (`ComponentGeometry`). Not a component itself: the
+/// rows of [`DocumentComponents`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentComponent {
+    pub component: camcraft_tools::component::ToolComponent,
+    pub geometry: camcraft_tools::component_geometry::ComponentGeometry,
+    /// #3645: the user library copy this row was taken from, if any.
+    /// The row itself is what the document judges and posts; the link
+    /// only lets the sync status compare it with the library.
+    pub library_ref: Option<LibraryRef>,
+    /// #3646: the catalog facts of a multi-seat cutter body (`DC`,
+    /// `KAPR`, `APMX`, centre cutting, seat count). Only on a tool item;
+    /// a tool whose insert sits on such a body takes its whole milling
+    /// record from it.
+    pub milling: Option<camcraft_tools::milling_cutter::MillingBody>,
+    /// #3646: an insert's own tool material and cutting rows. Only on
+    /// an insert; each tool that cuts with it takes them.
+    pub running: Option<InsertRunning>,
+    /// #3643: a lathe component's body (boxes or facets in its own
+    /// frame) for a turning stack. A spindle stack refuses a row that
+    /// has one by name; it is never dropped in silence.
+    pub lathe_body: Option<camcraft_tools::lathe_assembly::LatheBody>,
+}
+
+impl DocumentComponent {
+    /// A row with no library link, no cutter facts, no running data and
+    /// no lathe body.
+    #[must_use]
+    pub fn new(
+        component: camcraft_tools::component::ToolComponent,
+        geometry: camcraft_tools::component_geometry::ComponentGeometry,
+    ) -> Self {
+        Self { component, geometry, library_ref: None, milling: None, running: None, lathe_body: None }
+    }
+}
+
+/// #3645: a document component's link to the user component library:
+/// the library id and the content hash of the copy that was taken.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryRef {
+    pub id: String,
+    pub content_hash: String,
+}
+
+/// #3646: what an insert gives each tool that cuts with it, over the
+/// tool's own running data.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct InsertRunning {
+    pub tool_material: Option<camcraft_tools::cutting::ToolMaterial>,
+    pub cutting: Vec<camcraft_tools::cutting_rows::CuttingRow>,
+}
+
+/// #3644: the document's component table, one row for each id (the
+/// singleton). Written only through the component commands
+/// (`crate::commands::tool_assembly`) and the project loader.
+#[derive(Component, Debug, Clone, Default, PartialEq)]
+pub struct DocumentComponents(pub Vec<DocumentComponent>);
+
+/// #3644: one node of a tool's component stack: the id of a row of
+/// [`DocumentComponents`] and how it sits on its parent (`None`: the
+/// root, on the spindle).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssemblyLink {
+    pub component: String,
+    pub mount: Option<camcraft_tools::tool_assembly::Mount>,
+}
+
+/// #3644: the component stack a tool is built from. The tool's
+/// `ToolDef` and `ToolBody` are derived from it by `SetToolAssembly` and
+/// `EditDocumentComponent`, in the same undo step, never apart.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ToolAssembly(pub Vec<AssemblyLink>);
+
 /// One machine setup (M3.2 stage A): the named context that says WHICH
 /// raw material and WHICH work coordinate system an operation is
 /// machined against. The strings are entity NAMES, resolved through
@@ -643,12 +718,12 @@ impl PostScriptOptions {
         let aliased: Vec<String> = self
             .by_post
             .keys()
-            .filter(|k| crate::posting::agie::current_key(k) != **k)
+            .filter(|k| crate::posting::aliases::current_key(k) != **k)
             .cloned()
             .collect();
         for old in aliased {
             if let Some(v) = self.by_post.remove(&old) {
-                self.by_post.entry(crate::posting::agie::current_key(&old)).or_insert(v);
+                self.by_post.entry(crate::posting::aliases::current_key(&old)).or_insert(v);
             }
         }
     }
@@ -938,6 +1013,8 @@ pub fn register_schema(world: &World) {
     world.component::<ToolDef>();
     world.component::<ToolBody>();
     world.component::<ToolCutter>();
+    world.component::<DocumentComponents>();
+    world.component::<ToolAssembly>();
     world.component::<Operation>();
     world.component::<OperationMeta>();
     world.component::<ProgramEntry>();

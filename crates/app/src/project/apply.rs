@@ -561,6 +561,14 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // is the stamp itself.
         // v81 -> v82 (#2826): the Rotary Flow arm arrives; no v81
         // file names it, so nothing seats or moves - pure step-up.
+        // v82 -> v83 (#4031): a tool may state its cutter hand
+        // (`cutter_hand`, right M3 / left M4); absent is right-hand, as
+        // every v82 file cut. A v82 reader would silently drop a stated
+        // left hand and post M3 for a cutter that must reverse, so the
+        // ladder steps.
+        // v83 -> v84 (#3645): the tool component table and the tool
+        // stacks arrive; no v83 file holds them, so nothing moves - pure
+        // step-up.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {
@@ -648,6 +656,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     for dto in &file.entities {
         validate_kind(dto, dto.kind.unwrap_or(EntityKind::Model))?;
     }
+    // #3645: the component table and every tool's stack, read whole.
+    let (components, mut assemblies) = super::assembly_wire::read_all(&file).map_err(corrupt)?;
     freeze_legacy_tool_numbers(&mut file.entities);
     for dto in &mut file.entities {
         if let Some(op) = &mut dto.operation
@@ -729,7 +739,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         world,
         &match file.post {
             // #3537: a hidden alias name reads as the registry name it selects.
-            Some(PostDto::Named(name)) => crate::posting::agie::current_ref(crate::schema::PostRef::Named(name)),
+            Some(PostDto::Named(name)) => crate::posting::aliases::current_ref(crate::schema::PostRef::Named(name)),
             Some(PostDto::File(path)) => crate::schema::PostRef::File(path),
             None => crate::schema::PostRef::Builtin,
         },
@@ -740,6 +750,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // stale singleton from the previous document can never leak in
     // (the theme's law, worn in the pin's clothes).
     crate::ribbon::pinned_set(world, &file.pinned);
+    // #3645: opening lands the file's component table - including an
+    // empty one, so no row of the previous document leaks in.
+    crate::tool_assembly::table_set(world, components);
     // Opening lands the material too - including None (the units law).
     crate::cutting::material_set(world, material);
     // #1094: a raw-stock-only mark lands only when its source model is in
@@ -863,16 +876,25 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     tool: tdto.to_tool(),
                     number: tdto.number,
                 });
+                // #3645: the stack, read and checked before any write.
+                let stack = assemblies.remove(&dto.name);
                 // #368: validate_kind already refused a body that is no body.
                 if let Some(body) =
                     super::tool_body_wire::stated_body(tdto.holder.as_ref(), tdto.body.as_ref(), &dto.name).map_err(corrupt)?
                 {
+                    let body = match &stack {
+                        Some((_, resolved)) => super::assembly_wire::as_derived(body, resolved.as_ref()),
+                        None => body,
+                    };
                     crate::tool_body::set_body(world, &entity, Some(&body));
                 }
                 // #93: validate_kind already refused a cutter that disagrees.
                 if let Some(c) = &tdto.cutter {
                     let spun = super::tool_body_wire::cutter_from_dto(&tdto.to_tool(), c, &dto.name).map_err(corrupt)?;
                     crate::tool_cutter::set_cutter(world, &entity, Some(&spun));
+                }
+                if let Some((a, _)) = stack {
+                    crate::tool_assembly::set_assembly(world, &entity, Some(&a));
                 }
             }
             EntityKind::Operation => {

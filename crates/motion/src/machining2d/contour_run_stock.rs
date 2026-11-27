@@ -30,17 +30,13 @@ const STOCK_WORDS: Words = Words {
 /// A near tie of the part's area on the two sides of the run (a share).
 const TIE: f64 = 0.01;
 
-/// Contour along the open run `pts`, one radius plus the stock to leave
-/// to the side `side` names: Outside off the stock, Inside into it, Auto
-/// away from the part. `stock` and `part` give the stock's and the
-/// part's sections at a height (`Ok(None)`: none there).
-pub fn contour_open_run_sided(
+pub(super) fn sided_run_ride(
     pts: &[Point2],
     p: &ContourParams,
     side: Side,
     stock: &SectionAt,
     part: &SectionAt,
-) -> Result<Toolpath, GenError> {
+) -> Result<(Vec<Point2>, String), GenError> {
     p.validate()?;
     let run = simple(pts)?;
     let zs = p.levels()?;
@@ -92,10 +88,28 @@ pub fn contour_open_run_sided(
         ride.reverse();
     }
     clear_of_part(&ride, p.tool_diameter * 0.5, &part_levels)?;
+    Ok((
+        ride,
+        format!(
+            "contour: the open run on the stock is cut to its {said} side - the tool centre {d:.3} mm off it (tool radius plus stock to leave)"
+        ),
+    ))
+}
+
+/// Contour along the open run `pts`, one radius plus the stock to leave
+/// to the side `side` names: Outside off the stock, Inside into it, Auto
+/// away from the part. `stock` and `part` give the stock's and the
+/// part's sections at a height (`Ok(None)`: none there).
+pub fn contour_open_run_sided(
+    pts: &[Point2],
+    p: &ContourParams,
+    side: Side,
+    stock: &SectionAt,
+    part: &SectionAt,
+) -> Result<Toolpath, GenError> {
+    let (ride, note) = sided_run_ride(pts, p, side, stock, part)?;
     let mut path = contour_along_chain(&ride, p)?;
-    path.notes.push(format!(
-        "contour: the open run on the stock is cut to its {said} side - the tool centre {d:.3} mm off it (tool radius plus stock to leave)"
-    ));
+    path.notes.push(note);
     Ok(path)
 }
 

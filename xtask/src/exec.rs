@@ -12,6 +12,8 @@ use crate::checkout::{self, Reading};
 use crate::plan::{Plan, Step};
 use crate::scan::re;
 pub use crate::known_fail::expect_fail_note;
+#[path = "gpu_report.rs"]
+mod gpu_report;
 
 pub struct Run {
     pub root: PathBuf,
@@ -242,7 +244,7 @@ impl Run {
     /// Runs one step with its `-j` and `--test-threads` set to `jobs` (`budget::scale`). A debug suite
     /// step of a crate in `built` starts its test executable; each other step starts cargo (`direct`).
     pub(crate) fn execute(root: &Path, log_dir: &Path, dry: bool, n: usize, s: &Step, jobs: usize, built: &Built) -> Result<Done, String> {
-        let args = crate::budget::scale(&s.args, jobs);
+        let args = gpu_report::output_args(&crate::budget::scale(&s.args, jobs));
         let log = log_dir.join(log_name(n, &s.name));
         let dir = if s.in_ui { root.join("crates").join("ui") } else { root.to_path_buf() };
         let leaf = |d: &Path| d.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default();
@@ -295,7 +297,7 @@ impl Run {
             None => code == 0,
         } && stall.is_none();
         let stall = stall.map(|n| note = n).is_some();
-        println!("     {} in {secs}s {note}", row(ok, stall));
+        println!("     {} in {secs}s {note}", gpu_report::report_row(ok, stall, &note));
         if !ok && !stall {
             let gate = crate::build_stop::gate_command();
             crate::build_stop::metadata_note(&text, &args, &gate)?.iter().for_each(|l| println!("{l}"));
@@ -307,7 +309,7 @@ impl Run {
     pub fn summary(self) -> i32 {
         println!("\n== gate summary ({}) - logs in {}", self.label, self.log_dir.display());
         for d in &self.done {
-            println!("  {:<4} {:>5}s  {}  {}", row(d.ok, d.stall), d.secs, d.name, d.note);
+            println!("  {:<4} {:>5}s  {}  {}", gpu_report::report_row(d.ok, d.stall, &d.note), d.secs, d.name, d.note);
         }
         for (name, note) in &self.not_run {
             println!("  SKIP     -   {name}  {note}");
@@ -374,9 +376,10 @@ pub fn read_log(text: &str, code: i32) -> Result<String, String> {
             slow.push(format!("{} (>{}s)", &c[1], &c[2]));
         }
     }
-    let mut note = if compile {
+    // Successful captured output can contain deliberate failure fixtures, not a failed step.
+    let mut note = if compile && code != 0 {
         "compile error".into()
-    } else if !fails.is_empty() {
+    } else if !fails.is_empty() && code != 0 {
         let mut n = format!("failed: {}", fails.join(", "));
         if !tests.is_empty() {
             n.push_str(&format!(" [tests: {}]", tests.join(", ")));
@@ -392,6 +395,11 @@ pub fn read_log(text: &str, code: i32) -> Result<String, String> {
             note.push(' ');
         }
         note.push_str(&format!("slow: {}", slow.join(", ")));
+    }
+    let gpu = gpu_report::notes(text);
+    if !gpu.is_empty() {
+        if !note.is_empty() { note.push_str("; "); }
+        note.push_str(&gpu);
     }
     Ok(note)
 }

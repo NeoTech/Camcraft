@@ -90,6 +90,7 @@ pub(crate) mod deburr_filter;
 pub(crate) mod deburr_scan;
 pub(crate) mod deburr_size;
 mod deburr_contact;
+mod deburr_seam;
 mod drape;
 mod edge;
 mod fill;
@@ -112,6 +113,11 @@ mod params;
 mod polar;
 mod raster;
 mod raster_bridge;
+mod raster_seam;
+// #3329: the 3D Finish's start and exit points on its Parallel raster.
+mod finish_seam;
+#[cfg(test)]
+mod finish_seam_tests;
 mod rim;
 mod rings;
 mod ring_seam;
@@ -128,7 +134,8 @@ pub use params::{
 pub use center_cut::guard as center_cut_guard;
 pub use center_cut::guard_as as center_cut_guard_as;
 pub use center_cut::guard_shaped as center_cut_guard_shaped;
-pub use deburr::{deburr, deburr_edges, DeburrParams, UnreachableEdges};
+pub use deburr::{deburr, deburr_edges, deburr_seamed, DeburrParams, UnreachableEdges};
+pub use deburr_seam::ChainSeam;
 pub use deburr_filter::DeburrEdges;
 pub use deburr_size::{BreakMode, BreakProfile, DeburrBreak};
 pub use fill::{fill_openings, Filled};
@@ -141,6 +148,8 @@ pub use flow::flow;
 pub(crate) use support::closest_pt_tri;
 pub use polar::{morphed_spiral, radial, spiral};
 pub use raster::{blend, parallel, parallel_angle_refusal, parallel_with_angle};
+pub use raster_seam::{parallel_seamed, RasterEnds, RasterSeam};
+pub use finish_seam::{finish_seamed, raster_ends_kept};
 pub use swarf::{swarf, swarf_multi};
 pub use ring_seam::{waterline, waterline_seamed, RingSeam};
 pub use morph::morph;

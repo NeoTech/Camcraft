@@ -63,6 +63,20 @@ pub fn verify_bodies(
     } else if cx.mode == Mode::Undercut {
         // #1444: no region tangency under a roof; the mesh still speaks.
         section::solid(path, cx, &cutter, &mut warns);
+    } else if cx.mode == Mode::Envelope
+        && !(cx.tool.nose_radius.is_finite() && cx.tool.nose_radius > 0.0)
+        && let Some(facets) = cx.model
+    {
+        // #4062: the envelope measures cutting, and (d)'s height field
+        // cannot see an upward rapid crossing a roof. Sweep just the
+        // vertical rapids against the part, in both directions.
+        // Nose-center turning paths stay with the revolved verdict (f).
+        let law = super::SolidLaw {
+            step: 0.0, // only straight rapids enter this check
+            allow: cx.tightened(cx.gouge_tol),
+            hole_walls: false,
+        };
+        warns.extend(super::solid::vertical_rapid_hits(path, facets, &cutter, &law));
     }
 
     // (c) Shank/holder reach and (c3) the mid-turn sweep - [`reach`].

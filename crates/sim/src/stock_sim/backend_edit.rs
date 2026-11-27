@@ -51,7 +51,7 @@ impl Stock {
                     return Ok(());
                 }
                 let tool = SdfTool::Flat { r, flank: spanning_flank(f) };
-                f.subtract(m, &tool, chord_tol).map_err(|e| named_op(0, e))
+                f.subtract_batch_fitted(std::slice::from_ref(m), &tool, chord_tol).map_err(|e| named_op(0, e))
             }
         }
     }
@@ -71,7 +71,7 @@ impl Stock {
                 }
                 let chord_tol = (f.cell() * 0.25).max(1e-9);
                 let tool = SdfTool::Flat { r, flank: spanning_flank(f) };
-                f.subtract(&Move::new(MoveKind::Feed, a, b, None), &tool, chord_tol)
+                f.subtract_batch_fitted(&[Move::new(MoveKind::Feed, a, b, None)], &tool, chord_tol)
             }
         }
     }

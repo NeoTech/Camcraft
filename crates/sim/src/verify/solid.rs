@@ -142,16 +142,31 @@ pub fn stack_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
     judged(path, facets, cutter, law, Exemptions { stack_only: true, ..Exemptions::none() })
 }
 
+/// Finished-part backstop for envelope paths, which do not take the
+/// ordinary solid law. Do not rejudge their cutting moves or lateral links.
+pub(super) fn vertical_rapid_hits(
+    path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
+) -> Vec<Warning> {
+    judged(path, facets, cutter, law, Exemptions { vertical_rapids_only: true, ..Exemptions::none() })
+}
+
+fn vertical_rapid(m: &crate::cl::Move) -> bool {
+    m.kind == MoveKind::Rapid && m.arc.is_none()
+        && m.from.is_finite() && m.to.is_finite()
+        && m.from.x == m.to.x && m.from.y == m.to.y && m.from.z != m.to.z
+}
+
 struct Exemptions<'a> {
     walls: &'a [HoleAxis],
     bores: &'a [ThreadBore],
     reliefs: &'a [CornerReliefZone],
     stack_only: bool,
+    vertical_rapids_only: bool,
 }
 
 impl<'a> Exemptions<'a> {
     fn none() -> Self {
-        Self { walls: &[], bores: &[], reliefs: &[], stack_only: false }
+        Self { walls: &[], bores: &[], reliefs: &[], stack_only: false, vertical_rapids_only: false }
     }
 }
 
@@ -163,6 +178,14 @@ fn judged(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
     let reliefs = ex.reliefs;
     let stack_only = ex.stack_only;
     let first_cut = path.moves.iter().position(|m| m.kind != MoveKind::Rapid);
+    let first_vertical = if ex.vertical_rapids_only {
+        let Some(at) = path.moves.iter().position(vertical_rapid) else {
+            return Vec::new();
+        };
+        Some(at)
+    } else {
+        None
+    };
     if facets.is_empty() {
         return Vec::new();
     }
@@ -170,7 +193,11 @@ fn judged(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
     let allow = if law.allow.is_finite() { law.allow.max(0.0) } else { 0.0 };
     let index = SolidIndex::build(facets);
     let (Some(mut index), false) = (index, atoms.is_empty()) else {
-        return first_cut.map(|at| vec![Warning::Gouge { at }]).unwrap_or_default();
+        return if let Some(at) = first_vertical {
+            vec![Warning::RapidInPart { at }]
+        } else {
+            first_cut.map(|at| vec![Warning::Gouge { at }]).unwrap_or_default()
+        };
     };
     // The fluted length is the cutting edge; the bands above it are the
     // shank and holder. A cut that only the bands make is not a gouge -
@@ -186,6 +213,9 @@ fn judged(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
     let stopped = super::fine_bore::stopped_rapids(path, cutter.radius, cutter.shank_radius);
     let mut out = Vec::new();
     for (i, m) in path.moves.iter().enumerate() {
+        if ex.vertical_rapids_only && !vertical_rapid(m) {
+            continue;
+        }
         if !(m.from.is_finite() && m.to.is_finite()) {
             continue; // the NonFinite law owns it
         }
@@ -221,7 +251,10 @@ fn judged(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
                 }
                 continue;
             }
-            let lifts = stack_only && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
+            // #4211: the envelope's vertical-rapid sweep (#4062) takes the
+            // same rule. Its cut's end pose is judged by the finish law,
+            // which lets the edge touch the model by the finish tolerance.
+            let lifts = (stack_only || ex.vertical_rapids_only) && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
             let from_cut = i.checked_sub(1).and_then(|j| path.moves.get(j)).is_some_and(|c| c.kind != MoveKind::Rapid && c.to == m.from);
             if lifts && from_cut {
                 // Out of the kerf that cut made: the edge's start pose is

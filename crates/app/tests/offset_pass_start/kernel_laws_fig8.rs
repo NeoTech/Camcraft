@@ -155,10 +155,10 @@ fn fig8_pocket_2d_readings_of_the_old_planner() {
 
 const FIG8_ADAPTIVE_2D_READINGS_OF_THE_OLD_PLANNER: &[Row] = &[
     ("fig8 Inside",
-     "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 148 worst 173 full 0 | fallback 1",
+     "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 0 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 36 worst 170 full 0 | fallback 1",
      "L6"),
     ("fig8 Outside",
-     "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 188 worst 175 full 0 | fallback 1",
+     "lifts 0 named 0 re 0 | cross 0 leave 0 | entry air 1 hole 0 col 0 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 27 worst 175 full 0 | fallback 1",
      "L6"),
 ];
 
@@ -177,10 +177,10 @@ fn fig8_adaptive_2d_readings_of_the_old_planner_light() {
 
 const FIG8_OFFSET_2D_READINGS_OF_THE_OLD_PLANNER: &[Row] = &[
     ("fig8 Inside",
-     "lifts 3 named 3 re 3 | cross 0 leave 0 | entry air 0 hole 0 col 3 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 413 worst 173 full 0 | fallback 0",
+     "lifts 4 named 4 re 4 | cross 0 leave 0 | entry air 0 hole 0 col 4 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 125 worst 170 full 0 | fallback 0",
      "L6"),
     ("fig8 Outside",
-     "lifts 7 named 7 re 7 | cross 0 leave 0 | entry air 5 hole 0 col 3 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 875 worst 180 full 2 | fallback 0",
+     "lifts 2 named 2 re 2 | cross 0 leave 0 | entry air 2 hole 0 col 1 solid 1 (plunge 0 ramp 0 helix 1 rapid 0) | over 85 worst 180 full 2 | fallback 0",
      "L6"),
 ];
 

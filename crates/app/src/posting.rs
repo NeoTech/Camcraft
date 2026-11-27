@@ -30,6 +30,8 @@ use std::path::Path;
 
 #[path = "posting_agie.rs"]
 pub mod agie;
+#[path = "posting_aliases.rs"]
+pub mod aliases;
 
 #[path = "posting_waterjet.rs"]
 mod waterjet;
@@ -61,10 +63,11 @@ pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 /// The registry entries that speak WIRE EDM (#533): RS-274 motion with
 /// the control's own codes from the machine file, and (#617) the Sodick
 /// dialect with its manual's words, and (#2700) the G-EDM dialect for
-/// G-RBLv3 controllers. They serve wire EDMs only, and no cutting post
-/// serves one. The first is the default for a wire EDM.
+/// G-RBLv3 controllers, and (#4045) the Sodick LN2W dialect. They serve
+/// wire EDMs only, and no cutting post serves one. The first is the
+/// default for a wire EDM.
 pub const WIRE_POSTS: &[&str] =
-    &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)", agie::POST, "G-EDM Wire EDM"];
+    &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)", agie::POST, "G-EDM Wire EDM", "Sodick Wire EDM (LN2W)"];
 
 /// The registry entries that speak SINKER EDM (#542): RS-274 motion
 /// with the control's own codes from the machine file, each declaring
@@ -445,7 +448,7 @@ pub(crate) fn json_map_to_overrides(val: &Value) -> Result<BTreeMap<String, Opti
 
 /// Resolve a built-in post name or `.cps` file path to its [`PostRef`] and script text (#258, #2190).
 pub fn resolve_cps(cps: &str) -> Result<(PostRef, String), String> {
-    let cps = agie::current_name(cps);
+    let cps = aliases::current_name(cps);
     if BUILTINS.iter().any(|(n, _)| *n == cps) {
         return Ok((PostRef::Named(cps.to_owned()), builtin_post_text(cps)?.to_owned()));
     }
@@ -650,7 +653,7 @@ fn post_script_as(
 pub fn post_setup_unwritten(world: &World) -> Result<Posted, String> {
     let post = mounts::single(world, true)?.post;
     if agie::is_native(&post) {
-        return Err("Native wire EDM jobs require a job directory on the desktop or CLI".into());
+        return Err("Agie Wire EDM jobs require a job directory on the desktop or CLI".into());
     }
     let (label, cps) = script_of(&post)?;
     let posted = post_script_body_with(world, &cps, Some(&label), Some(&post), None);
@@ -1332,10 +1335,10 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         edm_params::insert(&op.params, &tool, &mut records);
         // #2769: what the stock box bounds, for a post's blank definition.
         stock_shape::insert(world, setup, &mut records);
-        // #988: a left-hand-cut thread mill turns M4.
-        if let OpParams::Thread { passes, .. } = &op.params
-            && passes.spindle_reverse
-        {
+        // #988: a left-hand-cut thread mill turns M4 - and only an
+        // operation that ASKS to reverse gets the ask on the records
+        // (#4031: the request, not the post, decides).
+        if operation::tool_gate::requests_reverse(&op.params) {
             post::ask_reverse_spindle(&mut records);
         }
         setup_change::ask(&changes, name, &mut records);

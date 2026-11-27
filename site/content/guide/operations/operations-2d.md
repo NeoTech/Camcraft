@@ -165,6 +165,18 @@ angle. An unset entry angle means 3 degrees, independently of the link
 angle. If there is too little room for that ramp, the path reports its
 substitution and uses the plunge feed. Read the generated entry notes.
 
+On an outside contour, **Ramp** also descends along the lead-in and ring
+onto each level. **Helix** uses the same ramp, not a helical orbit; a path
+note explains the substitution once. The default **Plunge** is unchanged.
+Where tabs stand at the level, or the lead-in and ring are too short for
+the ramp angle, the path instead uses a grazing dive at the lead-in and
+names the reason. Inspect these notes and the generated descent. This does
+not promise a ramp between every ring at the same depth.
+
+With control or wear compensation, Ramp and Helix entries or level
+transitions are refused. Use a supported entry and transition instead;
+do not remove the compensation check to obtain a path.
+
 <div class="guide-pair">
 
 ![2D contour toolpath without lead-in plunging directly onto the workpiece corner](../../../images/guide/op-2d-lead-before.png)
@@ -243,6 +255,22 @@ It is the same option as on 2D Offset:
 Only the ring strategies (Waterline, Offset rings) have a ring order.
 Zigzag rows and rest machining keep their own order. When you set Inside
 or Outside on them, the path notes say that the option is not used.
+
+**Do not touch** also applies to 2D Pocket, including rest machining.
+On **Geometry > Boundary > Boundaries**, choose **Pick protected** and
+pick model faces or edge chains. Choose **Done**, set **Clearance**, and
+choose **Apply**. The keep-out protects the flutes, shank and holder on
+cuts, entries, keep-down links, rapid links and the final clearance lift.
+Clearance adds standoff to **Stock to leave**. A cut with no safe room is
+refused by name; inspect the remaining stock around protected items.
+The MCP tool `set_operation_do_not_touch` sets the same protection.
+
+A planned corner relief that no pass can reach is not a completed cut.
+The operation notes identify the boundary corner:
+`corner relief at (x, y) is not cut: no pass vertex reaches the relief spur`.
+Each missed corner is named once, even across several levels. The
+material remains at that corner. Inspect the path and change the tool,
+boundary or relief choice as needed; regenerate and verify before posting.
 
 **Common refusals:** "pocket is narrower than the tool"; "stepover leaves
 bands the tool cannot reach"; a pick that "projects to a line from above

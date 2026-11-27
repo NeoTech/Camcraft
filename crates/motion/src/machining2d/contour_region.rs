@@ -87,7 +87,7 @@ pub fn contour_on_picked(
 
 /// The part a contour reads: its facets, its body ranges, and whether the
 /// rings were picked (the #1927 law applies).
-type PartRef<'a> = (&'a [Triangle], &'a [std::ops::Range<usize>], bool);
+pub(super) type PartRef<'a> = (&'a [Triangle], &'a [std::ops::Range<usize>], bool);
 
 fn contour_impl(region: &Region, p: &ContourParams, part: Option<PartRef<'_>>) -> Result<Toolpath, GenError> {
     p.validate()?;

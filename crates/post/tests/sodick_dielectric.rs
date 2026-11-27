@@ -201,3 +201,33 @@ fn the_generic_wire_post_notes_a_stated_tank_and_flushing_it_does_not_program() 
     let strip = |p: &str| p.lines().filter(|l| !l.contains("STATED BUT NOT PROGRAMMED")).collect::<Vec<_>>().join("\n");
     assert_eq!(strip(&out.program), strip(&plain.program), "only the notes differ");
 }
+
+/// #4046 / #4044: the header names the control the words are for, warns an
+/// LN1W / LN2W owner before the first code line, and states the threading
+/// that the program writes (T91 with AWT, the operator at an M00 without).
+#[test]
+fn the_header_names_the_mark_21_control_warns_ln_owners_and_states_the_threading() {
+    const LN: &str = "(LN1W/LN2W: NOT SUPPORTED - G21 ALARMS E00170 AND THE TAPER WORDS DIFFER - USE THE SODICK WIRE EDM LN2W POST)";
+    for (awt, threading) in [
+        (true, "(PROGRAM THREADS THE WIRE WITH T91 AT START)"),
+        (false, "(WIRE NOT THREADED AT START - THE OPERATOR THREADS IT AT THE M00)"),
+    ] {
+        let out = run(SODICK, &machine(json!({ "awt": awt })), &section("Punch1"));
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        let lines: Vec<&str> = out.program.lines().collect();
+        let at = |s: &str| lines.iter().position(|l| *l == s).unwrap_or_else(|| panic!("{s} missing:\n{}", out.program));
+        let first_code = lines.iter().position(|l| !l.starts_with('(')).unwrap_or(lines.len());
+        assert!(at("(SODICK MARK 21 / EX21 CONTROL WORDS - NOT VERIFIED ON A CONTROL - CHECK BEFORE CUTTING)") < first_code);
+        assert!(at(LN) < first_code, "{}", out.program);
+        assert!(at(threading) < first_code, "{}", out.program);
+        assert_eq!(lines.iter().filter(|l| l.contains("THREADED AT START") || l.contains("THREADS THE WIRE")).count(), 1, "{}", out.program);
+        assert_eq!(body(&out).contains(&"T91"), awt, "{}", out.program);
+    }
+    let description = SODICK.lines().find(|l| l.starts_with("description = ")).unwrap_or_default();
+    assert!(description.contains("Mark 21 / EX21 control"), "{description}");
+    assert!(
+        description.contains("LN1W/LN2W: not supported - G21 alarms (E00170) and the taper words differ - use the Sodick Wire EDM (LN2W) post"),
+        "{description}"
+    );
+    assert!(description.starts_with("description = \"Sodick wire EDM, 2-axis ("), "the post's name in refusals stays: {description}");
+}

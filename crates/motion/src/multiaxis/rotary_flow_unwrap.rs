@@ -84,6 +84,22 @@ pub(super) struct Unwrapped {
     pub u: Vec<f64>,
 }
 
+impl Unwrapped {
+    /// The track walked backwards (#2829): the coordinates reversed,
+    /// the place knots rebuilt ascending. The feature layer reads a
+    /// chain's direction from the mesh, never from the pick, so the
+    /// kernel walks a backward-wound chain backwards instead of
+    /// refusing a pick the user cannot reverse - the matched-place
+    /// pairing of two chains wound against each other twists the
+    /// band a whole turn, and the reversal untwists it.
+    pub(super) fn reverse(&mut self) {
+        self.th.reverse();
+        self.v.reverse();
+        self.rho.reverse();
+        self.u = self.u.iter().rev().map(|x| 1.0 - x).collect();
+    }
+}
+
 /// The chain `pts` (validated finite, distinct and off the axis) as
 /// one continuous track about the stated axis.
 pub(super) fn unwrap(ax: &Axis, b: &Basis, pts: &[Point3]) -> Unwrapped {
@@ -303,6 +319,27 @@ mod tests {
         // reads -0.25 turns, never a jump back.
         let th = unwrap_near(0.75 * TAU, -0.5 * TAU);
         assert!((th - (-0.25 * TAU)).abs() < 1e-12, "{th}");
+    }
+
+    #[test]
+    fn reverse_walks_the_track_backwards_with_ascending_knots() {
+        let t = Unwrapped {
+            th: vec![0.0, 1.0, 2.5],
+            v: vec![1.0, 2.0, 3.0],
+            rho: vec![8.0, 8.5, 9.0],
+            u: vec![0.0, 0.4, 1.0],
+        };
+        let mut r = t.clone();
+        r.reverse();
+        assert_eq!(r.th, vec![2.5, 1.0, 0.0]);
+        assert_eq!(r.v, vec![3.0, 2.0, 1.0]);
+        // The place knots stay ascending, each point's own fraction
+        // of the chord length read from the new start.
+        assert_eq!(r.u, vec![0.0, 0.6, 1.0]);
+        // Twice is the identity.
+        r.reverse();
+        assert_eq!(r.th, t.th);
+        assert_eq!(r.u, t.u);
     }
 
     #[test]

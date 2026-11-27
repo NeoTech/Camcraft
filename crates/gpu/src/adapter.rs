@@ -60,7 +60,18 @@ async fn try_kind(instance: &wgpu::Instance, kind: AdapterKind) -> Result<Headle
         .await
         .map_err(|err| format!("{} device {name}: {err}", kind.label()))?;
     let compute = probe(info.backend, &adapter.get_downlevel_capabilities(), &device.limits());
+    // Report the device that wgpu returned, not the kind that we requested.
+    eprintln!("GPU adapter: {} {name} (device type {:?})", actual_kind(info.device_type), info.device_type);
     Ok(HeadlessGpu { device, queue, kind, name, compute })
+}
+
+/// Identity for the report only; this does not select an adapter or change fallback policy.
+fn actual_kind(device_type: wgpu::DeviceType) -> &'static str {
+    match device_type {
+        wgpu::DeviceType::Cpu => "software",
+        wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::DiscreteGpu => "hardware",
+        wgpu::DeviceType::VirtualGpu | wgpu::DeviceType::Other => "unknown",
+    }
 }
 
 /// Software adapter first, then hardware. The error names why each failed.
@@ -109,4 +120,15 @@ pub fn device_for_test(suite: &str) -> Result<Option<HeadlessGpu>, String> {
 /// `CAMCRAFT_REQUIRE_GPU=1` is set: a skip must fail instead.
 pub fn gpu_required() -> bool {
     std::env::var(REQUIRE_GPU_ENV).is_ok_and(|v| v.trim() == "1")
+}
+
+#[cfg(test)]
+mod reporting_tests {
+    #[test]
+    fn actual_adapter_kind_does_not_claim_unproven_hardware() {
+        use wgpu::DeviceType::*;
+        for (device, label) in [(Cpu, "software"), (IntegratedGpu, "hardware"), (DiscreteGpu, "hardware"), (VirtualGpu, "unknown"), (Other, "unknown")] {
+            assert_eq!(super::actual_kind(device), label);
+        }
+    }
 }

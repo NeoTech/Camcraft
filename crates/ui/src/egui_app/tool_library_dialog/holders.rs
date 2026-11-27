@@ -5,8 +5,10 @@
 //! the largest diameter and the number of document tools that use the
 //! holder (`app::tool_body::holder_users`, keyed on the entry name). A
 //! click on a name opens the read-only holder view (`holder_view`).
-//! Built-in holders are read-only: user holders and holder edits need the
-//! user library store of #3645 (U7, #3898).
+//! Built-in holders are read-only. #3898 (U7): the user holders of the
+//! document (its component table) head the list; a click opens one in
+//! the component editor, and a built-in holder's view copies it as a
+//! user holder.
 //! Frame cost: the library rows are built once for each thread; a frame
 //! reads the document's holder references and formats the rows.
 //! Provenance: our own list over our own holder library; no HSMWorks
@@ -22,7 +24,7 @@ use camcraft_app::holder_library::{self, Clamp, HolderEntry};
 use camcraft_app::tool_body;
 use camcraft_app::units::{self, Unit};
 
-use crate::state::State;
+use crate::state::{ComponentGroup, ErrorScope, State};
 
 /// The label of the row that shows every taper.
 pub(crate) const ALL: &str = "All holders";
@@ -30,7 +32,11 @@ pub(crate) const ALL: &str = "All holders";
 pub(crate) const STRAIGHT: &str = "Straight shank";
 /// The note that says what the page cannot do yet.
 pub(crate) const READ_ONLY: &str =
-    "Built-in holders are read-only. User holders and holder edits come with the user library (#3645).";
+    "Built-in holders are read-only. Open one and copy it as a user holder to edit it.";
+/// #3898: the heading of the document's own holders.
+pub(crate) const USER_HOLDERS: &str = "USER HOLDERS";
+/// #3898: the button on a built-in holder that makes a user holder of it.
+pub(crate) const COPY: &str = "Copy as user holder";
 /// The column heads.
 pub(crate) const HEADS: [&str; 7] = ["Name", "Taper", "Clamp", "Clamps Ø", "Gauge length", "Largest Ø", "Used by"];
 const TAPER_W: f32 = 170.0;
@@ -98,11 +104,12 @@ pub(crate) fn users(state: &State) -> HashMap<String, Vec<String>> {
     out
 }
 
-/// The clamp as words: "ER32 collet", "Weldon side lock".
+/// The clamp as words: "ER32 collet", "Weldon side lock", "shrink fit".
 pub(crate) fn clamp_text(e: &HolderEntry) -> String {
     match e.clamp {
         Clamp::Er(er) => format!("{} collet", er.name),
         Clamp::Weldon { .. } => "Weldon side lock".to_owned(),
+        Clamp::Shrink { .. } => "shrink fit".to_owned(),
     }
 }
 
@@ -110,7 +117,7 @@ pub(crate) fn clamp_text(e: &HolderEntry) -> String {
 pub(crate) fn range_text(e: &HolderEntry, u: Unit) -> String {
     match e.clamp {
         Clamp::Er(er) => format!("{} – {}", units::len(er.min_bore, u, 2), units::len(er.max_bore, u, 2)),
-        Clamp::Weldon { bore, .. } => units::len(bore, u, 3),
+        Clamp::Weldon { bore, .. } | Clamp::Shrink { bore, .. } => units::len(bore, u, 3),
     }
 }
 
@@ -128,6 +135,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     };
     let mut pick_taper = None;
     let mut open = None;
+    let mut edit = None;
     let mut filter = view.filter.clone();
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
@@ -139,6 +147,10 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
             let label = ui.label("Holder filter");
             ui.add(egui::TextEdit::singleline(&mut filter).desired_width(ui.available_width())).labelled_by(label.id);
             ui.weak(READ_ONLY);
+            if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
+                super::super::error_text::error_text(ui, super::super::colorvision::text_inks(ui, &state.world).error, &msg);
+            }
+            edit = user_holders(ui, state, &filter);
             egui::ScrollArea::both().id_salt("tool_library_holders").auto_shrink([false, false]).show(ui, |ui| {
                 open = table(ui, &rows, &users, machine.as_deref(), &view.taper, &filter, state.units());
             });
@@ -153,6 +165,49 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     if let Some(name) = open {
         state.open_holder_in_library(Some(&name));
     }
+    if let Some(id) = edit {
+        super::component_edit::open(state, &id);
+    }
+}
+
+/// #3898: the document's holders and adapters (its component table), each
+/// with its library status and the tools whose stack uses it. A click on
+/// a name opens it in the component editor. Gives the id to edit.
+fn user_holders(ui: &mut Ui, state: &mut State, filter: &str) -> Option<String> {
+    let d = state.component_derived(None);
+    let f = filter.to_lowercase();
+    let shown: Vec<_> = d
+        .rows
+        .iter()
+        .filter(|(r, _, _)| matches!(crate::state::group_of(&r.component), ComponentGroup::Holders | ComponentGroup::Adapters))
+        .filter(|(r, _, _)| r.component.name().to_lowercase().contains(&f))
+        .collect();
+    ui.label(RichText::new(USER_HOLDERS).small().weak());
+    if shown.is_empty() {
+        ui.weak("The document holds no holder component. Copy a built-in holder, or add one from My library.");
+        return None;
+    }
+    let mut edit = None;
+    egui::Grid::new("tool_library_user_holders").striped(true).show(ui, |ui| {
+        for h in ["Name", "Machine side", "Tool side", "Library", "Used by"] {
+            ui.label(RichText::new(h).strong());
+        }
+        ui.end_row();
+        for (r, status, users) in shown {
+            if ui.selectable_label(false, r.component.name()).on_hover_text("edit this holder").clicked() {
+                edit = Some(r.component.id().to_owned());
+            }
+            let (machine, tool) = super::components::sides(&r.component);
+            ui.label(machine);
+            ui.label(tool);
+            ui.label(super::components::status_text(status));
+            let n = users.len();
+            ui.label(if n == 1 { "1 tool".to_owned() } else { format!("{n} tools") });
+            ui.end_row();
+        }
+    });
+    ui.add_space(6.0);
+    edit
 }
 
 /// "All holders", then one row for each taper with its count, then the

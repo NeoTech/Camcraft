@@ -154,6 +154,12 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
     if !tool.center_cutting {
         h.write_u8(0xCC);
     }
+    // #4031: a left-hand cutter changes the spindle word the post writes
+    // (M4, or the refusal); a byte only then, so no right-hand digest
+    // moves - a tool edited to left-hand marks its ops stale through here.
+    if tool.cutter_hand == crate::tools::CutterHand::Left {
+        h.write_u8(0xCB);
+    }
     // #368: a modelled body's envelope - bytes only when there is one,
     // so no digest without a body moves.
     crate::tool_body::digest(world, &tool_entity, h);

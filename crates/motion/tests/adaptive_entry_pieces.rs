@@ -179,6 +179,43 @@ fn a_tiny_second_piece_names_its_plunge_stand_in_at_each_level() {
     }
 }
 
+/// #2341: blending and solid restarts share one emitted pocket chain.
+#[test]
+fn corner_blends_keep_named_solid_restarts_at_each_level() {
+    // The first piece has corners to blend and room for the asked helix.
+    // The separate tiny piece fits the tool, but neither a helix nor a ramp.
+    let reg = region(vec![rect(0.0, 0.0, 30.0, 30.0), rect(50.0, 0.0, 60.1, 10.1)]);
+    let mut p = params(PocketStrategy::OffsetRings);
+    let sharp = pocket(&reg, &p).expect("sharp reference pocket");
+    p.blend_turns = true;
+    let blended = pocket(&reg, &p).expect("blended pocket with solid restarts");
+    assert!(blended.all_finite() && blended.is_chained());
+
+    let plunges = solid_plunges(&blended);
+    assert_eq!(plunges, solid_plunges(&sharp), "blending must keep the solid restart sites and depths");
+    for z in LEVELS {
+        // Count only added planar feed arcs, not entry helices or fitted arcs
+        // that the sharp reference already had.
+        assert!(blended.moves.iter().any(|m| {
+            m.kind == MoveKind::Feed
+                && m.from.z == z && m.to.z == z
+                && m.arc.is_some_and(|a| a.plane == ArcPlane::Xy)
+                && !sharp.moves.iter().any(|s| s.from == m.from && s.to == m.to && s.arc == m.arc)
+        }), "no added planar corner blend arc at Z {z}");
+        assert!(entered_by_helix(&blended, z, 0.0, 30.0), "first piece lost its helix at Z {z}");
+        assert!(plunges.iter().any(|&(x, y, pz)| {
+            (50.0..60.1).contains(&x) && (0.0..10.1).contains(&y) && (pz - z).abs() < 1e-6
+        }), "no solid restart in the tiny piece at Z {z}");
+    }
+    // Check all uncleared axial plunges, not just one representative site.
+    // Naming both XY and Z prevents a note at one level hiding another.
+    for (x, y, z) in plunges {
+        let site = format!("the pass start ({x:.3}, {y:.3}) at Z {z:.3} is in material and");
+        assert!(blended.notes.iter().any(|n| n.contains(&site) && n.contains("plunged into material")),
+            "no named solid restart for {site}; notes: {:?}", blended.notes);
+    }
+}
+
 /// A larger narrow second piece can ramp along its ring, but cannot
 /// take the asked helix. The diagnostic names the ramp site and level.
 #[test]

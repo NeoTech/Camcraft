@@ -27,4 +27,4 @@ for (const op of [{name: "DieL", x: -35.5}, {name: "DieR", x: 24.5}]) {
   });
 }
 cam.generate();
-cam.post({to: "DUODI20", cps: "Native wire EDM job files", options: {separationLengthMm: 1.0}});
+cam.post({to: "DUODI20", cps: "Agie Wire EDM (AgieVision)", options: {separationLengthMm: 1.0}});

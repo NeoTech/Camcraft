@@ -20,6 +20,7 @@ pub fn wire_tool(diameter: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 100.0,

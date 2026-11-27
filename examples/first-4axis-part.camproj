@@ -1,5 +1,5 @@
 {
-  "version": 73,
+  "version": 83,
   "units": "in",
   "machine": {
     "path": "built-in: Tormach 770MX + microARC 4",
@@ -39,12 +39,9 @@
         {
           "name": "A",
           "rotary": true,
-          "feed": null,
+          "feed": 360.0,
           "rapid": null,
-          "travel": [
-            -360.0,
-            360.0
-          ],
+          "travel": null,
           "axis": [
             1.0,
             0.0,
@@ -52,7 +49,8 @@
           ],
           "turns_part": true,
           "nose_to_axis": 269.23999999999995,
-          "axis_to_table": 80.00999999999999
+          "axis_to_table": 80.00999999999999,
+          "chain_order": 0
         }
       ],
       "max_tool_length": null,
@@ -87,7 +85,8 @@
       "rigid_tapping": true,
       "safe_retract_z": 0.0,
       "spindle_mount": "BT30",
-      "default_holder": "BT30 ER20"
+      "default_holder": "BT30 ER20",
+      "post": "Tormach PathPilot"
     }
   },
   "post": {
@@ -145,7 +144,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 8705992992591044939,
+        "stamp": 10132140172455864613,
         "cache": {
           "moves": [
             {
@@ -485,7 +484,7 @@
             }
           }
         },
-        "stamp": 15158439700779417996,
+        "stamp": 11203706960577164878,
         "cache": {
           "moves": [
             {
@@ -636,7 +635,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 8950742013452192109,
+        "stamp": 4063580763892316843,
         "cache": {
           "moves": [
             {
@@ -772,7 +771,7 @@
             }
           }
         },
-        "stamp": 12441738861805030740,
+        "stamp": 6246964895202407568,
         "cache": {
           "moves": [
             {
@@ -933,7 +932,7 @@
             }
           }
         },
-        "stamp": 10052659134323625166,
+        "stamp": 10096448847702385407,
         "cache": {
           "moves": [
             {
@@ -60843,7 +60842,11 @@
           ]
         ]
       ],
-      "rev": 1
+      "rev": 1,
+      "source": {
+        "path": "C:\\Users\\tbras\\RustProjects\\Camcraft\\.claude\\worktrees\\issue-3704\\crates\\app\\../../examples/models/first-4axis-part.obj",
+        "sha256": "3e9e87c60290a590105b1169dcaedd801a6c5b7ff1c27b78ef5af074860e3103"
+      }
     }
   ]
 }

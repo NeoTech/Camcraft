@@ -19,6 +19,45 @@ pub enum StockError {
 /// from tool sizes and never approach it.
 pub(super) const MAX_CELLS_PER_AXIS: usize = 4096;
 
+/// Cells across `extent` at `cell`: the ceiling, except that an extent
+/// a whole number of cells long up to rounding is that whole number.
+/// A box edge read back from a transform is often a few ulps long
+/// (12.7 mm two ulps long is 50 cells of 0.254 plus about 1e-14); the plain
+/// ceiling gives it one more column, a sliver a few femtometres wide
+/// that carries the full stock top past the box edge. The tolerance is
+/// relative (`1e-9` of the count), far under any cell a program uses; a
+/// box thinner than that still gets its one column.
+#[must_use]
+pub fn cells_across(extent: f64, cell: f64) -> usize {
+    let r = extent / cell;
+    let k = r.round();
+    if k >= 1.0 && (r - k).abs() <= 1e-9 * k { k as usize } else { r.ceil() as usize }
+}
+
+/// The edge at `v` on a lattice locked to the origin, in cells: the floor
+/// of `v / cell` for a lower edge (`upper` false), the ceiling for an
+/// upper one, except that an edge a whole number of cells from the origin
+/// up to rounding is that number. The law of [`cells_across`] for such a
+/// lattice: an edge read a few ulps past a cell boundary adds no sliver
+/// cell on either side, so the lattice over a box keeps the box's
+/// columns.
+#[must_use]
+pub(crate) fn edge_cells(v: f64, cell: f64, upper: bool) -> f64 {
+    let r = v / cell;
+    let k = r.round();
+    if (r - k).abs() <= 1e-9 * k.abs().max(1.0) {
+        k
+    } else if upper {
+        r.ceil()
+    } else {
+        r.floor()
+    }
+}
+
+#[cfg(test)]
+#[path = "cell_count_tests.rs"]
+mod cell_count_tests;
+
 /// The final part's top surface per cell: the highest facet plane
 /// covering each cell center, `-inf` where no facet covers it (the
 /// column is air). Facets whose XY projection is degenerate (vertical

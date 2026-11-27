@@ -155,6 +155,7 @@ const KNOWN_G: &[u32] = &[
     540, 550, 560, 570, 580, 590, 610, 640, // work offsets, exact stop / blending
     730, 800, 810, 820, 830, 850, 860, 890, 980, 990, // canned cycles and their return level
     900, 911, 940, // absolute positions, incremental arc centres, feed per minute
+    921, 970, // G92 offsets cleared (none are modelled), constant spindle rpm: no motion
 ];
 
 /// The centre of an R-word arc (RS-274: a positive R is the arc of 180

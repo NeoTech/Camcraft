@@ -11,6 +11,7 @@
 use super::Units;
 use super::curve_fit::{Budget, Curve, Fit};
 use super::entities::{circle_range, common, coordinate, layer, point};
+use super::insert_curve::{CurveDef, defer};
 use super::nurbs::{MAX_DEGREE, Nurbs};
 use super::pairs::{Record, integer, number};
 use super::types::{DxfError, Primitive, State, error};
@@ -32,7 +33,13 @@ fn per_unit(units: Units) -> f64 {
     }
 }
 
-fn fit_settings(state: &mut State, kind: &'static str) -> Fit<'static> {
+/// The curve tolerance in the drawing's units.
+pub(super) fn tolerance(state: &State) -> f64 {
+    CURVE_TOLERANCE_MM / per_unit(state.doc.units)
+}
+
+/// The fit settings; using them records the tolerance on the document.
+pub(super) fn fit_settings(state: &mut State, kind: &'static str) -> Fit<'static> {
     let k = per_unit(state.doc.units);
     let tol = CURVE_TOLERANCE_MM / k;
     let used = state.doc.curve_tolerance.map_or(tol, |old| old.max(tol));
@@ -113,6 +120,10 @@ pub(super) fn ellipse(record: Record<'_>, state: &mut State) -> Result<(), DxfEr
         return Err(error(KIND, "zero-length parameter sweep"));
     }
     let start = t0.rem_euclid(TAU);
+    let (major, minor) = ((m.x, m.y), (-m.y * ratio, m.x * ratio));
+    if state.defer_curves && ratio != 1.0 {
+        return defer(state, layer, CurveDef::Ellipse { c, major, minor, start, sweep, full }, KIND);
+    }
     let axis = m.y.atan2(m.x);
     // The circle of radius a is at most a (1 - ratio) from the ellipse, at the minor ends.
     // A ratio of exactly 1 is the circle itself; a near one is a circle only while that
@@ -143,23 +154,32 @@ pub(super) fn ellipse(record: Record<'_>, state: &mut State) -> Result<(), DxfEr
         state.push(layer, primitive);
         return Ok(());
     }
-    let curve = Ellipse {
-        c,
-        major: (m.x, m.y),
-        minor: (-m.y * ratio, m.x * ratio),
-    };
+    let out = ellipse_arcs(state, KIND, (c, major, minor), (start, sweep, full))?;
+    emit(state, layer, out, KIND)
+}
+
+/// An ellipse `c + major cos t + minor sin t` for t in `[start, start + sweep]` (sweep > 0),
+/// laid as tangent arcs. `minor` is perpendicular to `major` and not longer; it may point
+/// either way (a mirrored INSERT runs clockwise).
+pub(super) fn ellipse_arcs(
+    state: &mut State,
+    kind: &'static str,
+    (c, major, minor): (Point2, (f64, f64), (f64, f64)),
+    (start, sweep, full): (f64, f64, bool),
+) -> Result<Vec<Primitive>, DxfError> {
+    let curve = Ellipse { c, major, minor };
     // Pieces of at most a quarter turn, so each starts with a well-shaped biarc.
     let quarters = (sweep / FRAC_PI_2).ceil().max(1.0) as usize;
     let cuts: Vec<f64> = (0..=quarters)
         .map(|i| start + sweep * i as f64 / quarters as f64)
         .collect();
-    let fit = fit_settings(state, KIND);
+    let fit = fit_settings(state, kind);
     let mut budget = budget(state);
     let mut out = Vec::new();
     let last = full.then(|| curve.point(start));
     fit.section(&curve, &cuts, last, &mut budget, &mut out)?;
     state.curve_work = budget.evaluations;
-    emit(state, layer, out, KIND)
+    Ok(out)
 }
 
 fn budget(state: &State) -> Budget {
@@ -323,14 +343,23 @@ pub(super) fn spline(record: Record<'_>, state: &mut State) -> Result<(), DxfErr
         state.vertex(KIND)?;
     }
     let curve = Nurbs::new(degree, f.knots, f.points, f.weights)?;
-    let fit = fit_settings(state, KIND);
+    if state.defer_curves {
+        return defer(state, layer, CurveDef::Spline(curve), KIND);
+    }
+    let out = spline_arcs(state, &curve)?;
+    emit(state, layer, out, KIND)
+}
+
+/// A SPLINE curve laid as tangent arcs and lines, in the units of its control points.
+pub(super) fn spline_arcs(state: &mut State, curve: &Nurbs) -> Result<Vec<Primitive>, DxfError> {
+    let fit = fit_settings(state, "SPLINE");
     let mut budget = budget(state);
     let mut out = Vec::new();
-    for cuts in sections(&curve) {
-        fit.section(&curve, &cuts, None, &mut budget, &mut out)?;
+    for cuts in sections(curve) {
+        fit.section(curve, &cuts, None, &mut budget, &mut out)?;
     }
     state.curve_work = budget.evaluations;
-    emit(state, layer, out, KIND)
+    Ok(out)
 }
 
 fn push(list: &mut Vec<f64>, value: f64, cap: usize, what: &str) -> Result<(), DxfError> {

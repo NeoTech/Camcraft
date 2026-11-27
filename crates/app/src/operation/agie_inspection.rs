@@ -1,17 +1,15 @@
 //! Transfer one placed DXF wire opening for controller inspection, from CamCraft's setup and selection contracts.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use camcraft_geometry::dxf::Primitive;
-use camcraft_geometry::sketch_chains::{ChainClearance, ChainError};
-use camcraft_post::agie_setup::{INSPECTION_RECEIPT, InspectionProfile, InspectionSegment};
+use camcraft_geometry::sketch_chains::ChainClearance;
+use camcraft_post::agie_setup::{INSPECTION_RECEIPT, InspectionProfile};
 use flecs_ecs::prelude::World;
 use serde::Serialize;
 
 use super::{OpParams, WireSide, resolve_params, wire_sketch};
 use crate::geo2d::Point2;
-use crate::geometry::{Point3, quat_conjugate, quat_rotate_point, transform_point};
 use crate::{model, setup};
 
 #[derive(Serialize)]
@@ -22,18 +20,6 @@ pub struct AgieInspectionReceipt {
     pub nominal_blocks: usize,
     pub files: Vec<PathBuf>,
     pub review: &'static str,
-}
-
-fn exact_repeat(a: &Primitive, b: &Primitive) -> bool {
-    if a == b {
-        return true;
-    }
-    match (a, b) {
-        (Primitive::Line { start: a, end: b }, Primitive::Line { start: c, end: d }) => {
-            a == d && b == c
-        }
-        _ => false,
-    }
 }
 
 /// Cheap eligibility for a selected-geometry export action, independent of cached machining results.
@@ -129,12 +115,9 @@ pub(crate) fn prepare_inspection(
         .first(crate::path_picks::PickRole::Start)
         .ok_or("state the centre of the 3 mm threading hole")?;
     let hole = Point2::new(hole_pick.xy.x - ox, hole_pick.xy.y - oy);
-    let pose = selected.pose;
-    let place = |p: Point2| {
-        let q = transform_point(Point3::new(p.x, p.y, 0.0), pose.pos, pose.rot);
-        Point2::new(q.x - ox, q.y - oy)
-    };
-    let yaw = 2.0 * pose.rot[2].atan2(pose.rot[3]);
+    let origin = [ox, oy];
+    let yaw = 2.0 * selected.pose.rot[2].atan2(selected.pose.rot[3]);
+    let place = |p: Point2| selected.placed(p, origin);
     let placed_curve = |p: &Primitive| match *p {
         Primitive::Line { start, end } => Primitive::Line {
             start: place(start),
@@ -161,75 +144,19 @@ pub(crate) fn prepare_inspection(
     if ring.max_gap > 1e-8 {
         return Err("the selected opening has an unresolved joint gap".into());
     }
-    let local_hole = quat_rotate_point(
-        quat_conjugate(pose.rot),
-        Point3::new(hole_pick.xy.x - pose.pos.x, hole_pick.xy.y - pose.pos.y, 0.0),
-    );
+    let local_hole = selected.local(hole_pick.xy);
     let mut source_clearance = ChainClearance::new(ring).map_err(|e| e.to_string())?;
-    if !source_clearance.contains_disk(Point2::new(local_hole.x, local_hole.y), 1.5 + 1e-8) {
+    if !source_clearance.contains_disk(local_hole, 1.5 + 1e-8) {
         return Err(
             "the full 3 mm threading hole must lie inside the selected nominal profile".into(),
         );
     }
-    let mut spans = Vec::new();
-    for seg in &ring.segments {
-        let (a, b) = (place(seg.start), place(seg.end));
-        let arc = match seg.curve {
-            Primitive::Line { .. } => None,
-            Primitive::Arc {
-                center,
-                sweep_angle,
-                ..
-            } => Some((place(center), sweep_angle)),
-            Primitive::Circle { center, radius } => {
-                let mid = place(Point2::new(center.x - radius, center.y));
-                let half = Some((place(center), std::f64::consts::PI));
-                spans.push(InspectionSegment {
-                    start: a,
-                    end: mid,
-                    arc: half,
-                });
-                spans.push(InspectionSegment {
-                    start: mid,
-                    end: a,
-                    arc: half,
-                });
-                continue;
-            }
-        };
-        spans.push(InspectionSegment {
-            start: a,
-            end: b,
-            arc,
-        });
-    }
+    let spans = selected.opening_spans(origin)?;
     let mut profile = InspectionProfile::new(&spans, hole)?;
     profile.check_machine(&machine)?;
-    let data = selected.data.primitives();
-    let owned: HashSet<_> = ring.segments.iter().map(|s| s.primitive).collect();
-    let mut used = owned.clone();
-    for problem in &selected.data.chains().rejected {
-        if let ChainError::DuplicatePrimitive { primitive, of } = problem.error
-            && owned.contains(&of)
-            && let (Some(a), Some(b)) = (data.get(primitive), data.get(of))
-            && a.layer == b.layer
-            && exact_repeat(&a.primitive, &b.primitive)
-        {
-            used.insert(primitive);
-        }
-    }
-    for (i, item) in data.iter().enumerate().filter(|(i, _)| !used.contains(i)) {
-        if source_clearance
-            .obstructs(i, &item.primitive, 1e-8)
-            .map_err(|e| e.to_string())?
-        {
-            return Err(format!(
-                "unselected DXF primitive {} touches or enters the source opening",
-                i + 1
-            ));
-        }
-        profile.check_other(i, &placed_curve(&item.primitive))?;
-    }
+    selected.check_opening_clear(&mut source_clearance, |i, item| {
+        profile.check_other(i, &placed_curve(item))
+    })?;
     Ok((
         profile,
         setup_name.unwrap_or_else(|| "Document".into()),

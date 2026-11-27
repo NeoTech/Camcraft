@@ -13,8 +13,8 @@
 //! connection before reaching the app. Reads are bounded to [`MAX_LINE`]
 //! ([`MAX_HELLO_LINE`] before hello, #3873) and writes time out.
 //! **An idle client lets go** (#567, #3873): a client idle for
-//! [`IDLE_TIMEOUT`] ([`HELLO_TIMEOUT`] before hello) is dropped so the
-//! next client can be served.
+//! [`IDLE_TIMEOUT`] by default ([`HELLO_TIMEOUT`] before hello) is dropped
+//! so the next client can be served. A zero idle window disables only idle expiry.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener};
@@ -134,12 +134,13 @@ impl Inbox {
 
     /// [`Inbox::listen`] with its own idle window: a client sending no
     /// complete line for `idle` is dropped (a window shorter than the
-    /// poll step is read as the poll step). Tests use a short one.
+    /// poll step is read as the poll step). Zero disables idle expiry.
+    /// Tests use a short window.
     ///
     /// # Errors
     /// The bind (port in use, no permission) or the thread spawn failed.
     pub fn listen_with_idle(port: u16, wake: Wake, idle: Duration) -> std::io::Result<Self> {
-        let idle = idle.max(POLL);
+        let idle = if idle.is_zero() { idle } else { idle.max(POLL) };
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
@@ -149,7 +150,11 @@ impl Inbox {
         let thread = std::thread::Builder::new()
             .name("camcraft-mcp".into())
             .spawn(move || accept_loop(&Listener::Tcp(listener), &tx, &flag, &wake, idle, None, HELLO_TIMEOUT))?;
-        tracing::info!("mcp: listening on {addr} (an idle client is dropped after {}s)", idle.as_secs());
+        if idle.is_zero() {
+            tracing::info!("mcp: listening on {addr} (idle expiry disabled)");
+        } else {
+            tracing::info!("mcp: listening on {addr} (an idle client is dropped after {}s)", idle.as_secs());
+        }
         Ok(Self { rx, addr: Some(addr), stop, thread: Some(thread), link: None })
     }
 
@@ -264,20 +269,26 @@ fn serve_client(
             return Ok(End::Closed);
         }
         let cap = if gate.is_some() { MAX_HELLO_LINE } else { MAX_LINE };
-        let deadline = if gate.is_some() { hello } else { idle };
-        let quiet = active.elapsed();
-        let Some(left) = deadline.checked_sub(quiet).filter(|d| !d.is_zero()) else {
-            if gate.is_some() {
-                let _ = writeln!(writer, "{}", link::HELLO_REFUSED).and_then(|()| writer.flush());
-                return Ok(End::Refused);
-            }
-            let note = format!(
-                r#"{{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"warning","logger":"camcraft","data":"idle for {}s with no complete message - the connection is closed"}}}}"#,
-                quiet.as_secs()
-            );
-            // Best effort: the write times out, and the client goes either way.
-            let _ = writeln!(writer, "{note}").and_then(|()| writer.flush());
-            return Ok(End::Idle(quiet));
+        // Zero disables only the authenticated/live idle window, never hello.
+        let left = if gate.is_none() && idle.is_zero() {
+            POLL
+        } else {
+            let deadline = if gate.is_some() { hello } else { idle };
+            let quiet = active.elapsed();
+            let Some(left) = deadline.checked_sub(quiet).filter(|d| !d.is_zero()) else {
+                if gate.is_some() {
+                    let _ = writeln!(writer, "{}", link::HELLO_REFUSED).and_then(|()| writer.flush());
+                    return Ok(End::Refused);
+                }
+                let note = format!(
+                    r#"{{"jsonrpc":"2.0","method":"notifications/message","params":{{"level":"warning","logger":"camcraft","data":"idle for {}s with no complete message - the connection is closed"}}}}"#,
+                    quiet.as_secs()
+                );
+                // Best effort: the write times out, and the client goes either way.
+                let _ = writeln!(writer, "{note}").and_then(|()| writer.flush());
+                return Ok(End::Idle(quiet));
+            };
+            left
         };
         // Never wait past the idle deadline (nor a poll step, for the
         // stop flag). A zero timeout is refused by the OS API; `left`

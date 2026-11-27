@@ -3,7 +3,8 @@
 //! read back through AccessKit: the progress text and a Cancel that
 //! works while the calculation runs, the "incomplete" text without
 //! Cancel after it stopped, and no row when it is done or not asked.
-//! The shell case draws the row from a live playback worker.
+//! The shell case draws the row from a live playback worker. #3315: a
+//! hidden Stock row is said under the transport.
 //! Provenance: our own tests over our own transport row; no HSMWorks
 //! material involved.
 
@@ -102,4 +103,34 @@ fn the_shell_draws_the_row_from_the_live_worker() {
         p => panic!("the calculation ends: {p:?}"),
     }
     assert!(h.query_by_label(CANCEL).is_none(), "{p:?}: no Cancel once the calculation ended");
+}
+
+/// #3315: Simulate with the Stock row hidden draws no stock body. The
+/// line under the transport says why, in plain words, and goes when the
+/// stock is shown again.
+#[test]
+fn a_hidden_stock_is_said_under_the_transport() {
+    use crate::play_precalc::STOCK_HIDDEN_NOTE;
+    let mut h = shell_harness();
+    h.run_steps(2);
+    h.state_mut().state.sim = Some(Sim { t: 0.0, playing: false, speed: 1.0 });
+    h.run_steps(2);
+    assert!(h.query_by_label(STOCK_HIDDEN_NOTE).is_none(), "a shown stock needs no note");
+    h.get_by_label("Hide Stock").click();
+    h.run_steps(2);
+    assert!(h.state().state.active_stock_hidden());
+    assert!(h.query_by_label(STOCK_HIDDEN_NOTE).is_some(), "the transport says the stock is hidden");
+    // Plain English: it names the Browser row and no G-code word.
+    for word in ["G0", "G1", "M3", "voxel"] {
+        assert!(!STOCK_HIDDEN_NOTE.contains(word), "{word} in {STOCK_HIDDEN_NOTE:?}");
+    }
+    assert!(STOCK_HIDDEN_NOTE.contains("Stock row") && STOCK_HIDDEN_NOTE.contains("Browser"));
+    h.get_by_label("Show Stock").click();
+    h.run_steps(2);
+    assert!(h.query_by_label(STOCK_HIDDEN_NOTE).is_none(), "the note goes with the hidden stock");
+    // No transport, no note: the line belongs to the simulation.
+    h.get_by_label("Hide Stock").click();
+    h.state_mut().state.sim = None;
+    h.run_steps(2);
+    assert!(h.query_by_label(STOCK_HIDDEN_NOTE).is_none(), "no note outside the simulation");
 }

@@ -26,6 +26,7 @@ fn params(side: WireSide, start: Option<(f64, f64)>) -> WireParams {
         // A die on the sharp test rectangle: its corners are stated.
         sharp_corners: side == WireSide::Die,
         tabs: None,
+        overlap: 0.0,
     }
 }
 

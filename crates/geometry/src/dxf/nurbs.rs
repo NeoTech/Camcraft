@@ -89,6 +89,17 @@ impl Nurbs {
     }
 
     /// The parameter domain.
+    /// The same curve with each control point mapped by `f`: exact for an affine `f`, as a
+    /// rational B-spline is invariant under affine maps (The NURBS Book, section 4.4).
+    pub fn mapped(&self, f: impl FnMut(Point2) -> Result<Point2, DxfError>) -> Result<Nurbs, DxfError> {
+        Ok(Nurbs {
+            points: self.points.iter().copied().map(f).collect::<Result<_, _>>()?,
+            knots: self.knots.clone(),
+            weights: self.weights.clone(),
+            ..*self
+        })
+    }
+
     pub fn domain(&self) -> (f64, f64) {
         (self.knots[self.degree], self.knots[self.points.len()])
     }

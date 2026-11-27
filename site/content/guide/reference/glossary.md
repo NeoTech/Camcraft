@@ -24,8 +24,17 @@ stock and the work offset over from the active setup. See [Setups](@/guide/set-u
 program for collisions and refuses to write it when a move hits one. See
 [Posting](@/guide/check-and-post/posting.md#what-is-checked-before-anything-is-written).
 
+**CL data.** Cutter location data: the neutral list of tool positions that
+CAM produces before any post turns it into G-code. See [Model to Machine](@/guide/model-to-machine.md#the-five-steps).
+
 **Dialect.** The controller's own flavour of G-code, which a post script
 writes. The Post page offers the dialects by name. See [Posting](@/guide/check-and-post/posting.md#post-processors).
+
+**Dry run.** Running a program without cutting (an air cut), to find alarms
+and wrong moves safely. See [Model to Machine](@/guide/model-to-machine.md#at-the-machine).
+
+**Dutchman.** A separate converter from native CAD files to SolidCraft
+designs (`.sc`). It is not part of CamCraft. See [Model to Machine](@/guide/model-to-machine.md#design-files-native-and-neutral).
 
 **Generate.** Computes an operation's toolpath and checks it. A generate
 that cannot make a safe path stops with a message that names the setting or
@@ -62,6 +71,10 @@ mill, which is a different setup: see that entry. See [Setups](@/guide/set-up/se
 **Model.** An imported 3D mesh or STEP file (STL, OBJ or STEP) that
 describes the part. Import it with **Model** on the File group. See [First run](@/guide/getting-started/first-run.md#a-first-toolpath).
 
+**Native file.** A CAD program's own file (`.f3d`, `.sldprt`), with its
+editable feature history. CamCraft does not open it: export STEP, or convert
+it with Dutchman. See [Model to Machine](@/guide/model-to-machine.md#design-files-native-and-neutral).
+
 **Operation.** One machining step: a tool, an area to cut, and how to cut
 it, set on its Geometry, Heights, Passes, Lead in / Lead out, Feeds and
 (on a few kinds) Machine tabs. See [Operations](@/guide/operations/_index.md).
@@ -94,6 +107,9 @@ machine, post, fixtures, tools and operations. See [Setups](@/guide/set-up/setup
 order, with cut and rapid lengths and the estimated time. **Export setup
 sheets…** writes them; posting does not. See [Setups](@/guide/set-up/setups.md#setup-sheets).
 
+**Single block.** A control mode that runs one line, then waits. It is the
+safe way to step through a new program. See [Proving out](@/guide/fundamentals/proving-out.md).
+
 **Stale.** An operation whose toolpath no longer matches its inputs: the
 model, stock, tool, work offset or its own settings changed after it was
 generated. A stale operation blocks posting until it is generated again. See
@@ -115,6 +131,13 @@ into it. See [Setups](@/guide/set-up/setups.md).
 
 **Stock to leave.** Material left on the part for a later operation to
 remove, set as **Stock to leave** on the Passes tab. See [Operations](@/guide/operations/_index.md#the-settings-tabs).
+
+**Tool number.** The `T` number that a program calls (also called the pocket
+number). It must match the tool loaded at that place on the machine, and the
+tool's row in the control's tool table. See [Tools and tool libraries](@/guide/set-up/tools.md).
+
+**Tool offset.** A tool's measured length (`H`) and radius (`D`), stored in
+the control under its tool number. See [Model to Machine](@/guide/model-to-machine.md#at-the-machine).
 
 **Tool spindle.** The spindle that turns the cutter, as opposed to the
 work spindle that holds the chuck. A milling post's S drives it. See [Setups](@/guide/set-up/setups.md#machines).

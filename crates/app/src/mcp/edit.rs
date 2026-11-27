@@ -281,9 +281,8 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         Some(h) => (HolderPick::Named(h.to_owned()), "stated"),
     };
     let cmd = AddTool::with_holder(&env.world, &name, tool, pick).map_err(cmd_err)?;
-    let number = cmd.number();
-    let holder = cmd.holder().map(str::to_owned);
-    let note = cmd.note();
+    let (number, holder) = (cmd.number(), cmd.holder().map(str::to_owned));
+    let (note, warning) = (cmd.note(), cmd.warning());
     env.history.execute(&env.world, cmd);
     Ok(json!({
         "tool": name,
@@ -292,6 +291,7 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         "holder": holder,
         "holder_from": holder.as_ref().map(|_| from),
         "note": note,
+        "warning": warning,
     }))
 }
 

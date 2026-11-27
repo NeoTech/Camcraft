@@ -192,7 +192,7 @@ fn the_mills_posts_decline_a_plasma_stream_and_the_1300pl() {
             let error = engine::run(cps, &pl1300(), &stream).expect_err("the native dispatcher must refuse a single-file post");
             assert!(
                 matches!(&error, camcraft_app::post::PostError::Script(message) if message.contains(
-                    "Native wire EDM job files require the desktop or CLI One program post to a new job directory"
+                    "The Agie Wire EDM job requires the desktop or CLI One program post to a new job directory"
                 )),
                 "{n}: {error}"
             );

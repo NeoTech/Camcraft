@@ -147,3 +147,40 @@ fn non_manifold_input_refuses_by_name_at_construction() {
     assert!(err.to_string().contains("non-manifold edge"), "{err}");
     assert_eq!(facets(&world, "fin").map(|f| f.len()), Some(11), "untouched");
 }
+
+/// #4182 review: a part model drawn double-sided (every facet written in
+/// both windings) is the drive geometry. The repair keeps one side of it,
+/// as before the export's edge-parity rule; that rule never reaches it.
+fn double_sided(tris: &[Triangle]) -> Vec<Triangle> {
+    tris.iter().flat_map(|t| [*t, Triangle::new(t.a, t.c, t.b)]).collect()
+}
+
+#[test]
+fn a_double_sided_sheet_keeps_its_facets_through_repair() {
+    let world = new_world();
+    let mut history = History::default();
+    let (a, b, c, d) = (Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(0.0, 1.0, 0.0));
+    history.execute(&world, ImportModel::from_mesh("sheet", Mesh::from_facets(double_sided(&[Triangle::new(a, b, c), Triangle::new(a, c, d)]))));
+    let command = RepairModel::new(&world, "sheet", 0.001, 256).unwrap_or_else(|e| panic!("a double-sided sheet repairs: {e}"));
+    assert_eq!((command.report().triangles_before, command.report().dropped), (4, 2), "{}", command.summary());
+    history.execute(&world, command);
+    let after = facets(&world, "sheet").expect("still there");
+    assert!(after.len() >= 2, "the sheet keeps its facets: {}", after.len());
+    assert!(after.iter().all(|t| [t.a, t.b, t.c].iter().all(|p| p.z == 0.0)), "on the sheet's plane");
+}
+
+#[test]
+fn a_double_sided_fin_on_a_cube_stays_through_repair() {
+    let world = new_world();
+    let mut history = History::default();
+    let mut tris = cube(Point3::ZERO, Point3::new(1.0, 1.0, 1.0)).facets.to_vec();
+    let p = |y: f64, z: f64| Point3::new(0.5, y, z);
+    tris.extend(double_sided(&[Triangle::new(p(0.25, 1.0), p(0.75, 1.0), p(0.75, 1.5)), Triangle::new(p(0.25, 1.0), p(0.75, 1.5), p(0.25, 1.5))]));
+    history.execute(&world, ImportModel::from_mesh("finned", Mesh::from_facets(tris)));
+    let command = RepairModel::new(&world, "finned", 0.001, 256).unwrap_or_else(|e| panic!("the finned cube repairs: {e}"));
+    assert_eq!((command.report().triangles_before, command.report().dropped), (16, 2), "{}", command.summary());
+    history.execute(&world, command);
+    let after = facets(&world, "finned").expect("still there");
+    let fin = after.iter().filter(|t| [t.a, t.b, t.c].iter().any(|p| p.z > 1.0)).count();
+    assert!(fin >= 2, "the fin stays on the repaired model: {fin} facets above the cube");
+}

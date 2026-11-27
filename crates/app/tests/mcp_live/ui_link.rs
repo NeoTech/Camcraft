@@ -263,9 +263,18 @@ fn false_server_on_stale_entry_is_refused_with_no_tool_calls_sent() {
 
 #[test]
 fn an_unauthenticated_client_holding_the_link_times_out_and_releases_it() {
-    let dir = fresh_dir("hello-timeout");
+    hello_deadline_releases_link("hello-timeout", Duration::from_secs(60));
+}
+
+#[test]
+fn disabling_idle_expiry_keeps_the_hello_deadline() {
+    hello_deadline_releases_link("hello-no-idle", Duration::ZERO);
+}
+
+fn hello_deadline_releases_link(tag: &str, idle: Duration) {
+    let dir = fresh_dir(tag);
     // Short hello deadline (150 ms) so the test is quick.
-    let inbox = Inbox::link_with_timeouts(&dir, Box::new(|| {}), Duration::from_secs(60), Duration::from_millis(150))
+    let inbox = Inbox::link_with_timeouts(&dir, Box::new(|| {}), idle, Duration::from_millis(150))
         .expect("open the link");
     let entry = inbox.link_entry().expect("a link entry").clone();
 

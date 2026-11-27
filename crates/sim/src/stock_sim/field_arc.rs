@@ -112,6 +112,41 @@ impl ArcPiece {
         self.z0 == self.z1
     }
 
+    /// The length of the tool's path along this piece: the helix.
+    pub(crate) fn travel(&self) -> f64 {
+        (self.rad * self.span).hypot(self.z1 - self.z0)
+    }
+
+    /// This piece as `k` equal pieces in order (#4179): the same circle,
+    /// Z shared out uniformly (the helix law), each piece's own sagitta.
+    /// Their union is this piece's sweep.
+    pub(crate) fn split(&self, k: usize) -> Vec<ArcPiece> {
+        let k = k.max(1);
+        let step = self.span / k as f64;
+        let z = |j: usize| if j == k { self.z1 } else { self.z0 + (self.z1 - self.z0) * (j as f64 / k as f64) };
+        (0..k)
+            .map(|j| {
+                let mut piece = ArcPiece {
+                    ox: self.ox,
+                    oy: self.oy,
+                    rad: self.rad,
+                    b0: self.b0 + self.dir * (step * j as f64),
+                    dir: self.dir,
+                    span: step,
+                    z0: z(j),
+                    z1: z(j + 1),
+                    sag: self.rad * (1.0 - (step * 0.5).cos()),
+                    p0: Point3::new(0.0, 0.0, 0.0),
+                    p1: Point3::new(0.0, 0.0, 0.0),
+                    kind: self.kind.copy(),
+                };
+                piece.p0 = piece.anchor(0.0);
+                piece.p1 = piece.anchor(step);
+                piece
+            })
+            .collect()
+    }
+
     /// The piece parameter nearest `q`'s bearing (the clamped bearing).
     fn nearest_tau(&self, q: Point3) -> f64 {
         let (wx, wy) = (q.x - self.ox, q.y - self.oy);

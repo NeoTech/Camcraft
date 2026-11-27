@@ -64,6 +64,17 @@ pub fn entry_not_recommended(path: &Toolpath) -> Option<Warning> {
     Some(Warning::EntryNotRecommended { at, entry, inside })
 }
 
+/// #3849: a trochoidal clean-up pass whose radial engagement remained
+/// above `limit_deg` after peel step-down - one advisory warning on the
+/// operation and status line so an overloaded clean-up cut never passes
+/// silently. `at` is the clean-up feed through the measured peak, not
+/// the path's first cut.
+#[must_use]
+pub fn cleanup_engagement_warning(path: &Toolpath) -> Option<Warning> {
+    let (at, measured_deg, limit_deg) = crate::machining2d::cleanup_engagement_move(path)?;
+    Some(Warning::EngagementExceeded { at, measured_deg, limit_deg })
+}
+
 /// [`run_job`]'s body: every arm, unchanged.
 fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
@@ -90,6 +101,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut slot_bound,
         mut rotary_picks,
         mut prior,
+        prior_staged: _,
         verify_prior,
         mut drills_ahead,
         turned_ahead,
@@ -214,6 +226,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
+            // #4134: the control's wire offset over the judged path.
+            super::wire_comp::apply(op, &cond.0, &mut path)?;
             return Ok((path, Vec::new()));
         }
         let picks = if let Some(sketch) = &wire_sketch {
@@ -227,6 +241,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // #3215: a model's profile has its arcs read back from the facets,
         // bounded by the model's chord; a drawn chain keeps its polygon.
         let arcs = wire_sketch.is_none().then_some(crate::geometry::import::step::CHORD_CAP + material.excess);
+        let comp_cond = cond.0.clone();
         let (path, warnings) = super::wire_op::generate_wire(
             op,
             arcs,
@@ -242,6 +257,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
         }
+        super::wire_comp::apply(op, &comp_cond, &mut path)?;
         return Ok((path, warnings));
     }
     // The program ahead, cut only when a law asks (#89, #96 review).
@@ -644,6 +660,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     area.take(),
                     d,
                     comp_name,
+                    avoid_spec.as_ref(),
                     &mut carry,
                 )?;
                 lk.approach.material_top = mat_top;
@@ -662,7 +679,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     _ => region_for_job(&mut picked_region, &mut section_z, &src, &params, m_gen, frame.as_ref())?,
                 };
                 let ctx = area.take().ok_or_else(|| unreached("contour open boundary"))?;
-                let path = super::contour_open::open_pass(&base, &ctx, &cp)?;
+                let path = super::contour_open::open_pass(&base, &ctx, &cp, avoid_spec.as_ref())?;
                 (base, path)
             } else { match &src {
                 SrcRef::Selection(_) => {
@@ -707,6 +724,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         }
                         apply_area_controls(Region::new(loops)?, ctx.as_ref())?
                     };
+                    let avoid_active = avoid_spec.as_ref().filter(|s| !s.is_empty());
+                    let is_blocked = |err: &GenError| {
+                        avoid_active.is_some()
+                            && matches!(
+                                err,
+                                GenError::Invalid(m)
+                                    if m.starts_with("cannot cut clear of protected 'Do not touch'")
+                                        && m.ends_with("no safe cutting room remains")
+                            )
+                    };
                     let rings = |cp: &ContourParams| {
                         if region.is_empty() {
                             Ok(Toolpath::new(Vec::new()))
@@ -717,17 +744,40 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             // (M13.11) when the picks span several models.
                             // #1927: a picked ring that meets its wall at no
                             // level - the side stands in the part - is refused.
-                            machining2d::contour_on_picked(&region, &m_gen.facets, &m_gen.bodies, cp)
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_on_picked_avoid(&region, &m_gen.facets, &m_gen.bodies, cp, spec),
+                                None => machining2d::contour_on_picked(&region, &m_gen.facets, &m_gen.bodies, cp),
+                            }
                         } else {
-                            machining2d::contour(&region, cp)
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_avoid(&region, cp, spec),
+                                None => machining2d::contour(&region, cp),
+                            }
                         }
                     };
-                    let mut path = rings(&cp)?;
-                    if let Some(m) = carry_need!(&super::top_stock::contour_reach(&region, cp.side == Side::Inside, d), &path) {
-                        cp.links.approach.material_top = Some(m);
-                        lk = cp.links;
-                        path = rings(&cp)?;
-                    }
+                    let mut blocked_err: Option<GenError> = None;
+                    let mut path = match rings(&cp) {
+                        Ok(mut p) => {
+                            if let Some(m) = carry_need!(&super::top_stock::contour_reach(&region, cp.side == Side::Inside, d), &p) {
+                                cp.links.approach.material_top = Some(m);
+                                lk = cp.links;
+                                p = rings(&cp)?;
+                            }
+                            p
+                        }
+                        Err(e) if !runs.is_empty() && is_blocked(&e) => {
+                            blocked_err = Some(e);
+                            let mut empty = Toolpath::new(Vec::new());
+                            if let Some(spec) = avoid_active {
+                                empty.notes.push(format!(
+                                    "Do not touch ({}): skipped closed selection ring(s) blocked on every level",
+                                    spec.names_list()
+                                ));
+                            }
+                            empty
+                        }
+                        Err(e) => return Err(e),
+                    };
                     if control_comp && !runs.is_empty() {
                         return Err(GenError::Invalid(format!(
                             "{comp_name} compensation does not ride open runs - pick closed rings, or choose In computer"
@@ -746,14 +796,34 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // no tilt frame: world facets are the job's frame).
                     let stock_at = |z: f64| stock_facets.as_deref().map_or(Ok(None), |f| cut(f, &[], z));
                     let part_at = |z: f64| if keep_parts.is_empty() { Ok(None) } else { cut(&keep_parts, &[], z) };
+                    let multi_items = !region.is_empty() || runs.len() > 1;
                     for run in &runs {
                         // #1015: a run refused shows the rings and runs before it.
-                        let next = if part_solid {
-                            machining2d::contour_open_run(run, &cp, &section_at)
+                        let res = if part_solid {
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_open_run_avoid(run, &cp, &section_at, spec),
+                                None => machining2d::contour_open_run(run, &cp, &section_at),
+                            }
                         } else {
-                            machining2d::contour_open_run_sided(run, &cp, *side, &stock_at, &part_at)
-                        }
-                        .map_err(|e| e.after_moves(&path.moves))?;
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_open_run_sided_avoid(run, &cp, *side, &stock_at, &part_at, spec),
+                                None => machining2d::contour_open_run_sided(run, &cp, *side, &stock_at, &part_at),
+                            }
+                        };
+                        let next = match res {
+                            Ok(n) => n,
+                            Err(e) if multi_items && is_blocked(&e) => {
+                                blocked_err.get_or_insert(e);
+                                if let Some(spec) = avoid_active {
+                                    path.notes.push(format!(
+                                        "Do not touch ({}): skipped blocked open run",
+                                        spec.names_list()
+                                    ));
+                                }
+                                continue;
+                            }
+                            Err(e) => return Err(e.after_moves(&path.moves)),
+                        };
                         let said = next.notes.clone();
                         path = stitch(path, next);
                         for n in said {
@@ -761,6 +831,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                                 path.notes.push(n);
                             }
                         }
+                    }
+                    if !path.moves.iter().any(|m| m.kind == crate::cl::MoveKind::Feed)
+                        && let Some(e) = blocked_err
+                    {
+                        return Err(e);
+                    }
+                    if let Some(spec) = avoid_active {
+                        let rnotes = super::avoid::route_links(&mut path, spec, None);
+                        path.notes.extend(rnotes);
                     }
                     (region, path)
                 }
@@ -776,13 +855,23 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut cp = cp;
                     let run_whole = |cp: &ContourParams| -> Result<(Toolpath, Region), GenError> {
                         if part_solid {
-                            let (path, bands) = machining2d::contour_whole_bodies_with(
-                                &region,
-                                &m_gen.facets,
-                                &m_gen.bodies,
-                                cp,
-                                &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
-                            )?;
+                            let (path, bands) = match avoid_spec.as_ref().filter(|s| !s.is_empty()) {
+                                Some(spec) => machining2d::contour_whole_bodies_with_avoid(
+                                    &region,
+                                    &m_gen.facets,
+                                    &m_gen.bodies,
+                                    cp,
+                                    spec,
+                                    &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
+                                )?,
+                                None => machining2d::contour_whole_bodies_with(
+                                    &region,
+                                    &m_gen.facets,
+                                    &m_gen.bodies,
+                                    cp,
+                                    &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
+                                )?,
+                            };
                             let inside = cp.side == Side::Inside;
                             let mut reach = Region::empty();
                             for r in &bands {
@@ -794,7 +883,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             }
                             Ok((path, reach))
                         } else {
-                            let path = machining2d::contour(&region, cp)?;
+                            let path = match avoid_spec.as_ref().filter(|s| !s.is_empty()) {
+                                Some(spec) => machining2d::contour_avoid(&region, cp, spec)?,
+                                None => machining2d::contour(&region, cp)?,
+                            };
                             let reach = super::top_stock::contour_reach(&region, cp.side == Side::Inside, d);
                             Ok((path, reach))
                         }
@@ -1284,7 +1376,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
             // extra here.
+            // #3329: the start / exit picks seat each level's passes; no
+            // pick is the match below, move for move.
+            let seam = machining3d::LevelSeam::of(&params.path_picks());
             let generated = match &avoid_spec {
+                spec if !seam.is_empty() => {
+                    machining3d::pocket3d_picked(&material.facets, &region, air_stock, &pp, *shell, mask, spec.as_ref(), &seam)
+                }
                 spec if troch => {
                     machining3d::pocket3d_trochoidal(&material.facets, &region, &pp, *rest_rough, mask, spec.as_ref())
                 }
@@ -1490,8 +1588,19 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 None => None,
             };
             let drive = land.as_ref().map_or(&material.facets[..], |(f, _)| f.facets.as_slice());
+            // #3329: the picks choose the raster corner where the Parallel
+            // cut starts and where its last pass ends (each other pattern
+            // refuses a pick by name); an empty seam is the automatic
+            // path, byte for byte.
+            let seam = finishing3d::RasterSeam::of(&params.path_picks());
+            let seamed_ends = std::cell::Cell::new(None);
             let run = |fp: &Finish3DParams| -> Result<Toolpath, GenError> {
                 let whole = match fp.pattern {
+                _ if !seam.is_empty() => {
+                    let (t, ends) = finishing3d::finish_seamed(drive, fp, *direction_angle, &seam)?;
+                    seamed_ends.set(ends);
+                    t
+                }
                 finishing3d::FinishPattern::Waterline => {
                     finishing3d::waterline(drive, fp)?
                 }
@@ -1583,6 +1692,17 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 }
             };
             let mut path = finishing3d::center_cut_guard(tool.center_cutting, &solid, &fp, run)?;
+            // #3329: the clip of the area controls may cut the picked
+            // corner away; the finished path keeps it, or is refused.
+            if let Some(ends) = seamed_ends.get() {
+                finishing3d::raster_ends_kept(
+                    &path,
+                    ends,
+                    &seam,
+                    "the area controls clip the raster",
+                    "clear the area controls ('Do not touch', the machining boundary) or the picks",
+                )?;
+            }
             if clip.is_some() && let Some(spec) = &avoid_spec {
                 path.notes.push(format!(
                     "3D Finish keeps clear of 'Do not touch' {}; material beside these items may remain unfinished",
@@ -1653,7 +1773,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // is where it splits.
             let chains = drive_chains.take().ok_or_else(|| unreached("deburr chains"))??;
             let (include, exclude) = chains.split_at(super::deburr_picks::picked(&src).min(chains.len()));
-            let path = finishing3d::deburr_edges(
+            // #3329: the start / exit picks order the chains; an empty
+            // seam is the automatic ride, byte for byte.
+            let seam = finishing3d::ChainSeam::of(&params.path_picks(), tool.diameter);
+            let path = finishing3d::deburr_seamed(
                 &material.facets,
                 &DeburrParams {
                     width: *width,
@@ -1671,6 +1794,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     sizing: *sizing,
                 },
                 &finishing3d::DeburrEdges { include, exclude },
+                &seam,
             )?;
             (region, path)
         }
@@ -1792,10 +1916,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #3330: the contour's start / exit picks seat its rings; an
             // empty seam is the automatic ladder, byte for byte.
             let seam = crate::finishing3d::RingSeam::of(&params.path_picks());
+            // #3330: the parallel's picks choose the raster corner where
+            // the cut starts and where the last pass ends; an empty seam
+            // is the automatic order, byte for byte.
+            let raster = crate::finishing3d::RasterSeam::of(&params.path_picks());
             let run = |q: &Finish3DParams| if is_contour {
                 crate::multiaxis::contour5d_seamed(&material.facets, q, &axis, shank.as_ref(), &seam)
             } else {
-                crate::multiaxis::parallel5d(&material.facets, q, &axis, shank.as_ref())
+                crate::multiaxis::parallel5d_seamed(&material.facets, q, &axis, shank.as_ref(), &raster).map(|(t, _)| t)
             };
             let kind = if is_contour { "5-Axis Contour" } else { "5-Axis Parallel" };
             let path = super::plunge_solid::guard_posed(
@@ -3068,8 +3196,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             holes,
             break_through,
             pass_start,
+            entry: bore_entry,
             ..
         } => {
+            // The command doors refuse it first (`named_refusal`); this is
+            // the second check, for a project file or a caller that skipped them.
+            if let Some(why) = OpParams::bore_entry_refusal(*bore_entry) {
+                return Err(GenError::Invalid(why));
+            }
             // #1557: the stated break-through, the drill's own by default.
             let run = break_through.unwrap_or(drilling::THROUGH_CLEAR);
             broke = super::break_through::deepest(
@@ -3113,7 +3247,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tolerance: *tolerance,
-                entry: Entry3D::Plunge,
+                entry: *bore_entry,
                 helix_radius: 1.0,
             }, *pass_start)?;
             (region, path)
@@ -4255,6 +4389,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #3035: Adaptive areas cut by Offset rings - a warning, not
             // only a note; advisory (the rings are verified above).
             warns.extend(strategy_fallback(&path));
+            // #3849: trochoidal clean-up passes that still exceed the
+            // engagement limit - advisory (verified path, load risk).
+            warns.extend(cleanup_engagement_warning(&path));
             // #3748: a selected entry that is not the recommended Arc on a
             // start-side pass - one advisory warning, the entry kept.
             let advice = entry_not_recommended(&path);

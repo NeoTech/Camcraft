@@ -46,6 +46,7 @@ fn fan_fixture() -> (Loop, Loop, Vec<WireSync>, WireParams) {
         stock: None,
         clearance: 1.0,
         sharp_corners: false,
+        overlap: 0.0,
     };
     (upper, lower, sync, params)
 }

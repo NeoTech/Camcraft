@@ -24,9 +24,11 @@
 //!   sample (an absent body has no surface to extract), or a degenerate
 //!   cell is an `Err` by name - never a mesh with holes in it.
 
-use std::collections::HashMap;
-
 use crate::geometry::{Point3, Triangle};
+
+#[path = "iso_edges.rs"]
+mod edges;
+pub use edges::{open_edges, unpaired_edges};
 
 use super::field::SdfField;
 use super::kernel::StockError;
@@ -81,20 +83,21 @@ pub fn extract_at(f: &SdfField, step: f64) -> Result<Vec<Triangle>, StockError> 
     extract_with(f, step, IsoMethod::default())
 }
 
-/// Extract at `step` by `method`. A dual mesh that is not closed (a
-/// surface reaching the grid's pad, a fold no quad ring closes) is never
-/// returned: the marching mesh of the same samples stands in, logged.
+/// Extract at `step` by `method`. A dual mesh with an edge not on exactly
+/// two facets (a surface reaching the grid's pad, a fold no quad ring
+/// closes, flat fins on one edge: #4122) is never returned: the marching
+/// mesh of the same samples stands in, logged.
 pub fn extract_with(f: &SdfField, step: f64, method: IsoMethod) -> Result<Vec<Triangle>, StockError> {
     let g = sample(f, step)?;
     match method {
         IsoMethod::Marching => Ok(marching(&g)),
         IsoMethod::Dual => {
             let tris = super::dual::contour(&g);
-            let open = open_edges(&tris);
-            if open == 0 {
+            let unpaired = unpaired_edges(&tris);
+            if unpaired == 0 {
                 Ok(tris)
             } else {
-                tracing::warn!("iso-surface: the dual mesh has {open} open edges - marching tetrahedra stands in");
+                tracing::warn!("iso-surface: the dual mesh has {unpaired} edges not on two facets - marching tetrahedra stands in");
                 Ok(marching(&g))
             }
         }
@@ -188,7 +191,7 @@ pub(crate) fn marching(g: &Grid) -> Vec<Triangle> {
                 for (c, o) in CORNER.iter().enumerate() {
                     let s = [i + o[0], j + o[1], k + o[2]];
                     p[c] = g.at(s);
-                    v[c] = g.val(s);
+                    v[c] = on_surface(g.val(s), g.step);
                 }
                 if v.iter().all(|x| *x < 0.0) || v.iter().all(|x| *x >= 0.0) {
                     continue;
@@ -202,14 +205,41 @@ pub(crate) fn marching(g: &Grid) -> Vec<Triangle> {
     out
 }
 
+/// The fraction of the sample step within which a sample is on the
+/// surface (#4107, #4180): at a 0.25 mm step a sample within 0.25 nm of
+/// zero reads zero, which moves the surface by at most that.
+const NODE_SNAP: f64 = 1e-6;
+
+/// A sample within `NODE_SNAP` of a step of zero reads +0.0: on the
+/// surface, on the outside of `d < 0`. A cut floor on the lattice leaves
+/// values of about 1e-12 there, of both signs. Decided per edge (#4107's
+/// first form), two such samples of opposite sign both took their long
+/// edges' corners while the edge between them kept its own crossing
+/// mid-edge; the facet through the three was exactly collinear, `push`
+/// dropped it and the mesh opened by three edges (#4180). One value per
+/// sample is the same in every tetrahedron that shares it.
+fn on_surface(v: f64, step: f64) -> f64 {
+    if v.abs() < NODE_SNAP * step { 0.0 } else { v }
+}
+
 /// Polygonize one tetrahedron: inside is d < 0.
 fn tet(out: &mut Vec<Triangle>, p: [Point3; 4], v: [f64; 4]) {
     let inside: Vec<usize> = (0..4).filter(|&c| v[c] < 0.0).collect();
     let outside: Vec<usize> = (0..4).filter(|&c| v[c] >= 0.0).collect();
     let cross = |a: usize, b: usize| {
         let (da, db) = (v[a], v[b]);
-        let t = if (da - db).abs() > f64::EPSILON { (da / (da - db)).clamp(0.0, 1.0) } else { 0.5 };
+        // #4107: a sample on the surface (`on_surface`) is the corner
+        // itself: pa + (pb - pa) is not always pb. An edge is crossed only
+        // from an inside end (d < 0), so at most one end reads zero.
         let (pa, pb) = (p[a], p[b]);
+        if da == 0.0 {
+            return pa;
+        }
+        if db == 0.0 {
+            return pb;
+        }
+        let span = (da - db).abs();
+        let t = if span > f64::EPSILON { (da / (da - db)).clamp(0.0, 1.0) } else { 0.5 };
         Point3::new(pa.x + (pb.x - pa.x) * t, pa.y + (pb.y - pa.y) * t, pa.z + (pb.z - pa.z) * t)
     };
     let mean = |s: &[usize]| {
@@ -237,23 +267,6 @@ fn tet(out: &mut Vec<Triangle>, p: [Point3; 4], v: [f64; 4]) {
     }
 }
 
-/// Edges used by an odd number of triangles: zero on a closed surface.
-/// Vertices are welded on the 1e-9 lattice (`extract` interpolates each
-/// shared edge from the same two samples, so shared points are equal).
-#[must_use]
-pub fn open_edges(tris: &[Triangle]) -> usize {
-    let key = |p: Point3| [(p.x * 1e9).round() as i64, (p.y * 1e9).round() as i64, (p.z * 1e9).round() as i64];
-    let mut count: HashMap<([i64; 3], [i64; 3]), u32> = HashMap::new();
-    for t in tris {
-        for (a, b) in [(t.a, t.b), (t.b, t.c), (t.c, t.a)] {
-            let (ka, kb) = (key(a), key(b));
-            let e = if ka <= kb { (ka, kb) } else { (kb, ka) };
-            *count.entry(e).or_insert(0) += 1;
-        }
-    }
-    count.values().filter(|&&c| c % 2 == 1).count()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +292,85 @@ mod tests {
         // the tetrahedral split, so within 5% of 480.
         assert!(v > 0.0, "outward-facing: {v}");
         assert!((v - 480.0).abs() < 0.05 * 480.0, "volume {v} vs 480");
+    }
+
+    /// The corner `tet` puts on the edge from p0 to p1 (the one on the x axis).
+    fn corner_on_the_x_edge(v: [f64; 4]) -> Point3 {
+        let p = [Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(0.0, 1.0, 0.0), Point3::new(0.0, 0.0, 1.0)];
+        let mut out = Vec::new();
+        tet(&mut out, p, v);
+        let t = out.first().unwrap_or_else(|| panic!("no facet for {v:?}"));
+        *[t.a, t.b, t.c].iter().find(|q| q.y == 0.0 && q.z == 0.0).unwrap_or_else(|| panic!("no corner on the edge for {v:?}"))
+    }
+
+    #[test]
+    fn an_edge_gets_the_same_corner_from_either_end_near_the_snap_threshold() {
+        // #4107: one tetrahedron crosses the edge from its inside end (one
+        // corner inside), its neighbour from the outside end (three inside).
+        // Both must put the same corner on it. Since #4180 the snap is
+        // decided per sample (`on_surface`, before `tet`), so these tiny
+        // non-zero values interpolate, from either end alike.
+        let x0 = NODE_SNAP / (1.0 - NODE_SNAP); // t = NODE_SNAP when the far value is 1
+        for k in -4000_i64..4000 {
+            let d = f64::from_bits((x0.to_bits() as i64 + k) as u64);
+            let one_in = corner_on_the_x_edge([-d, 1.0, 1e-3, 1e-3]);
+            let three_in = corner_on_the_x_edge([-d, 1.0, -1.0, -1.0]);
+            assert!((one_in.x - three_in.x).abs() < 1e-12, "value {d:e}: {} from inside, {} from outside", one_in.x, three_in.x);
+        }
+    }
+
+    #[test]
+    fn a_snapped_corner_is_the_sample_itself() {
+        // #4107: two inside, two outside, one outside sample at zero. The
+        // facets reach that sample from both inside corners; each corner
+        // there must be the sample bit for bit, or a sliver survives `push`
+        // and collapses at the weld.
+        // Coordinates from a fixed linear congruential sequence in (-1, 1).
+        let mut seed: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut next = || {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+        };
+        for _ in 0..20_000 {
+            let mut corner = || Point3::new(next(), next(), next());
+            let mut p = [corner(), corner(), corner(), corner()];
+            // A lattice sample at "zero" carries a rounding residue (as
+            // 0.1 * 3 - 0.3 does); beside it pa + (pb - pa) is not pb.
+            p[2].x *= 1e-16;
+            let mut out = Vec::new();
+            tet(&mut out, p, [-1.0, -0.5, 0.0, 1.0]);
+            for t in &out {
+                for q in [t.a, t.b, t.c] {
+                    let gap = q - p[2];
+                    if gap.dot(gap) < 1e-18 {
+                        assert!(q == p[2], "corner {q:?} beside the sample {:?}", p[2]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_floor_on_the_lattice_reading_both_signs_stays_closed() {
+        // #4180: a box whose top face is lattice layer 4, that layer read
+        // as +-1e-12 with both signs, every other sample the exact
+        // distance. Snapped per edge, 15 collinear facets were dropped:
+        // 45 open edges.
+        let (step, n) = (0.25, [16usize, 16, 8]);
+        let mut d = Vec::new();
+        for k in 0..=n[2] {
+            for j in 0..=n[1] {
+                for i in 0..=n[0] {
+                    let (x, y, z) = (i as f64 * step, j as f64 * step, k as f64 * step);
+                    let top = if k != 4 { z - 1.0 } else if (i * 7 + j * 13) % 3 == 0 { 1e-12 } else { -1e-12 };
+                    d.push([top, 0.35 - z, 0.6 - x, x - 3.4, 0.6 - y, y - 3.4].into_iter().fold(f64::MIN, f64::max));
+                }
+            }
+        }
+        let tris = marching(&Grid { lo: Point3::ZERO, step, n, d });
+        assert!(!tris.is_empty());
+        assert_eq!(open_edges(&tris), 0);
+        assert_eq!(unpaired_edges(&tris), 0);
     }
 
     #[test]

@@ -42,10 +42,11 @@ const CUT_AREA: f64 = 1e-4;
 /// material at that height.
 pub type SectionAt<'a> = dyn Fn(f64) -> Result<Option<Region>, GenError> + 'a;
 
-/// Contour along the open run `pts`, the tool on the run's air side read
-/// from `section`. A run with no part material beside it at any level is
-/// ridden on its own line (nothing is there to cut), and the path says so.
-pub fn contour_open_run(pts: &[Point2], p: &ContourParams, section: &SectionAt) -> Result<Toolpath, GenError> {
+pub(super) fn open_run_ride(
+    pts: &[Point2],
+    p: &ContourParams,
+    section: &SectionAt,
+) -> Result<(Vec<Point2>, String), GenError> {
     p.validate()?;
     let run = simple(pts)?;
     let zs = p.levels()?;
@@ -58,9 +59,10 @@ pub fn contour_open_run(pts: &[Point2], p: &ContourParams, section: &SectionAt) 
         }
     }
     let Some(material_left) = material_side(&run, &levels, &PART_WORDS)? else {
-        let mut path = contour_along_chain(&run, p)?;
-        path.notes.push("contour: no part material beside the open run at any level - the tool centre rides its line".into());
-        return Ok(path);
+        return Ok((
+            run,
+            "contour: no part material beside the open run at any level - the tool centre rides its line".into(),
+        ));
     };
     let d = p.tool_diameter * 0.5 + p.stock_to_leave;
     if !(d.is_finite() && d > TOL) {
@@ -74,10 +76,21 @@ pub fn contour_open_run(pts: &[Point2], p: &ContourParams, section: &SectionAt) 
     let mut ride = offset_run(&run, d, !material_left)?;
     ride.reverse();
     clear_of_part(&ride, p.tool_diameter * 0.5, &levels)?;
+    Ok((
+        ride,
+        format!(
+            "contour: the open run is cut on its air side - the tool centre {d:.3} mm off it (tool radius plus stock to leave); Side applies to closed rings only"
+        ),
+    ))
+}
+
+/// Contour along the open run `pts`, the tool on the run's air side read
+/// from `section`. A run with no part material beside it at any level is
+/// ridden on its own line (nothing is there to cut), and the path says so.
+pub fn contour_open_run(pts: &[Point2], p: &ContourParams, section: &SectionAt) -> Result<Toolpath, GenError> {
+    let (ride, note) = open_run_ride(pts, p, section)?;
     let mut path = contour_along_chain(&ride, p)?;
-    path.notes.push(format!(
-        "contour: the open run is cut on its air side - the tool centre {d:.3} mm off it (tool radius plus stock to leave); Side applies to closed rings only"
-    ));
+    path.notes.push(note);
     Ok(path)
 }
 

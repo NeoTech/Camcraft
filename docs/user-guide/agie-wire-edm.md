@@ -4,7 +4,7 @@ CamCraft writes the nominal contour, resource manifest and piece script directly
 
 ## Post from the Wire EDM workspace
 
-1. Mount **AGIECUT Classic 2S (template)** as the setup machine. In the machine editor, open **EDM** and add a condition with ID **AGIE_QN2**, role **rough**, wire diameter **0.25 mm** and preview gap **0.005 mm**. Apply this change to the mounted machine. Choose **Native wire EDM job files** in the post picker.
+1. Mount **AGIECUT Classic 2S (template)** as the setup machine. In the machine editor, open **EDM** and add a condition with ID **AGIE_QN2**, role **rough**, wire diameter **0.25 mm** and preview gap **0.005 mm**. Apply this change to the mounted machine. Choose **Agie Wire EDM (AgieVision)** in the post picker.
 2. Define axis-aligned rectangular stock at most 350 × 250 mm in plan. Choose a stock thickness of 15, 20, 40 or 80 mm. The stock and work origin together must fit that span. Verify the installed work datum and the available axis travel on Agie Control. CamCraft refuses profiles with a stated X or Y travel limit because its preview cannot check the full resident path against that limit. Put the first, unrotated work origin on the stock top. Its XY position determines the job coordinates.
 3. Use one modeled workpiece and create one **Wire Contour**. For two to nine punches on the same stock, follow **Group captured punches** below. For a die opening, follow **Select a die opening** below. For two openings in one plate, follow **Group two die openings in one plate** below. For a punch, select the complete punch model. Use a punch with straight sides, vertical walls and flat ends at the stock planes. Angled faces are supported. Leave at least 0.4 mm of stock around the nominal polygon. Acute corners can need more stock: the post also checks the intersection of the two offset face lines and the swept wire at that corner. CamCraft checks each corner with the measured rough offset for the selected stock thickness. The stock margin includes the 0.125 mm wire radius. Some reentrant contours are supported. A tight inside corner fails if the rough offset for the selected stock thickness leaves more than 0.002 mm at the nominal vertex. Short segments and closely spaced faces fail if adjacent rough paths could meet. The punch must have a straight outer face that allows the lead to stay entirely on the waste side. Additional bodies, selected subprofiles, holes and steps are refused. Select a 0.25 mm wire and condition **AGIE_QN2**. Set the work planes to the stock top and bottom, and specify how the punch is captured. The capture setting confirms support for the punch when it is released. Keep the wire vertical. Taper, four-axis, burnout, explicit skims, tabs and fixture models are unsupported.
 4. Place the centre of a predrilled 2 mm threading hole in the waste. The entire hole must be inside the stock. Allow a perpendicular approach to the interior of a straight face with at least 3 mm of lead and at least 3 mm of straight face on each side of the entry. Generate the operation.
@@ -34,7 +34,7 @@ In the offline control check, each work showed **Matrijs** and `CCB030[4]` after
 
 ### QN2 offsets by stock thickness
 
-Agie Control calculated these wire-centre offsets on the straight outside faces of a synthetic rectangular punch. All dimensions are in millimetres. The native job sends nominal geometry. The resident technology applies each offset. The post review names the offsets of the selected thickness. Check them in the control before GRAFICHECK and FORMALCHECK.
+Agie Control calculated these wire-centre offsets on the straight outside faces of a synthetic rectangular punch. All dimensions are in millimetres. The AgieVision job sends nominal geometry. The resident technology applies each offset. The post review names the offsets of the selected thickness. Check them in the control before GRAFICHECK and FORMALCHECK.
 
 | Stock thickness | Rough | Trim 1 | Trim 2 | Trim 3 |
 | ---: | ---: | ---: | ---: | ---: |
@@ -63,7 +63,7 @@ From the project root, run the supplied script with a local CamCraft desktop CLI
 cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/punch.camscript
 ```
 
-The script imports an original 40 × 20 × 20 mm rectangular punch, places it in 80 × 60 × 20 mm stock and sets the threading point at X−30 Y0. Its post call selects the native separation with `options: {separationLengthMm: 1.0}`. Stock top is Z0 in the job. The `PUNCH40` directory contains the nominal contour in `PUNCH40.ISO`, its import reference in `PUNCH40.SBR` and the piece, start point and requested quality in `PUNCH40.SBL`. Existing destinations are refused. Edit the script’s output name to make another job.
+The script imports an original 40 × 20 × 20 mm rectangular punch, places it in 80 × 60 × 20 mm stock and sets the threading point at X−30 Y0. Its post call selects the separation cut with `options: {separationLengthMm: 1.0}`. Stock top is Z0 in the job. The `PUNCH40` directory contains the nominal contour in `PUNCH40.ISO`, its import reference in `PUNCH40.SBR` and the piece, start point and requested quality in `PUNCH40.SBL`. Existing destinations are refused. Edit the script’s output name to make another job.
 
 For an oblique entry, run `cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/oblique-punch.camscript` with a fresh `POLY20` destination. This pentagonal punch has a 3:4 sloping entry face. Its threading hole at X−20.5 Y6 approaches X−12.5 Y0 perpendicular to the middle of that face.
 
@@ -98,11 +98,11 @@ cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/punch-grid.
 
 ## Post a straight open cutoff
 
-Use 20 mm cold die steel, Berco Cut 0.25 mm and AGIE_QN2. Model the retained solid as one full-height prism. Select the straight X- or Y-parallel wall edge that reaches opposite faces of the rectangular stock. In **Geometry**, choose **Left** or **Right** so the kerf lies on the waste side as the selected chain is traversed. Clear **Start hole stated**. The native post extends each end of the nominal cut 4 mm into air. It uses a separate perpendicular approach at each end.
+Use 20 mm cold die steel, Berco Cut 0.25 mm and AGIE_QN2. Model the retained solid as one full-height prism. Select the straight X- or Y-parallel wall edge that reaches opposite faces of the rectangular stock. In **Geometry**, choose **Left** or **Right** so the kerf lies on the waste side as the selected chain is traversed. Clear **Start hole stated**. The AgieVision post extends each end of the nominal cut 4 mm into air. It uses a separate perpendicular approach at each end.
 
 Clamp both resulting pieces independently. Keep the clamps clear of the entire wire path, the 4 mm tails and both 3 mm approaches. The rough pass severs the offcut before three further trims. A catcher alone allows the offcut to move. Center the stock on the midpoints of the installed X and Y strokes. In **Passes**, confirm **Both pieces clamped through all passes** and **Stock centered in installed XY travel**. The post checks the air tails, approach points, work origin and wire envelope against the centered 350 × 250 mm travel. It uses the rough offset of the 20 mm row (0.245 mm) plus the 0.125 mm wire radius. Use a run-out clearance of 3.6 mm or less.
 
-Choose **Native wire EDM job files**, set **Separation cut length (mm)** to zero and choose a new output directory. The controller alternates travel across the part on successive passes. After TECCUT, the four passes of the 20 mm row are offset 0.245, 0.155, 0.140 and 0.134 mm toward the waste. Inspect the formal check and the plotted four cutting passes before machining.
+Choose **Agie Wire EDM (AgieVision)**, set **Separation cut length (mm)** to zero and choose a new output directory. The controller alternates travel across the part on successive passes. After TECCUT, the four passes of the 20 mm row are offset 0.245, 0.155, 0.140 and 0.134 mm toward the waste. Inspect the formal check and the plotted four cutting passes before machining.
 
 Run either original example from the repository root:
 
@@ -111,15 +111,15 @@ cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/cutoff-lowe
 cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/cutoff-upper.camscript
 ```
 
-The examples select opposite sides of synthetic 80 × 60 × 20 mm stock. Each writes one native job, named `LOWER20` or `UPPER20`. Each job opens with zero erosion steps and no separation cut. The left job has the side `c_left` and the right job has `c_right`. The entry point `stp1` and the exit point `stp2` are 4 mm beyond opposite stock faces and 3 mm to the waste side of the line. Assign the matching TECCUT row on the control before the formal check.
+The examples select opposite sides of synthetic 80 × 60 × 20 mm stock. Each writes one AgieVision job, named `LOWER20` or `UPPER20`. Each job opens with zero erosion steps and no separation cut. The left job has the side `c_left` and the right job has `c_right`. The entry point `stp1` and the exit point `stp2` are 4 mm beyond opposite stock faces and 3 mm to the waste side of the line. Assign the matching TECCUT row on the control before the formal check.
 
 ## Punch from a DXF circle or racetrack
 
 Create box stock of 20 mm thickness, import one DXF profile and place it on the stock top. Create a captured vertical **Wire Contour** punch. In **Geometry**, select the closed chain of the punch outline. The chain must be one DXF `CIRCLE`, or a racetrack of two straight lines and two tangent semicircular `ARC` entities with the same radius. The straight sides must be at least 6 mm long. Other geometry of the drawing must stay clear of the cut.
 
-The generator and the wire laws use a polygon that encloses each true arc within 0.000025 mm. The native ISO object has the nominal arcs: `G03` blocks with the exact arc centres as incremental `I` and `J` values. The control applies its own wire offset. The setup script is that of the modeled punch.
+The generator and the wire laws use a polygon that encloses each true arc within 0.000025 mm. The AgieVision ISO object has the nominal arcs: `G03` blocks with the exact arc centres as incremental `I` and `J` values. The control applies its own wire offset. The setup script is that of the modeled punch.
 
-The native job has these limits:
+The AgieVision job has these limits:
 
 - The racetrack has straight sides parallel to X or Y. Place the threading hole at least 3 mm outside a straight side, with at least 3 mm of that side on each side of the perpendicular entry.
 - The circle has a radius from 6 to 15 mm. Place the threading hole on a horizontal or vertical radius, at least 3 mm beyond the circle. The ISO object starts at that point of the circle and has two semicircles. The control applies the 1 mm separation along the circle.
@@ -146,7 +146,7 @@ A closed DXF chain of `LINE` and `ARC` entities that is not a circle or a racetr
 - All joints and arc centres must be on the five-decimal ISO grid. The post checks the exact squared radius at both ends of each arc and the tangent direction at each joint in grid units.
 - The stock must have at least 0.4 mm beyond each extremum of the loop, and the complete hole must be inside the stock. The rest of the drawing must stay outside the same area.
 
-The generator and the wire laws use a polygon of up to 2,048 vertices that encloses each true arc within 0.000025 mm. The native ISO object keeps each nominal endpoint and arc centre. The control applies its own wire offset to each arc and each straight.
+The generator and the wire laws use a polygon of up to 2,048 vertices that encloses each true arc within 0.000025 mm. The AgieVision ISO object keeps each nominal endpoint and arc centre. The control applies its own wire offset to each arc and each straight.
 
 Run the original examples from the repository root, each with a fresh destination:
 
@@ -156,6 +156,26 @@ cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/three-corne
 ```
 
 The `ROUND20` job has four corner arcs with alternating radii of 6 and 4 mm, and the hole at X0 Y−21. The `THREEARC` job has three arcs of R5 that sweep about 143.13, 126.87 and 90 degrees, an oblique straight side, and the hole at X12 Y−12.
+
+## Die opening from a DXF chain of lines and arcs
+
+A closed DXF chain of `LINE` and `ARC` entities can be one die opening in a 20 mm plate. The opening can be reentrant: parts of the plate can project into it. Set the wire side to **Die**, select the chain as for a punch, put the threading hole inside the opening and set **Freed piece captured**. These conditions apply:
+
+- Each arc joins its neighbours tangentially. Only two straight walls can meet at a sharp corner.
+- A sharp corner where the plate projects into the opening is accepted: the control turns the wire around it. A sharp inside corner of the plate fails if the rough offset (0.245 mm) leaves more than 0.002 mm at the vertex. Use a fillet there.
+- An arc that turns counter-clockwise in the counter-clockwise opening (an inside fillet of the plate) must have a radius larger than the rough offset, 0.245 mm. The control does not refuse a smaller arc: it leaves that arc out of each pass whose offset is larger, and cuts a sharp corner. CamCraft refuses it. All arcs have radii from 0.5 to 20 mm.
+- Walls that are not neighbours stay apart by more than two rough offsets plus the longest rough corner, about 1 to 1.2 mm.
+- At least one straight wall is parallel to X or Y. Place the hole at least 3 mm inside that wall, with at least 3 mm of the wall on each side of the perpendicular entry. The complete 2 mm hole is more than 1 mm from every wall, and the straight lead stays more than 0.4 mm from every other wall. CamCraft enters the nearest such wall.
+- All joints and arc centres must be on the five-decimal ISO grid, with equal squared radii at both ends of each arc. The control moves the centre of an arc whose radii differ slightly and plots no path when they differ more.
+- Leave at least 0.4 mm of plate between each wall and arc extremum of the opening and the stock edge. Other drawing geometry must not touch or enter the opening.
+
+The ISO object lists the nominal opening counter-clockwise from the entry with `G01`, `G02` and `G03` blocks and incremental `I`/`J` centres. The setup script is the die setup (`c_die`).
+
+```sh
+cargo run -p camcraft-app --bin camcraft-cli -- script examples/agie/reentrant-die.camscript
+```
+
+The `REENT20` job has R2 corners, a tooth with two sharp tips on the right wall, a tongue with an R4 round tip on the top wall, and the hole at X0 Y−7. On an offline copy of the control software the job imported with zero steps, took the TECCUT row for 20 mm and passed FORMALCHECK. The plot showed the rough pass inside the opening, a concentric arc for each fillet, a round turn at each tooth tip and the 1 mm separation before the entry.
 
 ## Open the job in Agie Control
 

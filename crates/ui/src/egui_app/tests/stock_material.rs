@@ -36,4 +36,12 @@ fn the_stock_page_states_the_stock_material_through_one_undo_step() {
     assert_eq!(camcraft_app::stock_material::of_setup(&st.world, active.as_deref()), Some(WorkMaterial::Brass));
     assert!(st.history.undo(&st.world));
     assert_eq!(camcraft_app::stock_material::of_setup(&st.world, active.as_deref()), None);
+
+    // #3262: Copper is in ALL at its discriminant index and selectable on stock.
+    assert_eq!(WorkMaterial::ALL.get(WorkMaterial::Copper as usize), Some(&WorkMaterial::Copper));
+    st.pending.push_back(CommandKind::SetStockMaterial(Some(WorkMaterial::Copper)));
+    st.drain_actions();
+    assert_eq!(camcraft_app::stock_material::of_setup(&st.world, active.as_deref()), Some(WorkMaterial::Copper));
+    assert!(st.history.undo(&st.world));
+    assert_eq!(camcraft_app::stock_material::of_setup(&st.world, active.as_deref()), None);
 }
