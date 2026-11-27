@@ -11,7 +11,7 @@
 //! Provenance: trochoidal milling with the step per loop as the radial
 //! engagement of the front arc (Otkur & Lazoglu 2007, Int. J. Mach. Tools
 //! Manuf. 47; Rauch, Duc & Hascoet 2009, Int. J. Mach. Tools Manuf. 49);
-//! our own design record `docs/decisions/4024-path-kernel-design.md`
+//! our own design record (`RECOMMENDED.md`, `## #4024`)
 //! "Stage 3".
 
 use super::law::{Read, Stock, read, samples};
@@ -20,7 +20,7 @@ use super::{Controlled, OrderedSet, Trochoid};
 use crate::frame::PlanePoint;
 use crate::guide::{Curve, Mark, MarkKind, Span};
 use crate::region::PlanarRegion;
-use crate::verdict::{Refusal, Stage, Verdict};
+use crate::verdict::{Note, Refusal, Stage, Verdict};
 use crate::{Point2, Region, in_area, to_loops};
 
 /// Over-limit reason: no loop fits beside the full-width stretch.
@@ -185,7 +185,11 @@ fn keeps_shape(c: &Curve) -> bool {
 
 /// Trochoidal control of the ordered set `s` with the stated `limit`.
 pub(crate) fn control(s: &OrderedSet, p: &PlanarRegion, stock: &Stock, t: &Trochoid, limit: f64, r: f64) -> Result<Verdict<Controlled>, Refusal> {
-    let pitch = t.pitch().min(limit * 2.0 * r);
+    // The loops advance no more than the stated engagement limit allows:
+    // a smaller pitch than asked is said on the status line (#4407).
+    let most = limit * 2.0 * r;
+    let pitch = t.pitch().min(most);
+    let limited = t.pitch() > most + crate::KERNEL_TOL;
     let radii = (t.width() / 2.0, MIN_LOOP_SHARE * r);
     let mut curves = s.curves().to_vec();
     let mut changed = vec![false; curves.len()];
@@ -219,5 +223,20 @@ pub(crate) fn control(s: &OrderedSet, p: &PlanarRegion, stock: &Stock, t: &Troch
         }
     };
     let out = Outcome { curves: changed.iter().any(|b| *b).then(|| curves.clone()), marks, reads };
-    finish(s, out, limit, "trochoidal", reason)
+    let v = finish(s, out, limit, "trochoidal", reason)?;
+    if !limited {
+        return Ok(v);
+    }
+    let note = Note::new(Stage::Load, format!("load: the trochoidal pitch is limited to {pitch:.3} mm by the engagement limit, under the asked {:.3} mm", t.pitch()))?;
+    Ok(match v {
+        Verdict::Done { out, fallbacks, mut notes } => {
+            notes.push(note);
+            Verdict::Done { out, fallbacks, notes }
+        }
+        Verdict::Incomplete { out, gaps, mut notes } => {
+            notes.push(note);
+            Verdict::Incomplete { out, gaps, notes }
+        }
+        refused => refused,
+    })
 }
