@@ -490,3 +490,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+## Noto Sans SC (interface font, assets/ui/fonts/NotoSansSC-Regular-Subset.ttf)
+
+Noto Sans SC, pinned to Regular 400 and subset to GB2312 plus punctuation by
+`scripts/fonts/subset_sc.py` (#853). SIL Open Font License 1.1, full text in
+`assets/ui/fonts/OFL.txt`; the reserved font name is not used by any modified
+version, and the subset is redistributed under the same licence.

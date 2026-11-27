@@ -52,6 +52,11 @@ pub struct ViewPrefs {
     /// #1873: where the `cadmpeg` program is, when it is not on `PATH`.
     /// `None` searches `PATH`.
     pub cadmpeg_path: Option<String>,
+    /// #853: the interface language as a BCP 47 tag (`en`, `zh-CN`); `None`
+    /// follows the system locale. Kept as text on purpose: the surface owns
+    /// which languages exist, and an unknown tag here is a status note, not
+    /// an unreadable file.
+    pub language: Option<String>,
     /// #2428: check GitHub for a newer release at startup (at most once/day).
     pub check_for_updates: bool,
     /// #2428: UTC Unix timestamp (seconds) of the last startup update check.
@@ -66,6 +71,7 @@ impl Default for ViewPrefs {
             skip_tool_holders: false,
             ai_offline_only: false,
             cadmpeg_path: None,
+            language: None,
             check_for_updates: true,
             last_update_check_utc: None,
         }
@@ -100,6 +106,10 @@ struct OnDisk {
     /// #1873: written only when set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cadmpeg_path: Option<String>,
+    /// #853: written only when the person pinned a language (absent = follow
+    /// the system locale).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
     /// #2428: written only when false (update checks default to on).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     check_for_updates: Option<bool>,
@@ -132,6 +142,7 @@ impl ViewPrefs {
         let import_tool_holders = skip_tool_holders.then_some(false);
         let ai_offline_only = self.ai_offline_only.then_some(true);
         let cadmpeg_path = self.cadmpeg_path.clone();
+        let language = self.language.clone();
         let check_for_updates = (!self.check_for_updates).then_some(false);
         let last_update_check_utc = self.last_update_check_utc.map(serde_json::Value::from);
         let disk = OnDisk {
@@ -141,6 +152,7 @@ impl ViewPrefs {
             import_tool_holders,
             ai_offline_only,
             cadmpeg_path,
+            language,
             check_for_updates,
             last_update_check_utc,
         };
@@ -185,6 +197,14 @@ impl ViewPrefs {
         let ai_offline_only = disk.ai_offline_only == Some(true);
         // #1873: a blank path is "not set", never a program named "".
         let cadmpeg_path = disk.cadmpeg_path.filter(|p| !p.trim().is_empty());
+        let language = match disk.language {
+            None => None,
+            Some(t) if valid_language_tag(&t) => Some(t),
+            Some(t) => {
+                notes.push(format!("language '{t}' is not a language tag - following the system locale"));
+                None
+            }
+        };
         let check_for_updates = disk.check_for_updates != Some(false);
         let last_update_check_utc = match disk.last_update_check_utc {
             None | Some(serde_json::Value::Null) => None,
@@ -203,12 +223,25 @@ impl ViewPrefs {
                 skip_tool_holders,
                 ai_offline_only,
                 cadmpeg_path,
+                language,
                 check_for_updates,
                 last_update_check_utc,
             },
             notes,
         ))
     }
+}
+
+/// A loose BCP 47 shape check (`zh-CN`, `en`, `zh_Hans`): the surface decides
+/// which languages exist; this only refuses text that cannot be a tag, so a
+/// corrupt value never reaches the lookup.
+fn valid_language_tag(tag: &str) -> bool {
+    let t = tag.trim();
+    !t.is_empty()
+        && t.len() <= 35
+        && t.split(['-', '_']).all(|part| {
+            !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric())
+        })
 }
 
 /// This process's preferences file, if a config folder resolves.
