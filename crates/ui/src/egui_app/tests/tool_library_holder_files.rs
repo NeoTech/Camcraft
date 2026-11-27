@@ -8,6 +8,7 @@
 //! Provenance: our own structural and state tests; no HSMWorks material involved.
 
 use egui::accesskit::Role;
+use egui_kittest::kittest::NodeT;
 
 use super::tool_library_editor::library_window;
 use super::tool_library_holders_ui::open_holders;
