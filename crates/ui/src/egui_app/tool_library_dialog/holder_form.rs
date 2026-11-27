@@ -1,14 +1,15 @@
 //! #4338 (U12 of #3663): the holder form of the tool library window - a
 //! user holder of the document with its name, its machine side (the
 //! spindle taper), its tool side (the clamp and the shank range it
-//! clamps) and its shape (gauge length, largest and nose diameter) as
-//! inputs, the drawing to scale with the spindle nose and the shank range,
+//! clamps) and its shape (gauge length, body and nose diameter) as
+//! inputs, the holder's largest diameter as the drawing states it (#4455), the drawing to scale with the spindle nose and the shank range,
 //! and the tools that use it. The values are the window's own draft
 //! (`ComponentDraft::shape`); only the footer's Apply lands them, as one
 //! undoable `EditDocumentComponent` that derives each of those tools again
 //! in the same undo step - or refuses by name, and changes nothing, when a
 //! tool no longer fits. The outline is the holder library's outline of the
-//! values (`HolderShape::geometry`): never smaller than the steel.
+//! values (`HolderShape::component`): never smaller than the steel, and
+//! refused when it would read back as other values (#4455).
 //! Frame cost (`crates/ui/AGENTS.md`): the check of the draft is kept for
 //! its shape (`checks`); the drawing is `holder_drawing`'s.
 //! Provenance: our own form over our own holder shape and component
@@ -32,7 +33,11 @@ pub(crate) const CLAMP: &str = "Clamp";
 pub(crate) const FROM: &str = "Clamps from";
 pub(crate) const TO: &str = "Clamps to";
 pub(crate) const GAUGE: &str = "Gauge length";
+/// The holder's largest diameter, flange included: read-only, the
+/// drawing's value (#4455).
 pub(crate) const LARGEST: &str = "Largest diameter";
+/// The widest steel of the body below the flange.
+pub(crate) const BODY: &str = "Body diameter";
 pub(crate) const NOSE: &str = "Nose diameter";
 pub(crate) const EDIT_OUTLINE: &str = "Edit outline…";
 pub(crate) const IMPORT_STEP: &str = "Import model (STEP)…";
@@ -69,7 +74,7 @@ fn check(shape: &HolderShape) -> Checked {
             return out.clone();
         }
         CHECKS.with(|c| c.set(c.get().saturating_add(1)));
-        let out = shape.geometry(ADAPTIVE_PORT).and_then(|g| Ok((shape.entry()?, g))).map_err(|e| e.to_string());
+        let out = shape.component(ADAPTIVE_PORT).and_then(|(_, g)| Ok((shape.entry()?, g))).map_err(|e| e.to_string());
         *k = Some((*shape, out.clone()));
         out
     })
@@ -111,6 +116,13 @@ pub(crate) fn refusal(state: &mut State) -> Option<String> {
     }
 }
 
+/// The largest diameter (mm) of the holder that `shape` draws, flange
+/// included: the value the drawing states, `None` while the values are
+/// refused (#4455).
+pub(crate) fn largest(shape: &HolderShape) -> Option<f64> {
+    check(shape).ok().map(|(e, _)| super::holder_drawing::largest_d(&e))
+}
+
 /// The tools whose component stack uses the open holder.
 pub(crate) fn users(state: &mut State) -> Vec<String> {
     current(state).map(|(_, _, _, users)| users).unwrap_or_default()
@@ -129,8 +141,7 @@ pub(super) fn apply(state: &mut State) {
         return;
     }
     let built = shape
-        .kind()
-        .and_then(|kind| Ok((kind, shape.geometry(ADAPTIVE_PORT)?)))
+        .component(ADAPTIVE_PORT)
         .map_err(|e| e.to_string())
         .and_then(|(kind, geometry)| Ok((ToolComponent::new(&d.id, d.name.trim(), kind).map_err(|e| e.to_string())?, geometry)));
     match built {
@@ -175,11 +186,12 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     }
     let h = ui.available_height().min(ui.ctx().viewport_rect().height() * 0.7 - 140.0).max(200.0);
     let checked = check(&s);
+    let largest_d = largest(&s);
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_width(FIELDS_W);
             egui::ScrollArea::vertical().id_salt("tool_library_holder_form").max_height(h).show(ui, |ui| {
-                fields(ui, &mut d.name, &mut s);
+                fields(ui, &mut d.name, &mut s, largest_d);
                 if let Err(why) = &checked {
                     super::super::error_text::error_text(ui, super::super::colorvision::text_inks(ui, &state.world).error, why);
                 }
@@ -222,7 +234,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
 }
 
 /// The name and the three sections; a change lands in the draft only.
-fn fields(ui: &mut Ui, name: &mut String, s: &mut HolderShape) {
+fn fields(ui: &mut Ui, name: &mut String, s: &mut HolderShape, largest_d: Option<f64>) {
     egui::Grid::new("tool_library_holder_name").num_columns(2).show(ui, |ui| {
         let l = ui.label(NAME);
         ui.add(egui::TextEdit::singleline(name).desired_width(220.0)).labelled_by(l.id);
@@ -270,11 +282,21 @@ fn fields(ui: &mut Ui, name: &mut String, s: &mut HolderShape) {
     egui::Grid::new("tool_library_holder_shape").num_columns(3).show(ui, |ui| {
         number(ui, GAUGE, &mut s.gauge_len, true, "");
         let shrink = s.clamp == ShapeClamp::Shrink;
-        number(ui, LARGEST, &mut s.largest_d, shrink, "an ER or Weldon body is as wide as its nose: edit the nose diameter");
+        number(ui, BODY, &mut s.largest_d, shrink, "an ER or Weldon body is as wide as its nose: edit the nose diameter");
         if number(ui, NOSE, &mut s.nose_d, true, "") && !shrink {
             s.largest_d = s.nose_d;
         }
+        // The outline's widest section, as the drawing states it.
+        ui.label(LARGEST);
+        ui.label(largest_d.map_or_else(|| "-".to_owned(), largest_text)).on_hover_text("the flange or the body, whichever is wider");
+        ui.weak("mm");
+        ui.end_row();
     });
+}
+
+/// The largest diameter as the form shows it.
+pub(crate) fn largest_text(d: f64) -> String {
+    format!("{d:.2}")
 }
 
 /// A new clamp keeps what still applies: a bore keeps its size (a new one

@@ -28,8 +28,10 @@ use crate::state::{ComponentDraft, ErrorScope};
 
 const ID: &str = "user:holder:Shrink 20";
 
+/// #4455: a gauge length at which the outline shows the Ø44 body (at 80
+/// mm the flange envelope covers it, and the form does not edit it).
 fn shrink20() -> HolderShape {
-    HolderShape { taper: BT40, clamp: ShapeClamp::Shrink, bore: 20.0, gauge_len: 80.0, nose_d: 32.0, largest_d: 44.0 }
+    HolderShape { taper: BT40, clamp: ShapeClamp::Shrink, bore: 20.0, gauge_len: 120.0, nose_d: 32.0, largest_d: 44.0 }
 }
 
 fn cutter() -> Tool {
@@ -175,7 +177,7 @@ fn each_holder_field_lands_in_one_step_with_its_tools_and_undoes() {
     open_holders(&mut h);
     set_filter(&mut h, "shrink 20");
     click_window_button(&mut h, "Shrink 20");
-    for l in [holder_form::NAME, holder_form::TAPER, holder_form::CLAMP, holder_form::FROM, holder_form::TO, holder_form::GAUGE, holder_form::LARGEST, holder_form::NOSE] {
+    for l in [holder_form::NAME, holder_form::TAPER, holder_form::CLAMP, holder_form::FROM, holder_form::TO, holder_form::GAUGE, holder_form::BODY, holder_form::LARGEST, holder_form::NOSE] {
         assert!(shows(&h, l), "the form has the field {l}");
     }
     assert!(shows(&h, A) && shows(&h, B), "the form lists the tools that use the holder");
@@ -183,8 +185,8 @@ fn each_holder_field_lands_in_one_step_with_its_tools_and_undoes() {
     let edits: [(&str, Edit, bool); 5] = [
         ("name", |n, _| *n = "Shrink 20 long".into(), false),
         ("taper", |_, s| s.taper = CAT40, true),
-        ("gauge length", |_, s| s.gauge_len = 95.0, true),
-        ("largest diameter", |_, s| s.largest_d = 36.0, true),
+        ("gauge length", |_, s| s.gauge_len = 130.0, true),
+        ("body diameter", |_, s| s.largest_d = 36.0, true),
         ("nose diameter", |_, s| s.nose_d = 36.0, true),
     ];
     for (what, edit, tools_change) in edits {
@@ -270,7 +272,6 @@ fn an_edit_that_breaks_a_tools_fit_is_refused_by_name() {
     draft(&mut h, |d| {
         if let Some(s) = d.shape.as_mut() {
             s.bore = 16.0;
-            s.nose_d = 28.0;
         }
     });
     click_window_button(&mut h, frame::APPLY);

@@ -54,6 +54,16 @@ fn each_builtin_taper_holder_reads_back_as_its_shape() {
         assert_eq!(s.kind().expect("codes"), kind, "{}", e.name());
         assert!(close(&zr(&s.geometry(ADAPTIVE_PORT).expect("draws")), &zr(&g)), "{}: the same outline", e.name());
         assert!((s.gauge_len - e.gauge_len).abs() < 1e-9);
+        // #4455: the library's own steel, also where the outline hides it.
+        let (nose_d, largest_d) = match e.clamp {
+            Clamp::Er(er) => (er.nut_d, er.nut_d),
+            Clamp::Weldon { body_d, .. } => (body_d, body_d),
+            Clamp::Shrink { nose_d, body_d, .. } => (nose_d, body_d),
+        };
+        assert!((s.nose_d - nose_d).abs() < 1e-9 && (s.largest_d - largest_d).abs() < 1e-9, "{}: the library's steel, not {s:?}", e.name());
+        // An Apply of the values as read writes the outline the copy has.
+        let (_, written) = s.component(ADAPTIVE_PORT).unwrap_or_else(|e2| panic!("{}: writes back: {e2}", e.name()));
+        assert!(close(&zr(&written), &zr(&g)), "{}: an Apply keeps the outline", e.name());
         n += 1;
     }
     assert!(n > 50, "the built-in taper holders read back ({n})");
@@ -79,7 +89,7 @@ fn an_edited_outline_is_never_smaller_than_the_steel() {
             }
         }
     }
-    let mut checked = 0;
+    let (mut checked, mut kept) = (0, 0);
     for s in shapes {
         let Ok(g) = s.geometry(ADAPTIVE_PORT) else { continue };
         let pts = zr(&g);
@@ -99,13 +109,21 @@ fn an_edited_outline_is_never_smaller_than_the_steel() {
             let z = front + (s.taper.flange_t) * f64::from(i) / 20.0;
             assert!(radius_at(&pts, z) >= s.taper.flange_d * 0.5 - 1e-9, "{s:?}: the flange at z {z}");
         }
-        // The form reads back what it wrote.
-        let kind = s.kind().expect("codes");
-        let back = HolderShape::of(&kind, &g, ADAPTIVE_PORT).unwrap_or_else(|| panic!("{s:?} reads back: {pts:?}"));
-        assert!(close(&zr(&back.geometry(ADAPTIVE_PORT).expect("draws")), &pts), "{s:?} reads back as {back:?}");
         checked += 1;
+        // The form reads back exactly what it wrote, or does not write it
+        // (#4455): never a value smaller than the steel it was given.
+        let kind = s.kind().expect("codes");
+        match (s.component(ADAPTIVE_PORT), HolderShape::of(&kind, &g, ADAPTIVE_PORT)) {
+            (Ok((_, written)), Some(back)) => {
+                assert_eq!(written, g, "{s:?}: the form writes the shape's outline");
+                assert!((back.largest_d - s.largest_d).abs() < 1e-6 && (back.nose_d - s.nose_d).abs() < 1e-6, "{s:?} reads back as {back:?}");
+                kept += 1;
+            }
+            (Err(ShapeError::NotKept), None) => {}
+            (w, b) => panic!("{s:?}: a write {w:?} and a read-back {b:?} that disagree"),
+        }
     }
-    assert!(checked > 60, "shapes checked: {checked}");
+    assert!(checked > 60 && kept > 60, "shapes checked: {checked}, kept: {kept}");
 }
 
 #[test]
@@ -122,6 +140,37 @@ fn a_value_that_cannot_be_steel_is_refused_by_name() {
     let shrink = HolderShape { clamp: ShapeClamp::Shrink, bore: 12.0, nose_d: 24.0, largest_d: 20.0, ..ok };
     assert!(refused(shrink).contains("a shrink-fit body widens from its nose"));
     assert!(refused(HolderShape { bore: 500.0, nose_d: 600.0, largest_d: 600.0, ..shrink }).contains("larger than Ø200 mm"));
+}
+
+/// #4455: a shrink-fit body under the flange envelope shows nowhere in the
+/// outline. The outline reads back as no form shape - never as the
+/// narrowest body that draws it - and the form refuses to write it.
+#[test]
+fn a_body_the_flange_envelope_covers_is_not_read_back_smaller() {
+    // BT40, Ø32 nose: the cone meets the flare under Ø44 at gauge 80.
+    let hidden = HolderShape { taper: BT40, clamp: ShapeClamp::Shrink, bore: 20.0, gauge_len: 80.0, nose_d: 32.0, largest_d: 44.0 };
+    let g = hidden.geometry(ADAPTIVE_PORT).expect("draws: the envelope covers the body");
+    let wider = HolderShape { largest_d: 50.0, ..hidden }.geometry(ADAPTIVE_PORT).expect("draws");
+    assert!(close(&zr(&g), &zr(&wider)), "a wider body draws the same outline");
+    let kind = hidden.kind().expect("codes");
+    assert_eq!(HolderShape::of(&kind, &g, ADAPTIVE_PORT), None, "the outline does not fix the body");
+    assert_eq!(hidden.component(ADAPTIVE_PORT), Err(ShapeError::NotKept));
+    assert!(ShapeError::NotKept.to_string().contains("give a longer gauge length"));
+    // A longer gauge length shows the body: the form keeps it.
+    let long = HolderShape { gauge_len: 120.0, ..hidden };
+    let (_, g) = long.component(ADAPTIVE_PORT).expect("kept");
+    assert_eq!(HolderShape::of(&kind, &g, ADAPTIVE_PORT), Some(long));
+    // A library chuck whose body the envelope covers reads back as the
+    // library's steel at the library's gauge length only.
+    let lib = library()
+        .into_iter()
+        .find(|e| e.name() == "BT40 Shrink 20 mm")
+        .expect("BT40 Shrink 20 mm");
+    let lg = ComponentGeometry::holder(&lib, ADAPTIVE_PORT, lib.gauge_len).expect("draws");
+    let back = HolderShape::of(&kind, &lg, ADAPTIVE_PORT).expect("the library chuck reads back");
+    assert_eq!((back.nose_d, back.largest_d), (33.0, 42.0), "the table's nose and body");
+    let off = HolderShape { gauge_len: lib.gauge_len - 2.0, ..back };
+    assert_eq!(off.component(ADAPTIVE_PORT), Err(ShapeError::NotKept), "a covered body off the library length is refused");
 }
 
 #[test]
