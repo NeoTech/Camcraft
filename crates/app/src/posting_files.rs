@@ -173,6 +173,9 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // the LN2W dialect (docs/decisions/4045-sodick-ln2w-dialect.md).
     ("Sodick AQ600L", AssetFile("sodick-aq600l.mch")),
     ("AGIECUT Classic 2S (template)", AssetFile("agiecut-classic-2s.mch")),
+    // #2701: the G-EDM DIY wire template; no travel, guide height or
+    // condition invented (assets/machines/AGENTS.md); names the G-EDM post.
+    ("G-EDM Wire EDM (template)", AssetFile("g-edm.mch")),
 ];
 
 fn post_dir() -> &'static DataFiles {
@@ -429,6 +432,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "sodick-alc400g.mch") => Some(include_str!("../../../assets/machines/sodick-alc400g.mch")),
         ("machines", "sodick-aq600l.mch") => Some(include_str!("../../../assets/machines/sodick-aq600l.mch")),
         ("machines", "agiecut-classic-2s.mch") => Some(include_str!("../../../assets/machines/agiecut-classic-2s.mch")),
+        ("machines", "g-edm.mch") => Some(include_str!("../../../assets/machines/g-edm.mch")),
         ("machines", "3axis-vmc.mch") => Some(include_str!("../../../assets/machines/3axis-vmc.mch")),
         _ => None,
     }
