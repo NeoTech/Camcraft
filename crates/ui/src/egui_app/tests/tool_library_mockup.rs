@@ -7,7 +7,7 @@
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 //! Provenance: our own structural tests; no HSMWorks material involved.
 
-use camcraft_app::units::{self, Unit};
+use camcraft_app::units;
 use egui::accesskit::Role;
 
 use super::tool_library_editor::{H, click_window_button, library_window, open_in_window};
@@ -155,7 +155,8 @@ fn the_window_shows_the_recipes_table_and_the_preview_side_by_side() {
     click_window_button(&mut h, recipes_tab::TAB);
     let win = library_window(&h).rect();
     assert!(win.width() >= dialog::WIDE_W - 1.0, "the window {win:?} opens {} wide", dialog::WIDE_W);
-    let fz = if h.state().state.units() == Unit::Inches { "fz (in)" } else { "fz (mm)" };
+    // #4337: Stepover is the table's last column of numbers.
+    let fz = "Stepover";
     let node = library_window(&h);
     let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
     let (head, view) = (rect(fz), rect("3D"));

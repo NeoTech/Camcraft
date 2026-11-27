@@ -6,7 +6,8 @@
 //! HSMWorks material involved.
 
 use super::page_layout_windows::assert_window_layout;
-use crate::egui_app::tool_library_dialog::recipes_tab::{MARK, SUGGEST, TAB};
+use crate::egui_app::tool_library_dialog::recipes_actions::{ADD, COPY, SUGGEST};
+use crate::egui_app::tool_library_dialog::recipes_tab::TAB;
 use crate::egui_app::tool_library_dialog::{HOLDERS_PAGE, TOOLS_PAGE, categories, frame, holder_view, holders, preview};
 use super::*;
 use egui_kittest::kittest::NodeT;
@@ -199,10 +200,25 @@ fn layout_window_tool_editor() {
             .unwrap_or_else(|| panic!("the Recipes tab has no widget labelled {label:?}"))
             .rect()
     };
-    let (tab, suggest, apply) = (rect(TAB), rect(SUGGEST), rect("Apply"));
-    assert!(win.expand(1.0).contains_rect(suggest), "Suggest {suggest:?} stays in the window {win:?}");
-    assert!(tab.top() < suggest.top() && suggest.top() < apply.top(), "Suggest {suggest:?} stands between the tabs and Apply");
-    assert!(node.query_all_by_label(MARK).next().is_none() || rect(MARK).top() > suggest.top(), "the table follows the Suggest row");
+    // #4337 (U11): the explanation, then the table's columns, then the
+    // three buttons on one row, then the units note - all above Apply.
+    let line = |part: &str| {
+        node.query_by_label_contains(part)
+            .unwrap_or_else(|| panic!("the Recipes tab has no line with {part:?}"))
+            .rect()
+    };
+    let (tab, explain, apply) = (rect(TAB), line("One recipe for each work material."), rect("Apply"));
+    let (material, rpm, stepdown) = (rect("Material"), rect("Spindle rpm"), rect("Stepdown"));
+    let (add, suggest, copy, units) = (rect(ADD), rect(SUGGEST), rect(COPY), line("Units: feed"));
+    assert!(tab.top() < explain.top() && explain.bottom() <= material.top() + 1.0, "the explanation {explain:?} heads the table {material:?}");
+    assert!(material.left() < rpm.left() && rpm.left() < stepdown.left(), "Material, Spindle rpm, Stepdown read left to right");
+    assert!(add.top() > material.bottom(), "the buttons {add:?} follow the table");
+    assert!((add.top() - suggest.top()).abs() < 2.0 && add.right() <= suggest.left() + 1.0, "Add {add:?} then Suggest {suggest:?} on one row");
+    assert!(copy.top() >= suggest.top() - 2.0, "Copy {copy:?} follows Suggest, on its row or under it");
+    assert!(units.top() > copy.top() && units.bottom() < apply.top(), "the units note {units:?} follows the buttons, above Apply");
+    for b in [add, suggest, copy] {
+        assert!(win.expand(1.0).contains_rect(b), "the button {b:?} stays in the window {win:?}");
+    }
     assert!(node.query_all_by_label("Diameter").next().is_none(), "the geometry rows stay on the Tool tab");
 }
 

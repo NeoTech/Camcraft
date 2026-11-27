@@ -62,6 +62,7 @@ mod tool_library_dialog;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
+pub use tool_library_dialog::{DerivedKey, RecipesView};
 #[path = "state_components.rs"]
 mod components_ui;
 pub use components_ui::{
