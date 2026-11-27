@@ -66,6 +66,7 @@ mod rail;
 pub(crate) mod recipes_actions;
 mod recipes_derived;
 mod recipes_fill;
+pub(crate) mod recipes_speeds;
 pub(crate) mod recipes_tab;
 pub(crate) mod search;
 pub(crate) mod side_view;
