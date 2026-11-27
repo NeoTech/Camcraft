@@ -13,7 +13,7 @@
 //! work offset is not.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use flecs_ecs::prelude::{Entity, World};
 
@@ -49,7 +49,7 @@ fn label(world: &World, key: &str) -> String {
 
 /// The folders that make copies (not suppressed, with a posted member),
 /// each with its posted members in folder order.
-fn active(world: &World, ops: &[(String, Entity)]) -> Vec<(String, PatternDef, Vec<String>)> {
+fn active(world: &World, ops: &[(String, Entity)]) -> Vec<Active> {
     folders(world)
         .into_iter()
         .filter(|(_, def)| !def.suppressed)
@@ -61,9 +61,22 @@ fn active(world: &World, ops: &[(String, Entity)]) -> Vec<(String, PatternDef, V
         .collect()
 }
 
-/// A folder the post cannot write, by name.
-fn refusal(world: &World, name: &str, def: &PatternDef, posted: &[String], ops: &[(String, Entity)]) -> Option<String> {
+/// One active folder: its key, its pattern and its posted members.
+type Active = (String, PatternDef, Vec<String>);
+
+/// A folder the post cannot write, by name. `all` is every active
+/// folder: an operation that two of them name has no one shift.
+fn refusal(world: &World, (name, def, posted): &Active, all: &[Active], ops: &[(String, Entity)]) -> Option<String> {
     let folder = label(world, name);
+    for (other, _, theirs) in all.iter().filter(|(other, _, _)| other != name) {
+        if let Some(m) = posted.iter().find(|m| theirs.contains(*m)) {
+            return Some(format!(
+                "{folder}: member '{}' is also in pattern folder '{}' - an operation belongs to one folder only; set the members of one folder again",
+                label(world, m),
+                label(world, other)
+            ));
+        }
+    }
     let setup = def.setup.as_deref();
     let square = crate::setup::wcs_entity(world, setup)
         .and_then(|e| model::transform_of(world, &e))
@@ -101,23 +114,27 @@ fn refusal(world: &World, name: &str, def: &PatternDef, posted: &[String], ops: 
 pub(super) fn plan(world: &World, ops: &[(String, Entity)]) -> Result<Vec<Unit>, String> {
     let active = active(world, ops);
     let mut owner: HashMap<&str, usize> = HashMap::new();
-    for (i, (name, def, posted)) in active.iter().enumerate() {
-        if let Some(why) = refusal(world, name, def, posted, ops) {
+    for (i, folder) in active.iter().enumerate() {
+        if let Some(why) = refusal(world, folder, &active, ops) {
             return Err(why);
         }
-        for m in posted {
-            owner.insert(m.as_str(), i);
-        }
+        owner.extend(folder.2.iter().map(|m| (m.as_str(), i)));
     }
     let mut out = Vec::with_capacity(ops.len());
-    let mut i = 0;
-    while let Some((name, entity)) = ops.get(i) {
-        let Some((_, def, posted)) = owner.get(name.as_str()).and_then(|f| active.get(*f)) else {
+    let mut written: HashSet<usize> = HashSet::new();
+    for (name, entity) in ops {
+        let Some(f) = owner.get(name.as_str()).copied() else {
             out.push(Unit { name: name.clone(), entity: *entity, offsets: Vec::new(), last: true });
-            i += 1;
             continue;
         };
-        let members: Vec<(String, Entity)> = ops.iter().skip(i).take(posted.len()).cloned().collect();
+        // A folder writes all its sections where its first member stands
+        // (the row law keeps the members together). The members are taken
+        // by name, never by a count of the rows that follow.
+        let Some((_, def, posted)) = active.get(f).filter(|_| written.insert(f)) else {
+            continue;
+        };
+        let members: Vec<(String, Entity)> =
+            posted.iter().filter_map(|m| ops.iter().find(|(n, _)| n == m).cloned()).collect();
         let shifts: Vec<[f64; 3]> = enabled_offsets(def).into_iter().map(|(_, o)| o).collect();
         match def.order_mode {
             PatternOrder::ByTool => out.extend(
@@ -135,7 +152,6 @@ pub(super) fn plan(world: &World, ops: &[(String, Entity)]) -> Result<Vec<Unit>,
                 }
             }
         }
-        i += posted.len();
     }
     Ok(out)
 }
@@ -148,21 +164,23 @@ pub(super) fn pattern_problems(world: &World) -> Vec<String> {
         return Vec::new(); // the program's own refusal speaks first
     };
     let mut out = Vec::new();
-    for (name, def, posted) in active(world, &ops) {
-        if let Some(why) = refusal(world, &name, &def, &posted, &ops) {
+    let active = active(world, &ops);
+    for folder in &active {
+        if let Some(why) = refusal(world, folder, &active, &ops) {
             out.push(why);
             continue;
         }
+        let (name, def, posted) = folder;
         let (_, machine) = crate::machine::of_setup(world, def.setup.as_deref());
         let (turning, fixed) = crate::fixture::workholding_for(world, def.setup.as_deref());
         let meshes = crate::fixture::meshes_for(world, def.setup.as_deref());
-        for (copy, shift) in enabled_offsets(&def).into_iter().filter(|(_, o)| *o != [0.0; 3]) {
-            for m in &posted {
+        for (copy, shift) in enabled_offsets(def).into_iter().filter(|(_, o)| *o != [0.0; 3]) {
+            for m in posted {
                 let Some(e) = model::find_by_name(world, m) else { continue };
                 let (Some(op), Some(cache)) = (model::operation_of(world, &e), model::toolpath_of(world, &e)) else {
                     continue; // the post's own walk refuses a lost op by name
                 };
-                let at = format!("{} copy {copy} ({})", label(world, m), label(world, &name));
+                let at = format!("{} copy {copy} ({})", label(world, m), label(world, name));
                 let path = match copies(&cache.path, &[shift], 0.0) {
                     Ok(p) => p,
                     Err(why) => {

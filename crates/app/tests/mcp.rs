@@ -30,6 +30,8 @@ mod op_type_fields;
 // #3012: pattern folders - commands, project file, MCP and the post.
 #[path = "mcp/pattern_folder.rs"]
 mod pattern_folder;
+#[path = "mcp/pattern_folder_law.rs"]
+mod pattern_folder_law;
 #[path = "mcp/pattern_folder_post.rs"]
 mod pattern_folder_post;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.

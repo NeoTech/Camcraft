@@ -128,6 +128,31 @@ pub(super) fn validate(dto: &EntityDto, kind: EntityKind) -> Result<(), ProjectE
     Ok(())
 }
 
+/// The membership law over the whole file, run before any world write:
+/// each member is an operation row of the file, and an operation is a
+/// member of one folder only. The commands refuse both
+/// (`checked_members`); a hand-edited file must not state them, because
+/// the post would then cut a copy that the list does not show.
+pub(super) fn validate_members(entities: &[EntityDto]) -> Result<(), ProjectError> {
+    let mut owner: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for dto in entities {
+        let Some(p) = &dto.pattern else { continue };
+        for m in &p.members {
+            let is_op = entities.iter().any(|e| e.name == *m && matches!(e.kind, Some(EntityKind::Operation)));
+            if !is_op {
+                return Err(corrupt(format!("pattern folder '{}' names member '{m}', which is not an operation of this file", dto.name)));
+            }
+            if let Some(other) = owner.insert(m.as_str(), dto.name.as_str()) {
+                return Err(corrupt(format!(
+                    "operation '{m}' is a member of pattern folders '{other}' and '{}' - an operation belongs to one folder only",
+                    dto.name
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Land a folder row (validated already).
 pub(super) fn apply(world: &World, entity: &flecs_ecs::prelude::Entity, dto: Option<PatternDto>) -> Result<(), ProjectError> {
     let p = dto.ok_or_else(|| corrupt("pattern folder entity without its pattern"))?;

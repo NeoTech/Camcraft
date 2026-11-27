@@ -18,11 +18,11 @@ use camcraft_app::schema::PatternOrder;
 use flecs_ecs::prelude::World;
 use serde_json::{json, Value};
 
-fn has_word(line: &str, code: &str) -> bool {
+pub(crate) fn has_word(line: &str, code: &str) -> bool {
     line.split_whitespace().any(|w| w.trim_end_matches('*') == code)
 }
 
-fn tool_changes(program: &str) -> Vec<String> {
+pub(crate) fn tool_changes(program: &str) -> Vec<String> {
     program
         .lines()
         .filter(|l| has_word(l, "M6") || has_word(l, "M06"))
@@ -30,7 +30,7 @@ fn tool_changes(program: &str) -> Vec<String> {
         .collect()
 }
 
-fn post_fanuc(world: &World, tag: &str) -> posting::Posted {
+pub(crate) fn post_fanuc(world: &World, tag: &str) -> posting::Posted {
     let dir = tmp_dir(tag);
     let cps = posting::builtin_post_text("Fanuc").expect("a built-in");
     let posted = posting::post_script(world, &dir.join("out.nc"), cps).expect("the gate passes and the script runs");
@@ -38,7 +38,7 @@ fn post_fanuc(world: &World, tag: &str) -> posting::Posted {
     posted
 }
 
-fn folder(world: &World, h: &mut History, kind: &camcraft_app::schema::PatternKind, mode: PatternOrder, members: &[&str]) {
+pub(crate) fn folder(world: &World, h: &mut History, kind: &camcraft_app::schema::PatternKind, mode: PatternOrder, members: &[&str]) {
     let cmd = CreatePatternFolder::new(world, kind, mode, &names(members)).expect("folder");
     h.execute(world, cmd);
 }
@@ -56,7 +56,7 @@ fn by_tool_posts_each_member_once_over_every_enabled_copy() {
     // Copy 3 stands 80 mm along X; copy 2 (40 mm) is off.
     let xs: Vec<f64> = posted.line_pos.iter().flatten().map(|p| p[0]).collect();
     assert!(xs.iter().any(|x| *x > 70.0), "copy 3 is cut");
-    assert!(!xs.iter().any(|x| (25.0..55.0).contains(x)), "copy 2 is not cut");
+    assert!(!xs.iter().any(|x| (21.0..59.0).contains(x)), "copy 2 is not cut");
     assert_eq!(posted.line_pos.len(), posted.lines, "every program line maps");
     assert!(posted.not_judged.as_deref().is_some_and(|l| l.contains("pattern copies (Pattern1)")), "{:?}", posted.not_judged);
     crate::common::write_golden("nc/pattern_folder/fanuc_linear_by_tool.nc", &posted.program);

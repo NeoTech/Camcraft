@@ -102,7 +102,7 @@ fn dir(o: &Map<String, Value>, key: &str) -> Result<[f64; 3], String> {
     let v: Vec<f64> = o
         .get(key)
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .and_then(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<f64>>>())
         .unwrap_or_default();
     match v[..] {
         [x, y] => Ok([x, y, 0.0]),
