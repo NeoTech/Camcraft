@@ -164,25 +164,44 @@ pub(crate) fn save(dir: &Path, file: &str, source: &str, overwrite: bool) -> Res
 mod tests {
     use super::*;
 
+    /// An environment of `(name, value)` pairs for `user_dir_for`.
+    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
+        let owned: Vec<(String, OsString)> = pairs.iter().map(|(k, v)| ((*k).to_owned(), OsString::from(v))).collect();
+        move |k: &str| owned.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone())
+    }
+
     #[test]
     fn the_folder_follows_the_override_then_the_platform_data_dir() {
-        let env = |pairs: &'static [(&'static str, &'static str)]| {
-            move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| OsString::from(v))
-        };
-        let over = user_dir_for("linux", env(&[(ENV_VAR, "/p/posts"), ("HOME", "/h")]));
-        assert_eq!(over, Some(PathBuf::from("/p/posts")));
-        let rel = user_dir_for("linux", env(&[(ENV_VAR, "rel"), ("HOME", "/h")]));
-        assert_eq!(rel, Some(PathBuf::from("/h/.local/share/camcraft/posts")), "a relative override is ignored");
-        let mac = user_dir_for("macos", env(&[("HOME", "/h")]));
-        assert_eq!(mac, Some(PathBuf::from("/h/Library/Application Support/camcraft/posts")));
-        assert_eq!(user_dir_for("windows", env(&[("HOME", "/h")])), None);
+        // Native absolute paths: on Windows a path needs its drive to be absolute.
+        let abs = if cfg!(windows) { "C:\\p\\posts" } else { "/p/posts" };
+        let home = if cfg!(windows) { "C:\\h" } else { "/h" };
+        let over = user_dir_for("linux", env(&[(ENV_VAR, abs), ("HOME", home)]));
+        assert_eq!(over, Some(PathBuf::from(abs)), "the override wins");
+        let linux = PathBuf::from(home).join(".local").join("share").join("camcraft").join("posts");
+        let rel = user_dir_for("linux", env(&[(ENV_VAR, "rel"), ("HOME", home)]));
+        assert_eq!(rel, Some(linux.clone()), "a relative override is ignored");
+        assert_eq!(user_dir_for("linux", env(&[("HOME", home)])), Some(linux));
+        let xdg = if cfg!(windows) { "C:\\xdg" } else { "/xdg" };
+        assert_eq!(
+            user_dir_for("linux", env(&[("HOME", home), ("XDG_DATA_HOME", xdg)])),
+            Some(PathBuf::from(xdg).join("camcraft").join("posts"))
+        );
+        let mac = user_dir_for("macos", env(&[("HOME", home)]));
+        assert_eq!(mac, Some(PathBuf::from(home).join("Library").join("Application Support").join("camcraft").join("posts")));
+        let appdata = if cfg!(windows) { "C:\\Users\\u\\AppData\\Roaming" } else { "/appdata" };
+        assert_eq!(
+            user_dir_for("windows", env(&[("APPDATA", appdata)])),
+            Some(PathBuf::from(appdata).join("camcraft").join("posts"))
+        );
+        assert_eq!(user_dir_for("windows", env(&[("HOME", home)])), None, "Windows reads APPDATA, not HOME");
+        assert_eq!(user_dir_for("macos", env(&[])), None, "no home, no folder");
     }
 
     #[test]
     fn a_file_name_must_be_plain() {
-        let d = Path::new("/u");
-        assert_eq!(file_in(d, "mine"), Ok(PathBuf::from("/u/mine.cps")));
-        assert_eq!(file_in(d, "Mine.CPS"), Ok(PathBuf::from("/u/Mine.CPS")));
+        let d = Path::new(if cfg!(windows) { "C:\\u" } else { "/u" });
+        assert_eq!(file_in(d, "mine"), Ok(d.join("mine.cps")));
+        assert_eq!(file_in(d, "Mine.CPS"), Ok(d.join("Mine.CPS")));
         for bad in ["", "  ", "../x.cps", "a/b.cps", "a\\b.cps", "C:x.cps", ".hidden.cps", "a\nb.cps"] {
             assert!(file_in(d, bad).is_err(), "{bad:?} must be refused");
         }
