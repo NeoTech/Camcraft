@@ -70,6 +70,8 @@ pub(crate) mod recipes_tab;
 pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
+/// #4451: display only - private to this window, so no law can read it.
+mod thread_form;
 pub(crate) mod thumbs;
 pub(crate) mod tool_tab;
 

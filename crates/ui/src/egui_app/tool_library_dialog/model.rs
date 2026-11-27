@@ -24,6 +24,7 @@
 //! A still frame reads the inputs and builds nothing (`builds`).
 //! #4336: the side view's flute lines and the holder's name are built
 //! with the rest.
+//! #4451: a thread mill's steel carries its teeth (`thread_form`).
 //! Provenance: our own display model over `app::tool_body` and
 //! `app::spun`; the revolve follows `app::tool_body_view::revolve`
 //! (general surface-of-revolution practice). No vendor material consulted.
@@ -236,6 +237,8 @@ fn build(k: &Key) -> ToolModel {
         cutter_profile::check(t, points).ok().map(|s| s.outline())
     });
     let steel = drawn.unwrap_or_else(|| Tool { holder_len: 0.0, ..t.clone() }.profile());
+    // #4451: a thread mill shows its teeth on the cutting length.
+    let steel = super::thread_form::toothed(t, &steel).unwrap_or(steel);
     let profile = body.as_ref().and_then(|b| b.profile());
     let bands = match &body {
         Some(b) => tool_body::checked_bands(t, b).unwrap_or_default(),
