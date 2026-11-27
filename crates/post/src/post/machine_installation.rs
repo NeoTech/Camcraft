@@ -59,6 +59,8 @@ pub(super) fn mirror(m: &Machine, out: &mut Map<String, Value>) {
 pub(super) fn script_props(m: &Value, props: &mut Value) {
     if let Some(id) = m.pointer("/controller/identity").filter(|v| !v.is_null()) {
         props["controllerIdentity"] = id.clone();
+        // #4095: the HEIDENHAIN dialect of the stated control, or the refusal by name.
+        props["heidenhainDialect"] = super::heidenhain_dialect::script_value(id);
         let mut axes: Vec<_> = m
             .pointer("/kinematics/static/axes")
             .and_then(Value::as_array)

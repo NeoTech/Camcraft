@@ -26,15 +26,25 @@ struct Kept {
     op: Operation,
     stamp: GenStamp,
     region: Option<Region>,
+    /// The answer's identity as the frame-cost caches read it (#4266):
+    /// fresh at each keep, so a changed input is a new key and a still
+    /// frame reads its cached answer. `None` while the stamp cannot
+    /// resolve (then nothing is kept and nothing caches).
+    fill_id: Option<u64>,
 }
+
+/// One kept answer: the region and the fill id the scene caches key on.
+type KeptAnswer = (Option<Region>, Option<u64>);
 
 thread_local! {
     /// `Some` while a scope is open: operation name -> its region.
-    static SCOPE: RefCell<Option<HashMap<String, Option<Region>>>> = const { RefCell::new(None) };
+    static SCOPE: RefCell<Option<HashMap<String, KeptAnswer>>> = const { RefCell::new(None) };
     /// The answers kept between frames, newest last.
     static KEPT: RefCell<Vec<Kept>> = const { RefCell::new(Vec::new()) };
     /// Real `region_of` calls made through [`region_of`] (#2235 pins).
     static CALLS: Cell<u64> = const { Cell::new(0) };
+    /// Fresh fill ids, one per keep.
+    static IDS: Cell<u64> = const { Cell::new(0) };
 }
 
 /// Run `f` with the per-scene region memo open. A nested call keeps
@@ -68,9 +78,17 @@ pub fn scene_scope<R>(f: impl FnOnce() -> R) -> R {
 /// (a source or tool gone) is never kept: it is asked again each scope.
 #[must_use]
 pub fn region_of(world: &World, name: &str, op: &Operation) -> Option<Region> {
+    region_with_id(world, name, op).0
+}
+
+/// [`region_of`]'s answer with its fill identity: the id the scene's
+/// turned-fill cache keys on (#4266, the "actual inputs" key - the kept
+/// answer's own id, never a document counter).
+#[must_use]
+pub fn region_with_id(world: &World, name: &str, op: &Operation) -> (Option<Region>, Option<u64>) {
     let hit = SCOPE.with(|s| s.borrow().as_ref().and_then(|m| m.get(name).cloned()));
-    if let Some(region) = hit {
-        return region;
+    if let Some(hit) = hit {
+        return hit;
     }
     let stamp = operation::op_stamp(world, op, name);
     let kept = stamp.and_then(|stamp| {
@@ -78,26 +96,30 @@ pub fn region_of(world: &World, name: &str, op: &Operation) -> Option<Region> {
             k.borrow()
                 .iter()
                 .find(|e| e.name == name && e.stamp == stamp && e.op == *op)
-                .map(|e| e.region.clone())
+                .map(|e| (e.region.clone(), e.fill_id))
         })
     });
-    let region = match kept {
-        Some(region) => region,
+    let (region, fill_id) = match kept {
+        Some((region, fill_id)) => (region, fill_id),
         None => {
             CALLS.with(|n| n.set(n.get().saturating_add(1)));
             let region = operation::region_of(world, op);
+            let fill_id = stamp.map(|_| IDS.with(|n| {
+                n.set(n.get().saturating_add(1));
+                n.get()
+            }));
             if let Some(stamp) = stamp {
-                keep(Kept { name: name.to_owned(), op: op.clone(), stamp, region: region.clone() });
+                keep(Kept { name: name.to_owned(), op: op.clone(), stamp, region: region.clone(), fill_id });
             }
-            region
+            (region, fill_id)
         }
     };
     SCOPE.with(|s| {
         if let Some(m) = s.borrow_mut().as_mut() {
-            m.insert(name.to_owned(), region.clone());
+            m.insert(name.to_owned(), (region.clone(), fill_id));
         }
     });
-    region
+    (region, fill_id)
 }
 
 /// Store one answer: it replaces the operation's older one, and the

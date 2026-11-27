@@ -39,6 +39,7 @@ mod linalg;
 mod stamp;
 mod stamp_pose;
 mod stamp_rise;
+mod stamp_sweep;
 #[cfg(test)]
 mod stamp_tests;
 pub mod axis;

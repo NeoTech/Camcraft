@@ -2,7 +2,9 @@
 //! only from iTNC 530 60642x-04, TNC 640 34059x-04, TNC 620 81760x-01 and
 //! TNC 320 77185x-01 (docs/research/heidenhain/differences.md B2/B3,
 //! dialects.md). #4224: PECK posts the explicit chain on each level, never
-//! a G205.
+//! a G205. #4095: the level comes from the shared dialect resolver
+//! (`drillC200`), and a control that it does not know, or that has no
+//! DIN/ISO programs, is refused by name at the program start.
 
 use super::*;
 use camcraft_post::machine::parse_mch;
@@ -68,6 +70,10 @@ fn controls_before_the_q395_level_write_g200_without_q395() {
         ("TNC 640", "340590-02"),
         ("TNC 620", "340560-02"),
         ("TNC 320", "340551-06"),
+        // #4095: the resolver knows these Q211 levels too (B3).
+        ("iTNC 530", "340420-05"),
+        ("TNC 426", "280474-01"),
+        ("TNC 430", "280476-01"),
     ] {
         assert_old_level(&run_on(&with_identity(model, nc), &script), &format!("{model} {nc}"));
     }
@@ -84,6 +90,7 @@ fn controls_from_the_q395_level_keep_q395() {
         ("TNC 620", "817600-01"),
         ("TNC 620", "817600-18"),
         ("TNC 320", "771851-18"),
+        ("TNC7", "817625-17"),
     ] {
         let out = run_on(&with_identity(model, nc), &script);
         assert!(out.warnings.is_empty(), "{model} {nc}: {:?}", out.warnings);
@@ -99,22 +106,46 @@ fn controls_from_the_q395_level_keep_q395() {
 #[test]
 fn an_unknown_control_or_version_is_refused_by_name() {
     let script = read("assets/posts/heidenhain.cps");
-    for (model, nc) in [
-        ("iTNC 530", "340420-05"),
-        ("TNC 640", "340593-03"),
-        ("TNC 426", "280476-01"),
-        ("TNC7", "817625-17"),
-        ("iTNC 530", "unknown"),
-    ] {
-        assert_refused(&script, model, nc);
+    for (model, nc) in [("TNC 640", "340593-03"), ("TNC 426", "280460-01"), ("TNC7", "817625-21")] {
+        assert_refused(&script, model, nc, &format!("{model} NC {nc} is not in the HEIDENHAIN dialect table"));
     }
+    assert_refused(&script, "Sinumerik 840D", "340490-03", "\"Sinumerik 840D\" is not a HEIDENHAIN control");
+    assert_refused(&script, "TNC 128", "771841-05", "TNC 128 is a paraxial positioning control");
+    assert_refused(&script, "iTNC 530", "unknown", "is not a canonical HEIDENHAIN identifier");
 }
 
-fn assert_refused(script: &str, model: &str, nc: &str) {
-    let out = run_on(&with_identity(model, nc), script);
-    let why = format!("the cycle 200/205 parameter set of {model} NC {nc} is not known to this post - refused, not posted");
-    assert!(out.warnings.iter().any(|w| w.contains(&why)), "{model} {nc:?}: {:?}", out.warnings);
-    assert!(!out.program.contains("G200") && !out.program.contains("G205"), "{model} {nc:?}: {}", out.program);
+/// #4095: DIN/ISO programs do not exist on the TNC 310 and on TNC7
+/// 81762x-16; the research does not show them on TNC 320 340 551-01 to -03
+/// (differences.md B2, "DIN/ISO programs").
+#[test]
+fn a_control_without_din_iso_programs_is_refused_by_name() {
+    let script = read("assets/posts/heidenhain.cps");
+    assert_refused(&script, "TNC 310", "286040-01", "TNC 310 NC 286040-01 (profile tnc310) has no DIN/ISO programs");
+    assert_refused(&script, "TNC7", "817625-16", "TNC7 NC 817625-16 (profile tnc7) has no DIN/ISO programs");
+    assert_refused(
+        &script,
+        "TNC 320",
+        "340551-03",
+        "TNC 320 NC 340551-03 (profile tnc320-34055x) is not known to run DIN/ISO programs",
+    );
+}
+
+/// #4095: cycle 200 before TNC 426/430 280 474 has no Q211, which the post
+/// writes: refused by name, never written without it.
+#[test]
+fn a_cycle_200_without_q211_is_refused_by_name() {
+    let out = run_on(&with_identity("TNC 426", "280472-01"), &read("assets/posts/heidenhain.cps"));
+    let why = "cycle 200 of TNC 426 NC 280472-01 (profile tnc426-472) has no Q211 (dwell at the depth), which this post writes - refused, not posted";
+    assert!(out.warnings.iter().any(|w| w.contains(why)), "{:?}", out.warnings);
+    assert!(!out.program.contains("G200"), "{}", out.program);
+}
+
+fn assert_refused(script: &str, model: &str, nc: &str, why: &str) {
+    let err = match engine::run(script, &with_identity(model, nc), &two_holes()) {
+        Ok(out) => panic!("{model} {nc:?}: posted\n{}", out.program),
+        Err(e) => e.to_string(),
+    };
+    assert!(err.contains("Heidenhain TNC: ") && err.contains(why), "{model} {nc:?}: {err}");
 }
 
 /// #4172: the NC software must be the complete canonical identifier
@@ -124,21 +155,17 @@ fn assert_refused(script: &str, model: &str, nc: &str) {
 #[test]
 fn a_malformed_or_unsupported_nc_identifier_is_refused_by_name() {
     let script = read("assets/posts/heidenhain.cps");
+    for nc in ["340490-03junk", "340490-030", "340490-3", "340490-03 sp8", "606425-04 SP", "606425-04 SP0", "606425-04SP8"] {
+        assert_refused(&script, "iTNC 530", nc, "is not a canonical HEIDENHAIN identifier");
+    }
+    for (model, nc) in [("iTNC 530", "340490-00"), ("TNC 620", "817600-00")] {
+        assert_refused(&script, model, nc, "release 00 does not exist");
+    }
     for (model, nc) in [
-        // Malformed: a suffix, a third release digit, one release digit.
-        ("iTNC 530", "340490-03junk"),
-        ("iTNC 530", "340490-030"),
-        ("iTNC 530", "340490-3"),
-        ("iTNC 530", "340490-03 sp8"),
-        ("iTNC 530", "606425-04 SP"),
-        ("iTNC 530", "606425-04 SP0"),
-        ("iTNC 530", "606425-04SP8"),
-        // Release zero, and releases that the research does not name.
-        ("iTNC 530", "340490-00"),
+        // Releases that the research does not name.
         ("iTNC 530", "340490-09"),
         ("iTNC 530", "606425-05"),
         ("TNC 640", "340595-12"),
-        ("TNC 620", "817600-00"),
         // Variants outside the family.
         ("iTNC 530", "340499-03"),
         ("iTNC 530", "340495-03"),
@@ -147,7 +174,7 @@ fn a_malformed_or_unsupported_nc_identifier_is_refused_by_name() {
         // A valid identifier under the wrong model.
         ("TNC 640", "340490-03"),
     ] {
-        assert_refused(&script, model, nc);
+        assert_refused(&script, model, nc, &format!("{model} NC {nc} is not in the HEIDENHAIN dialect table"));
     }
 }
 

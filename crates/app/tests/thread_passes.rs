@@ -106,8 +106,12 @@ fn a_left_hand_cut_mill_under_m4_climbs_clockwise_and_posts_m4() {
     let out = post_with(&world, include_str!("../../../assets/posts/haas.cps"));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert!(out.program.lines().any(|l| l.starts_with('S') && l.split_whitespace().any(|w| w == "M4")), "{}", out.program);
-    // A post that cannot reverse the spindle refuses the section by name.
+    // #4228: Tormach reverses too (M4).
     let out = post_with(&world, include_str!("../../../assets/posts/tormach.cps"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.lines().any(|l| l.starts_with('S') && l.split_whitespace().any(|w| w == "M4")), "{}", out.program);
+    // A post that cannot reverse the spindle refuses the section by name.
+    let out = post_with(&world, include_str!("../../../assets/posts/doosan-dnm.cps"));
     assert!(out.warnings.iter().any(|w| w.contains("does not declare millSpindleReverse")), "{:?}", out.warnings);
 }
 

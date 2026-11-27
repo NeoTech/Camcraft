@@ -33,7 +33,8 @@ explainWords = {
   "G38.3": "PROBE TOWARD CONTACT, NO ERROR", // LinuxCNC G-code reference, G38.2-G38.5
   "G59.1": "WORK OFFSET 7", // LinuxCNC G-code reference, G54-G59.3: coordinate system 7
   "G59.2": "WORK OFFSET 8", // LinuxCNC G-code reference, G54-G59.3: coordinate system 8
-  "G59.3": "WORK OFFSET 9"  // LinuxCNC G-code reference, G54-G59.3: coordinate system 9
+  "G59.3": "WORK OFFSET 9", // LinuxCNC G-code reference, G54-G59.3: coordinate system 9
+  "G92.1": "CLEAR G92 OFFSETS" // LinuxCNC G-code reference, G92.1: reset G92 offsets
 };
 
 declaredOptions = {
@@ -94,6 +95,13 @@ declaredOptions = {
   writeToolList: { type: "boolean", title: "Write tool list", group: "Header & comments", description: "Emit a summary comment per tool at program start", default: false },
   optionalStop: { type: "boolean", title: "Optional stop (M1)", group: "Behavior", description: "Write M1 before tool changes after the first operation", default: false },
   useRadiusArcs: { type: "boolean", title: "Use radius (R) arcs", group: "Cycles & arcs", description: "Write R word instead of I/J/K arc centers", default: false },
+  clearG92: {
+    type: "boolean",
+    title: "Clear G92 offsets (G92.1)",
+    group: "Machine",
+    description: "Write G92.1 in the header to clear any G92 offset left on the control",
+    default: true,
+  },
 };
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -422,7 +430,8 @@ function onOpen() {
   note(headTitle(nm));
   invertedNotes();
   writeHeaderExtras();
-  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
+  var clearG92 = optBool("clearG92", true);
+  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80", clearG92 ? "G92.1" : "", "G97"]);
   block(pathWords());
   var mode = retractMode();
   if (mode === "g53") {

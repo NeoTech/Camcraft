@@ -49,7 +49,7 @@ function decimal(value, places, limit, field) {
   return Number(value.toFixed(places));
 }
 function local(value, axis) {
-  return decimal(required(value, axis) - section["Origin" + axis], 4, 99999.9999, axis);
+  return decimal(required(value, axis) - section["Origin" + axis], dialect ? dialect.decimals : 4, dialect && dialect.decimals === 3 ? 99999.999 : 99999.9999, axis);
 }
 function coord(axis, value) {
   var n = local(value, axis);
@@ -71,8 +71,15 @@ function workOffsetName(n) {
 
 function onOpen() {
   var controller = machine.controllerIdentity;
-  if (!controller || controller.model !== "iTNC 530" || controller.nc_software !== "340490-03") {
+  if (!controller) {
     refuse("unsupported or missing controller profile; select iTNC 530 NC 340490-03");
+  }
+  dialectCheck(controller);
+  // #4114/#4095: the manual quill procedure (M140, M0 stops) is verified on
+  // one installation and NC software only, the same check as the DIN/ISO post.
+  if (controller.model !== "iTNC 530" || controller.nc_software !== "340490-03") {
+    refuse("controller profile " + dialect.profile + " (" + controller.model + " NC " + controller.nc_software +
+      ") is not verified for the manual quill procedure; select iTNC 530 NC 340490-03");
   }
   if (machine.model !== "Fehlmann Picomax 55 (iTNC 530)") {
     refuse("the manual quill procedure requires the Fehlmann Picomax 55 (iTNC 530) installation");
@@ -101,6 +108,30 @@ function onOpen() {
   }
   programName = program.numbered ? String(program.number) : "CAMCRAFT";
   block("BEGIN PGM " + programName + " MM");
+}
+// #4095: the dialect of the stated control comes from the shared resolver
+// (camcraft_post::post::heidenhain_dialect, machine.heidenhainDialect;
+// docs/decisions/4095-heidenhain-dialect-resolver.md). This post writes
+// L M140 MB MAX, CYCL DEF 247 with Q339 (a preset-table row) and M137, so
+// each of these must exist with that meaning on the control. Coordinates
+// use the control's decimals.
+var dialect = null;
+function dialectCheck(controller) {
+  var d = machine.heidenhainDialect;
+  var who = controller.model + " NC " + controller.nc_software;
+  if (!d || typeof d !== "object" || d.error) {
+    refuse("unsupported controller profile: " + (d && d.error ? String(d.error) : "no dialect for " + who));
+  }
+  var lacks = [];
+  if (d.m140 !== "yes") lacks.push("M140 MB MAX");
+  if (d.cycle247 !== "presetTable") lacks.push("cycle 247 as a preset-table row");
+  if (d.m136m137 !== "yes") lacks.push("M137");
+  if (d.decimals !== 3 && d.decimals !== 4) lacks.push("3 or 4 coordinate decimals");
+  if (lacks.length) {
+    refuse("controller profile " + d.profile + " (" + who + ") does not confirm " + lacks.join(", ") +
+      ", which this post writes");
+  }
+  dialect = d;
 }
 function onParameter(name, value) {
   if (inSection) refuse("unexpected parameter inside a section: " + name);

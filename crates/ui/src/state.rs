@@ -62,6 +62,17 @@ mod tool_library_dialog;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
+#[path = "state_components.rs"]
+mod components_ui;
+pub use components_ui::{
+    ComponentAction, ComponentDraft, ComponentGroup, ComponentLib, ComponentsView, LoadedLibrary, StackDraft,
+};
+#[cfg(test)]
+pub(crate) use components_ui::library_loads;
+pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
+#[path = "state_component_views.rs"]
+mod component_views;
+pub use component_views::{ComponentRow, ComponentViews, Derived as ComponentDerived, StackView, ViewBuilds, candidates};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -419,6 +430,9 @@ pub enum CommandKind {
         gauge: Option<f64>,
         projection: Option<f64>,
     },
+    /// #3898: a component action of the tool library window (the
+    /// component table, a tool's component stack, the user library file).
+    Component(ComponentAction),
     /// The document's workpiece material (M13.2); `None` states none.
     SetWorkMaterial(Option<camcraft_app::tools::WorkMaterial>),
     /// The op page's "Apply suggestion" (M13.2): feed + spindle speed
@@ -930,6 +944,8 @@ pub struct WcsUi {
     /// `sync_setup_ui` zero the readout when an origin is undone without
     /// wiping typing into a never-placed slot.
     pub(crate) placed: bool,
+    /// Display-only refusal, shared by the flip status and the WCS page.
+    pub(crate) flip_note: wcs_ui::FlipNote,
 }
 
 /// Editable fields of the Setups page (M3.2 A). Transient like [`StockUi`]:
@@ -2202,6 +2218,11 @@ pub struct State {
     pub tool_shape_editor: Option<String>,
     /// #3892: the tool library window - `None` closed (view state).
     pub tool_library: Option<ToolLibraryView>,
+    /// #3898: the component library the tool library window reads (a
+    /// cached read of the built-ins and the user's file).
+    pub component_lib: ComponentLib,
+    /// #3898: the component pages' derived sets, keyed on their inputs.
+    pub component_views: ComponentViews,
     /// #2397: Properties is showing the blank new-tool form. The Tool
     /// target with the empty name is the destination; this says which of
     /// its two faces shows - the pointer to the library, or the draft.
@@ -2549,6 +2570,8 @@ impl State {
             },
             tool_shape_editor: None,
             tool_library: None,
+            component_lib: ComponentLib::default(),
+            component_views: ComponentViews::default(),
             new_tool_form: false,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
@@ -3774,6 +3797,7 @@ impl State {
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
+            CommandKind::Component(action) => self.run_component(action),
             CommandKind::ChangeTool { name, tool } => {
                 match ChangeTool::new(&self.world, &name, tool) {
                     Ok(command) => {

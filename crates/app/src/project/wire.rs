@@ -68,6 +68,9 @@ pub fn collect(world: &World) -> ProjectFile {
                 holder,
                 cutter: crate::tool_cutter::cutter_of(world, &entity)
                     .map(|c| super::tool_body_wire::spun_to_dto(&c)),
+                // #3645: the tool's component stack, by row id.
+                assembly: crate::tool_assembly::assembly_of(world, &entity)
+                    .map(|a| super::assembly_wire::assembly_to_dto(&a)),
                 ..ToolDto::from_tool(&t)
             });
             // The setup payload only ever rides a setup row (the kind test
@@ -284,6 +287,11 @@ pub fn collect(world: &World) -> ProjectFile {
         smoothing: crate::setup_post_options::document(world).smoothing,
         // Off writes no key (#1386).
         explain: crate::setup_post_options::document(world).explain,
+        // #3645: an empty table writes no key.
+        components: crate::tool_assembly::components(world)
+            .iter()
+            .map(super::component_wire::component_to_dto)
+            .collect(),
         entities,
     }
 }

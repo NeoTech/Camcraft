@@ -35,6 +35,14 @@ pub(crate) fn shot_token() -> &'static egui::UserData {
     TOKEN.get_or_init(|| egui::UserData::new("camcraft-report-shot"))
 }
 
+/// A failed native read-back answers only this door, even if it closed.
+/// The browser already has the complete text; never issue CopyImage here.
+pub(crate) fn capture_failed(state: &mut State, token: &egui::UserData) {
+    if token == shot_token() {
+        state.status = "Screenshot: picture was not copied - the text report is complete".to_owned();
+    }
+}
+
 /// What the user files: a defect, or an enhancement. The two GitHub
 /// labels are the repository's existing `bug` and `enhancement`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

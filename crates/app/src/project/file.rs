@@ -203,7 +203,14 @@ use super::*;
 /// CHANGE` footer of the commit that stepped the ladder). An old
 /// reader must refuse a v83 file rather than drop a left hand and post
 /// M3 for a cutter that must reverse.
-pub const PROJECT_VERSION: u32 = 83;
+/// v84 (#3645): the document's tool component table (`components`) and
+/// each tool's component stack (`assembly`). Absent is none, what every
+/// v83 file held. This step is a compatibility break: every file this
+/// build writes says v84, and a v83 reader refuses the new files (see
+/// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
+/// A v83 reader would drop the table and the stacks, and the next
+/// component edit could not update the tools built from them.
+pub const PROJECT_VERSION: u32 = 84;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older
@@ -350,6 +357,10 @@ pub struct ProjectFile {
     /// absent key is off - no explanatory comments.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub explain: bool,
+    /// #3645 (v84): the document's tool component table, one row for
+    /// each id (`component_wire`). Absent is no table - every older file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<super::component_wire::ComponentDto>,
     pub entities: Vec<EntityDto>,
 }
 
@@ -614,6 +625,12 @@ pub struct ToolDto {
     /// so no version step is needed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form: Option<camcraft_tools::form_mill::FormSpec>,
+    /// #3645 (v84): the tool's component stack (`assembly_wire`), whose
+    /// ids name rows of the file's `components` table. Absent is no
+    /// stack - every older tool. The derived record and body are the
+    /// keys above, saved as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assembly: Option<Vec<super::assembly_wire::LinkDto>>,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -769,6 +786,7 @@ impl ToolDto {
             tip_form: t.tip_form,
             tip_diameter: t.tip_diameter,
             form: t.form.clone(),
+            assembly: None,
         }
     }
 

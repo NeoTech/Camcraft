@@ -109,7 +109,7 @@ impl Shell {
         let mut raw_input = winit_state.take_egui_input(window);
         // #1696: pictures the capture read-back finished arrive as egui's
         // own Screenshot event, so the door that asked can match its token.
-        raw_input.events.extend(capture.drain_events());
+        raw_input.events.extend(capture.drain_events(state));
 
         // Size the 3D target from last frame's layout, like the imgui shell.
         let want = view_pass::target_extent(*viewport_points, scale);

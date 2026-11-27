@@ -341,6 +341,10 @@ impl ToolBody {
 pub struct DocumentComponent {
     pub component: camcraft_tools::component::ToolComponent,
     pub geometry: camcraft_tools::component_geometry::ComponentGeometry,
+    /// #3645: the user library copy this row was taken from, if any.
+    /// The row itself is what the document judges and posts; the link
+    /// only lets the sync status compare it with the library.
+    pub library_ref: Option<LibraryRef>,
     /// #3646: the catalog facts of a multi-seat cutter body (`DC`,
     /// `KAPR`, `APMX`, centre cutting, seat count). Only on a tool item;
     /// a tool whose insert sits on such a body takes its whole milling
@@ -349,17 +353,30 @@ pub struct DocumentComponent {
     /// #3646: an insert's own tool material and cutting rows. Only on
     /// an insert; each tool that cuts with it takes them.
     pub running: Option<InsertRunning>,
+    /// #3643: a lathe component's body (boxes or facets in its own
+    /// frame) for a turning stack. A spindle stack refuses a row that
+    /// has one by name; it is never dropped in silence.
+    pub lathe_body: Option<camcraft_tools::lathe_assembly::LatheBody>,
 }
 
 impl DocumentComponent {
-    /// A row with no cutter facts and no running data.
+    /// A row with no library link, no cutter facts, no running data and
+    /// no lathe body.
     #[must_use]
     pub fn new(
         component: camcraft_tools::component::ToolComponent,
         geometry: camcraft_tools::component_geometry::ComponentGeometry,
     ) -> Self {
-        Self { component, geometry, milling: None, running: None }
+        Self { component, geometry, library_ref: None, milling: None, running: None, lathe_body: None }
     }
+}
+
+/// #3645: a document component's link to the user component library:
+/// the library id and the content hash of the copy that was taken.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryRef {
+    pub id: String,
+    pub content_hash: String,
 }
 
 /// #3646: what an insert gives each tool that cuts with it, over the

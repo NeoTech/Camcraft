@@ -265,6 +265,7 @@ function progComment() { return clean(typeof program !== "undefined" ? program.c
 // name does not carry is the operator's comment block after the begin.
 function onOpen() {
   manualInstallation();
+  dialectCheck();
   var nm =(typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   var said = progComment();
   if (said) pgmName = said.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -425,6 +426,38 @@ function manualInstallation() {
   }
 }
 
+// #4095: the dialect of the stated control comes from the shared resolver
+// (camcraft_post::post::heidenhain_dialect, machine.heidenhainDialect;
+// docs/decisions/4095-heidenhain-dialect-resolver.md). A machine with no
+// controller identity keeps the output of today: the TNC 640 34059x-07
+// level that this post is specced from (#4094). A stated control that the
+// resolver does not know, or that has no DIN/ISO programs, is refused by
+// name: a script error stops the post, and nothing is written.
+var dialect = null;
+function dialectWho() {
+  var id = machine.controllerIdentity;
+  return String(id.model) + " NC " + String(id.nc_software) + (dialect ? " (profile " + dialect.profile + ")" : "");
+}
+function dialectCheck() {
+  if (typeof machine === "undefined" || !machine || !machine.controllerIdentity) return;
+  var d = machine.heidenhainDialect;
+  if (!d || typeof d !== "object" || d.error) {
+    throw new Error("Heidenhain TNC: " + (d && d.error ? String(d.error) : "no dialect for " + dialectWho()) +
+      " - refused, not posted");
+  }
+  dialect = d;
+  if (d.languageIso !== "yes") {
+    throw new Error("Heidenhain TNC: " + dialectWho() + (d.languageIso === "no"
+      ? " has no DIN/ISO programs" : " is not known to run DIN/ISO programs") +
+      " - choose the Klartext post; refused, not posted");
+  }
+  // fu() writes three decimals: the 1 um grid, which every profile takes.
+  if (!(d.decimals >= 3)) {
+    throw new Error("Heidenhain TNC: " + dialectWho() + " takes " + d.decimals +
+      " coordinate decimals; this post writes 3 - refused, not posted");
+  }
+}
+
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
@@ -437,8 +470,18 @@ function startPreamble() {
   modalWait = true;
   // Cycle 247 activates on definition; never call it as a hole cycle.
   // It resets coordinate transformations (892905-25 §10.4, p.275).
+  // #4095: G247 Q339 selects a preset-table row only where cycle 247 has
+  // that meaning (iTNC 530 from 340 422). Before, it sets a datum value:
+  // the same block would move the datum. Refused, never written.
   if (preset !== null && preset !== activePreset) {
-    block(["G247", "Q339=" + preset]);
+    if (dialect && dialect.cycle247 !== "presetTable") {
+      msg("G247 Q339=" + preset + " (preset-table row) cannot be written for " + dialectWho() + ": " +
+        (dialect.cycle247 === "datum" ? "its cycle 247 sets a datum value, not a preset-table row"
+          : dialect.cycle247 === "none" ? "it has no cycle 247" : "the meaning of its cycle 247 is not known") +
+        " - refused, not posted");
+    } else {
+      block(["G247", "Q339=" + preset]);
+    }
     activePreset = preset;
     cycleSig = "";
   }
@@ -714,61 +757,24 @@ function qword(n, v) {
 function cycleBad(why) {
   msg(coolantWho() + "Heidenhain drilling/tapping: " + why);
 }
-// #4094: the cycle 200/205 parameter level of the stated control. Q379
-// and Q253 (cycle 205) exist from iTNC 530 340 422; Q208 (cycle 205)
-// and Q395 (cycles 200, 205) only from iTNC 530 60642x-04, TNC 640
-// 34059x-04, TNC 620 81760x-01 and TNC 320 77185x-01 (iTNC 530 manual
-// 670388-25 p13; the cycle examples of the 340 49x manuals end without
-// them: docs/research/heidenhain/differences.md B2/B3, dialects.md).
-// Returns "q208" (Q379 Q253 Q208 Q395), "q379" (Q379 Q253, no Q208 or
-// Q395) or null with drillLevelWhy set. A machine with no controller
-// identity keeps "q208", the level of the TNC 640 manual this post is
-// specced from (docs/decisions/4094-dinsio-cycle-parameter-level.md).
-// The dialect resolver of #4095 replaces this table. #4224: the post
-// writes no cycle 205 now (PECK and DEEP post the explicit chain), so
-// only the Q395 of cycle 200 reads the level.
+// #4094/#4095: the cycle 200 (DRILLING) parameter level of the stated
+// control, from the resolver's drillC200 (differences.md B2 "Cycle 200 Q
+// list", B3): "q395" writes Q211 and Q395 (iTNC 530 60642x-04, TNC 640
+// 34059x-04, TNC 620 81760x-01, TNC 320 77185x-01, TNC7); "q211" writes
+// Q211 without Q395 (iTNC 530 340 420 to 60642x-03, TNC 426/430 280 474
+// on, the TNC 640/620/320 releases before those); "base" has no Q211, which
+// this post writes, and is refused. A machine with no controller identity
+// keeps "q395", the level of the TNC 640 manual this post is specced from
+// (docs/decisions/4094-dinsio-cycle-parameter-level.md). #4224: the post
+// writes no cycle 205 (PECK and DEEP post the explicit chain).
 var drillLevelWhy = "";
-// #4172: one guard for the whole NC software input. The string must be the
-// complete canonical identifier of dialects.md section 1: 6 digits, "-",
-// exactly 2 release digits, then nothing or " SP<n>". The first five digits
-// are the family, the sixth the variant. Each row names the model, the
-// family, the highest variant, the releases that the research names (an
-// unnamed release such as TNC 640 -03 or 81760x-12 is refused) and the
-// first release at the q208 level (0: none). Anything else is refused.
-var NC_ID = /^(\d{5})(\d)-(\d{2})(?: SP[1-9]\d{0,2})?$/;
-var DRILL_ROWS = [
-  // iTNC 530 340 422: only that variant. The research names no release;
-  // Q379 exists from it on and Q208 never before 60642x-04.
-  { model: "iTNC 530", fam: "34042", vmin: 2, vmax: 2, rels: "any", q208: 0 },
-  { model: "iTNC 530", fam: "34049", vmin: 0, vmax: 4, rels: [1, 2, 3, 4, 5, 6, 7, 8], q208: 0 },
-  { model: "iTNC 530", fam: "60642", vmin: 0, vmax: 5, rels: [1, 2, 3, 4], q208: 4 },
-  { model: "TNC 640", fam: "34059", vmin: 0, vmax: 5, rels: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18], q208: 4 },
-  { model: "TNC 620", fam: "34056", vmin: 0, vmax: 5, rels: [1, 2, 3, 4], q208: 0 },
-  { model: "TNC 620", fam: "73498", vmin: 0, vmax: 5, rels: [1, 2], q208: 0 },
-  { model: "TNC 620", fam: "81760", vmin: 0, vmax: 5, rels: [1, 2, 3, 4, 5, 6, 7, 8, 16, 17, 18], q208: 1 },
-  { model: "TNC 320", fam: "34055", vmin: 0, vmax: 5, rels: [1, 2, 3, 4, 5, 6], q208: 0 },
-  { model: "TNC 320", fam: "77185", vmin: 0, vmax: 5, rels: [1, 2, 4, 5, 6, 18], q208: 1 }
-];
 function drillLevel() {
-  var id = typeof machine !== "undefined" && machine ? machine.controllerIdentity : null;
-  if (!id) return "q208";
-  var model = String(id.model || ""), nc = String(id.nc_software || "");
-  var m = NC_ID.exec(nc);
-  var level = null;
-  if (m) {
-    var fam = m[1], v = Number(m[2]), rel = Number(m[3]);
-    for (var ri = 0; ri < DRILL_ROWS.length && !level; ri++) {
-      var r = DRILL_ROWS[ri];
-      if (r.model !== model || r.fam !== fam || v < r.vmin || v > r.vmax || rel < 1) continue;
-      if (r.rels !== "any" && r.rels.indexOf(rel) < 0) continue;
-      level = r.q208 > 0 && rel >= r.q208 ? "q208" : "q379";
-    }
-  }
-  if (!level) {
-    drillLevelWhy = "the cycle 200/205 parameter set of " + model + " NC " + nc +
-      " is not known to this post - refused, not posted";
-  }
-  return level;
+  if (!dialect) return "q395";
+  var level = dialect.drillC200;
+  if (level === "q395" || level === "q211") return level;
+  drillLevelWhy = "cycle 200 of " + dialectWho() + " has no Q211 (dwell at the depth)," +
+    " which this post writes - refused, not posted";
+  return null;
 }
 function onCycle() {
   startPreamble();
@@ -858,7 +864,7 @@ function onCycle() {
     words.push(qword(211, dwell));
     var level = drillLevel();
     if (!level) { cycleBad(drillLevelWhy); return; }
-    if (level === "q208") words.push(qword(395, DEPTH_REFERENCE));
+    if (level === "q395") words.push(qword(395, DEPTH_REFERENCE));
     else if (DEPTH_REFERENCE !== 0) {
       // #4094: the 340 49x level has no Q395. The old cycle drills to the
       // tool tip (Q395=0). Any other ask is refused.

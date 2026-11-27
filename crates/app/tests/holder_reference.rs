@@ -291,11 +291,11 @@ fn an_older_tool_library_loads_as_custom_holders_and_a_new_one_round_trips_the_r
     const { assert!(HOLDER_REF_VERSION > CUTTING_STEPS_VERSION, "v0.22.0 (v2) and v3 readers must refuse holder references"); }
     assert_eq!(file["version"], json!(HOLDER_REF_VERSION), "a reader that would drop the reference must refuse the file");
     let mut future = file.clone();
-    // #3904, #3368, #4031: the newest version this build reads is
-    // CUTTER_HAND_VERSION (TIP_FORM_VERSION's step is under it).
+    // #3904, #3368, #4031, #3645: the newest version this build reads is
+    // 8 (`ASSEMBLY_VERSION`; TIP_FORM_VERSION's step is under it).
     const { assert!(TIP_FORM_VERSION > CUTTER_VERSION) };
     const { assert!(CUTTER_HAND_VERSION > TIP_FORM_VERSION) };
-    future["version"] = json!(CUTTER_HAND_VERSION + 1);
+    future["version"] = json!(camcraft_app::tool_library::ASSEMBLY_VERSION + 1);
     let err = parse_tool_library(&future.to_string()).expect_err("future library version refused");
     assert!(err.contains("version"), "{err}");
     let def = file["tools"].as_array().expect("tools").iter().find(|t| t["name"] == TOOL).expect("tool")["definition"].clone();

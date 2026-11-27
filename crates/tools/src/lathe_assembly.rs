@@ -158,6 +158,9 @@ pub struct ResolvedLathe {
     /// The clearance bands of every body but the insert's; `None` when
     /// no component has a body.
     pub clearance: Option<LatheClearance>,
+    /// The facets the bands were read from: every body but the insert's,
+    /// placed in the turning frame (empty when no component has one).
+    pub placed: Vec<Tri>,
 }
 
 /// Resolve `nodes` on `station` (the module's law). `orientation`
@@ -221,8 +224,7 @@ pub fn resolve_lathe(
         all.extend(local);
     }
     let clearance =
-        if all.is_empty() { None } else { Some(LatheClearance::of(&all).map_err(LatheAssemblyError::Clearance)?) };
-    let params = LatheParams {
+        if all.is_empty() { None } else { Some(LatheClearance::of(&all).map_err(LatheAssemblyError::Clearance)?) };    let params = LatheParams {
         nose_radius,
         orientation: q,
         stated,
@@ -232,7 +234,7 @@ pub fn resolve_lathe(
         clearance_deg: spec.clearance.degrees(),
         ic_mm,
     };
-    Ok(ResolvedLathe { params, placement, crp: [r * ox, 0.0, r * oz], clearance })
+    Ok(ResolvedLathe { params, placement, crp: [r * ox, 0.0, r * oz], clearance, placed: all })
 }
 
 /// The part of facet `t` within one insert of the nose centre in the
