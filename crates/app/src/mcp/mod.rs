@@ -106,8 +106,8 @@ mod recipe_tools;
 // loopback socket, against the app's own document and History.
 pub use bridge::bridge;
 pub use link_client::{bridge as link_bridge, call as link_call, connect as link_connect, LinkError, Select};
-pub use listen::{Inbox, Request, Wake, IDLE_TIMEOUT};
-pub use port_flag::port_from;
+pub use listen::{Inbox, Request, Wake, HELLO_TIMEOUT, IDLE_TIMEOUT};
+pub use port_flag::{idle_timeout_from, port_from};
 pub use live::{
     answer_live, answer_live_with, requires_approval, ApprovedCall, GateKind, LiveAnswer,
     LiveGate, LiveOptions,

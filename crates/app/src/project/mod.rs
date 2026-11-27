@@ -190,6 +190,11 @@ mod disk_stamp;
 pub use disk_stamp::DiskStamp;
 mod json;
 pub use json::*;
+// #3645: the component table and the tool stacks on file.
+mod component_wire;
+pub use component_wire::*;
+mod assembly_wire;
+pub use assembly_wire::{assembly_from_dto, assembly_to_dto, stack_from_dto, LinkDto, MountDto};
 mod apply;
 mod fidelity_migrate;
 mod pocket_adaptive_migrate;

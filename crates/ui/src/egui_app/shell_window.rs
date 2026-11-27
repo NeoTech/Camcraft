@@ -33,7 +33,7 @@ mod start;
 
 /// The windowed shell (the `--ui egui` entry without `--headless`); returns
 /// the process exit code.
-pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
+pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, mcp_idle: std::time::Duration, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
     let event_loop = match EventLoop::new() {
         Ok(el) => el,
         Err(err) => {
@@ -70,7 +70,7 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
         let wake: camcraft_app::mcp::Wake = Box::new(move || {
             let _ = proxy.send_event(());
         });
-        match camcraft_app::mcp::Inbox::listen(port, wake) {
+        match camcraft_app::mcp::Inbox::listen_with_idle(port, wake, mcp_idle) {
             Ok(inbox) => {
                 if let Some(addr) = inbox.addr() {
                     diag_warn!("mcp: listening on {addr} (connect with: camcraft-cli mcp --connect {addr})");
@@ -93,7 +93,7 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
                 let wake: camcraft_app::mcp::Wake = Box::new(move || {
                     let _ = proxy.send_event(());
                 });
-                match camcraft_app::mcp::Inbox::link(&dir, wake) {
+                match camcraft_app::mcp::Inbox::link_with_timeouts(&dir, wake, mcp_idle, camcraft_app::mcp::HELLO_TIMEOUT) {
                     Ok(inbox) => shell.state.ui_link = Some(inbox),
                     Err(err) => {
                         diag_warn!("ui link: cannot open in {}: {err}", dir.display());

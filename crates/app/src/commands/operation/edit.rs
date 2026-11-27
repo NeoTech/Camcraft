@@ -134,10 +134,7 @@ impl EditOperationParams {
         }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         // #894: a thread's pitch, infeed and holes against the mounted thread mill.
@@ -254,10 +251,7 @@ impl ChangeOperationKind {
             return Err(CommandError::Invalid(why));
         }
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         if let Some(msg) = crate::operation::side_sane(world, &params, &prev.src) {

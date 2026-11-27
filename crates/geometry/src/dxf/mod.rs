@@ -2,7 +2,8 @@
 //! Provenance: Autodesk's published DXF Reference; original implementation, no vendor code.
 //!
 //! Only planar, zero-width model-space geometry is accepted. Arcs remain analytic. SPLINE and
-//! ELLIPSE are laid as tangent arcs within [`CURVE_TOLERANCE_MM`] (#1865).
+//! ELLIPSE are laid as tangent arcs within [`CURVE_TOLERANCE_MM`] (#1865). An INSERT of a
+//! BLOCK is expanded into world geometry, with nesting and copy counts bounded (#1865).
 //! This module performs no file I/O and has no dependency on the application or ECS.
 
 mod biarc;
@@ -12,6 +13,9 @@ mod curves;
 mod dictionaries;
 mod document_writer;
 mod entities;
+mod insert;
+mod insert_curve;
+mod insert_place;
 mod nurbs;
 mod pairs;
 mod polyline;
@@ -21,6 +25,7 @@ mod units;
 mod writer;
 
 pub use curves::{CURVE_MAX_RADIUS_MM, CURVE_TOLERANCE_MM};
+pub use insert::MAX_BLOCK_DEPTH;
 pub use document_writer::{write, write_bytes};
 pub use reader::{parse, parse_with_limits};
 pub use types::*;

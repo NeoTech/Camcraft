@@ -34,3 +34,21 @@ pub fn parallel5d(
     let base = finishing3d::parallel(facets, p)?;
     stamp_axes(&base, facets, p.tool_diameter * 0.5, c, shank)
 }
+
+/// [`parallel5d`] with the user's start and exit points (#3330): the
+/// raster's passes ordered for the picks (`finishing3d::parallel_seamed`:
+/// the corner nearest the start pick begins the cut, the exit pick
+/// chooses where the last pass ends), then posed by the same stamp - the
+/// tilt limit and the shank dodge judge the re-ordered path as every
+/// other. Returns the posed path and the raster's ordered ends (tips of
+/// the upright plan). An empty `seam` is [`parallel5d`], byte for byte.
+pub fn parallel5d_seamed(
+    facets: &[Triangle],
+    p: &Finish3DParams,
+    c: &AxisControl,
+    shank: Option<&Shank>,
+    seam: &finishing3d::RasterSeam,
+) -> Result<(Toolpath, Option<finishing3d::RasterEnds>), GenError> {
+    let (base, ends) = finishing3d::parallel_seamed(facets, p, seam)?;
+    Ok((stamp_axes(&base, facets, p.tool_diameter * 0.5, c, shank)?, ends))
+}

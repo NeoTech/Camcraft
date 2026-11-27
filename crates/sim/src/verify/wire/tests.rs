@@ -210,8 +210,9 @@ fn each_pass_is_judged_at_its_own_kerf() {
 }
 
 /// #538: a path that does not return to its threading point once per
-/// stated pass, or an open run stating skims, cannot be split into
-/// passes - refused by name, never judged at a guessed kerf.
+/// stated pass, or an open run whose stated skims disagree with its
+/// travel boundaries, cannot be split into passes - refused by name,
+/// never judged at a guessed kerf.
 #[test]
 fn passes_that_cannot_be_told_apart_are_unreadable() {
     let start = Point2::new(-10.0, 0.0);
@@ -223,6 +224,75 @@ fn passes_that_cannot_be_told_apart_are_unreadable() {
     assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(_)]), "{:?}", v.findings);
     let v = run_skims(CutSide::Punch, &two, start, vec![f64::NAN]);
     assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("not a positive number")), "{:?}", v.findings);
+    // #3216: an open run stating a skim whose travel boundary the path
+    // does not carry (and a path carrying a boundary the cut does not
+    // state) cannot be split - refused by name.
     let v = run_skims(CutSide::Open, &open_run(5.0 + K, -20.0, 20.0), start, vec![0.15]);
-    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("open run")), "{:?}", v.findings);
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("not one per skim")), "{:?}", v.findings);
+    let rough_only = open_run(5.0 + K, -15.0 - 2.0 * K, 15.0 + 2.0 * K);
+    let v = run_skims(CutSide::Open, &rough_only, start, Vec::new());
+    assert!(v.findings.is_empty(), "a plain open pass with no boundary stated: {:?}", v.findings);
+}
+
+/// #3216 over #538: an open run's rough pass at `rough_at` and one skim
+/// at `skim_at`, each from `y0` to its own far end (`rough_y1`,
+/// `skim_y1`), the wire rethreaded between them - the travel move (a
+/// rapid, no wire through it) carries the pass boundary.
+fn open_skimmed(rough_at: f64, skim_at: f64, y0: f64, rough_y1: f64, skim_y1: f64) -> Toolpath {
+    let mut a = PathBuilder::new(Point3::new(5.0 + rough_at, y0, 0.0));
+    a.push(MoveKind::Feed, Point3::new(5.0 + rough_at, rough_y1, 0.0), None);
+    let mut rough = a.finish();
+    let mut b = PathBuilder::new(Point3::new(5.0 + skim_at, y0, 0.0));
+    b.push(MoveKind::Feed, Point3::new(5.0 + skim_at, skim_y1, 0.0), None);
+    let skim = b.finish();
+    let (Some(end), Some(to)) = (rough.end(), skim.start()) else { panic!("both passes lay a cut") };
+    rough.moves.push(crate::cl::Move::new(MoveKind::Rapid, end, to, None));
+    rough.moves.extend(skim.moves);
+    rough
+}
+
+/// #3216 over #538: an open run's skim is judged at its own kerf and
+/// its own ends - the travel boundary tells the passes apart, the same
+/// geometry read at the rough's kerf would lie.
+#[test]
+fn an_open_runs_each_pass_is_judged_at_its_own_kerf() {
+    let (part, stock) = (left_part(), square(15.0));
+    let ks = 0.15;
+    let job = |tp: &Toolpath, skims: Vec<f64>| {
+        judge(&WireJob {
+            path: tp,
+            kerf_offset: K,
+            skim_offsets: skims,
+            side: CutSide::Open,
+            start: None,
+            sections: sections(&part, Some(&stock)),
+            burnout: false,
+            cutoff_from: None,
+            capture: false,
+            taper: false,
+            verify_tol: 0.0,
+            taper_chord: false,
+        })
+    };
+    // Clean: each pass stands its own kerf off the part, each end clear
+    // in the air past the stock.
+    let tp = open_skimmed(K, ks, -15.0 - 2.0 * K, 15.0 + 2.0 * K, 15.0 + 2.0 * K);
+    let v = job(&tp, vec![ks]);
+    assert!(v.findings.is_empty(), "{:?}", v.findings);
+    assert_eq!(v.skipped, Some(OPEN_SKIP), "the skipped laws are said");
+    // The same path claimed at the rough's kerf: the skim rides 0.15
+    // off the part, K asks more - a gouge by the difference, named at
+    // the skim's own move.
+    let v = job(&tp, vec![K]);
+    let g = v.findings.iter().find(|f| matches!(f, WireFinding::Gouge { .. })).expect("a skim read at the rough's kerf gouges by the difference");
+    assert!(matches!(g, WireFinding::Gouge { move_no: 3, depth, .. } if (depth - (K - ks)).abs() < 1e-6), "{g:?}");
+    // Each pass's own ends: the skim's far end stands less than ITS kerf
+    // off the stock - refused naming the skim's kerf, not the rough's.
+    let near = open_skimmed(K, ks, -15.0 - 2.0 * K, 15.0 + 2.0 * K, 15.0 + ks - 0.05);
+    let v = job(&near, vec![ks]);
+    assert!(
+        matches!(v.findings.as_slice(), [WireFinding::OpenEndInStock { need, .. }] if (need - ks).abs() < 1e-9),
+        "the skim's end is judged at the skim's kerf: {:?}",
+        v.findings
+    );
 }

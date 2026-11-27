@@ -278,6 +278,8 @@ pub(super) fn seed_kind(state: &mut State, before: usize) {
 /// other than the `next_free` number `AddTool` will assign). Rides the
 /// same Apply / Add click as the geometry, as its own undoable command.
 /// #3893: the tool library window's Apply calls it too.
+/// #3667: the compare uses the number `AddTool` gives, which skips the
+/// machine's reserved pockets.
 pub(super) fn push_number_if_changed(state: &mut State, name: &str) {
     let want = (state.tool_ui.number > 0).then_some(state.tool_ui.number);
     let have = model::find_by_name(&state.world, name)
@@ -290,7 +292,12 @@ pub(super) fn push_number_if_changed(state: &mut State, name: &str) {
             });
         }
     } else if let Some(n) = want
-        && Some(n) != camcraft_app::tool_numbers::next_free(&state.world)
+        && Some(n)
+            != camcraft_app::tool_numbers::next_free_for(
+                &state.world,
+                name,
+                state.tool_ui.tool_kind(),
+            )
     {
         state.pending.push_back(CommandKind::SetToolNumber {
             name: name.to_owned(),

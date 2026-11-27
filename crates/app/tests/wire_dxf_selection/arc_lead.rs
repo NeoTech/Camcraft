@@ -147,3 +147,70 @@ fn a_radius_at_or_under_the_kerf_offset_is_refused_at_the_command_door() {
     let op = WireContourOp { lead_arc_radius: Some(offset + 0.001), ..wire_op() };
     assert!(EditOperationParams::new(&world, "Cut", OpParams::WireContour(op)).is_ok());
 }
+
+/// Rewrites every wire contour's `overlap` in the saved file to `to`: the
+/// file a script or a hand edited after the save, which no command door
+/// read.
+fn patch_overlap(v: &mut serde_json::Value, to: f64) {
+    match v {
+        serde_json::Value::Object(m) => {
+            if let Some(serde_json::Value::Object(w)) = m.get_mut("wire_contour") {
+                w.insert("overlap".into(), to.into());
+            }
+            m.values_mut().for_each(|c| patch_overlap(c, to));
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(|c| patch_overlap(c, to)),
+        _ => {}
+    }
+}
+
+/// #3216: a stated closing overlap beside the tangent arc lead is refused
+/// by name - at the command door (the edit and the create alike), and at
+/// the generation door for a file whose overlap was turned up by hand
+/// after the save, so a stale file cannot generate the analytic path with
+/// a ride it never cuts. The refused commands change nothing.
+#[test]
+fn a_closing_overlap_with_an_arc_lead_is_refused_by_name_at_both_doors() {
+    // The command door.
+    let (world, h) = document(DXF);
+    let e = model::find_by_name(&world, "Cut").expect("operation");
+    let before = model::operation_of(&world, &e).expect("op").params;
+    let done = h.done_len();
+    let op = WireContourOp { overlap: 1.0, lead_arc_radius: Some(1.0), ..wire_op() };
+    let why = EditOperationParams::new(&world, "Cut", OpParams::WireContour(op.clone()))
+        .err()
+        .expect("edit refused")
+        .to_string();
+    assert!(
+        why.contains("a closing overlap is stated with a tangent arc lead") && why.contains("set the straight lead or clear the overlap"),
+        "{why}"
+    );
+    let why = CreateOperation::new(&world, "Cut 2", "Wire", SrcRef::Entity("drawing".into()), OpParams::WireContour(op))
+        .err()
+        .expect("create refused")
+        .to_string();
+    assert!(why.contains("a closing overlap is stated with a tangent arc lead"), "{why}");
+    assert_eq!(model::operation_of(&world, &e).expect("op").params, before, "the refused edit changes nothing");
+    assert!(model::find_by_name(&world, "Cut 2").is_none(), "the refused create makes no operation");
+    assert_eq!(h.done_len(), done, "no history entry");
+    // The generation door: the arc lead is stated by an edit (overlap 0,
+    // the door passes), the file is saved, the overlap turned up by hand,
+    // and the file opened again - the generate is refused by name, and no
+    // program is written.
+    let world = led(DIE, FIXTURE, "C110", WireSide::Die, (0.0, 0.0), false, 1.0);
+    let file = std::env::temp_dir().join(format!("camcraft-3216-{}.ccam", std::process::id()));
+    project::save(&world, &file).expect("save");
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).expect("read")).expect("json");
+    patch_overlap(&mut v, 1.0);
+    std::fs::write(&file, serde_json::to_string_pretty(&v).expect("text")).expect("write");
+    let back = new_world();
+    let loaded = project::load(&back, &file);
+    let _ = std::fs::remove_file(&file);
+    loaded.expect("load");
+    let why = refusal(&back);
+    // The generate reads the door law too, so the overlap is refused by
+    // its pair with the arc lead - never cut, and no program written.
+    assert!(why.contains("a closing overlap") && why.contains("tangent arc lead"), "{why}");
+    let e = model::find_by_name(&back, "Cut").expect("operation");
+    assert!(model::toolpath_of(&back, &e).is_none(), "no program is written for the refused cut");
+}

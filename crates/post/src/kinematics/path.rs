@@ -19,6 +19,7 @@ const POSE_MATCH_POS_TOL_MM: f64 = 1e-7;
 const POSE_MATCH_AXIS_DOT: f64 = 1.0 - 1e-12;
 
 /// Solves a sequence of part-space moves into machine-space coordinates with rotary chord subdivision.
+/// A rotary travel refusal includes the index of the original input move.
 pub fn solve_path(
     cfg: &AcTrunnionConfig,
     moves: &[PathMove],
@@ -61,10 +62,22 @@ pub fn solve_path(
             axis: to_axis,
         };
 
+        let at_move = |error| match error {
+            KinematicsError::TravelLimitExceeded { .. } => {
+                KinematicsError::PathTravelLimitExceeded {
+                    source_index,
+                    source: Box::new(error),
+                }
+            }
+            _ => error,
+        };
+
         let m_from = match prev_end {
             Some((prev_part, prev_mach)) if same_part_pose(prev_part, p_from) => prev_mach,
             Some(_) => return Err(KinematicsError::DiscontinuousPath { source_index }),
-            None => solver.solve_pose(p_from, SectionBoundary::Continuous)?,
+            None => solver
+                .solve_pose(p_from, SectionBoundary::Continuous)
+                .map_err(at_move)?,
         };
 
         // A clearance marker does not establish clearance before the lift finishes.
@@ -74,7 +87,9 @@ pub fn solve_path(
             mv.safe_retract || mv.kind != MoveKind::Rapid || opts.subdivide_rapids;
 
         if !allow_subdivide {
-            let m_to = solver.solve_pose(p_to, SectionBoundary::Continuous)?;
+            let m_to = solver
+                .solve_pose(p_to, SectionBoundary::Continuous)
+                .map_err(at_move)?;
             out.push(SolvedMove {
                 source_index,
                 kind: mv.kind,
@@ -101,7 +116,8 @@ pub fn solve_path(
             p_to,
             0,
             &mut out,
-        )?;
+        )
+        .map_err(at_move)?;
         prev_end = Some((p_to, m_end));
     }
 

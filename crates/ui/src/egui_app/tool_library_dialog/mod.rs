@@ -25,12 +25,21 @@
 //! the preview side by side, as far as the screen permits ([`width`]).
 //! On a narrow window the rail folds and the preview keeps a least width
 //! ([`rail_w`], [`columns`]), so the side drawing always has room.
+//! #3898 (U7): the tools list has a "My library" source (`components`)
+//! with the component library and the document's component table; a
+//! document component opens in the component editor (`component_edit`),
+//! which stands in for the page; the Holders page lists the user holders
+//! of the document; the Tool tab's assembly group has the tool's
+//! component stack (`stack`). Each document change is one undoable
+//! command.
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
 
 pub(crate) mod assembly_group;
 pub(crate) mod categories;
+pub(crate) mod component_edit;
+pub(crate) mod components;
 mod details_tab;
 /// #3908: display only - private to this window, so no law can read it.
 mod flutes;
@@ -43,6 +52,7 @@ mod rail;
 mod recipes_fill;
 pub(crate) mod recipes_tab;
 pub(crate) mod side_view;
+pub(crate) mod stack;
 pub(crate) mod thumbs;
 mod tool_tab;
 
@@ -146,6 +156,14 @@ fn body(ui: &mut Ui, state: &mut State) {
     ui.separator();
     if picked != page {
         state.show_library_page(picked);
+        if let Some(v) = state.tool_library.as_mut() {
+            v.component_edit = None;
+        }
+    }
+    // #3898: the component editor stands in for the page while it is open.
+    if state.tool_library.as_ref().is_some_and(|v| v.component_edit.is_some()) {
+        component_edit::draw(ui, state);
+        return;
     }
     match picked {
         LibraryPage::Tools => tools_page(ui, state),

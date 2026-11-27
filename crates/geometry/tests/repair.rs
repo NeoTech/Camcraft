@@ -6,7 +6,7 @@
 //! camcraft_geometry::geometry.
 
 use camcraft_geometry::geo2d::GeoError;
-use camcraft_geometry::geometry::repair::{self, open_edge_count};
+use camcraft_geometry::geometry::repair::{self, open_edge_count, weld_at_f32};
 use camcraft_geometry::geometry::{cube, Mesh, Point3, Triangle};
 
 fn unit_cube() -> Mesh {
@@ -250,4 +250,51 @@ fn garbage_meshes_error_cleanly_never_panic() {
         }
         let _ = open_edge_count(&m);
     }
+}
+
+/// #4182: a closed thin tetrahedron near 150 mm (one f32 step there is
+/// 15.3 nm) whose last two corners stand 3 nm apart.
+fn thin_tetra() -> Vec<Triangle> {
+    let (p0, p1) = (Point3::new(150.0, 150.0, 150.0), Point3::new(160.0, 150.0, 150.0));
+    let (x, y) = (Point3::new(155.0, 155.0, 150.0), Point3::new(155.0, 155.0, 150.0 + 3e-6));
+    vec![Triangle::new(p0, p1, x), Triangle::new(p0, y, p1), Triangle::new(p0, x, y), Triangle::new(p1, y, x)]
+}
+
+#[test]
+fn a_back_to_back_pair_left_at_the_written_corners_goes_and_the_mesh_stays_closed() {
+    // #4182: at the f32 corners the file holds, two facets collapse and the
+    // other two are one facet both ways. Keeping one of them left three
+    // open edges; the closed answer is no facet at all.
+    let tris = thin_tetra();
+    assert_eq!(open_edge_count(&Mesh::from_facets(tris.clone())), 0);
+    let r = weld_at_f32(&tris).expect("welds").expect("the last two corners meet at f32");
+    assert_eq!((r.triangles_after, r.dropped), (0, 4));
+    assert_eq!(open_edge_count(&r.mesh), 0);
+}
+
+#[test]
+fn corners_closer_than_an_f32_step_weld_at_their_written_values() {
+    // #4182: a closed tetrahedron with edge 0-1 split 3 nm from corner 0.
+    // Written as f32 the two facets on that corner collapse; welded at the
+    // written values they go and the tetrahedron is closed. A mesh with
+    // nothing to collapse is left as it is.
+    let p = [
+        Point3::new(150.0, 150.0, 150.0),
+        Point3::new(160.0, 150.0, 150.0),
+        Point3::new(150.0, 160.0, 150.0),
+        Point3::new(150.0, 150.0, 160.0),
+    ];
+    let a = Point3::new(150.0 + 3e-6, 150.0, 150.0);
+    let split = vec![
+        Triangle::new(p[0], p[2], a),
+        Triangle::new(a, p[2], p[1]),
+        Triangle::new(p[0], a, p[3]),
+        Triangle::new(a, p[1], p[3]),
+        Triangle::new(p[1], p[2], p[3]),
+        Triangle::new(p[0], p[3], p[2]),
+    ];
+    let r = weld_at_f32(&split).expect("welds").expect("two facets collapse at f32");
+    assert_eq!((r.triangles_after, r.dropped), (4, 2));
+    assert_eq!(open_edge_count(&r.mesh), 0);
+    assert!(weld_at_f32(&unit_cube().facets).expect("nothing to weld").is_none());
 }

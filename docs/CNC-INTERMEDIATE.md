@@ -133,6 +133,7 @@ behavior only):
 | `EdmCondition` `WireSide` | a wire EDM section (#533): the machine's condition id the cut burns with, and `die` / `punch` (commentary). The moves are the wire-centre path (kerf in them, no feed). A script without `wireEdm = true` is refused the section by name |
 | `SinkerCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a Sinker Burn or Sinker Side Burn (#542, #545), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and for an orbit (#544) its geometry (`circular` / `vector` / `planetary`) and radius mm. The sinker post writes the condition and pickup through the machine's `edm.codes` (#290 D5). It refuses a condition absent from `edm.conditions` and any orbit. A Side Burn uses `edm.codes.depth` for its downward plunge and requires `edm.codes.side` for each lateral feed. The `side` template must contain `{x}` `{y}` `{z}` `{f}`. These values state the absolute endpoint in the work offset and the feed, in the document's units. Lateral feeds must follow one X or Y axis at constant Z. A script whose manifest `serves` does not name `sinker_edm` is refused the section by name |
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
+| `WireGuideLower` `WireGuideUpper` `WireBottom` `WireTop` | a leaning section by guide offsets (#4075), before the section: the lower and upper guide planes that `WireU` `WireV` are stated at, and the cut's bottom and top, each work Z in mm (the cut's planes only when they resolve). A post that states the part's planes (Sodick `TP` / `TN`) moves the lean along the same straight wire to them |
 | `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `WireTaperDialect` `WireCorner` `WirePlane` `WireAngle` | a tapered section on an angle-word machine (#1164, `edm.taper_angle`): `angle`, the control's corner rule (`mitre` or `cone`) and the programmed plane's Z (the work's top), before the section; then before each written move the angle word (the stated taper signed by the machine's `positive` side rule, 0 for the move that stands the wire upright) - that move's X Y are the wire's point on the programmed plane, and no `WireU` `WireV` are sent. The cone rule's turning moves are the control's and are not sent |
 | `WaterjetAbrasive` `PierceDwell` `ValveLagDwell` | the `WATERJET` header (#1882), for the section: the abrasive feeds (`true`) or the cut is pure water (`false`); the pierce dwell and the valve lag dwell in s - each ABSENT when unstated. Cleared at `ENDSECTION` |
@@ -148,6 +149,10 @@ A post that declares `failOnWarning = true` refuses the complete program if the 
 - `currentPosition` — `{X, Y, Z}`, live
 - `programBounds` — the XY box of the cutting records, `{minX, maxX,
   minY, maxY}` mm, or `null` (#1882); set before `onOpen`
+- `programOffsets` — one entry for each section of the stream:
+  `"control"` or `"wear"` when a `COMP` record engages that compensation
+  in it, else `""` (#4076); set before `onOpen`, so a header or section
+  note can say if the control's offset is used
 - `machine` — the `.mch` flattened: `rapidRate`, `feedRateMax`,
   `spindleMax`, `coolants[]`, `rotaries[]` (letter + stated direction
   + travel in degrees, geometry never speeds), `travel` (#1882: the

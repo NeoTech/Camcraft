@@ -39,6 +39,54 @@ impl Pass {
 /// close a pass: the path ends each pass exactly on it.
 const RETURN_TOL: f64 = 1e-6;
 
+/// Split an open run's wire at its pass boundaries (#3216 over #538):
+/// each boundary (the vertex a travel move landed on - a rapid, the
+/// wire cut and threaded anew) closes the pass before it and opens the
+/// next, so the boundary count must be the skim count. `k` is the
+/// rough pass's kerf offset, `skims` each later pass's, in cut order.
+///
+/// # Errors
+/// A skim offset that is not a positive number, or a path whose
+/// travel moves and stated skims disagree - the passes cannot then be
+/// told apart, so nothing is judged at a guess.
+pub(super) fn split_open(wire: &Wire, k: f64, skims: &[f64]) -> Result<Vec<Pass>, String> {
+    let pts_len = wire.pts.len();
+    if skims.is_empty() {
+        if !wire.breaks.is_empty() {
+            return Err(format!(
+                "the path carries {} pass boundary travel move(s) and the cut states no skim passes - regenerate it",
+                wire.breaks.len()
+            ));
+        }
+        return Ok(vec![Pass { first: 0, last: pts_len.saturating_sub(1), k }]);
+    }
+    if let Some(bad) = skims.iter().find(|s| !(s.is_finite() && **s > 0.0)) {
+        return Err(format!("a skim's kerf offset {bad} is not a positive number"));
+    }
+    if wire.breaks.len() != skims.len() {
+        return Err(format!(
+            "the path carries {} pass boundary travel move(s), not one per skim ({} passes) - regenerate it",
+            wire.breaks.len(),
+            skims.len()
+        ));
+    }
+    let offsets: Vec<f64> = std::iter::once(k).chain(skims.iter().copied()).collect();
+    let mut out: Vec<Pass> = Vec::with_capacity(offsets.len());
+    let mut first = 0usize;
+    for (i, &b) in wire.breaks.iter().enumerate() {
+        if b == 0 || b + 1 >= pts_len {
+            return Err("a pass boundary lands a pass with no cut - regenerate the path".into());
+        }
+        out.push(Pass { first, last: b - 1, k: offsets[i] });
+        first = b;
+    }
+    if first + 1 >= pts_len {
+        return Err("the last pass lays down no cut - regenerate the path".into());
+    }
+    out.push(Pass { first, last: pts_len - 1, k: offsets[wire.breaks.len()] });
+    Ok(out)
+}
+
 /// Split `pts` (the wire centre's polyline) into its passes. `k` is
 /// the rough pass's kerf offset, `skims` each later pass's, in cut
 /// order. With no skims the whole path is one pass at `k`, as before.

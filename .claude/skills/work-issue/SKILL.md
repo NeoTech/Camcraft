@@ -10,11 +10,17 @@ You are an issue worker. The prompt names one issue `N` and your tier
 order of the steps. Load the `gh-issues` skill for the `gh` mechanics.
 
 ## 0. Before you start
+- Read [the ownership guard](../issue-claims/references/ownership.md)
+  before dispatch, including review fixes on an existing branch. Use the
+  caller-dispatched or self-started path in step 1, not both. The worker
+  verifies the record and exact remote head before it edits.
 - Read the issue and all its comments: `gh issue view N --comments`.
 - **Stop without claiming** (one-line report to the caller) if any holds:
-  - it carries `P?`, `needs-research`, `blocked` or `in-review`;
-  - a live claim exists (AGENTS.md "Claim before any code", "A claim
-    comment is a claim");
+  - it carries `P?`, `needs-research` or `blocked`; `in-review` also stops
+    new work, but not the named review fix on the existing PR;
+  - a different claimant holds a live claim, or another worker owns the
+    branch (AGENTS.md "Claim before any code", "A claim comment is a claim").
+    A caller's claim for this exact worker is not a competing claim;
   - its effort label is above your tier - say "N is effort:<x>, not mine";
   - it has no effort label: set one from the AGENTS.md table (respecting
     the safety floor) with a one-line comment why, and stop if it is
@@ -28,8 +34,24 @@ order of the steps. Load the `gh-issues` skill for the `gh` mechanics.
   stop, so that it sends a worker to fix them first.
 
 ## 1. Claim and branch
-- `gh issue edit N --add-label claimed --add-assignee @me` and
-  `gh issue comment N --body "claimed: issue-worker-<tier> (<model>) · <UTC> · worktree/branch issue/N-<slug> · plan: <one line>"`.
+- **Caller-dispatched:** read the supplied record URL and verify the named
+  identity, issue, branch, base and exact head against the public threads.
+  Confirm this same record; do not post another `claimed:` comment or
+  create another owner. A missing or mismatched record means STOP.
+- **Self-started:** perform the guard's before-dispatch reads yourself. If
+  free, post the claim below with your writer record, then read it back and
+  re-read the threads and exact head before work. For the same claimant's
+  named review fix after writer release, post only a new writer record
+  linked to the live claim; do not claim against yourself. An ended claim
+  needs a new claim. A different live claimant means stand down.
+- The dispatcher (or the self-started worker) posts a new claim only when
+  needed: `gh issue edit N --add-label claimed --add-assignee @me` and
+  `gh issue comment N --body-file <claim-and-writer-record-file>`.
+  Start the body with `claimed: issue-worker-<tier> (<model>) · <UTC> · worktree/branch issue/N-<slug> · plan: <one line>`.
+  Contributors without label permission use the same claim comment. Read
+  back the result; do not report denied labels or assignment as set.
+- For an existing PR fix, reuse the existing branch and worktree. The new
+  branch procedure below applies only when this issue has no branch yet.
 - In a fork, follow AGENTS.md's fork sync first (process files, cut tag).
 - A worktree agent never switches, pulls, merges, resets, checks out or
   stashes in the main checkout. Its only git there is
@@ -113,6 +135,8 @@ something under the safety floor that your label didn't account for):
   escalation per run; never lower a label.
 
 ## 5. Done on the branch
+- Immediately before a push, repeat the ownership guard's pre-push check.
+  A moved remote head or a rejected push is a STOP, never a force-push.
 - Commit (`<type>(<scope>): <subject>`, body ends `Fixes #N`, plus the
   session's Co-Authored-By line), push, open a **draft** PR with
   `--body-file`: what changed, how tested (pinning tests named), what was
@@ -122,6 +146,9 @@ something under the safety floor that your label didn't account for):
   `Refs #N`, and the quick gate diffs against `origin/side/path-kernel`.
 - Swap `claimed` for `in-review`; comment
   `fix on issue/N-<slug> · PR #M · pinned by <tests> · merges when reviewed`.
+- Link the writer record from the PR. Record the published exact head and
+  release writer ownership before review. This does not withdraw the issue
+  claim. A coordinator never pushes in place of a worker that still owns it.
 - Remove the worktree and its target dir.
 - Report to the caller: PR number, tests, anything not exercised, and
   each search that you did yourself in place of a scout (section 1a).

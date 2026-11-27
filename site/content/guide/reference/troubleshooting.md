@@ -44,6 +44,20 @@ refuses by name rather than silently picking another.
 A flag with no value (`--gpu-backend needs a value ...`, `--gpu needs an
 adapter name ...`) is refused the same way: give it one.
 
+## GPU compute falls back to the CPU
+
+The log can report `uncaptured GPU error` or `GPU compute device lost`.
+The shared compute device then stays disabled for the rest of the process.
+CamCraft keeps the first failure reason, logs it once, and uses the CPU
+path for later stock-cut calculations. It does not repeatedly recreate
+the failed compute device.
+
+To start with compute disabled, set `CAMCRAFT_GPU_COMPUTE=off` before
+starting CamCraft. This does not select the adapter that draws the window.
+A compute fallback is not recovery from every graphics driver failure:
+if the window cannot render, use the window troubleshooting steps above.
+The CPU fallback does not bypass verification or establish machine safety.
+
 ## Posting
 
 All of these appear in the **Post refused** window; nothing was written to

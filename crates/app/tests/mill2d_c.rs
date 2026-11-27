@@ -121,6 +121,7 @@ fn hole(x: f64, y: f64, radius: f64, floor_z: f64, through: bool) -> Hole {
 
 fn bore(holes: Vec<Hole>) -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
         links: camcraft_app::links::Links::PLANAR,

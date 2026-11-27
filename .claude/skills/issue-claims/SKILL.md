@@ -22,6 +22,10 @@ the maintainer.
 
 ## 1. Check before you claim
 
+For branch writers and PR reviewers, also read the shared
+[ownership guard](references/ownership.md). The dispatch skills use its
+public records; the claim lifetime and release rules below still apply.
+
 1. `gh issue view N --comments`.
 2. Find the newest claim line and its author.
 3. Read the claimant's LAST comment, not only the claim line.

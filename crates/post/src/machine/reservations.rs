@@ -157,7 +157,9 @@ fn check_tool(
         if !(entry.usage == "probe" && probe) {
             return Err(format!(
                 "tool '{name}' (T{number}) is reserved for {} on {}; a probe requires ToolKind touch probe",
-                entry.usage, selectors.machine.model
+                // #3667: the plain name, not the file word `tool_setter`.
+                if entry.usage == "tool_setter" { "tool setter" } else { entry.usage.as_str() },
+                selectors.machine.model
             ));
         }
     }

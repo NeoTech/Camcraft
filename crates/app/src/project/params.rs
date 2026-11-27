@@ -1367,6 +1367,9 @@ pub enum ParamsDto {
         /// centre-out order every earlier file cut - no version step.
         #[serde(default, skip_serializing_if = "PassStartDto::is_auto")]
         pass_start: PassStartDto,
+        /// Absent means `plunge`, the only entry every earlier file cut.
+        #[serde(default, skip_serializing_if = "EntryDto::is_plunge")]
+        entry: EntryDto,
         #[serde(default, skip_serializing_if = "PathPicksDto::is_empty")]
         picks: PathPicksDto,
     },
@@ -1712,6 +1715,14 @@ pub enum EntryDto {
     /// The circular ramp (M11.1). Appended: the file word is new, so no
     /// earlier file can hold it and every earlier word reads as before.
     Arc,
+}
+
+impl EntryDto {
+    /// The default word, left out of a file (additive: no version step).
+    #[must_use]
+    pub fn is_plunge(&self) -> bool {
+        *self == Self::Plunge
+    }
 }
 
 /// One hole of a drill op's list, on the wire: world XY, the model's

@@ -185,7 +185,7 @@ fn each_mount_file_is_its_own_post_machine_ops_and_work_offset() {
 
     assert!(is_siemens_on(b, MACHINE_B), "post B for machine B:\n{b}");
     assert!(b.contains("; SETUP: Setup2") && b.contains("; OPERATION: Face2 - FACE - G55"), "{b}");
-    assert!(b.contains("G90 G55") && !b.contains("G54"), "Setup2's own work offset only:\n{b}");
+    assert!(b.contains("G90 G94 G55") && !b.contains("G54"), "Setup2's own work offset only:\n{b}");
     assert!(!b.contains("Face1") && !b.contains("Setup1") && !b.contains("VMC"), "nothing of Setup1:\n{b}");
 }
 
@@ -338,7 +338,7 @@ fn the_same_own_mount_is_one_file_and_half_a_mount_is_two() {
     assert!(one[0].0.ends_with(&format!("row7-same-{}.nc", std::process::id())), "at the path asked: {}", one[0].0);
     assert_eq!(one[0].2, vec!["Setup1".to_owned(), "Setup2".to_owned()]);
     let t = &one[0].1;
-    assert!(is_siemens_on(t, MACHINE_B) && t.contains("G90 G54") && t.contains("G90 G55"), "{t}");
+    assert!(is_siemens_on(t, MACHINE_B) && t.contains("G90 G94 G54") && t.contains("G90 G94 G55"), "{t}");
 
     // Own machine, followed post: two machines, both Fanuc.
     let (world, mut h) = doc();

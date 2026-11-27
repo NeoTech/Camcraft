@@ -129,15 +129,18 @@ mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
+// #4134: the Wire Contour's control / wear offset spans.
+pub mod wire_comp;
 mod agie_profile;
 mod agie_die;
 mod planner_switch;
 pub use planner_switch::{PHASE1_KINDS, check_engine, planner_engine};
-pub(crate) use agie_profile::{agie_job, agie_quality, agie_sketch_job};
+pub(crate) use agie_profile::{AgieSketch, agie_job, agie_quality, agie_sketch_job};
 mod wire_ruled;
 pub(crate) mod wire_sketch;
 pub(crate) mod wire_sketch_arcs;
 mod agie_inspection;
+mod agie_opening;
 pub(crate) use agie_inspection::prepare_inspection;
 pub use agie_inspection::{AgieInspectionReceipt, export_agie_inspection, has_agie_inspection_source};
 // #534: the wire laws' inputs, read live at the post.

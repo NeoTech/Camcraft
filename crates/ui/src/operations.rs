@@ -320,6 +320,8 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             // uncut stock of a start-side pass - advisory, own lines.
             Warning::EntryStandIn { .. } => (228, false),
             Warning::PlungeIntoStock { .. } => (229, false),
+            // #3849: trochoidal clean-up engagement above limit - advisory.
+            Warning::EngagementExceeded { .. } => (230, false),
             // A lathe holder's rub (#369) splits part from stock too.
             Warning::HolderHit { part, .. } => (212 + *part as u8, false),
         }
@@ -352,7 +354,8 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             | Warning::PlungeTooDeep { at, .. }
             | Warning::EntryNotRecommended { at, .. }
             | Warning::EntryStandIn { at, .. }
-            | Warning::PlungeIntoStock { at } => *at,
+            | Warning::PlungeIntoStock { at }
+            | Warning::EngagementExceeded { at, .. } => *at,
         }
     }
     let mut lines: Vec<(String, Option<usize>)> = Vec::new();
@@ -739,5 +742,18 @@ mod warning_fold_tests {
         let at: Vec<_> = super::fold_warnings_located(&w).into_iter().map(|(_, at)| at).collect();
         assert_eq!(at, [Some(10), Some(500), Some(3), Some(4)]);
         assert!(w[5].blocks_post(), "a part rapid remains a blocking warning");
+    }
+
+    #[test]
+    fn engagement_exceeded_surfaces_as_advisory_status_line_and_keeps_own_group() {
+        let w = [
+            Warning::PlungeIntoStock { at: 2 },
+            Warning::EngagementExceeded { at: 9, measured_deg: 102.5, limit_deg: 90.0 },
+        ];
+        assert!(!w[1].blocks_post());
+        let located = super::fold_warnings_located(&w);
+        assert_eq!(located.len(), 2, "{located:?}");
+        assert_eq!(located[1].1, Some(9));
+        assert!(located[1].0.contains("102.5 deg") && located[1].0.contains("90.0 deg"), "{:?}", located[1]);
     }
 }

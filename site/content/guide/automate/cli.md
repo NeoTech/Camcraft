@@ -1,14 +1,15 @@
 +++
 title = "Command line"
-description = "Run CamCraft without the window: process a project, run a script, and read the exit codes."
+description = "Process projects and scripts without a window, or send MCP calls to a running window."
 weight = 1
 aliases = ["guide/cli/"]
 +++
 
-`camcraft-cli` is the headless lane: the same commands and the same post
-gate as the window, with no UI. Build it as shown in [Install](@/guide/getting-started/install.md)
+`camcraft-cli` normally runs headless: the same commands and the same post
+gate as the window, with no UI. With `--ui`, it controls an existing window
+instead. Build it as shown in [Install](@/guide/getting-started/install.md)
 (a debug build is `target/debug/camcraft-cli`; a release build is
-`target/release/camcraft-cli`). Every example below was run against the
+`target/release/camcraft-cli`). The headless output examples below were run against the
 0.18.0 build from this repository, from the repository root, and the output
 is trimmed where noted. Log lines (timestamps) are shortened to their
 message.
@@ -16,8 +17,8 @@ message.
 ## Open a file in the window
 
 Use the desktop executable `camcraft-ui` to open one file from the
-command line. This starts the window; `camcraft-cli` remains the headless
-tool described below.
+command line. This starts a new window; it is separate from the `--ui`
+connection to an existing window described below.
 
 ```sh
 camcraft-ui part.step
@@ -45,11 +46,45 @@ The title bar says **(read-only)** until you save to a different file.
 A model file is imported as usual, because an import makes a new
 project. An agent gets the same result with the MCP tool `open_project` and `read_only: true`.
 
+## Control a running window
+
+Start CamCraft first. The `--ui` lane sends the same
+[MCP tools](@/guide/automate/mcp.md) to that window. Each call runs on the
+window's own document and undo history: changes appear there, and **Ctrl+Z**
+undoes them. It never falls back to a separate headless document.
+
+Use these command forms (not captured output):
+
+```text
+camcraft-cli --ui windows
+camcraft-cli --ui [--window <pid|project>] call <tool> [<json-args>]
+camcraft-cli --ui [--window <pid|project>] mcp
+camcraft-cli --ui --help
+```
+
+`windows` lists process IDs, versions and open project paths from discovery
+files. A crashed window can leave a stale file. With several windows,
+choose one with `--window` and its process ID or open project path.
+`call` takes an MCP tool name and an optional JSON object. It prints the
+tool's answer. `mcp` bridges an agent's stdio MCP session to the window;
+it does not start another document. `script` and `process` do not take `--ui`.
+
+- No running window: exit 3, with nothing run.
+- Several windows without a selection, or invalid arguments: exit 2.
+- A refused tool call: exit 1.
+- A window busy with another command: exit 4. Wait for that command to end.
+- A successful call: exit 0.
+
+Discovery uses the current user's local link folder. Do not share its
+files: they contain the connection token. `CAMCRAFT_UI_LINK_DIR` overrides
+that folder. A window started with `CAMCRAFT_UI_LINK=off` has no link.
+
 ## Help and version
 
-There are three commands, `script`, `process` and `mcp`. There is no
-per-command `--help`: `help` (or running with no arguments) prints the one
-screen that covers all three.
+Use `camcraft-cli help` for the command list, or add `--help` to a command
+to read its flags without running it. `camcraft-cli --ui --help` describes
+the live-window lane. The older headless capture below shows the 0.18.0
+usage screen, not the complete current command list.
 
 ```sh
 $ camcraft-cli version

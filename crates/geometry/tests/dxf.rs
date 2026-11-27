@@ -5,6 +5,10 @@ use camcraft_geometry::dxf::{Limits, Primitive, Unit, Units, parse, parse_with_l
 use camcraft_geometry::geo2d::Point2;
 use std::f64::consts::{FRAC_PI_2, PI};
 
+#[path = "dxf/block_curves.rs"]
+mod block_curves;
+#[path = "dxf/blocks.rs"]
+mod blocks;
 #[path = "dxf/curves.rs"]
 mod curves;
 

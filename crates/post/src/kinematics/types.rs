@@ -304,4 +304,13 @@ pub enum KinematicsError {
         /// Actionable explanation (for example inserting a safe retract boundary).
         hint: String,
     },
+    /// Rotary travel blocked a move in the input path.
+    #[error("move {source_index}: {source}")]
+    PathTravelLimitExceeded {
+        /// Zero-based index of the originating input move.
+        source_index: usize,
+        /// Original travel refusal from the pose solver.
+        #[source]
+        source: Box<KinematicsError>,
+    },
 }

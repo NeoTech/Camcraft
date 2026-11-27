@@ -84,6 +84,12 @@ pub(crate) fn groups(raw: &Value, m: &Machine, k: Option<Kind>, posts: &[&str]) 
             super::ToolChangeMode::Changer => "Automatic tool changer",
         });
     }
+    if let Some(rule) = m.d_number {
+        g.row("D number", match rule {
+            super::DNumberRule::FirstEdge => "First cutting edge (D1)",
+            super::DNumberRule::ToolNumber => "Equal to the tool number",
+        });
+    }
     let declared = raw.pointer("/general/kind").and_then(Value::as_str).filter(|w| !w.is_empty());
     g.row(
         "Kind",

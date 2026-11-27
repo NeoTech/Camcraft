@@ -1,5 +1,5 @@
 {
-  "version": 76,
+  "version": 83,
   "machine": {
     "path": "built-in: Lathe",
     "machine": {
@@ -119,7 +119,7 @@
             "plunge_feed": 40.0
           }
         },
-        "stamp": 927847941135173140,
+        "stamp": 11455470071918782900,
         "cache": {
           "moves": [
             {
@@ -267,7 +267,7 @@
             "plunge_feed": 40.0
           }
         },
-        "stamp": 5061023982338156630,
+        "stamp": 1164513321703053095,
         "cache": {
           "moves": [
             {
@@ -419,7 +419,7 @@
             "inspect_tol": 0.0
           }
         },
-        "stamp": 334344936400781048,
+        "stamp": 8068515685416524633,
         "cache": {
           "moves": [
             {
@@ -1309,7 +1309,8 @@
         "datum_from": "",
         "post": {
           "named": "Fanuc Lathe"
-        }
+        },
+        "order": 0
       }
     },
     {

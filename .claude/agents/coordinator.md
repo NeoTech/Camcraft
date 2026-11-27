@@ -49,6 +49,23 @@ and report them together.
 
 ## How you dispatch
 
+- Read [the ownership guard](../skills/issue-claims/references/ownership.md)
+  before dispatch of any writer or reviewer, including review fixes,
+  refreshes and read-only Opus reviews. Read the public claim, owner records
+  and exact PR head. A live owner means stand down and name its record URL.
+- When free, write the record for one named worker and read it back. For a
+  new issue, append it to the claim you post for that worker. For the same
+  claimant's review fix, add a new writer record under the existing claim.
+  Pass the record URL, base and starting exact head in the brief. The worker
+  confirms it; it does not claim the issue a second time.
+- For a reviewer, follow the guard's collaborator check before recording
+  ownership. Pass the record URL and require the reviewer to read it before
+  work, re-read ownership and head before a verdict or labels, and release
+  on completion, skip or failure. Contributor pre-checks claim no reviewer
+  ownership. A review-session relay must supply this same evidence.
+- Verify the published head or review result and the owner's release before
+  a handoff. A coordinator must not push a worker's prepared commits while
+  that worker owns the branch. Confirm a failure before releasing for it.
 - **Scouts.** Keep four `context-scout` agents alive, named `scout-1` to
   `scout-4`. Start one again when it ends. Continue a scout with
   SendMessage, so it keeps what it already read.

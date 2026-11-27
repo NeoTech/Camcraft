@@ -1,5 +1,5 @@
 //! #3335: real viewport clicks fill the Boundaries "Do not touch" group of
-//! 2D Offset, Trace and Finish3D operations. The click goes through the shell's own pointer route
+//! 2D Offset, Trace, Finish3D and Contour (#3344) operations. The click goes through the shell's own pointer route
 //! (`interact::pick_at` -> `feature_click::click` -> `take_pick`), not a
 //! direct `take_pick` call: a face click and an edge click each add one row,
 //! the status line names the pick, and the row's remove button takes it
@@ -47,8 +47,8 @@ fn armed_operation(kind: OpType) -> Harness<'static, ShellUi> {
     let mut h = shell_harness();
     // Finish3D has more geometry controls above the protected rows. Trace
     // has the "Not taken" Start point and Exit point groups (#3324) above
-    // them. Keep both rows and their remove buttons inside the test viewport.
-    let height = if matches!(kind, OpType::Finish3D | OpType::Trace) { 1400.0 } else { 1100.0 };
+    // them; Contour has them too (#3344). Keep both rows and their remove buttons inside the test viewport.
+    let height = if matches!(kind, OpType::Finish3D | OpType::Trace | OpType::Contour) { 1400.0 } else { 1100.0 };
     h.set_size(egui::vec2(1440.0, height));
     {
         let st = &mut h.state_mut().state;
@@ -137,4 +137,9 @@ fn trace_takes_a_protected_face_and_edge_by_viewport_click() {
 #[test]
 fn finish3d_takes_a_protected_face_and_edge_by_viewport_click() {
     face_then_edge(armed_operation(OpType::Finish3D));
+}
+
+#[test]
+fn contour_takes_a_protected_face_and_edge_by_viewport_click() {
+    face_then_edge(armed_operation(OpType::Contour));
 }

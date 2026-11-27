@@ -1,4 +1,4 @@
-//! Collect one nominal punch, die opening or straight open cutoff for the native wire EDM job,
+//! Collect one nominal punch, die opening or straight open cutoff for the Agie Wire EDM job,
 //! before the wire generator offsets it.
 //! Provenance: CAMCraft's Wire Contour geometry and named controller recipe.
 
@@ -25,19 +25,19 @@ pub(crate) fn agie_job(
 ) -> Result<agie::AgieJob, String> {
     let (side, job, lo, hi, [ox, oy, oz]) = checked(world, op, name, Some(source))?;
     let OpParams::WireContour(wire) = &op.params else {
-        return Err("The native wire EDM job requires a Wire Contour".into());
+        return Err("The Agie Wire EDM job requires a Wire Contour".into());
     };
     if !job.material.bodies.is_empty() {
-        return Err("The native wire EDM job requires one closed vertical prism spanning the stock height; cavities, steps and multiple bodies are unsupported".into());
+        return Err("The Agie Wire EDM job requires one closed vertical prism spanning the stock height; cavities, steps and multiple bodies are unsupported".into());
     }
     // Both caps of the complete source model have the exact planar outline.
     // A union of sampled slices can add rounded vertices along a sloping face.
     let region = crate::geometry::closed_vertical_prism(&job.material.facets, lo.z, hi.z)
-        .map_err(|why| format!("The native wire EDM job requires one closed vertical prism spanning the stock height: {why}"))?;
+        .map_err(|why| format!("The Agie Wire EDM job requires one closed vertical prism spanning the stock height: {why}"))?;
     let points = match side {
         agie::AgieSide::Punch => {
             let [ring] = region.loops() else {
-                return Err("The native wire EDM job requires exactly one closed punch boundary, without openings or additional contours".into());
+                return Err("The Agie Wire EDM job requires exactly one closed punch boundary, without openings or additional contours".into());
             };
             ring.points()
         }
@@ -61,38 +61,59 @@ pub(crate) fn agie_job(
     })
 }
 
-/// The nominal punch of `op` on one selected DXF circle, racetrack (#2022) or
-/// convex tangent loop (#2983), and that shape in setup XY. The selected-chain
+/// The nominal shape of a selected DXF chain: a punch profile (#2022,
+/// #2983), or the walls of a die opening in the setup frame (#3178).
+pub(crate) enum AgieSketch {
+    Punch(WireProfile),
+    Die(Vec<camcraft_post::agie_setup::InspectionSegment>),
+}
+
+/// The nominal job of `op` on one selected DXF chain: a punch on a circle,
+/// racetrack (#2022) or convex tangent loop (#2983), or a die opening of
+/// lines and arcs (#3178), and that shape in setup XY. The selected-chain
 /// door has refused models, fixtures and other drawings in the setup.
 pub(crate) fn agie_sketch_job(
     world: &World,
     op: &Operation,
     name: &str,
-) -> Result<(agie::AgieJob, WireProfile), String> {
-    if !matches!(&op.params, OpParams::WireContour(w) if w.side == WireSide::Punch) {
-        return Err("The native wire EDM job reads a selected DXF chain only for a captured punch".into());
+) -> Result<(agie::AgieJob, AgieSketch), String> {
+    if !matches!(&op.params, OpParams::WireContour(w) if matches!(w.side, WireSide::Punch | WireSide::Die)) {
+        return Err("The Agie Wire EDM job reads a selected DXF chain only for a captured punch or die opening".into());
     }
     let (side, job, lo, hi, [ox, oy, oz]) = checked(world, op, name, None)?;
     let (OpParams::WireContour(wire), Some(chain)) = (&op.params, job.wire_sketch.as_ref()) else {
-        return Err("Select one closed DXF chain for the native wire EDM punch".into());
+        return Err("Select one closed DXF chain for the Agie Wire EDM job".into());
     };
     let start = wire
         .picks
         .first(crate::path_picks::PickRole::Start)
-        .ok_or("The DXF punch requires a predrilled 2 mm threading hole")?;
+        .ok_or("The DXF job requires a predrilled 2 mm threading hole")?;
     let start = [start.xy.x, start.xy.y];
-    let mut shape = chain.wire_profile()?;
-    // The rest of the drawing must clear the whole native work: the arc
-    // extrema with the rough pass and wire (as the post bounds them), and the
-    // complete threading hole. The box of the two holds the straight lead.
-    let rough = camcraft_post::agie_setup::qn2_offsets_um(20_000)
-        .ok_or("The QN2 recipe has no measured offset for 20 mm stock")?[0];
-    let reach = f64::from((u32::from(rough) + 125).next_multiple_of(100)) / 1000.0;
-    let [a, b] = shape.bounds();
-    let low = Point2::new((a.x - reach).min(start[0] - 1.0), (a.y - reach).min(start[1] - 1.0));
-    let high = Point2::new((b.x + reach).max(start[0] + 1.0), (b.y + reach).max(start[1] + 1.0));
-    chain.check_envelope(low, high)?;
-    shape.place(|p| Point2::new(p.x - ox, p.y - oy));
+    let shape = if side == agie::AgieSide::Die {
+        // The wire stays inside the opening. Nothing else of the drawing may
+        // touch or enter it, and the complete hole lies inside it.
+        let mut clearance = camcraft_geometry::sketch_chains::ChainClearance::new(&chain.chain)
+            .map_err(|e| e.to_string())?;
+        if !clearance.contains_disk(chain.local(Point2::new(start[0], start[1])), 1.0 + 1e-8) {
+            return Err("The complete 2 mm start hole must lie inside the selected die opening".into());
+        }
+        chain.check_opening_clear(&mut clearance, |_, _| Ok(()))?;
+        AgieSketch::Die(chain.opening_spans([ox, oy])?)
+    } else {
+        let mut shape = chain.wire_profile()?;
+        // The rest of the drawing must clear the whole native work: the arc
+        // extrema with the rough pass and wire (as the post bounds them), and the
+        // complete threading hole. The box of the two holds the straight lead.
+        let rough = camcraft_post::agie_setup::qn2_offsets_um(20_000)
+            .ok_or("The QN2 recipe has no measured offset for 20 mm stock")?[0];
+        let reach = f64::from((u32::from(rough) + 125).next_multiple_of(100)) / 1000.0;
+        let [a, b] = shape.bounds();
+        let low = Point2::new((a.x - reach).min(start[0] - 1.0), (a.y - reach).min(start[1] - 1.0));
+        let high = Point2::new((b.x + reach).max(start[0] + 1.0), (b.y + reach).max(start[1] + 1.0));
+        chain.check_envelope(low, high)?;
+        shape.place(|p| Point2::new(p.x - ox, p.y - oy));
+        AgieSketch::Punch(shape)
+    };
     let job = agie::AgieJob {
         side,
         contour: Vec::new(),
@@ -107,7 +128,7 @@ pub(crate) fn agie_sketch_job(
 /// check refuses any other condition first.
 pub(crate) fn agie_quality(world: &World, op: &Operation) -> Result<agie::Quality, String> {
     let OpParams::WireContour(wire) = &op.params else {
-        return Err("The native wire EDM job requires a Wire Contour".into());
+        return Err("The Agie Wire EDM job requires a Wire Contour".into());
     };
     let condition = super::wire_op::condition_of(world, op.setup.as_deref(), &op.tool, wire)?;
     agie::quality_of(&condition.id).ok_or_else(|| {
@@ -122,7 +143,7 @@ pub(crate) fn agie_quality(world: &World, op: &Operation) -> Result<agie::Qualit
 /// job. `None` for `source` is the selected DXF chain of a punch (#2022).
 fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> Result<Checked, String> {
     let OpParams::WireContour(wire) = &op.params else {
-        return Err("The native wire EDM job requires a Wire Contour".into());
+        return Err("The Agie Wire EDM job requires a Wire Contour".into());
     };
     if wire.taper_deg != 0.0
         || wire.tabs.is_some()
@@ -130,7 +151,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         || !wire.skims.is_empty()
         || wire.four_axis.is_some()
     {
-        return Err("The native wire EDM job supports one captured vertical punch, die opening or clamped open cutoff. Disable taper, four-axis, tabs, burnout and requested skims; the controller selects trim passes".into());
+        return Err("The Agie Wire EDM job supports one captured vertical punch, die opening or clamped open cutoff. Disable taper, four-axis, tabs, burnout and requested skims; the controller selects trim passes".into());
     }
     let side = match (&wire.side, &op.src) {
         (WireSide::Punch, SrcRef::Entity(_)) => agie::AgieSide::Punch,
@@ -138,7 +159,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         (WireSide::Die, SrcRef::Selection(_)) => agie::AgieSide::Die,
         (WireSide::Left, SrcRef::Selection(_)) => agie::AgieSide::Left,
         (WireSide::Right, SrcRef::Selection(_)) => agie::AgieSide::Right,
-        _ => return Err("The native wire EDM job requires the complete punch model, the selected rim of a through-opening in the retained die plate, or one selected cutoff edge".into()),
+        _ => return Err("The Agie Wire EDM job requires the complete punch model, the selected rim of a through-opening in the retained die plate, or one selected cutoff edge".into()),
     };
     // An open cutoff severs both pieces before the trims (#2962). A closed
     // cycle keeps its captured slug and its drilled start hole.
@@ -150,7 +171,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
             return Err("The open cutoff requires air threading and at most 3.6 mm run-out clearance for its 4 mm tails".into());
         }
     } else if !wire.capture || wire.picks.first(crate::path_picks::PickRole::Start).is_none() {
-        return Err("The native wire EDM job requires a captured closed contour and a predrilled 2 mm start hole on the waste side".into());
+        return Err("The Agie Wire EDM job requires a captured closed contour and a predrilled 2 mm start hole on the waste side".into());
     }
     let on_source = match (&op.src, source) {
         (_, None) => super::wire_sketch::selected(&op.src, &op.params),
@@ -164,7 +185,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         (SrcRef::Stock, Some(_)) => false,
     };
     if !on_source {
-        return Err("The native wire EDM job requires the complete punch, or the edge chains of one through-opening in the retained die plate".into());
+        return Err("The Agie Wire EDM job requires the complete punch, or the edge chains of one through-opening in the retained die plate".into());
     }
     let setup = op.setup.as_deref();
     let condition = super::wire_op::condition_of(world, setup, &op.tool, wire)?;
@@ -180,11 +201,11 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
     let edm = crate::machine::of_setup(world, setup)
         .1
         .and_then(|m| m.edm)
-        .ok_or("The native wire EDM job requires a mounted wire EDM profile")?;
+        .ok_or("The Agie Wire EDM job requires a mounted wire EDM profile")?;
     let row = edm.condition(&condition.machine, &condition.id, &[])?;
     if row.role != "rough" || !row.wire_diameter.is_some_and(|d| (d - 0.25).abs() <= 1e-9) {
         return Err(format!(
-            "The native wire EDM job requires the {} machine condition to state role rough and wire diameter 0.25 mm",
+            "The Agie Wire EDM job requires the {} machine condition to state role rough and wire diameter 0.25 mm",
             condition.id
         ));
     }
@@ -198,7 +219,7 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         })
     {
         return Err(
-            "Native wire EDM jobs do not support additional stops, homing, or coolant overrides".into(),
+            "Agie Wire EDM jobs do not support additional stops, homing, or coolant overrides".into(),
         );
     }
     if setup::wcs_slot(world, setup) != 0
@@ -214,32 +235,32 @@ fn checked(world: &World, op: &Operation, name: &str, source: Option<&str>) -> R
         })
     {
         return Err(
-            "The native wire EDM job requires one unrotated, unflipped setup with its own stock and first work offset"
+            "The Agie Wire EDM job requires one unrotated, unflipped setup with its own stock and first work offset"
                 .into(),
         );
     }
-    let stock = setup::stock_entity(world, setup).ok_or("The native wire EDM job requires rectangular box stock")?;
+    let stock = setup::stock_entity(world, setup).ok_or("The Agie Wire EDM job requires rectangular box stock")?;
     if !matches!(
         model::stock_def_of(world, &stock),
         Some(crate::stock::StockShape::Box { .. })
     ) || model::transform_of(world, &stock)
         .is_some_and(|p| !crate::setup_align::is_identity_rot(p.rot))
     {
-        return Err("The native wire EDM job requires axis-aligned rectangular box stock".into());
+        return Err("The Agie Wire EDM job requires axis-aligned rectangular box stock".into());
     }
     let job = job::collect_job(world, op, name).map_err(|e| e.to_string())?;
     if !job.fixtures.is_empty() || !job.unread_steel.is_empty() {
-        return Err("The native wire EDM post cannot verify controller-generated leads against fixtures".into());
+        return Err("The Agie Wire EDM post cannot verify controller-generated leads against fixtures".into());
     }
-    let (lo, hi) = job.stock_aabb.ok_or("The native wire EDM job requires finite stock bounds")?;
+    let (lo, hi) = job.stock_aabb.ok_or("The Agie Wire EDM job requires finite stock bounds")?;
     let [ox, oy, oz] = job.wcs_origin;
     if job.hs.top != Some(hi.z) || job.hs.bottom != Some(lo.z) || oz != hi.z {
-        return Err("The native wire EDM job requires a through cut from stock top to bottom and the setup Z origin at stock top".into());
+        return Err("The Agie Wire EDM job requires a through cut from stock top to bottom and the setup Z origin at stock top".into());
     }
     // Guide heights and posted stock Z are in the setup frame (stock top Z0).
-    if edm.lower_guide_z.is_some_and(|z| z > lo.z - oz)
-        || edm.upper_guide_z.is_some_and(|z| z < 0.0)
-    {
+    // #4039: work that meets a guide plane is in reach (within the guide-reach tolerance).
+    use crate::machine::wire_edm::{above_guide, below_guide};
+    if edm.lower_guide_z.is_some_and(|z| below_guide(lo.z - oz, z)) || edm.upper_guide_z.is_some_and(|z| above_guide(0.0, z)) {
         return Err("The wire work extends outside the stated wire guide heights".into());
     }
     Ok((side, job, lo, hi, [ox, oy, oz]))

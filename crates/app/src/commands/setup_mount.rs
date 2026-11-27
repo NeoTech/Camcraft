@@ -134,7 +134,7 @@ pub struct SetSetupPost {
 impl SetSetupPost {
     pub fn new(world: &World, setup: &str, next: Option<PostRef>) -> Result<Self, CommandError> {
         let def = def_of(world, setup)?;
-        let next = next.map(crate::posting::agie::current_ref);
+        let next = next.map(crate::posting::aliases::current_ref);
         if let Some(p) = &next {
             super::post::validate(p)?;
         }

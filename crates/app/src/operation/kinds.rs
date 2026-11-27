@@ -1062,6 +1062,7 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
         holes: Vec::new(),
         break_through: None,
         pass_start: crate::machining2d::PassStart::Auto,
+        entry: crate::machining3d::Entry3D::Plunge,
         picks: crate::path_picks::PathPicks::default(),
     }
 }

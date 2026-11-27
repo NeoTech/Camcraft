@@ -44,6 +44,7 @@ fn expected(file: &str, n: u32) -> String {
     match file {
         "heidenhain.cps" => format!("Q339={n}"),
         "sinumerik.cps" if n > 4 => format!("G{}", 500 + n),
+        "tormach.cps" if n > 9 => format!("G54.1 P{n}"),
         "tormach.cps" | "tormach-lathe.cps" if n > 6 => format!("G59.{}", n - 6),
         _ => format!("G{}", 53 + n),
     }
@@ -51,7 +52,8 @@ fn expected(file: &str, n: u32) -> String {
 
 fn max_of(file: &str) -> u32 {
     match file {
-        "tormach.cps" | "tormach-lathe.cps" => 9,
+        "tormach.cps" => 500,
+        "tormach-lathe.cps" => 9,
         _ => 6,
     }
 }
@@ -110,6 +112,9 @@ fn offset_warnings(w: &[String]) -> Vec<&String> {
 }
 
 fn has_word(program: &str, word: &str) -> bool {
+    if word.contains(' ') {
+        return program.lines().any(|l| l.contains(word));
+    }
     // a Heidenhain block ends in `*`
     program.lines().any(|l| l.split_whitespace().any(|w| w.trim_end_matches('*') == word))
 }
@@ -269,9 +274,17 @@ fn a_recorded_toolpath_posts_under_each_offset() {
         rs.push(Record::Section { begin: false });
         engine::run(cps, &Value::Null, &cnc::serialize(&rs)).expect("engine runs")
     };
-    let (_, fanuc) = SCRIPTS[3];
-    let (_, tormach) = SCRIPTS[10];
-    for (cps, n, word) in [(fanuc, 1, Some("G54")), (fanuc, 6, Some("G59")), (fanuc, 7, None), (tormach, 7, Some("G59.1")), (tormach, 9, Some("G59.3")), (tormach, 10, None)] {
+    let (_, fanuc) = SCRIPTS.iter().find(|(name, _)| *name == "fanuc.cps").unwrap();
+    let (_, tormach) = SCRIPTS.iter().find(|(name, _)| *name == "tormach.cps").unwrap();
+    for (cps, n, word) in [
+        (*fanuc, 1, Some("G54")),
+        (*fanuc, 6, Some("G59")),
+        (*fanuc, 7, None),
+        (*tormach, 7, Some("G59.1")),
+        (*tormach, 9, Some("G59.3")),
+        (*tormach, 10, Some("G54.1 P10")),
+        (*tormach, 501, None),
+    ] {
         let out = run(cps, n);
         match word {
             Some(w) => {

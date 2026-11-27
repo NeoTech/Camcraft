@@ -97,6 +97,12 @@ pub(super) struct State {
     pub limits: Limits,
     /// Curve evaluations left for this drawing's SPLINE and ELLIPSE fits.
     pub curve_work: usize,
+    /// The INSERT references read so far; expanded at EOF, when every BLOCK is known.
+    pub inserts: Vec<super::insert::InsertRef>,
+    /// Set while a block body is read: a SPLINE or ELLIPSE keeps its definition in `curves`,
+    /// and is fitted only after its INSERT placement, in world units.
+    pub defer_curves: bool,
+    pub curves: Vec<super::insert_curve::LayeredCurve>,
 }
 
 impl State {

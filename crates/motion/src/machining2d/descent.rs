@@ -26,7 +26,7 @@ use crate::entry::{Entry3D, disc_clears, dive_room, helix_about};
 use crate::entry_arc::{ArcLead, arc_lead_swept, pts_dir, push_arc_lead, seg_dir};
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
-use crate::links::{helix_turns, plan_zig_capped, push_zig};
+use crate::links::{helix_turns, plan_zig_legs, push_zig};
 use crate::ring_zig::push_zig_ring;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
@@ -159,7 +159,7 @@ pub(super) fn plan_core(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, p
 pub(super) fn ramp_fallback(l: &Lvl, z: f64, prev_z: f64, m: &Motion) -> Option<Descent> {
     let a = &m.links.approach;
     let zf = descent_from(m, prev_z, true);
-    plan_zig_capped(l.pass, zf - z, fallback_ramp_angle(a), a.ramp_max_len).map(|(pre, n)| Descent::Zig(pre, n, zf))
+    plan_zig_legs(l.pass, zf - z, fallback_ramp_angle(a), a.ramp_max_len, m.zig_legs).map(|(pre, n)| Descent::Zig(pre, n, zf))
 }
 
 /// The angle (deg) of the ramp fallback: the entry's, 3 deg when it sets
@@ -224,7 +224,7 @@ pub(super) fn plan_arm(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, pr
     };
     let a = &m.links.approach;
     match arm {
-        Entry3D::Ramp if zig => match plan_zig_capped(l.pass, prev_z - z, m.links.ramp_angle, a.ramp_max_len) {
+        Entry3D::Ramp if zig => match plan_zig_legs(l.pass, prev_z - z, m.links.ramp_angle, a.ramp_max_len, m.zig_legs) {
             Some((pre, n)) => Descent::Zig(pre, n, prev_z),
             None => Descent::Sub("the first cut is too short to ramp at the angle"),
         },
@@ -233,7 +233,7 @@ pub(super) fn plan_arm(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, pr
             // along the first cut (every point on the cut the level law
             // proved), each leg within the leg limit.
             let zf = descent_from(m, prev_z, true);
-            match plan_zig_capped(l.pass, zf - z, a.ramp_angle, a.ramp_max_len) {
+            match plan_zig_legs(l.pass, zf - z, a.ramp_angle, a.ramp_max_len, m.zig_legs) {
                 Some((pre, n)) => Descent::Zig(pre, n, zf),
                 None => Descent::Sub("the first cut is too short for the entry ramp's angle and length"),
             }

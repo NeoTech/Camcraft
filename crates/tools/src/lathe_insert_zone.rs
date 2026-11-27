@@ -96,7 +96,7 @@ impl InsertZone {
 
 /// One Sutherland-Hodgman pass on axis `k`: keep `p[k] >= c`
 /// (`keep_above`) or `p[k] <= c`.
-fn clip_axis(poly: &[[f64; 3]], k: usize, c: f64, keep_above: bool) -> Vec<[f64; 3]> {
+pub(crate) fn clip_axis(poly: &[[f64; 3]], k: usize, c: f64, keep_above: bool) -> Vec<[f64; 3]> {
     let inside = |p: &[f64; 3]| if keep_above { p[k] >= c } else { p[k] <= c };
     let mut out = Vec::with_capacity(poly.len() + 2);
     for (i, p) in poly.iter().enumerate() {

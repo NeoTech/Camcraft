@@ -21,6 +21,8 @@ disagree, this file is correct.
 | Read, file, label, comment on or close an issue | `gh-issues` |
 | Check, mirror, release a claim; work a `needs-research` issue | `issue-claims` |
 | Work one issue from claim to draft PR | `work-issue` |
+| Continue another author's stalled PR | `takeover` |
+| Reproduce a reported bug before fixing it | `repro-first` |
 | Set or check an `effort:*` label | `classify-effort` |
 | Review open pull requests | `review-prs` |
 | Merge a batch of `merge-ready` PRs | `merge-ready` |

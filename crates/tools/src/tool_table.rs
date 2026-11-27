@@ -144,6 +144,7 @@ pub(crate) fn base_tool(kind: ToolKind, diameter_mm: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: ThreadHand::Right,
+        cutter_hand: crate::cutter_hand::CutterHand::Right,
         nose_radius: 0.0,
         width: 0.0,
         flute_len,

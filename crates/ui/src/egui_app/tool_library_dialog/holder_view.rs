@@ -5,7 +5,7 @@
 //! largest and nose diameter), the document tools that use the holder
 //! (a click opens the tool in the editor), and the outline to scale with
 //! its dimension lines. Nothing here is editable: a built-in holder is
-//! fixed, and holder edits wait for the user library of #3645 (U7).
+//! fixed. #3898 (U7): "Copy as user holder" makes an editable copy.
 //! Frame cost (`crates/ui/AGENTS.md`): the outline's shapes and labels
 //! are built when the holder, the drawing's rect, the unit or the
 //! dimension toggle change; a still frame builds nothing (`builds`).
@@ -42,6 +42,8 @@ const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
 enum Ask {
     List,
     Tool(String),
+    /// #3898: copy the built-in holder as a user holder of the document.
+    Copy(String),
 }
 
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
@@ -66,6 +68,16 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         }
         ui.heading(row.name.as_str());
         ui.weak(format!("holder · used by {}", count(users.len())));
+        // #3898: only a holder with a taper is a built-in component.
+        let id = format!("{}holder:{}", camcraft_app::component_library::BUILTIN_PREFIX, row.name);
+        if ui
+            .add_enabled(e.taper.is_some(), egui::Button::new(holders::COPY))
+            .on_hover_text("a user holder in this document, made from this one, that you can edit (one undo step)")
+            .on_disabled_hover_text("a straight-shank chuck states no shank size, so it is not a component")
+            .clicked()
+        {
+            ask = Some(Ask::Copy(id));
+        }
     });
     ui.weak(READ_ONLY);
     ui.separator();
@@ -100,6 +112,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     match ask {
         Some(Ask::List) => state.open_holder_in_library(None),
         Some(Ask::Tool(name)) => state.open_tool_in_library(&name),
+        Some(Ask::Copy(id)) => state.queue_component(crate::state::ComponentAction::CopyAsUser { id }),
         None => {}
     }
 }

@@ -62,6 +62,17 @@ mod tool_library_dialog;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
+#[path = "state_components.rs"]
+mod components_ui;
+pub use components_ui::{
+    ComponentAction, ComponentDraft, ComponentGroup, ComponentLib, ComponentsView, LoadedLibrary, StackDraft,
+};
+#[cfg(test)]
+pub(crate) use components_ui::library_loads;
+pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
+#[path = "state_component_views.rs"]
+mod component_views;
+pub use component_views::{ComponentRow, ComponentViews, Derived as ComponentDerived, StackView, ViewBuilds, candidates};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -174,7 +185,7 @@ pub enum CommandKind {
     /// via `posting::post_setup`.
     PostProgramDialog,
     ExportAgieInspection(String),
-    ImportAgieDrawing,
+    ImportInspectionDrawing,
     CreateAgieInspection {
         name: String, tool: String, drawing: String,
         chain: camcraft_app::geometry::sketch_chains::ChainId, start: [f64; 2], setup: Option<String>,
@@ -419,6 +430,9 @@ pub enum CommandKind {
         gauge: Option<f64>,
         projection: Option<f64>,
     },
+    /// #3898: a component action of the tool library window (the
+    /// component table, a tool's component stack, the user library file).
+    Component(ComponentAction),
     /// The document's workpiece material (M13.2); `None` states none.
     SetWorkMaterial(Option<camcraft_app::tools::WorkMaterial>),
     /// The op page's "Apply suggestion" (M13.2): feed + spindle speed
@@ -930,6 +944,8 @@ pub struct WcsUi {
     /// `sync_setup_ui` zero the readout when an origin is undone without
     /// wiping typing into a never-placed slot.
     pub(crate) placed: bool,
+    /// Display-only refusal, shared by the flip status and the WCS page.
+    pub(crate) flip_note: wcs_ui::FlipNote,
 }
 
 /// Editable fields of the Setups page (M3.2 A). Transient like [`StockUi`]:
@@ -1216,6 +1232,9 @@ pub struct ToolUi {
     pub pitch_min: f64,
     /// Tap thread hand; older tools default to right-hand.
     pub thread_hand: camcraft_app::tools::ThreadHand,
+    /// The cutter's hand (#4031): right runs M3, left needs the spindle
+    /// reversed (M4) - the app's `Tool` field's law, mirrored.
+    pub cutter_hand: camcraft_app::tools::CutterHand,
     /// Insert nose radius; the turning kind's cutting ball, inert on
     /// the mills (the app's `Tool` field's law, mirrored).
     pub nose_radius: f64,
@@ -1312,6 +1331,7 @@ impl ToolUi {
             pitch: t.pitch,
             pitch_min: t.pitch_min,
             thread_hand: t.thread_hand,
+            cutter_hand: t.cutter_hand,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -1402,6 +1422,7 @@ impl ToolUi {
             pitch: self.pitch,
             pitch_min: self.pitch_min,
             thread_hand: self.thread_hand,
+            cutter_hand: self.cutter_hand,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -2197,6 +2218,11 @@ pub struct State {
     pub tool_shape_editor: Option<String>,
     /// #3892: the tool library window - `None` closed (view state).
     pub tool_library: Option<ToolLibraryView>,
+    /// #3898: the component library the tool library window reads (a
+    /// cached read of the built-ins and the user's file).
+    pub component_lib: ComponentLib,
+    /// #3898: the component pages' derived sets, keyed on their inputs.
+    pub component_views: ComponentViews,
     /// #2397: Properties is showing the blank new-tool form. The Tool
     /// target with the empty name is the destination; this says which of
     /// its two faces shows - the pointer to the library, or the draft.
@@ -2544,6 +2570,8 @@ impl State {
             },
             tool_shape_editor: None,
             tool_library: None,
+            component_lib: ComponentLib::default(),
+            component_views: ComponentViews::default(),
             new_tool_form: false,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
@@ -3490,6 +3518,10 @@ impl State {
                 // script. The theme is NOT reset: it is the user's
                 // preference, not the document's (#877).
                 posting::post_set(&self.world, &PostRef::Builtin);
+                // #3644: the component table is the document's too; a
+                // blank holds no row of the last document (open clears it
+                // the same way).
+                camcraft_app::tool_assembly::table_set(&self.world, Vec::new());
                 self.history.clear();
                 // Frozen evidence of the old document retires with it.
                 self.post_view = None;
@@ -3532,7 +3564,7 @@ impl State {
             CommandKind::SaveProjectFile(path) => self.save_project_path(path),
             CommandKind::OpenRecent(kind, path) => self.open_recent(kind, path),
             CommandKind::ClearRecent(kind) => self.clear_recent(kind),
-            CommandKind::ImportAgieDrawing => self.import_agie_drawing(),
+            CommandKind::ImportInspectionDrawing => self.import_inspection_drawing(),
             CommandKind::CreateAgieInspection { name, tool, drawing, chain, start, setup } => {
                 self.create_agie_inspection(name, tool, drawing, chain, start, setup);
             }
@@ -3729,12 +3761,13 @@ impl State {
             CommandKind::AddTool { name, tool } => match AddTool::with_holder(&self.world, &name, tool, HolderPick::MachineDefault) {
                 Ok(command) => {
                     let number = command.number();
-                    let note = command.note();
+                    // #3792: a speed outside the machine's range is said here too.
+                    let notes: Vec<String> = command.note().into_iter().chain(command.warning()).collect();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = match note {
-                        Some(n) => format!("tool {name} added (T{number}) - {n}"),
-                        None => format!("tool {name} added (T{number})"),
+                    self.status = match notes.is_empty() {
+                        false => format!("tool {name} added (T{number}) - {}", notes.join(" - ")),
+                        true => format!("tool {name} added (T{number})"),
                     };
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
@@ -3764,6 +3797,7 @@ impl State {
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
+            CommandKind::Component(action) => self.run_component(action),
             CommandKind::ChangeTool { name, tool } => {
                 match ChangeTool::new(&self.world, &name, tool) {
                     Ok(command) => {
@@ -4915,7 +4949,7 @@ impl State {
                 if !posted.bundle_files.is_empty() {
                     self.post_view = None;
                     self.status = format!(
-                        "Native wire EDM job prepared in {} ({} controller files, zero working steps)",
+                        "Agie Wire EDM job prepared in {} ({} controller files, zero working steps)",
                         path.display(), posted.bundle_files.len()
                     );
                     if let Some(review) = posted.controller_review {
@@ -4985,15 +5019,15 @@ impl State {
                 }
             },
         };
-        let mesh = match self.stock_mesh.get(&fv) {
-            Ok(m) => m,
+        let (bytes, n) = match self.stock_mesh.get(&fv).and_then(|m| camcraft_app::stock_export::file_bytes(&m)) {
+            Ok(b) => b,
             Err(err) => {
                 self.status = format!("stock export refused: {err}");
                 return;
             }
         };
-        match std::fs::write(&path, camcraft_app::stock_export::stl_bytes(&mesh)) {
-            Ok(()) => self.status = format!("machined stock: {} facets written to {}", mesh.len(), path.display()),
+        match std::fs::write(&path, bytes) {
+            Ok(()) => self.status = format!("machined stock: {n} facets written to {}", path.display()),
             Err(err) => self.status = format!("stock export write failed: {err}"),
         }
     }

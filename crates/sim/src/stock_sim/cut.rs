@@ -1,6 +1,6 @@
 //! Split from `stock_sim.rs` by M5.0.1; structure only.
 
-use super::kernel::{MAX_CELLS_PER_AXIS, StockError, part_surface};
+use super::kernel::{cells_across, MAX_CELLS_PER_AXIS, StockError, part_surface};
 use super::dexel::Dexel;
 
 use crate::cl::{Move, MoveKind};
@@ -110,8 +110,9 @@ impl Dexel {
             ));
         }
         let (x0, y0) = (bx0 - cell, by0 - cell);
-        let nx = (((bx1 - bx0) / cell).ceil() as usize + 2).max(1);
-        let ny = (((by1 - by0) / cell).ceil() as usize + 2).max(1);
+        // `cells_across` (#4012), then the one cell of margin each side.
+        let nx = cells_across(bx1 - bx0, cell) + 2;
+        let ny = cells_across(by1 - by0, cell) + 2;
         if nx > MAX_CELLS_PER_AXIS || ny > MAX_CELLS_PER_AXIS {
             return Err(StockError::Invalid(format!(
                 "grid would be {nx}x{ny} cells; at most {MAX_CELLS_PER_AXIS} per axis"

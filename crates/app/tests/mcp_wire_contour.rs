@@ -292,7 +292,7 @@ fn wire_contour_accepts_an_explicit_zero_taper_on_add_and_edit() {
 #[test]
 fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
     use camcraft_app::project::{
-        WireContourDto, WireFourAxisDto, WirePairingDto, WireSideDto, WireSkimDto, WireSyncDto, WireTabsDto,
+        WireCompensationDto, WireContourDto, WireFourAxisDto, WirePairingDto, WireSideDto, WireSkimDto, WireSyncDto, WireTabsDto,
         WireWideningDto,
     };
     use std::collections::BTreeSet;
@@ -347,7 +347,9 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
             verify_tolerance: 0.01,
         }),
         sharp_corners: true,
+        overlap: 1.5,
         lead_arc_radius: Some(0.5),
+        compensation: WireCompensationDto::Control,
     };
     let dto_keys: BTreeSet<String> = serde_json::to_value(&populated)
         .expect("serialize WireContourDto")
@@ -370,15 +372,17 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
         "AGIECUT Classic 2S (template)",
         "Generic ISO Wire EDM",
         "Sodick Wire EDM (Mark 21)",
-        "Native wire EDM job files",
+        "Agie Wire EDM (AgieVision)",
         "AGIE_QN2",
     ] {
         assert!(skill.contains(required), "SKILL.md missing `{required}`");
     }
     assert!(!skill.contains("today the Wire Contour"), "SKILL.md still claims Wire Contour mounts no tool");
     assert!(!skill.contains("the wire post is #533"), "SKILL.md still claims wire post does not exist");
-    // #3537: the old post name is a hidden alias, never a listed name.
-    assert!(!skill.contains("Agie native wire EDM"), "SKILL.md still lists the hidden alias post name");
+    // #3537, #4000: the old post names are hidden aliases, never listed names.
+    for alias in camcraft_app::posting::aliases::POST_ALIASES.iter().map(|(old, _)| *old) {
+        assert!(!skill.contains(alias), "SKILL.md still lists the hidden alias post name {alias}");
+    }
 
     // Omitting `tool` on add_operation for Wire Contour must refuse by name,
     // and listed fields are accepted by edit_operation.

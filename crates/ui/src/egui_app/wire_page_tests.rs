@@ -249,6 +249,29 @@ fn wire_sharp_inside_corners_toggle_applies_and_undoes() {
     assert!(!live(&h).sharp_corners, "one undo restores the default");
 }
 
+/// #3216: the closing overlap edits the draft and Apply stores it as
+/// one undoable edit, and the side combo offers the centre slit.
+#[test]
+fn wire_closing_overlap_and_centre_side_apply_and_undo() {
+    let mut h = wire_page();
+    h.state_mut().op_tab = super::super::op_tabs::SEC_GEO;
+    h.run_steps(3);
+    assert_eq!(draft(&h).overlap, 0.0, "the plain lap by default");
+    assert!(h.query_by_label("Closing overlap").is_some(), "the overlap row shows");
+    if let OpParams::WireContour(w) = &mut h.state_mut().op_ui.params {
+        w.overlap = 1.5;
+    }
+    h.run_steps(3);
+    press(&mut h, "Apply");
+    h.state_mut().drain_actions();
+    assert_eq!(live(&h).overlap, 1.5);
+    let st = h.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert_eq!(live(&h).overlap, 0.0, "one undo restores the plain lap");
+    assert!(super::SIDES.iter().any(|s| s.contains("Centre")), "the centre slit is offered as a side");
+}
+
+
 /// #3991: the tangent arc lead is off by default (the straight lead), its
 /// row is on the geometry tab, turning it on seeds the default radius,
 /// and Apply stores it as one undoable edit.

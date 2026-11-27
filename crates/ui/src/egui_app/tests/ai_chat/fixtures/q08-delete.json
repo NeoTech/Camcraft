@@ -1,0 +1,136 @@
+{
+  "format_version": 1,
+  "source": {
+    "repository": "mkinney/Camcraft",
+    "commit": "d9be74b1408654799446f0e05e2c675fefc619c2",
+    "path": "qa/q08/q08-20261122T131017Z/q08-transcript.json",
+    "turn_indices": [
+      7
+    ]
+  },
+  "meta": {
+    "camcraft": "0.25.0 (7e2a8119) linux-x86_64",
+    "provider_preset": "Offline local (Ollama), Native tools mode",
+    "model": "qwen3-coder:latest (Ollama on M5 via ssh reverse tunnel)",
+    "endpoint": "http://localhost:11434/v1/chat/completions",
+    "max_tokens": 4096,
+    "tools_offered": [
+      "open_project",
+      "save_project",
+      "import_model",
+      "get_job",
+      "get_selection",
+      "list_operation_types",
+      "list_tool_catalog",
+      "add_tool",
+      "set_stock",
+      "add_operation",
+      "edit_operation",
+      "detect_holes",
+      "detect_pockets",
+      "delete_operation",
+      "set_tool",
+      "list_features",
+      "set_operation_geometry",
+      "undo",
+      "redo",
+      "generate",
+      "verify",
+      "post",
+      "add_setup",
+      "activate_setup",
+      "set_wcs"
+    ],
+    "system_prompt_sent": false,
+    "capture": "tcpflow on lo port 11434 (the panel has no transcript export); each round = one POST /v1/chat/completions",
+    "fixture": "q08-start.camproj (session 1) / q08-after-step5.camproj (session 2: app restarted for a fresh chat)",
+    "brief": "cheese:~/qa/briefs/q08-ai-panel-local.md"
+  },
+  "initial_project": "q08-after-step5.camproj",
+  "setup": [],
+  "turns": [
+    {
+      "user": "Delete every operation.",
+      "brief_step": "6",
+      "session": 2,
+      "rounds": [
+        {
+          "model_reply": {
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_cbg69xwf",
+                "index": 0,
+                "type": "function",
+                "function": {
+                  "name": "get_job",
+                  "arguments": "{}"
+                }
+              }
+            ],
+            "finish_reason": "tool_calls"
+          },
+          "usage": {
+            "prompt_tokens": 5104,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens": 12,
+            "total_tokens": 5116
+          }
+        },
+        {
+          "model_reply": {
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_fnr65ob5",
+                "index": 0,
+                "type": "function",
+                "function": {
+                  "name": "delete_operation",
+                  "arguments": "{\"name\":\"Pocket roughing\"}"
+                }
+              },
+              {
+                "id": "call_9tjfchtv",
+                "index": 1,
+                "type": "function",
+                "function": {
+                  "name": "delete_operation",
+                  "arguments": "{\"name\":\"Pocket finishing\"}"
+                }
+              }
+            ],
+            "finish_reason": "tool_calls"
+          },
+          "usage": {
+            "prompt_tokens": 8622,
+            "prompt_tokens_details": {
+              "cached_tokens": 5103
+            },
+            "completion_tokens": 47,
+            "total_tokens": 8669
+          }
+        },
+        {
+          "model_reply": {
+            "content": "All operations have been deleted.<tool_call>",
+            "tool_calls": null,
+            "finish_reason": "stop"
+          },
+          "usage": {
+            "prompt_tokens": 8759,
+            "prompt_tokens_details": {
+              "cached_tokens": 1831
+            },
+            "completion_tokens": 8,
+            "total_tokens": 8767
+          }
+        }
+      ],
+      "refused_call_ids": [],
+      "expected_operations": []
+    }
+  ]
+}

@@ -250,3 +250,55 @@ fn sinumerik_setup_change_refuses_an_unstated_machine_retract() {
     let first = gap(&out.program, "Cut2");
     assert!(!first.contains("G53") && !first.contains("SETUP CHANGE") && !has_block(&first, &["M0"]), "no guessed Z or invitation to change setup: {first}");
 }
+
+// #1977: the Haas NGC safe-start and completion blocks (Haas Mill NGC
+// Operator's Manual 2025: G94 p. 386; G91 G28 Z0, then G90, then M30 in
+// the M88/M89 sample, p. 449; G53 G49 Z0, then G53 Y0, pp. 202 and 204).
+fn haas_lines(options: &Value, after: AfterOperation) -> Vec<Vec<String>> {
+    let out = engine::run_with(&read("assets/posts/haas.cps"), &machine(), &cnc::serialize(&records(after, None)), options)
+        .expect("post runs");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    out.program.lines().map(|l| words(l).into_iter().map(str::to_string).collect()).filter(|w: &Vec<String>| !w.is_empty()).collect()
+}
+
+#[test]
+fn haas_safe_start_block_states_feed_per_minute() {
+    let lines = haas_lines(&Value::Null, AfterOperation::None);
+    let starts: Vec<&Vec<String>> = lines.iter().filter(|w| w.contains(&"G17".to_string()) && w.contains(&"G80".to_string())).collect();
+    assert_eq!(starts.len(), 3, "one safe-start block per section: {lines:?}");
+    for w in starts {
+        assert_eq!(w, &["G17", "G90", "G94", "G54", "G40", "G49", "G80"], "{lines:?}");
+    }
+}
+
+#[test]
+fn haas_program_end_restores_absolute_mode_before_m30() {
+    let lines = haas_lines(&Value::Null, AfterOperation::None);
+    let tail: Vec<String> = lines[lines.len() - 5..].iter().map(|w| w.join(" ")).collect();
+    assert_eq!(tail, ["G91 G28 Z0", "G28 X0 Y0", "G90", "M30", "%"], "{lines:?}");
+    // A trip home after an operation restores G90 too, before the next section.
+    let lines = haas_lines(&Value::Null, AfterOperation::GoHome);
+    for (i, w) in lines.iter().enumerate() {
+        if w.contains(&"G91".to_string()) {
+            assert_eq!(lines[i + 1].join(" "), "G28 X0 Y0", "{lines:?}");
+            assert_eq!(lines[i + 2].join(" "), "G90", "G91 never outlives its home move: {lines:?}");
+        }
+    }
+}
+
+#[test]
+fn haas_g53_retract_cancels_the_length_offset_and_brings_y_home() {
+    let g53 = json!({ "safeRetract": "G53" });
+    let lines = haas_lines(&g53, AfterOperation::None);
+    let tail: Vec<String> = lines[lines.len() - 4..].iter().map(|w| w.join(" ")).collect();
+    assert_eq!(tail, ["G53 G49 G0 Z150.", "G53 G0 Y0.", "M30", "%"], "{lines:?}");
+    assert!(!lines.iter().flatten().any(|w| w == "G91" || w == "G28"), "no reference return in G53 mode: {lines:?}");
+    // A setup-change stop lifts Z only; the next tool call writes G43 again.
+    let out = engine::run_with(&read("assets/posts/haas.cps"), &machine(),
+        &cnc::serialize(&records(AfterOperation::ProgramStop, Some("Flip B"))), &g53).expect("post runs");
+    let first = gap(&out.program, "Cut2");
+    assert!(has_block(&first, &["G53", "G49", "G0", "Z150."]), "{first}");
+    assert!(!has_block(&first, &["Y0."]), "Z only at a setup change: {first}");
+    let next = &out.program[out.program.find("OPERATION: Cut2").expect("Cut2")..];
+    assert!(has_block(next, &["G43", "H1"]), "the length offset comes back: {next}");
+}

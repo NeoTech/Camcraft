@@ -6,6 +6,7 @@
 //! tool length change re-seeded (#808 item 2). The values are the
 //! window's own holder draft (`ToolEditorView::holder`); only Apply
 //! holder lands them, as the one undoable `SetToolBody::library`.
+//! #3898 (U7): the component stack (`stack`) stands below the holder.
 //! Provenance: our own group over `app::holder_library`; no HSMWorks
 //! material involved.
 
@@ -40,6 +41,8 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     } else {
         ui.label("A turning tool takes no library holder: import its holder in the Body section.");
     }
+    // #3898: the tool's component stack (the document's shared parts).
+    super::stack::draw(ui, state);
     body(ui, state, u);
 }
 

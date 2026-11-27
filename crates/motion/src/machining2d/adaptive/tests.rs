@@ -137,3 +137,62 @@ fn the_slot_keeps_its_verdict_under_sub_micron_perturbations_light() {
     assert_lifted_within_the_load("the opening 180 nm deeper", &reach, &pl);
     let (reach, pl) = perturbed_slot(0.0, -125.0 * 1e-6);
     assert_lifted_within_the_load("the slot -125 nm wider", &reach, &pl);}
+
+/// Issue #4010: the center area the Z 15 level of the user's
+/// `Milling-test.step` bore hands the planner after the solidcore bump of
+/// PR #3802 (dumped from the 3-D ladder, 328 vertices), with the spec the
+/// ladder gives it (D10, helix R2 at the area's kernel spot).
+fn bore_z15() -> (Region, Region, AdaptiveSpec) {
+    let pts: Vec<Point2> = include_str!("../../../tests/fixtures/bore_z15_center.txt")
+        .lines()
+        .filter_map(|l| {
+            let mut it = l.split_whitespace().map(str::parse::<f64>);
+            match (it.next(), it.next()) {
+                (Some(Ok(x)), Some(Ok(y))) => Some(Point2::new(x, y)),
+                _ => None,
+            }
+        })
+        .collect();
+    assert_eq!(pts.len(), 328, "the Z 15 center outline");
+    let (Ok(l), r) = (crate::geo2d::Loop::new(pts), 5.0) else { panic!("fixture loop") };
+    let Ok(center) = Region::new(vec![l]) else { panic!("fixture region") };
+    let Ok(reach) = center.offset(r) else { panic!("reach") };
+    let seed = Point2::new(0.0012, 0.0012);
+    let spec = AdaptiveSpec {
+        r,
+        load: crate::load::DEFAULT_OPTIMAL_LOAD,
+        tol: crate::machining2d::pocket_hsm::PLAN_TOL,
+        climb: true,
+        seed,
+        start: Point2::new(seed.x - 2.0, seed.y),
+        bore: r + 2.0,
+        helix_r: 2.0,
+        smooth: 2.5,
+    };
+    (center, reach, spec)
+}
+
+/// Issue #4010: the bore's disc is one star cell from its middle. Before
+/// the fix, the opening of this outline kept edges one Clipper unit long
+/// (1.4e-6 mm) that turned back about the pole. The star law read each as
+/// a shadow, so the level went to the growth rings: 1000 mm of feed
+/// against the 334 mm of the morph spiral on the same disc.
+#[test]
+fn the_users_z15_bore_is_one_star_cell() {
+    let (center, _, spec) = bore_z15();
+    let Ok(cell) = star::star_cell(&center, &spec) else { panic!("star cell") };
+    assert!(cell.is_some(), "the bore's disc is a star cell from its middle");
+}
+
+/// Issue #4010: the Z 15 bore level plans the short morph spiral, as the
+/// other levels of the same disc do (334 mm of feed), not the growth
+/// rings' 1000 mm.
+#[test]
+fn the_users_z15_bore_plans_the_short_spiral() {
+    let (center, reach, spec) = bore_z15();
+    let Ok(pl) = plan(&reach, &center, &spec) else { panic!("plan") };
+    let len: f64 = pl.passes.iter().flat_map(|w| w.windows(2)).map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y)).sum();
+    assert!(len < 500.0, "the bore's walk is {len:.2} mm: {:?}", pl.notes);
+    assert!(first_crossing(&pl.passes).is_none(), "{:?}", pl.notes);
+    assert!(pl.rest < crate::machining2d::pocket_hsm::HSM_REST_MAX * reach.area(), "rest {} {:?}", pl.rest, pl.notes);
+}

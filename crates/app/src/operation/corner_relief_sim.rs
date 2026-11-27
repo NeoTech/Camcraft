@@ -41,6 +41,8 @@ pub(crate) fn zones_for_op(world: &World, op: &Operation, op_name: &str) -> Vec<
     {
         return Vec::new();
     }
+    // #3035: the rest grid, cut here as the yaw turn below reads it.
+    job.settle_prior();
     let yaw = job.wcs_yaw.take();
     if let Some(yw) = yaw
         && yw

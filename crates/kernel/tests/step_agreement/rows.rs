@@ -164,6 +164,29 @@ pub const ROWS: &[Row] = &[
         import: "agree",
         mesh: "off: volume",
     },
+    // #4045 (review of PR #4065): the EDM test parts that the Sodick LN2W
+    // goldens are cut from (our own parts; testdata/models/edm/).
+    Row {
+        file: "edm/edm-test-2axis.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "edm/edm-test-square.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "edm/edm-test-taper.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
     Row {
         file: "empty_list.step",
         mm_per_unit: 1.0,

@@ -1,7 +1,8 @@
 //! The transport's line for the stock removal calculated before
 //! playback (#2181): progress while it runs, a Cancel button, and the
 //! word "incomplete" when it stopped early; and the line that names the
-//! operation the stock simulation stops before (#2280). Provenance: our own
+//! operation the stock simulation stops before (#2280); and the line that
+//! says the stock is hidden (#3315). Provenance: our own
 //! transport bar (`egui_app::shell`); nothing from vendor binaries.
 //!
 //! The line is display state only: no command, nothing undoable, and
@@ -64,8 +65,24 @@ pub(crate) fn advance_playhead(state: &mut State, dt: f64, total: f64) {
     }
 }
 
+/// The line when the active setup's Stock row is hidden (#3315): the
+/// simulation draws no stock body then, so the user is told why.
+pub const STOCK_HIDDEN_NOTE: &str =
+    "The stock is hidden, so the material removal is not shown. Show the Stock row in the Browser to see it.";
+
+/// `STOCK_HIDDEN_NOTE` while the active stock is hidden, else `None`.
+#[must_use]
+pub fn stock_hidden_note(state: &State) -> Option<&'static str> {
+    state.active_stock_hidden().then_some(STOCK_HIDDEN_NOTE)
+}
+
 /// Draw the line under the transport bar, when there is one.
 pub(crate) fn transport_row(ui: &mut egui::Ui, state: &State) {
+    // #3315: before the worker check - a hidden stock is said whether
+    // or not the stock removal is being calculated.
+    if let Some(note) = stock_hidden_note(state) {
+        ui.label(note);
+    }
     let Some(play) = state.field_play.as_ref() else {
         return;
     };

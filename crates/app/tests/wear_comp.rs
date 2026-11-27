@@ -6,7 +6,7 @@
 //! file (an additive `wear_comp` key) and the cached span's `wear`
 //! flag. Haas, Mazak and Siemens 840D write their own comp words (#39)
 //! to `golden/nc/<dialect>/contour_wear_comp.nc`; Heidenhain (its
-//! radius is always the table's R plus DR), Tormach and the lathe post refuse it
+//! radius is always the table's R plus DR) and the lathe post refuse it
 //! by name.
 //!
 //! Regenerate after an intentional change:
@@ -153,13 +153,33 @@ fn haas_mazak_and_840d_post_wear_over_the_centre_path_to_the_goldens() {
 }
 
 #[test]
+fn tormach_posts_wear_over_the_centre_path() {
+    let (world, _) = world_with(Compensation::Wear);
+    let e = model::find_by_name(&world, "Contour1").expect("op");
+    let spans = model::toolpath_of(&world, &e).expect("cache").path.comps.len();
+    let text = stream(&world);
+    let m = posting::machine_value(&world);
+    let out = engine::run(&post_text("tormach"), &m, &text).unwrap();
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let p = &out.program;
+    assert_eq!(p.matches("G1 G41 ").count(), spans, "{p}");
+    assert_eq!(p.matches("(WEAR COMP - D1 ").count(), 1, "one note per section: {p}");
+    assert!(!p.contains("X10 Y10 ") && !p.contains("X10. Y10. "), "the centre path, never the part corner: {p}");
+    let mut path = std::env::temp_dir();
+    path.push(format!("camcraft_wear_comp_ok_tormach_{}.nc", std::process::id()));
+    let posted = posting::post_script(&world, &path, &post_text("tormach")).expect("the gate releases it");
+    assert_eq!(&posted.program, p);
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn the_other_posts_refuse_wear_by_name_and_the_gate_blocks() {
     let (world, _) = world_with(Compensation::Wear);
     let text = stream(&world);
     let m = posting::machine_value(&world);
     let out = engine::run(&post_text("fanuc-lathe"), &m, &text).unwrap();
     assert!(out.warnings.iter().any(|w| w.contains("nose-radius compensation")), "{:?}", out.warnings);
-    for stem in ["heidenhain", "tormach", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
+    for stem in ["heidenhain", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
         let mut path = std::env::temp_dir();
         path.push(format!("camcraft_wear_comp_{stem}_{}.nc", std::process::id()));
         let err = posting::post_script(&world, &path, &post_text(stem)).expect_err("the gate blocks");

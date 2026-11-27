@@ -279,12 +279,12 @@ fn queue_post_after_apply(
             return;
         }
         if dlg.options.per_op {
-            dlg.error = Some("Choose One program to create a native wire EDM job directory".into());
+            dlg.error = Some("Choose One program to create an Agie Wire EDM job directory".into());
             state.post_dialog = Some(dlg);
             return;
         }
         let parent = if dir_trim.is_empty() {
-            crate::file_dialog::FileDialog::new().set_title("Choose a parent folder for the native wire EDM job").pick_folder()
+            crate::file_dialog::FileDialog::new().set_title("Choose a parent folder for the Agie Wire EDM job").pick_folder()
         } else {
             Some(PathBuf::from(dir_trim))
         };

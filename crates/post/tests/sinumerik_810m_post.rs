@@ -255,7 +255,17 @@ fn arcs_comp_and_dwell_match_810m_dialect() {
             kind: MoveKind::Feed, x: 10.0, y: 50.0, z: -7.0, feed: Some(400.0),
             center: Some((10.0, 45.0)), ccw: false, plane: ArcPlane::Xy, abc: None,
         }),
-        mv(MoveKind::Rapid, 10.0, 50.0, 15.0, None),
+        // Helical G18 arc: X and Z in plane, Y moves from 50.0 to 52.0 (#4146).
+        cnc::Record::Move(cnc::MoveRec {
+            kind: MoveKind::Feed, x: 20.0, y: 52.0, z: -9.0, feed: Some(400.0),
+            center: Some((20.0, -7.0)), ccw: false, plane: ArcPlane::Xz, abc: None,
+        }),
+        // Helical G19 arc: Y and Z in plane, X moves from 20.0 to 22.0 (#4146).
+        cnc::Record::Move(cnc::MoveRec {
+            kind: MoveKind::Feed, x: 22.0, y: 60.0, z: -11.0, feed: Some(400.0),
+            center: Some((60.0, -9.0)), ccw: true, plane: ArcPlane::Yz, abc: None,
+        }),
+        mv(MoveKind::Rapid, 22.0, 60.0, 15.0, None),
         cnc::Record::Section { begin: false },
     ];
     let out = run(&mch, &cnc::serialize(&recs), &json!({}));
@@ -265,9 +275,11 @@ fn arcs_comp_and_dwell_match_810m_dialect() {
     assert!(p.contains("G40 "), "{p}");
     assert!(p.contains("(WEAR COMP - D1 HOLDS WEAR DELTA ONLY)"), "{p}");
     assert!(!p.contains("NORM") && !p.contains("KONT") && !p.contains("CR="), "{p}");
-    assert!(p.contains("G18 G2 X10 Y30 Z-4 I10 K0 F400"), "{p}");
-    assert!(p.contains("G19 G3 X10 Y40 Z-6 J10 K0 F400"), "{p}");
+    assert!(p.contains("G18 G2 X10 Z-4 I10 K0 F400"), "{p}");
+    assert!(p.contains("G19 G3 Y40 Z-6 J10 K0 F400"), "{p}");
     assert!(p.contains("G17 G2 X10 Y50 Z-7 I0 J5 F400"), "{p}");
+    assert!(p.contains("G18 G2 X20 Z-9 Y52 I10 K0 F400"), "{p}");
+    assert!(p.contains("G19 G3 Y60 Z-11 X22 J8 K0 F400"), "{p}");
 
     // Plane change while G41 is active must be refused by name.
     let bad_plane = recs.into_iter().filter(|r| !matches!(r, cnc::Record::Comp { side: None, .. })).collect::<Vec<_>>();
@@ -315,7 +327,7 @@ fn canned_cycles_emit_l81_to_l89_with_r_parameters_and_safe_hops() {
         assert!(!out.program.contains("Z-10"), "{kind:?}: expanded plunge Z-10 must be suppressed:\n{}", out.program);
     }
 
-    // Rigid tap with dwell > 0 is refused on 810M (R04 only valid without encoder R08=-4).
+    // Tap with encoder (R08=-3) and dwell > 0 is refused on 810M (R04 only valid without encoder R08=-4).
     let mut b = PathBuilder::new(Point3::new(10.0, 10.0, 10.0));
     b.push(MoveKind::Rapid, Point3::new(10.0, 10.0, 1.0), None);
     let fm = b.moves_len();
@@ -493,7 +505,7 @@ fn deep_to_tap_initializes_z_axis_before_every_l84() {
     });
     b.push(MoveKind::Rapid, Point3::new(10.0, 10.0, 4.0), None);
 
-    // Hole 2: rigid TAP (L84 R08=-3).
+    // Hole 2: TAP with encoder (L84 R08=-3).
     b.push(MoveKind::Rapid, Point3::new(30.0, 10.0, 4.0), None);
     b.push(MoveKind::Rapid, Point3::new(30.0, 10.0, 1.0), None);
     let fm2 = b.moves_len();
@@ -550,7 +562,7 @@ fn deep_to_tap_initializes_z_axis_before_every_l84() {
     assert_eq!(l84_params.len(), 2, "two L84 calls expected:\n{}", out.program);
     assert!(
         l84_params[0].contains("R08=-3") && l84_params[0].contains("R11=3"),
-        "rigid L84 after L83 DEEP must reset R11=3 (Z axis):\n{}",
+        "L84 with encoder after L83 DEEP must reset R11=3 (Z axis):\n{}",
         out.program
     );
     assert!(

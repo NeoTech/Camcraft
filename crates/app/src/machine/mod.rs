@@ -64,6 +64,9 @@ pub mod wire_edm;
 mod sheet;
 pub mod validate;
 // #383: the machine editor - property grid, draft, user folder and save.
+pub mod chain;
+// #2756: the axis chain's rows, built once per edit (#2238).
+pub mod chain_view;
 pub mod draft;
 pub mod fields;
 pub mod order;

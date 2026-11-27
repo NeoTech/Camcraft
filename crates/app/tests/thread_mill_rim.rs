@@ -171,6 +171,7 @@ fn open_ahead(world: &World, h: &mut History, thread: &OpParams) {
         let (t, op) = (format!("OPEN-T{k}"), format!("OPEN{k}"));
         h.execute(world, AddTool::new(world, &t, tool).expect("open tool"));
         let bore = OpParams::Bore {
+            entry: camcraft_app::machining3d::Entry3D::Plunge,
             pass_start: camcraft_app::machining2d::PassStart::Auto,
             break_through: hole.through.then_some(1.5),
             links: camcraft_app::links::Links::PLANAR,

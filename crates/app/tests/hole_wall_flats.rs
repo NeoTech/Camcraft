@@ -156,6 +156,7 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             picks: Default::default(),
         },
         Kind::Bore => OpParams::Bore {
+            entry: camcraft_app::machining3d::Entry3D::Plunge,
             pass_start: camcraft_app::machining2d::PassStart::Auto,
             break_through: None,
             links: camcraft_app::links::Links::PLANAR,

@@ -166,7 +166,9 @@ fn geometry_boundaries_shows_do_not_touch_controls_rows_and_viewport_marks() {
 }
 
 #[test]
-fn unsupported_op_shows_do_not_touch_note_without_pick_button() {
+fn contour_shows_pick_protected_and_no_unsupported_note() {
+    // #3344: Contour takes protected items. Every kind with a Boundary
+    // group now takes them, so no kind shows the unsupported note here.
     let _g = snapshot_guard();
     let mut h = Harness::builder()
         .with_size(Vec2::new(1400.0, 1100.0))
@@ -178,10 +180,10 @@ fn unsupported_op_shows_do_not_touch_note_without_pick_button() {
     }
     h.run_steps(3);
     expand_boundary(&mut h);
-    assert!(h
-        .query_by_label_contains("2D Pocket, Trace, 2D Offset, 2D Adaptive, 3D Pocket, Face, 3D Finish and Engrave")
-        .is_some());
-    assert!(h.query_by_label("Pick protected").is_none());
+    assert!(h.query_by_label_contains("is supported on").is_none(), "Contour supports Do not touch (#3344)");
+    h.get_by_label("Pick protected").click();
+    h.run_steps(2);
+    assert_eq!(h.state().state.boundary_pick, Some(crate::state::BoundaryPick::DoNotTouch));
 }
 
 #[test]

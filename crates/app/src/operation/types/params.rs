@@ -1465,6 +1465,11 @@ pub enum OpParams {
         /// Where each level's rings start (#3360): the shared pass-order
         /// parameter. `Auto` is every earlier file, byte for byte.
         pass_start: crate::machining2d::PassStart,
+        /// How each hole's first descent enters the material: `Plunge`
+        /// (every earlier file), `Ramp` or `Helix`. The ramp and helix
+        /// angles are the links' approach (`ramp_angle`, `helix_angle`):
+        /// a hard cap on the descent. Never `Arc` (refused at the door).
+        entry: crate::machining3d::Entry3D,
         picks: crate::path_picks::PathPicks,
     },
     /// Helical thread milling (M2.4 C, reworked by #894): internal

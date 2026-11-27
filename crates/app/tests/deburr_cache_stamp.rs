@@ -18,7 +18,9 @@ const CONE: &str = "CM-0600-90";
 const LEGACY_SELECTED_STAMP: u64 = 10_384_171_768_072_239_596;
 // Captured again at the #2901 salt (v3 -> v4): the salt moves every
 // stamp once; the automatic deburr's stamp still holds no filter word.
-const LEGACY_AUTOMATIC_STAMP: u64 = 8_060_236_086_598_552_561;
+// Recaptured at the #3704 generator-output term: that term moves every
+// stamp once, the same churn.
+const LEGACY_AUTOMATIC_STAMP: u64 = 9_082_132_452_601_881_700;
 
 fn generated(selected: bool, excluded: bool) -> (World, History) {
     let world = camcraft_app::world::new_world();

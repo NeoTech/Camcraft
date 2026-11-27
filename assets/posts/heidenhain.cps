@@ -9,7 +9,7 @@
 // text; original work. Where the manual leaves a hole, the post
 // refuses by name or the house style decides, and the conformance
 // goldens lock that decision, not any vendor's.
-description = "Heidenhain TNC (3-axis mill, DIN/ISO G200/G205/G206/G207 cycles and G247 presets)";
+description = "Heidenhain TNC (3-axis mill, DIN/ISO G200/G206/G207 cycles and G247 presets)";
 vendor = "CamCraft (independent, unaffiliated)";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -25,6 +25,11 @@ afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a st
 floatingTapping = true; // #51: G206 requires the operation's explicit floating-holder choice
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 6;      // preset rows 1..6; more rows depend on the machine's preset table, not verified here (#931)
+// #4085: on a machine whose installation states a manual change at the
+// physical upper change position, each tool change retracts with M92 and
+// stops with M6 (manualChange below). Plain "manual" states no change
+// position, so the engine refuses it for this post by name.
+manualToolChange = ["manual-retract-top"];
 // #902: millimetres only for now - the engine refuses an inch document by
 // name. The TNC runs inch (G70), but the feed unit its inch programs and
 // cycle Q feeds take was not confirmed from the public manual this post
@@ -41,6 +46,7 @@ var sRpm = 0;
 var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
+var installedTool = null;  // #4085: the tool the operator installed at the last manual change
 var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
@@ -258,7 +264,9 @@ function progComment() { return clean(typeof program !== "undefined" ? program.c
 // legal file name); else the machine's, as before. A stated number the
 // name does not carry is the operator's comment block after the begin.
 function onOpen() {
-  var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
+  manualInstallation();
+  dialectCheck();
+  var nm =(typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   var said = progComment();
   if (said) pgmName = said.replace(/[^A-Za-z0-9._-]/g, "_");
   else if (progNumbered()) pgmName = String(progNo());
@@ -332,6 +340,10 @@ function onSpindleSpeed() {
 }
 
 function onToolChange(number, name) {
+  // #4087: a T number past the control's tool table alarms at the control.
+  if (typeof machine !== "undefined" && machine.toolNumberMax > 0 && number > machine.toolNumberMax) {
+    msg("tool number " + number + " is above the machine tool table maximum " + machine.toolNumberMax);
+  }
   toolName = clean(name);
   tNo = number;
   toolWait = true;
@@ -340,7 +352,8 @@ function onToolChange(number, name) {
 // The preamble closes over everything a raw motion line needs to be a
 // legal program. #50: the tool call is the T block, `T5 G17 S4500*`
 // (pp. 71, 218: number, spindle axis, speed; it applies the tool's
-// length) - M6 is machine-dependent (p. 392) and not written. A speed
+// length) - M6 is machine-dependent (p. 392) and not written, except as
+// the stop of a manual change (#4085, manualChange). A speed
 // change without a tool change is a T block of the speed only (p.
 // 201). G40 G90 ride the first positioning block. The old preamble
 // words are gone: G54 (datum shift), G80 (WORKING PLANE, p. 756) are
@@ -361,6 +374,90 @@ function smoothOff() {
   smoothMode = "";
 }
 
+// #4085: the manual tool change, on a machine whose installation states
+// "manual-retract-top" (the Fehlmann Picomax 55, iTNC 530): a T block
+// there only gives the T number to the PLC and does not stop. The
+// machine's programming manual changes a tool with an M92 Z+0 retract
+// and an M6 move, and its machine parameters halt the program at M06.
+// The order here is: retract (G00 G90 Z+0 M92) while the OLD tool call
+// is still in force, M6, the operator checks, M0 (the stop), then the
+// new T block. So the new tool's length is never active while the old
+// tool is in the spindle, and on the verified installation (below) the
+// retract goes up to the machine-referenced change height whatever
+// length is active. The section end has already stopped the spindle
+// (M5) and the coolant (M9). At the program's start the tool in the
+// spindle is unknown: no retract, M6, the checks and M0
+// only. A repeated tool number is no change and writes no stop.
+// #4114: M6 is the change call that the machine's manual writes. M0 after
+// it is the stop: it halts whatever the M06 machine parameter says, and on
+// the Picomax it also switches the drives off (manual p. 1-17), the same
+// stop as the Klartext post.
+// docs/decisions/4085-heidenhain-din-manual-change.md records the call.
+function manualChange() {
+  var mode = (typeof machine !== "undefined" && machine) ? machine.toolChangeMode : undefined;
+  if (mode !== "manual-retract-top" || tNo === installedTool) return;
+  if (installedTool !== null) block(["G00", "G90", "Z+0", "M92"]);
+  block(["M6"]);
+  note("CHECK DRIVES OFF BEFORE TOUCHING TOOL");
+  note("CHECK QUILL AT PHYSICAL CHANGE POSITION");
+  note("ABORT IF EITHER CHECK FAILS");
+  note("THEN INSTALL TOOL " + ni(tNo) + (toolName ? " " + toolName : ""));
+  block(["M0"]);
+  installedTool = tNo;
+}
+
+// #4114: the sequence above is safe only where the M92 Z datum is the
+// upper change position and the control halts as stated. Those are
+// machine parameters of one installation, so the post refuses each
+// "manual-retract-top" machine that is not that installation: the same
+// controller identity and machine check as the Klartext post. A script
+// error stops the post, and nothing is written.
+var MANUAL_VERIFIED = { machine: "Fehlmann Picomax 55 (iTNC 530)", model: "iTNC 530", nc: "340490-03" };
+function manualInstallation() {
+  if (typeof machine === "undefined" || !machine || machine.toolChangeMode !== "manual-retract-top") return;
+  var id = machine.controllerIdentity;
+  var v = MANUAL_VERIFIED;
+  if (!id || id.model !== v.model || id.nc_software !== v.nc || machine.model !== v.machine) {
+    var seen = id ? String(id.model) + " NC " + String(id.nc_software) : "no controller identity";
+    throw new Error("Heidenhain TNC: the manual-retract-top tool change (M92 retract, M6, M0 stop)" +
+      " is verified only on the " + v.machine + " with " + v.model + " NC " + v.nc +
+      "; the machine " + String(machine.model || machine.name || "") + " states " + seen +
+      " - choose a post that is verified for this installation");
+  }
+}
+
+// #4095: the dialect of the stated control comes from the shared resolver
+// (camcraft_post::post::heidenhain_dialect, machine.heidenhainDialect;
+// docs/decisions/4095-heidenhain-dialect-resolver.md). A machine with no
+// controller identity keeps the output of today: the TNC 640 34059x-07
+// level that this post is specced from (#4094). A stated control that the
+// resolver does not know, or that has no DIN/ISO programs, is refused by
+// name: a script error stops the post, and nothing is written.
+var dialect = null;
+function dialectWho() {
+  var id = machine.controllerIdentity;
+  return String(id.model) + " NC " + String(id.nc_software) + (dialect ? " (profile " + dialect.profile + ")" : "");
+}
+function dialectCheck() {
+  if (typeof machine === "undefined" || !machine || !machine.controllerIdentity) return;
+  var d = machine.heidenhainDialect;
+  if (!d || typeof d !== "object" || d.error) {
+    throw new Error("Heidenhain TNC: " + (d && d.error ? String(d.error) : "no dialect for " + dialectWho()) +
+      " - refused, not posted");
+  }
+  dialect = d;
+  if (d.languageIso !== "yes") {
+    throw new Error("Heidenhain TNC: " + dialectWho() + (d.languageIso === "no"
+      ? " has no DIN/ISO programs" : " is not known to run DIN/ISO programs") +
+      " - choose the Klartext post; refused, not posted");
+  }
+  // fu() writes three decimals: the 1 um grid, which every profile takes.
+  if (!(d.decimals >= 3)) {
+    throw new Error("Heidenhain TNC: " + dialectWho() + " takes " + d.decimals +
+      " coordinate decimals; this post writes 3 - refused, not posted");
+  }
+}
+
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
@@ -373,12 +470,23 @@ function startPreamble() {
   modalWait = true;
   // Cycle 247 activates on definition; never call it as a hole cycle.
   // It resets coordinate transformations (892905-25 §10.4, p.275).
+  // #4095: G247 Q339 selects a preset-table row only where cycle 247 has
+  // that meaning (iTNC 530 from 340 422). Before, it sets a datum value:
+  // the same block would move the datum. Refused, never written.
   if (preset !== null && preset !== activePreset) {
-    block(["G247", "Q339=" + preset]);
+    if (dialect && dialect.cycle247 !== "presetTable") {
+      msg("G247 Q339=" + preset + " (preset-table row) cannot be written for " + dialectWho() + ": " +
+        (dialect.cycle247 === "datum" ? "its cycle 247 sets a datum value, not a preset-table row"
+          : dialect.cycle247 === "none" ? "it has no cycle 247" : "the meaning of its cycle 247 is not known") +
+        " - refused, not posted");
+    } else {
+      block(["G247", "Q339=" + preset]);
+    }
     activePreset = preset;
     cycleSig = "";
   }
   if (toolWait) {
+    manualChange();
     toolNote();
     block(["T" + ni(tNo), "G17", spindleWait && sRpm > 0 ? "S" + ff(sRpm) : ""]);
     xyUnknown = true;          // #1633: the first traverse states its height again
@@ -629,7 +737,7 @@ function onCircular() {
 // ------------------------------------------------------------ drilling
 // #51 provenance: TNC 640 Cycle Programming, ID 892905-25, 9/2016,
 // §§3.3/3.8/4.2/4.3/10.4 (pp.81-82,95-98,111-116,275).
-// G200/G205/G206/G207 define; M99 calls ONCE, on a positioning
+// G200/G206/G207 define; M99 calls ONCE, on a positioning
 // block (§2.1 p.60). No M89 modal calls and no G80 (working plane).
 // Native cycles return to R; the expanded chain's higher lifts and
 // XY traverses remain explicit. Only its drilling moves are replaced.
@@ -637,8 +745,8 @@ var DWELL_TOL = 1e-6;
 function sameHole(p) {
   return Math.abs(p.X - cycleX) < DWELL_TOL && Math.abs(p.Y - cycleY) < DWELL_TOL;
 }
-// #3102: the top of the documented Q208 range (mm/min), the fastest retract.
-var RETRACT_FEED_MAX = 99999.999;
+// #4094: Q395 = 0, the depth is to the tool tip (the stream's own Z).
+var DEPTH_REFERENCE = 0;
 function qword(n, v) {
   // Q values may need four decimals (not integer feed rounding, which
   // would change a tap's feed/pitch relation). Numeric ranges checked below.
@@ -648,6 +756,25 @@ function qword(n, v) {
 }
 function cycleBad(why) {
   msg(coolantWho() + "Heidenhain drilling/tapping: " + why);
+}
+// #4094/#4095: the cycle 200 (DRILLING) parameter level of the stated
+// control, from the resolver's drillC200 (differences.md B2 "Cycle 200 Q
+// list", B3): "q395" writes Q211 and Q395 (iTNC 530 60642x-04, TNC 640
+// 34059x-04, TNC 620 81760x-01, TNC 320 77185x-01, TNC7); "q211" writes
+// Q211 without Q395 (iTNC 530 340 420 to 60642x-03, TNC 426/430 280 474
+// on, the TNC 640/620/320 releases before those); "base" has no Q211, which
+// this post writes, and is refused. A machine with no controller identity
+// keeps "q395", the level of the TNC 640 manual this post is specced from
+// (docs/decisions/4094-dinsio-cycle-parameter-level.md). #4224: the post
+// writes no cycle 205 (PECK and DEEP post the explicit chain).
+var drillLevelWhy = "";
+function drillLevel() {
+  if (!dialect) return "q395";
+  var level = dialect.drillC200;
+  if (level === "q395" || level === "q211") return level;
+  drillLevelWhy = "cycle 200 of " + dialectWho() + " has no Q211 (dwell at the depth)," +
+    " which this post writes - refused, not posted";
+  return null;
 }
 function onCycle() {
   startPreamble();
@@ -689,7 +816,7 @@ function onCycle() {
   if (has(p.ChainBottomZ) && Math.abs(p.ChainBottomZ - p.Z) > DWELL_TOL) {
     cycleBad("drilling dwell/depth disagrees with the expanded chain bottom"); return;
   }
-  var g = tap ? (floating ? "G206" : "G207") : (type === "PECK" ? "G205" : "G200");
+  var g = tap ? (floating ? "G206" : "G207") : "G200";
   var words = [g, qword(200, clearance), qword(201, depth)];
   if (tap) {
     if (!has(sRpm) || sRpm <= 0 || sRpm !== Math.round(sRpm)) { cycleBad("tapping needs a positive integral spindle speed to resolve pitch"); return; }
@@ -715,36 +842,38 @@ function onCycle() {
     if (type !== "SPOT" && type !== "DRILL" && type !== "PECK" && type !== "DEEP") {
       cycleBad("unsupported cycle kind " + type); return;
     }
-    var pecked = type === "PECK" || type === "DEEP";
-    // The generator counts pecks from R, the control from the surface.
-    // A nonzero gap would change the first infeed: refuse rather than
-    // silently deepen it. Single-plunge drills/taps allow that gap.
-    if (pecked && Math.abs(clearance) > DWELL_TOL) {
-      // Preserve the already-supported explicit chain when its air-gap
-      // first infeed cannot be expressed by a constant native peck.
+    // #4224: PECK and DEEP always post the expanded chain as plain moves.
+    // The native peck cycles do not do the chain's motion. Cycle 205
+    // makes a full retract after each plunging depth Q202, then moves at
+    // FMAX back to Q258 above the last depth; cycle 200 moves at FMAX to
+    // the set-up clearance Q200 above the last depth. The chain makes
+    // chip-break hops (PECK), or rapids to R and feeds down from R (DEEP).
+    // The simulation and the gouge check read the chain, so the program
+    // must do the chain: the explicit chain is the motion that was checked
+    // (docs/decisions/4224-heidenhain-peck-chain.md).
+    if (type === "PECK" || type === "DEEP") {
       inCycle = false; cycleSig = "";
       if (dwell > 0) pendingDwell = { z: Number(p.Z), s: dwell };
       return;
     }
-    var step = pecked ? Number(p.Q) : -depth;
-    if (!has(step) || step <= 0 || step > 99999.9999) { cycleBad("invalid peck/infeed depth"); return; }
-    words.push(qword(206, feed), qword(202, step));
-    if (g === "G200") words.push(qword(210, 0)); // no top-dwell intent
+    // A single plunge: the plunging depth is the whole depth.
+    words.push(qword(206, feed), qword(202, -depth), qword(210, 0)); // no top-dwell intent
   }
   words.push(qword(203, surface), qword(204, clearance));
-  if (g === "G205") {
-    // Constant chip-break pecks, no decrement or deepened start. A
-    // conservative feed re-approach avoids inventing an unverified rapid.
-    // #3102: Q208 (retraction feed) is a number, never the word FMAX. An
-    // iTNC 530 (606425 04) DIN/ISO import refuses the G205 block with
-    // Q208=FMAX. The iTNC 530 cycle manual (670388-25, cycle 205) gives
-    // the range 0..99999.999 and writes Q208=99999 in its own example;
-    // the TNC 640 manual (892905-25) takes the same number. The top of
-    // the range asks for the fastest retract that the control permits.
-    words.push(qword(212, 0), qword(205, p.Q), qword(258, 0), qword(259, 0),
-      qword(257, p.Q), qword(256, Math.min(1, p.Q)), qword(211, dwell),
-      qword(379, 0), qword(253, feed), qword(208, RETRACT_FEED_MAX), qword(395, 0));
-  } else if (g === "G200") words.push(qword(211, dwell), qword(395, 0));
+  if (g === "G200") {
+    words.push(qword(211, dwell));
+    var level = drillLevel();
+    if (!level) { cycleBad(drillLevelWhy); return; }
+    if (level === "q395") words.push(qword(395, DEPTH_REFERENCE));
+    else if (DEPTH_REFERENCE !== 0) {
+      // #4094: the 340 49x level has no Q395. The old cycle drills to the
+      // tool tip (Q395=0). Any other ask is refused.
+      cycleBad("G200 Q395=" + DEPTH_REFERENCE + " cannot be written for " +
+        String(machine.controllerIdentity.model) + " NC " + String(machine.controllerIdentity.nc_software) +
+        ": its cycle 200 has no Q395 - refused, not posted");
+      return;
+    }
+  }
   // #1359: checked last, so a tap's own named refusals (rpm, pitch)
   // still speak; inCycle stays set, so the hole's chain is swallowed too.
   if (spindleStopped("drilling cycle " + g)) return;
@@ -756,7 +885,8 @@ function onCycle() {
 }
 function dwellAtBottom(z) {
   if (pendingDwell === null || !has(z) || Math.abs(z - pendingDwell.z) > DWELL_TOL) return;
-  block(["FUNCTION DWELL TIME" + fu(pendingDwell.s)]);
+  // #4093: ISO programs always use G04 F<s> (cycle 9 DWELL TIME). FUNCTION DWELL is not confirmed for ISO.
+  block(["G04", "F" + fu(pendingDwell.s)]);
   pendingDwell = null;
 }
 // A dwell whose chain never reached its bottom is refused, never lost.

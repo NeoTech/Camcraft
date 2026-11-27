@@ -26,7 +26,8 @@ use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 
 use super::adaptive_troch::{AdaptiveTrochParams, confined};
-use super::adaptive_troch_clean::{CleanChain, emit_cleanup, plan_cleanup};
+use super::adaptive_troch_check::{cleanup_engagement_note, plan_cleanup_checked};
+use super::adaptive_troch_clean::{CleanChain, emit_cleanup};
 use super::adaptive_troch_lanes::{plan_all_lanes, rest_share};
 use super::face::GenError;
 use super::pocket::{PocketParams, PocketStrategy};
@@ -55,6 +56,7 @@ pub(crate) struct TrochLevel {
     cleared: Region,
     reach_area: f64,
     rest: f64,
+    clean_notes: Vec<String>,
 }
 
 /// A planner's message under the 3D method's name.
@@ -99,13 +101,34 @@ pub(crate) fn plan_troch_level(center: &Region, p: &PocketParams, t: &AdaptiveTr
     let reach = center.offset(r)?;
     let region = if p.stock_to_leave > 0.0 { center.offset(r + p.stock_to_leave)? } else { reach.clone() };
     let planned = plan_all_lanes(&region, center, p, t)?;
-    let (clean, cleared) =
-        plan_cleanup(center, &reach, &planned.used_center, &planned.cleared, p.tool_diameter, p.optimal_load, p.climb, t)?;
-    let rest = rest_share(&reach, &cleared);
-    Ok(TrochLevel { layouts: planned.layouts, clean, cleared, reach_area: reach.area(), rest })
+    let clean =
+        plan_cleanup_checked(&region, center, &reach, &planned.layouts, &planned.used_center, &planned.cleared, p, t)?;
+    let rest = rest_share(&reach, &clean.cleared);
+    let mut clean_notes = Vec::new();
+    if clean.step_reduced {
+        clean_notes.push(rename(&format!(
+            "2D Adaptive (Trochoidal): clean-up peel step was reduced to hold the {:.1} deg engagement limit (measured {:.1} deg)",
+            t.max_engagement, clean.max_deg
+        )));
+    }
+    if let Some((deg, at)) = clean.exceeded {
+        clean_notes.push(rename(&cleanup_engagement_note(deg, at, t.max_engagement)));
+    }
+    Ok(TrochLevel {
+        layouts: planned.layouts,
+        clean: clean.chains,
+        cleared: clean.cleared,
+        reach_area: reach.area(),
+        rest,
+        clean_notes,
+    })
 }
 
 impl TrochLevel {
+    /// Notes about clean-up engagement adjustment or over-limit cuts (#3849).
+    pub(crate) fn clean_notes(&self) -> &[String] {
+        &self.clean_notes
+    }
     /// The area the level's cuts sweep clear, down to its plane.
     pub(crate) fn cleared(&self) -> &Region {
         &self.cleared

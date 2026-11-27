@@ -67,7 +67,11 @@ pub struct GenJob {
     pub(super) slot_bound: Option<Result<crate::machining2d::SlotBound, GenError>>,
     /// #2848: a rotary op's picked faces, read here; the rotary arms keep to them or refuse by name.
     pub(super) rotary_picks: Option<Result<super::rotary_picks::Picked, GenError>>,
+    /// The rest grid, once [`GenJob::settle_prior`] has cut `prior_staged`.
     pub(super) prior: Option<Result<Arc<crate::rest::PriorState>, GenError>>,
+    /// #3035: the rest grid's world reads, done at collect; its stock
+    /// simulation runs in the job, off the collecting thread.
+    pub(super) prior_staged: Option<Result<crate::rest::StagedPrior, GenError>>,
     /// The program ahead of this op in its setup, uncut (issue #96
     /// review): verify's vertical-dive convictions are re-read against
     /// the stock it leaves standing. `None` is nothing ahead cut, a
@@ -367,17 +371,15 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         analytic_stock = true;
     }
     let carried_overhang = carried.overhang;
-    let prior = match &op.params {
+    let prior_staged = match &op.params {
         OpParams::Pocket3D { .. } | OpParams::MultiAxisRough { .. } => {
-            // The mask the rest laws stand on, resolved NOW on the
-            // caller's thread; the Arc is so a run never clones a
-            // height field (Dexel is big, and borrowed anyway).
+            // The mask the rest laws stand on: its world reads NOW, on
+            // the caller's thread; its simulation in the job (#3035).
             Some(
-                crate::rest::prior_state(world, op_name, setup, tool.diameter * 0.5)
+                crate::rest::stage_prior(world, op_name, setup, tool.diameter * 0.5)
                     // #319: declared material past the carried grid is
                     // present - no mask, the declared stock is cut.
-                    .map(|p| if carried.distrust_prior { crate::rest::PriorState { grid: None, ..p } } else { p })
-                    .map(Arc::new),
+                    .map(|p| if carried.distrust_prior { p.without_grid() } else { p }),
             )
         }
         // #2033: a 2D Pocket whose rest area is read from the previous
@@ -393,9 +395,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
                 return Err(GenError::Invalid(format!("{op_name}: {why}")));
             }
             Some(
-                crate::rest::prior_state(world, op_name, setup, tool.diameter * 0.5)
-                    .map(|p| if carried.distrust_prior { crate::rest::PriorState { grid: None, ..p } } else { p })
-                    .map(Arc::new),
+                crate::rest::stage_prior(world, op_name, setup, tool.diameter * 0.5)
+                    .map(|p| if carried.distrust_prior { p.without_grid() } else { p }),
             )
         }
         _ => None,
@@ -524,7 +525,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         drive_chains,
         slot_bound,
         rotary_picks: super::rotary_picks::picks_of(world, op),
-        prior,
+        prior: None,
+        prior_staged,
         verify_prior,
         drills_ahead,
         turned_ahead,
@@ -560,6 +562,17 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         unit: crate::units::of(world),
         wcs_yaw,
     })
+}
+
+impl GenJob {
+    /// #3035: cut the staged rest grid into `prior`. `run_job` calls it
+    /// first, so the stock simulation runs on the job's own thread; an
+    /// error stays stored for the arm that reads the grid.
+    pub(super) fn settle_prior(&mut self) {
+        if let Some(staged) = self.prior_staged.take() {
+            self.prior = Some(staged.and_then(crate::rest::StagedPrior::simulate).map(Arc::new));
+        }
+    }
 }
 
 /// The old `region_for_src`'s law told without a world: the picks' answer when
