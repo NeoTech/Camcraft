@@ -330,6 +330,12 @@ pub struct SetupDto {
     /// step). Absent - every older file - states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sheet_job: Option<crate::sheet_job::SheetJob>,
+    /// #3406: the setup's part-in-spindle mode, additive (no version
+    /// step). Absent - every older file - states none. An older reader
+    /// drops it, and its family door then refuses the turning work on
+    /// the mill by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_in_spindle: Option<crate::part_in_spindle::PartInSpindle>,
     /// #3447: the setup's place in the program (its creation order), v77.
     /// Absent - every older file - sorts first, by name. An old reader
     /// must refuse the file rather than drop the key and post in name order.

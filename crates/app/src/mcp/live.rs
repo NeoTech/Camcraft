@@ -35,7 +35,8 @@ pub enum GateKind {
     /// Machine mount or machine definition edits (`load_machine`, `edit_machine`). Never auto-approved.
     MachineEdit,
     /// Setup post or workholding limit edits (`set_setup_post`, `set_workholding_max_rpm`, `set_setup_nose_to_axis`,
-    /// `set_sheet_job`: its allowance is a floor the post holds the program to).
+    /// `set_sheet_job`: its allowance is a floor the post holds the program to; `set_part_in_spindle`,
+    /// `set_table_station`: they open a mill setup to turning work).
     LimitEdit,
     /// File writes (`save_project`, `export_tool_library`, `export_fixture_dxf` with `path`).
     FileWrite,
@@ -59,7 +60,12 @@ pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
     match tool {
         "post" | "export_agie_inspection" => Some(GateKind::Posting),
         "load_machine" | "edit_machine" => Some(GateKind::MachineEdit),
-        "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" | "set_sheet_job" => {
+        "set_setup_post"
+        | "set_workholding_max_rpm"
+        | "set_setup_nose_to_axis"
+        | "set_sheet_job"
+        | "set_part_in_spindle"
+        | "set_table_station" => {
             Some(GateKind::LimitEdit)
         }
         "save_project" | "export_tool_library" | "save_library_component" | "delete_library_component" => Some(GateKind::FileWrite),

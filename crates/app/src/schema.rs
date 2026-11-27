@@ -482,6 +482,11 @@ pub struct ToolAssembly(pub Vec<AssemblyLink>);
 /// through-cut allowance, XY zero, clamp clearance); `None`, the default
 /// and every earlier file, states none. Read through [`crate::sheet_job`];
 /// written only by `SetSheetJob` and the project loader.
+/// `part_in_spindle` (#3406) is a mill setup's part-in-spindle mode: the
+/// mill spindle holds the stock, and lathe tools stand on the table at
+/// their own work offsets. `None`, the default and every earlier file,
+/// states none. Read through [`crate::part_in_spindle`]; written only by
+/// `SetPartInSpindle`, `SetTableStation` and the project loader.
 /// `order` (#3447) is the setup's place in the program: `CreateSetup`
 /// writes the next number, so a setup added later posts later whatever
 /// its name. `None`, every earlier file, sorts first and by name
@@ -503,6 +508,7 @@ pub struct SetupDef {
     pub nose_to_axis: Option<f64>,
     pub workholding_max_rpm: Option<f64>,
     pub sheet_job: Option<crate::sheet_job::SheetJob>,
+    pub part_in_spindle: Option<crate::part_in_spindle::PartInSpindle>,
     pub order: Option<u32>,
 }
 

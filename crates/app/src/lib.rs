@@ -147,6 +147,8 @@ pub mod setup_post_options;
 pub mod setup_workholding;
 // #3070: the guided sheet job - stock, Z zero, allowance, clamp plane.
 pub mod sheet_job;
+// #3406: part-in-spindle mode on a mill - lathe tools on the table.
+pub mod part_in_spindle;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;

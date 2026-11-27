@@ -105,6 +105,8 @@ mod thread_infeed_tools;
 mod workholding_tools;
 // #3070: the guided sheet job.
 mod sheet_job_tools;
+// #3406: part-in-spindle mode and table tool stations.
+mod part_in_spindle_tools;
 // #3073: saved cut recipes.
 mod recipe_tools;
 // #3647: tool components, assemblies and the component library.

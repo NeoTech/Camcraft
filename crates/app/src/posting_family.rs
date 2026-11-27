@@ -25,7 +25,11 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
     for (name, e) in ops {
         if let Some(op) = model::operation_of(world, e) {
             let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
-            if !op.params.kind().info().admits(machine) {
+            // #3406: a part-in-spindle setup's own door, by its own words.
+            if let Some(Err(why)) = crate::part_in_spindle::door(world, op.setup.as_deref(), &op.params) {
+                return Err(format!("{name}: {why}"));
+            }
+            if !crate::part_in_spindle::active(world, op.setup.as_deref()) && !op.params.kind().info().admits(machine) {
                 return Err(format!(
                     "{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation",
                     op.params.kind(),
