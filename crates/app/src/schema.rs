@@ -607,6 +607,44 @@ pub struct ProgramEntry {
     pub suppressed: bool,
 }
 
+/// How a pattern folder (#3012) puts its copies in the program.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PatternOrder {
+    /// Each member operation cuts every enabled copy in one section,
+    /// so its tool changes once.
+    #[default]
+    ByTool,
+    /// Every member operation cuts one copy, then the next copy.
+    ByPart,
+}
+
+/// The copies of a pattern folder (#3012). Directions are unit vectors
+/// in the XY plane of the setup's WCS; spacings are millimetres. Copy 1
+/// is the members' own place.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternKind {
+    Linear { dir: [f64; 3], count: u32, spacing: f64 },
+    Grid { dir1: [f64; 3], count1: u32, spacing1: f64, dir2: [f64; 3], count2: u32, spacing2: f64 },
+}
+
+/// A pattern folder in the operation list (#3012): member operations of
+/// one setup, posted again at each enabled copy, all in the setup's WCS.
+/// Like a `ProgramEntry` it is not an `Operation` and takes its row by
+/// `OperationMeta::order`; its members stand directly after it.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct PatternDef {
+    /// The setup it stands in, the `Operation::setup` law.
+    pub setup: Option<String>,
+    /// Suppressed: no copies; the members post once, as plain operations.
+    pub suppressed: bool,
+    pub order_mode: PatternOrder,
+    pub kind: PatternKind,
+    /// Member operation keys, in folder order.
+    pub members: Vec<String>,
+    /// 1-based copy numbers left out of the program.
+    pub disabled_instances: Vec<u32>,
+}
+
 /// The cached result of generating an operation: the path plus the
 /// warnings `verify` attached to it. Deleting the operation entity frees
 /// both through the Rust-owned drop hooks (AGENTS.md resource invariant).
@@ -1032,6 +1070,7 @@ pub fn register_schema(world: &World) {
     world.component::<Operation>();
     world.component::<OperationMeta>();
     world.component::<ProgramEntry>();
+    world.component::<PatternDef>();
     world.component::<Toolpath>();
     world.component::<Units>();
     world.component::<MachineDef>();

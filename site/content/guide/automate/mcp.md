@@ -285,6 +285,7 @@ time. The current, authoritative tool list is whatever the client's
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
 | Tool components and assemblies | `list_tool_components`, `get_tool_assembly`, `set_tool_assembly`, `upsert_tool_component`, `delete_tool_component`, `sync_tool_component`, `save_library_component`, `delete_library_component`, `export_holders`, `import_holders` |
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
+| Pattern folders | `create_pattern_folder`, `edit_pattern_folder`, `set_pattern_members`, `set_pattern_instance_enabled`, `delete_pattern_folder` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
 | Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
 | Agie nominal inspection | `create_agie_inspection`, `export_agie_inspection` |

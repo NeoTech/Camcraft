@@ -64,18 +64,16 @@ fn harness_json(fingerprint: &Path) -> Option<(String, SystemTime)> {
 /// The sweep never reads through, or deletes, a link: it could lead out of `target/`.
 pub fn plain_dir(path: &Path) -> bool {
     let Ok(m) = fs::symlink_metadata(path) else { return false };
-    if !m.is_dir() || m.file_type().is_symlink() {
-        return false;
-    }
+    let plain = m.is_dir() && !m.file_type().is_symlink();
+    // One expression on each OS: an early `return false` before a `#[cfg(windows)]` block reads as a
+    // needless bool to clippy on Linux and macOS (Rust 1.100, #4133).
     #[cfg(windows)]
-    {
+    let plain = plain && {
         use std::os::windows::fs::MetadataExt;
         const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        if m.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return false;
-        }
-    }
-    true
+        m.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+    };
+    plain
 }
 
 /// The plain subdirectories of `dir` (see `plain_dir`); a link is skipped.
