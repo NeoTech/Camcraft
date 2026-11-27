@@ -3,6 +3,10 @@
 //! region given another way (loops reversed, each started at its next
 //! vertex), and through each other kind that shares the guide choice. The
 //! canonical sets must match within 1 um (Hausdorff per curve, same count).
+//! A refusal never matches (#4406): when the first call refuses, L1 is not
+//! measured (refused, with the reason); when a later call refuses against
+//! curves, L1 is broken. Two refusals are never compared by their reason
+//! text, so stand-ins that share one reason cannot pass as equal.
 
 use std::cell::Cell;
 
@@ -15,38 +19,54 @@ use super::standins::{RingGuide, loop_curve, rings, rings_choice, square_region}
 
 type GuideResult = Result<Verdict<GuideSet>, Refusal>;
 
-/// The gap of two guide results: two refusals with the same reason match;
-/// a refusal against curves is an infinite gap.
+/// The curves of a guide result (none for a refusal).
 fn curves(r: &GuideResult) -> Option<Vec<&camcraft_pathkernel::guide::Curve>> {
     r.as_ref().ok().and_then(Verdict::out).map(|g| g.curves().iter().collect())
 }
 
-fn gap(a: &GuideResult, b: &GuideResult, what: &str) -> Measure {
-    let reason = |r: &GuideResult| match r {
-        Err(e) | Ok(Verdict::Refused(e)) => Some(e.reason()),
+fn refusal(r: &GuideResult) -> Option<&Refusal> {
+    match r {
+        Err(e) | Ok(Verdict::Refused(e)) => Some(e),
         Ok(_) => None,
-    };
-    match (curves(a), curves(b)) {
-        (Some(x), Some(y)) => {
-            let (g, place) = set_gap(&x, &y);
+    }
+}
+
+/// The gap of a later guide result `b` against the first result `a`, which
+/// gave curves: a refusal of `b` is an infinite gap.
+fn gap(a: &[&camcraft_pathkernel::guide::Curve], b: &GuideResult, what: &str) -> Measure {
+    match curves(b) {
+        Some(y) => {
+            let (g, place) = set_gap(a, &y);
             Measure::new(g, MATCH_TOL, format!("{what}: {place}"), None)
         }
-        _ if reason(a) == reason(b) => Measure::new(0.0, MATCH_TOL, format!("{what}: refused the same way"), None),
-        _ => Measure::new(f64::INFINITY, MATCH_TOL, format!("{what}: a refusal against curves"), None),
+        None => {
+            let why = refusal(b).map_or("no output", Refusal::reason);
+            Measure::new(f64::INFINITY, MATCH_TOL, format!("{what}: a refusal against curves ({why})"), None)
+        }
     }
 }
 
 /// L1 over `guide` on `region` with `choice`; `others` are the guide
 /// planners of other kinds that share the choice.
 pub fn check_l1(guide: &dyn GuidePlanner, region: &KernelRegion, choice: &GuideChoice, others: &[&dyn GuidePlanner]) -> LawVerdict {
-    let base = guide.guide(region, choice, GUIDE_TOL);
-    let mut m = vec![gap(&base, &guide.guide(region, choice, GUIDE_TOL), "a second call")];
+    let first = guide.guide(region, choice, GUIDE_TOL);
+    let Some(base) = curves(&first) else {
+        return match refusal(&first) {
+            Some(e) => judge(Law::L1, vec![Measure::refusal("the first call", e)]),
+            None => judge(Law::L1, vec![Measure::unread("the first call", super::kit::NO_OUTPUT)]),
+        };
+    };
+    if base.is_empty() {
+        return judge(Law::L1, vec![Measure::unread("the first call", "the guide gave no curves")]);
+    }
+    let base = &base;
+    let mut m = vec![gap(base, &guide.guide(region, choice, GUIDE_TOL), "a second call")];
     match planar(region).and_then(permuted) {
-        Ok(turned) => m.push(gap(&base, &guide.guide(&turned, choice, GUIDE_TOL), "the loops permuted and restarted")),
+        Ok(turned) => m.push(gap(base, &guide.guide(&turned, choice, GUIDE_TOL), "the loops permuted and restarted")),
         Err(e) => m.push(Measure::new(f64::INFINITY, MATCH_TOL, format!("the permuted region: {}", e.reason()), None)),
     }
     for (i, o) in others.iter().enumerate() {
-        m.push(gap(&base, &o.guide(region, choice, GUIDE_TOL), &format!("shared guide {i}")));
+        m.push(gap(base, &o.guide(region, choice, GUIDE_TOL), &format!("shared guide {i}")));
     }
     judge(Law::L1, m)
 }

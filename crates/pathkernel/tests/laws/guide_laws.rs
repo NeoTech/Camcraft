@@ -10,7 +10,7 @@ use camcraft_pathkernel::guide::{
     Circle, GuideChoice, GuidePlanner, Guides, Hand, HelixChoice, HelixPlanner, MedialPlanner, RingPlanner, RingRef, RingsChoice,
 };
 use camcraft_pathkernel::link::LinkPolicy;
-use camcraft_pathkernel::{Bounds, KernelRegion, Loop, MaterialSide, Point2, Refusal, Region, Selection, region};
+use camcraft_pathkernel::{Bounds, KernelRegion, Loop, MaterialSide, Point2, Refusal, Region, Selection, Stage, region};
 
 use super::guide_kit::{circle, tool, xy};
 use super::kit::{Case, Law, LawVerdict, Planners, assert_held, run};
@@ -18,11 +18,24 @@ use super::l1_guide::check_l1;
 use super::l2_sides::check_l2;
 use super::l3_order::check_l3;
 use super::l4_fallback::check_l4;
-use super::standins::{ProvedEntry, ReadLoad, ShapeReader, SideOrder, StraightLink, recipe};
+use super::standins::{GEO_FAILED, ProvedEntry, ReadLoad, ShapeReader, SideOrder, StraightLink, recipe};
 
+/// The region of the face `outer` in a stock box 10 mm and four tool radii
+/// larger at each side. #4406: with no stock, the region stage refuses the
+/// Outside material side by name, and L2 read that refusal as held.
 fn inside(outer: Vec<Point2>, m: MaterialSide, r: f64) -> Result<KernelRegion, Refusal> {
+    let grow = 10.0 + 4.0 * r;
+    let (lo, hi) = outer.iter().fold((Point2::new(f64::INFINITY, f64::INFINITY), Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY)), |(lo, hi), p| {
+        (Point2::new(lo.x.min(p.x), lo.y.min(p.y)), Point2::new(hi.x.max(p.x), hi.y.max(p.y)))
+    });
+    let (x0, y0, x1, y1) = (lo.x - grow, lo.y - grow, hi.x + grow, hi.y + grow);
+    fn geo<E>(_: E) -> Refusal {
+        Refusal::new(Stage::Region, GEO_FAILED)
+    }
+    let ring = Loop::new(vec![Point2::new(x0, y0), Point2::new(x1, y0), Point2::new(x1, y1), Point2::new(x0, y1)]).map_err(geo)?;
+    let stock = Region::new(vec![ring]).map_err(geo)?;
     let sel = Selection::face(outer, vec![])?;
-    let b = Bounds::new(None, Region::empty(), 0.0, -5.0)?;
+    let b = Bounds::new(Some(stock), Region::empty(), 0.0, -5.0)?;
     region(&sel, m, &b, xy(), tool(r), 0.0)
 }
 

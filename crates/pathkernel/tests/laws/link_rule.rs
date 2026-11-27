@@ -6,7 +6,8 @@
 //! a crossing out of the centre area, the air and the edge band (#4241:
 //! outside the stock within a tool radius of it, the disc clear of each
 //! part wall loop and each keep-out area; read here from the stock of the
-//! case, not from the kernel's room).
+//! case, not from the kernel's room). #4406: a run that a stage refused is
+//! refused (not measured), never held.
 
 use std::collections::BTreeMap;
 
@@ -20,7 +21,7 @@ use super::grid::samples;
 use super::guide_kit::{circle, rect, tool, xy};
 use super::order_link::stock_box;
 use super::kit::{
-    Case, Law, LawVerdict, MATCH_TOL, Measure, Planners, Run, assert_broken, assert_held, judge, outside, planar, poly_dist, refused_held, run,
+    Case, Law, LawVerdict, MATCH_TOL, Measure, Planners, Run, assert_broken, assert_held, judge, outside, planar, poly_dist, refused, run,
 };
 use super::standins::{LEAVES_AREA, end_of, good, island_case, square_case, start_of};
 
@@ -28,7 +29,7 @@ use super::standins::{LEAVES_AREA, end_of, good, island_case, square_case, start
 pub fn check_link(run: &Result<Run, Refusal>, c: &Case) -> LawVerdict {
     let r = match run {
         Ok(r) => r,
-        Err(e) => return refused_held(Law::Link, e),
+        Err(e) => return refused(Law::Link, e),
     };
     let steps = r.plan.steps();
     let mut by_reason: BTreeMap<&'static str, u32> = BTreeMap::new();
@@ -46,8 +47,13 @@ pub fn check_link(run: &Result<Run, Refusal>, c: &Case) -> LawVerdict {
     if c.no_split {
         m.push(Measure::new(f64::from(lifts), 0.0, format!("lifts on a fixture with no split ring: {by_reason:?}"), None));
     }
-    let Ok(p) = planar(&r.region) else {
-        return judge(Law::Link, m);
+    let p = match planar(&r.region) {
+        Ok(p) => p,
+        Err(e) => {
+            // #4406: the stay links are not read: never held.
+            m.push(Measure::refusal("the stay links", &e));
+            return judge(Law::Link, m);
+        }
     };
     for (i, s) in steps.iter().enumerate() {
         let Step::Link(Hop::Stay(path)) = s else {
@@ -60,12 +66,19 @@ pub fn check_link(run: &Result<Run, Refusal>, c: &Case) -> LawVerdict {
         let mut line: Vec<Point2> = cut(i.checked_sub(1)).map(end_of).into_iter().collect();
         line.extend(path.points());
         line.extend(cut(i.checked_add(1)).map(start_of));
-        let worst = samples(&line, 0.05)
+        // #4406: a hop of zero length has no samples; read its points, so
+        // that no stay link skips its leg.
+        let mut read = samples(&line, 0.05);
+        if read.is_empty() {
+            read = line.iter().map(|q| (*q, *q)).collect();
+        }
+        let worst = read
             .iter()
             .map(|(q, _)| (outside(p.center(), *q).min(outside(p.air(), *q)).min(off_band(p, &c.stock, *q)), *q))
             .max_by(|a, b| a.0.total_cmp(&b.0));
-        if let Some((d, q)) = worst {
-            m.push(Measure::new(d, MATCH_TOL, format!("stay link at step {i}: a crossing out of the area"), Some(q)));
+        match worst {
+            Some((d, q)) => m.push(Measure::new(d, MATCH_TOL, format!("stay link at step {i}: a crossing out of the area"), Some(q))),
+            None => m.push(Measure::new(f64::INFINITY, MATCH_TOL, format!("stay link at step {i}: a stay link with no point"), None)),
         }
     }
     judge(Law::Link, m)
