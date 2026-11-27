@@ -172,6 +172,7 @@ include!("example_catalog/case_2d_slots.rs");
 // #2856: the refusal case 2d/drill-overfeed and its two case tests.
 include!("example_catalog/case_2d_drill_overfeed.rs");
 include!("example_catalog/case_3d_rough_finish.rs"); // #2866: 3d/rough-finish
+include!("example_catalog/case_multiaxis_wrapped.rs"); // #2869: multiaxis/wrapped
 include!("example_catalog/case_edm_sinker.rs"); // #2872: edm/sinker
 
 mod catalog_turning_bushing {

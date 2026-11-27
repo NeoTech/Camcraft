@@ -240,7 +240,7 @@ operation, 1 to 4 (the panel clamps it). Refusals as Swarf.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/wrapped](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/wrapped)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-rotary-contour" /> }} ![View of ring passes around the fitted rotation axis.](../../../operation-paths.svg#RotaryContour)
@@ -270,7 +270,7 @@ along it: Rotary Parallel".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/wrapped](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/wrapped)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-rotary-parallel" /> }} ![View of passes along a bar at successive rotary positions.](../../../operation-paths.svg#RotaryParallel)
@@ -292,7 +292,7 @@ work's ... mm radius - raise it".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/wrapped](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/wrapped)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-rotary-offset" /> }} ![View of roughing passes wrapping around a turned workpiece.](../../../operation-paths.svg#RotaryOffset)

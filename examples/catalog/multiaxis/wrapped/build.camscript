@@ -1,0 +1,53 @@
+// Provenance: original wrapped A-axis grooved-bar example using CamCraft's public commands.
+cam.import("model/wrapped.obj", "wrapped");
+cam.call("set_model_link", { model: "wrapped", path: null });
+cam.call("load_machine", { builtin: "Tormach 770MX + microARC 4" });
+cam.call("add_setup", { name: "Wrap" });
+cam.call("set_setup_post", { post: "Tormach PathPilot" });
+cam.call("set_stock", { cylinder: { diameter: 22.0, height: 20.0 }, axis: "x" });
+cam.call("fit_stock", { shape: "cylinder", margin: 1.0 });
+// Rotary Parallel also finishes the free end faces down to the A centreline:
+// the 15 mm flutes reach past the 11 mm stock radius.
+cam.call("add_tool", { catalog: "BN-0600", holder: "none" });
+
+// The heights of the rotary kinds are radii about the A axis; Rotary Contour
+// reads Top and Bottom as stations along the axis.
+cam.call("add_operation", {
+  kind: "Rotary Offset", name: "Wrap rough", tool: "BN-0600", source: "wrapped",
+  params: {
+    tolerance: 0.05, stepover: 2.0, stock_to_leave: 0.3,
+    clearance_z: { reference: "fixed", offset: 20.0 },
+    top_z: { reference: "fixed", offset: 11.0 },
+    bottom_z: { reference: "fixed", offset: 8.0 },
+    stepdown: 1.0, feed: 600.0, plunge_feed: 150.0, climb: true
+  }
+});
+cam.call("add_operation", {
+  kind: "Rotary Parallel", name: "Wrap finish", tool: "BN-0600", source: "wrapped",
+  params: {
+    tolerance: 0.2, stepover: 3.0,
+    clearance_z: { reference: "fixed", offset: 20.0 },
+    top_z: { reference: "fixed", offset: 11.0 },
+    bottom_z: { reference: "fixed", offset: -11.0 },
+    feed: 800.0, plunge_feed: 200.0, climb: true
+  }
+});
+cam.call("add_operation", {
+  kind: "Rotary Contour", name: "Groove rings", tool: "BN-0600", source: "wrapped",
+  params: {
+    tolerance: 0.05,
+    clearance_z: { reference: "fixed", offset: 20.0 },
+    retract_z: { reference: "fixed", offset: 15.0 },
+    top_z: { reference: "fixed", offset: 5.0 },
+    bottom_z: { reference: "fixed", offset: -5.0 },
+    feed: 800.0, plunge_feed: 200.0, climb: true
+  }
+});
+cam.generate();
+var verdict = cam.verify();
+if (!verdict.ok) {
+  throw new Error("wrapped catalog verify failed: " + JSON.stringify(verdict));
+}
+cam.save("wrapped.camproj");
+cam.post({ to: "wrapped.nc" });
+cam.report();
