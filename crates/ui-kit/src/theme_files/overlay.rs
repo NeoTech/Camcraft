@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use egui::Color32;
 
 use super::names;
-use crate::egui_app::theme::{Tokens, clamp};
+use crate::theme::{Tokens, clamp};
 
 /// Overlay the parsed maps on the base table. The destructuring is the
 /// M6.1 A exhaustiveness law, restated for files: a token added to
@@ -55,7 +55,7 @@ pub(super) fn apply_overlay(
     // dark) gets the built-in set of that ground for each key it leaves
     // out - the furniture followed the ground before it was a token.
     let viewport = c(names::VIEWPORT, viewport);
-    let light = crate::egui_app::ground_ink::light_ground;
+    let light = crate::contrast::light_ground;
     let ground = match (light(viewport), light(base.viewport)) {
         (now, was) if now == was => base,
         (true, _) => Tokens::LIGHT,
