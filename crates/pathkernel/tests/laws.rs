@@ -54,6 +54,8 @@ mod l7_move;
 mod link_rule;
 #[path = "laws/load.rs"]
 mod load;
+#[path = "laws/load_stage.rs"]
+mod load_stage;
 #[path = "laws/order.rs"]
 mod order;
 #[path = "laws/order_link.rs"]

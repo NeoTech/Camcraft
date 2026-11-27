@@ -16,9 +16,10 @@ use camcraft_motion::geo2d::{Point2, Region};
 use camcraft_motion::geometry::Point3;
 use camcraft_pathkernel::guide::{GuideChoice, GuidePlanner, RingPlanner, RingRef, RingsChoice};
 use camcraft_pathkernel::link::{Hop, Level, LinkPolicy, LinkProof, LinkStage, LinkTally};
+use camcraft_pathkernel::load::{Controlled, LoadControl, LoadPlanner, StockRead};
 use camcraft_pathkernel::order::{Direction, OrderChoice, OrderPlanner, OrderStage, StartSide};
 use camcraft_pathkernel::plan::Cut;
-use camcraft_pathkernel::{Bounds, MaterialSide, Selection, ToolShape, WorkPlane, region};
+use camcraft_pathkernel::{Bounds, MaterialSide, Selection, ToolShape, Verdict, WorkPlane, region};
 
 /// The retract plane of the converted path.
 const RETRACT: f64 = 2.0;
@@ -47,9 +48,20 @@ impl Pen {
     }
 }
 
+/// The load stage of a kernel run (#4026): the planner, the choice and
+/// the stock reader; `None` runs no load stage.
+pub type Load<'a> = Option<(&'a dyn LoadPlanner, LoadControl, &'a dyn StockRead)>;
+
 /// The kernel plan of the material round `part` from `side`, as a
 /// toolpath, with its link tally.
 fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
+    let (path, tally, _) = kernel_path_with(part, side, None);
+    (path, tally)
+}
+
+/// [`kernel_path`] with the load stage `load` between order and link; the
+/// load verdict goes with it, and each of its notes is a path note.
+pub fn kernel_path_with(part: &Region, side: StartSide, load: Load) -> (Toolpath, LinkTally, Option<Verdict<Controlled>>) {
     let sel = Selection::face(part.loops()[0].points().to_vec(), vec![]).unwrap();
     let bounds = Bounds::new(Some(stock()), Region::empty(), TOP, Z).unwrap();
     let tool = ToolShape::disc(R, 0.0, true, 30.0).unwrap();
@@ -58,7 +70,9 @@ fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
     let set = RingPlanner.guide(&r, &g, 1e-3).unwrap().out().unwrap().clone();
     let oc = OrderChoice { start: side, direction: Direction::Climb };
     let ordered = OrderStage.order(set, &r, &oc, None).unwrap().out().unwrap().clone();
-    let cuts: Vec<Cut> = ordered.curves().iter().map(|c| Cut::new(c.clone(), None).unwrap()).collect();
+    let controlled = load.map(|(stage, lc, reader)| stage.control(ordered.clone(), &r, reader, &lc, R).unwrap());
+    let curves = controlled.as_ref().and_then(Verdict::out).map_or(ordered.curves(), |c| c.set().curves());
+    let cuts: Vec<Cut> = curves.iter().map(|c| Cut::new(c.clone(), None).unwrap()).collect();
     let mut pen = Pen { path: Toolpath::default(), at: Point3::new(0.0, 0.0, 10.0) };
     let mut tally = LinkTally::default();
     let mut paths: Vec<Vec<Point2>> = Vec::new();
@@ -89,7 +103,10 @@ fn kernel_path(part: &Region, side: StartSide) -> (Toolpath, LinkTally) {
     for (why, n) in tally.by_reason() {
         pen.path.notes.push(format!("link: the tool lifted to the retract plane {n} time(s) instead of the keep-down link - {why}"));
     }
-    (pen.path, tally)
+    if let Some(Verdict::Done { notes, .. }) = &controlled {
+        pen.path.notes.extend(notes.iter().map(|n| n.text().to_string()));
+    }
+    (pen.path, tally, controlled)
 }
 
 /// The lift count of the kernel for each part and side: (part, side, lifts).
