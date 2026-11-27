@@ -56,6 +56,8 @@ const WIRE: &str = "Generic ISO Wire EDM";
 const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
 const SKIMS_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_punch_skims.nc";
 const OPEN_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_open_cutoff.nc";
+const OPEN_SKIMS_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_open_skims.nc";
+const CENTRE_SKIMS_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_centre_skims.nc";
 
 fn cps(name: &str) -> &'static str {
     camcraft_app::posting::builtin_post_text(name).expect("registered")
@@ -113,7 +115,9 @@ fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
     );
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -152,7 +156,9 @@ fn gouging_die() -> World {
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Location::default()).expect("stock");
     h.execute(&world, stock);
     let op = WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -431,8 +437,14 @@ fn each_skim_refusal_is_named_at_the_door() {
 /// cut off along the part's top edge at x = 60 by an open run, the kerf
 /// on the offcut's side (`wrong` puts it on the part's). The side is read
 /// from the picked chain's own travel, so the fixture holds whichever way
-/// the feature graph orders the edge.
-fn cutoff_doc(wrong: bool) -> World {
+/// the feature graph orders the edge. `skims` ride after the rough pass.
+fn cutoff_doc_with(wrong: bool, skims: Vec<WireSkim>) -> World {
+    cutoff_doc_side(wrong, false, skims)
+}
+
+/// [`cutoff_doc_side`] forced onto the centre-line slit (`centre`): the
+/// same open chain, cut with the wire riding the run itself (#3216).
+fn cutoff_doc_side(wrong: bool, centre: bool, skims: Vec<WireSkim>) -> World {
     use camcraft_app::geometry::feature;
     use camcraft_app::model;
     use camcraft_app::operation::{FeatureSel, GeoSel};
@@ -460,9 +472,17 @@ fn cutoff_doc(wrong: bool) -> World {
         })
         .expect("the part's top edge at x = 60 is its own open chain");
     // Travelling +Y the offcut (x > 60) is on the right.
-    let side = if up != wrong { WireSide::Right } else { WireSide::Left };
+    let side = if centre {
+        WireSide::Centre
+    } else if up != wrong {
+        WireSide::Right
+    } else {
+        WireSide::Left
+    };
     let op = WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -475,7 +495,7 @@ fn cutoff_doc(wrong: bool) -> World {
         taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
-        skims: Vec::new(),
+        skims,
         four_axis: None,
         sharp_corners: false,
     };
@@ -483,6 +503,11 @@ fn cutoff_doc(wrong: bool) -> World {
     h.execute(&world, CreateOperation::new(&world, "Cutoff1", "EDM-W025", src, OpParams::WireContour(op)).expect("op"));
     h.execute(&world, GenerateOperation::new(&world, "Cutoff1").expect("the open run generates"));
     world
+}
+
+/// [`cutoff_doc_with`] with no skims.
+fn cutoff_doc(wrong: bool) -> World {
+    cutoff_doc_with(wrong, Vec::new())
 }
 
 /// Done means (#1109 over #533/#534): an open cut-off posts through
@@ -544,6 +569,136 @@ fn an_open_cutoff_posts_its_golden_and_a_gouging_one_is_refused() {
     let punch = posting::post_script(&punch_doc(FIXTURE), &out, cps(WIRE)).expect("the punch posts").program;
     let _ = std::fs::remove_file(&out);
     assert_eq!(punch, std::fs::read_to_string(GOLDEN).expect("golden present"));
+}
+
+/// Done means (#3216 rework over #538 x #1109): an open run with one
+/// skim generates, verifies AND posts. Each pass is threaded anew in
+/// the air - one travel move (no wire through it) carries the boundary
+/// between the rough's run-out and the skim's run-in, so the path
+/// stays one chained program; the wire laws judge each pass at its own
+/// kerf; the post cuts the wire at the run-out, travels with none, and
+/// threads it again at the run-in, announcing the skim's condition
+/// there. The rough-only open golden does not move.
+#[test]
+fn an_open_run_with_a_skim_generates_verifies_and_posts() {
+    let world = cutoff_doc_with(false, vec![skim("S21", false)]);
+    // The generated path: one travel move between the two passes, the
+    // skim at its own offset (wire radius 0.125 + the skim's gap 0.02).
+    let e = model::find_by_name(&world, "Cutoff1").expect("op");
+    let cache = model::toolpath_of(&world, &e).expect("the cached path");
+    let travels: Vec<usize> = cache
+        .path
+        .moves
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.kind == camcraft_app::cl::MoveKind::Rapid)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(travels.len(), 1, "one travel between the two passes: {:?}", cache.path.moves.len());
+    assert!(cache.path.is_chained(), "the travel keeps the path one chained program");
+    let skim_moves = &cache.path.moves[travels[0] + 1..];
+    assert!(!skim_moves.is_empty() && skim_moves.iter().all(|m| (m.to.x - 60.145).abs() < 1e-9), "the skim rides its own offset: {:?}", &skim_moves[..2]);
+    let rough_moves = &cache.path.moves[..travels[0]];
+    assert!(!rough_moves.is_empty() && rough_moves.iter().all(|m| (m.to.x - 60.165).abs() < 1e-9), "the rough rides the kerf offset");
+    // Verified: no unreadable path, each pass judged, the open laws said.
+    let clause = posting::wire_clause(&world);
+    assert!(clause.problems.is_empty(), "{:?}", clause.problems);
+    let line = clause.line.expect("the skimmed open run is judged, not skipped");
+    assert!(line.contains("Cutoff1 open run (") && line.contains("kerf judged") && line.contains("slug laws not applied"), "{line}");
+    // Posted: the wire is cut at the run-out, the travel carries none,
+    // the wire is threaded anew, and the skim's condition is selected
+    // at its first move.
+    let text = post_text(&world);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(OPEN_SKIMS_GOLDEN, &text).expect("write golden");
+    }
+    assert_eq!(text, std::fs::read_to_string(OPEN_SKIMS_GOLDEN).expect("golden present"), "the skimmed open program drifted from its golden");
+    let lines: Vec<&str> = text.lines().collect();
+    let count = |w: &str| lines.iter().filter(|l| **l == w).count();
+    assert_eq!((count("FX-THREAD"), count("FX-CUT"), count("FX-TIP-OUT")), (2, 2, 2), "{text}");
+    let at = |w: &str| lines.iter().position(|l| *l == w).unwrap_or_else(|| panic!("no {w} in\n{text}"));
+    let at_from = |w: &str, from: usize| lines.iter().skip(from).position(|l| *l == w).map(|i| i + from).unwrap_or_else(|| panic!("no {w} after {from} in\n{text}"));
+    let (rough_cond, first_cut) = (at("FX-COND C110"), at("FX-CUT"));
+    let g0s: Vec<usize> = lines.iter().enumerate().filter(|(_, l)| l.starts_with("G0 ")).map(|(i, _)| i).collect();
+    assert_eq!(g0s.len(), 2, "one positioning G0, one boundary travel G0: {text}");
+    let travel = g0s[1];
+    let (skim_note, skim_cond) = (at("(SKIM 1)"), at("FX-COND S21"));
+    let last_cut = at_from("FX-CUT", skim_cond);
+    assert!(
+        rough_cond < first_cut && first_cut < travel && travel < skim_note && skim_note < skim_cond && skim_cond < last_cut,
+        "cut at the run-out, travel, thread anew, select the skim's condition, cut again: {text}"
+    );
+    assert!(at("FX-TIP-OUT") < travel && travel < at_from("FX-THREAD", travel), "the wire is cut and disposed before the travel, threaded after it: {text}");
+    let (comp, comp2) = (at("FX-COMP-OFF"), at_from("FX-COMP-OFF", skim_cond));
+    let rough_cuts: Vec<&str> = lines[comp + 1..first_cut].iter().filter(|l| l.starts_with("G1 X")).copied().collect();
+    assert!(rough_cuts.len() >= 2 && rough_cuts.iter().all(|l| l.contains("X60.165")), "{text}");
+    let skim_cuts: Vec<&str> = lines[comp2 + 1..last_cut].iter().filter(|l| l.starts_with("G1 X")).copied().collect();
+    assert!(skim_cuts.len() >= 2 && skim_cuts.iter().all(|l| l.contains("X60.145")), "{text}");
+    // The rough-only open golden stands byte for byte beside it.
+    let rough = posting::post_script(&cutoff_doc(false), &std::env::temp_dir().join("rough-only"), cps(WIRE)).expect("the rough-only open run posts").program;
+    assert_eq!(rough, std::fs::read_to_string(OPEN_GOLDEN).expect("golden present"));
+}
+
+/// Done means (#3216, item 2 of the review): the centre-line slit is an
+/// open run for the post too. With one skim it generates (the travel
+/// move marks the pass boundary), verifies with the kerf law said
+/// skipped by statement (CENTRE_SKIP), and posts - the SIDE note says
+/// the centre slit's own words, each pass is cut at its run-out and
+/// threaded again at its run-in in the air, and the skim's condition is
+/// selected at its first move. The right-hand open golden does not move.
+#[test]
+fn a_centre_slit_with_a_skim_generates_verifies_and_posts() {
+    let world = cutoff_doc_side(false, true, vec![skim("S21", false)]);
+    // The generated path: one travel move between the two passes, both
+    // passes riding the run itself (the centre offset is zero).
+    let e = model::find_by_name(&world, "Cutoff1").expect("op");
+    let cache = model::toolpath_of(&world, &e).expect("the cached path");
+    let travels: Vec<usize> = cache
+        .path
+        .moves
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.kind == camcraft_app::cl::MoveKind::Rapid)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(travels.len(), 1, "one travel between the two passes: {:?}", cache.path.moves.len());
+    assert!(cache.path.is_chained(), "the travel keeps the path one chained program");
+    assert!(cache.path.moves.iter().all(|m| (m.to.x - 60.0).abs() < 1e-9), "the centre slit rides the run itself");
+    // Verified: the ends are judged, the kerf law is said skipped.
+    let clause = posting::wire_clause(&world);
+    assert!(clause.problems.is_empty(), "{:?}", clause.problems);
+    let line = clause.line.expect("the centre slit is judged, not skipped");
+    assert!(
+        line.contains("Cutoff1 open run (centre of travel)") && line.contains("kerf law not applied (a centre slit burns both sides of the run by statement)"),
+        "{line}"
+    );
+    // Posted: the open-run words for Centre at every note site.
+    let text = post_text(&world);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(CENTRE_SKIMS_GOLDEN, &text).expect("write golden");
+    }
+    assert_eq!(text, std::fs::read_to_string(CENTRE_SKIMS_GOLDEN).expect("golden present"), "the centre program drifted from its golden");
+    let lines: Vec<&str> = text.lines().collect();
+    let count = |w: &str| lines.iter().filter(|l| **l == w).count();
+    assert_eq!((count("FX-THREAD"), count("FX-CUT"), count("FX-TIP-OUT")), (2, 2, 2), "{text}");
+    assert!(lines.contains(&"(SIDE CENTRE - CENTRE-LINE SLIT THROUGH THE AIR, NO KERF IN THE PATH (THE KERF LAW IS SKIPPED))"), "{text}");
+    let at = |w: &str| lines.iter().position(|l| *l == w).unwrap_or_else(|| panic!("no {w} in\n{text}"));
+    let at_from = |w: &str, from: usize| lines.iter().skip(from).position(|l| *l == w).map(|i| i + from).unwrap_or_else(|| panic!("no {w} after {from} in\n{text}"));
+    let (rough_cond, first_cut) = (at("FX-COND C110"), at("FX-CUT"));
+    let g0s: Vec<usize> = lines.iter().enumerate().filter(|(_, l)| l.starts_with("G0 ")).map(|(i, _)| i).collect();
+    assert_eq!(g0s.len(), 2, "one positioning G0, one boundary travel G0: {text}");
+    let travel = g0s[1];
+    let (skim_note, skim_cond) = (at("(SKIM 1)"), at("FX-COND S21"));
+    let last_cut = at_from("FX-CUT", skim_cond);
+    assert!(
+        rough_cond < first_cut && first_cut < travel && travel < skim_note && skim_note < skim_cond && skim_cond < last_cut,
+        "cut at the run-out, travel, thread anew, select the skim's condition, cut again: {text}"
+    );
+    let cuts: Vec<&str> = lines[first_cut..last_cut].iter().filter(|l| l.starts_with("G1 X")).copied().collect();
+    assert!(cuts.iter().all(|l| l.contains("X60.")), "every cut rides the run itself: {text}");
+    // The right-hand open golden stands byte for byte beside it.
+    let right = posting::post_script(&cutoff_doc(false), &std::env::temp_dir().join("right-only"), cps(WIRE)).expect("the right open run posts").program;
+    assert_eq!(right, std::fs::read_to_string(OPEN_GOLDEN).expect("golden present"));
 }
 
 /// Review of #1139: nothing at post refuses a wire setup before its

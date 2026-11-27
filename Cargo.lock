@@ -832,6 +832,8 @@ dependencies = [
  "solidcore-step",
  "solidcore-tess",
  "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
  "truck-meshalgo",
  "truck-modeling",
  "truck-shapeops",

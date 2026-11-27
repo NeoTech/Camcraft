@@ -314,6 +314,12 @@ unstated capability into existence.
   (840D sl Fundamentals, section 6.6, "D number = cutting edge number").
   State `tool-number` only for a control set to free D numbers where the
   shop gives each tool the D number equal to its T number.
+- `controller.work_offset_max` (#4088, optional whole number 1..255) is
+  the highest work offset that the control holds. On a Heidenhain
+  control it is the last row of the preset table (`PRESET.PR`): a table
+  with rows 0..5 states 5. The post engine refuses a higher offset by
+  setup name, for each post. Unstated keeps the post's own limit. A
+  value above the post's limit does not raise that limit.
 - `controller.post` (#2374, optional string): the name of the built-in
   post (`posting::BUILTINS`) that writes this machine's programs. The
   Setup page offers it when the machine is mounted and the setup posts
@@ -369,6 +375,12 @@ ceiling), `spindleMax` rpm, `coolants[]`, `rotaries[]
 - `controllerIdentity`, when stated, has `model`, `nc_software` and an
   optional `installed_options` list. An absent list means unknown. An empty
   list means the installation has no options.
+- `heidenhainDialect`, when the machine states a controller identity, is
+  the result of the HEIDENHAIN dialect resolver (#4095,
+  `camcraft_post::post::heidenhain_dialect`): the profile name and its
+  capability flags, or `{ "error": "<why>" }` for an identity that the
+  table does not know. Each HEIDENHAIN post refuses by name what it cannot
+  serve. Other posts ignore it.
 - `linearAxes` lists the linear axis letters when the machine states a
   controller identity. It includes additional linear axes, such as W.
 - `toolChangeMode`, when stated, is `manual`, `manual-retract-top` or `changer`.

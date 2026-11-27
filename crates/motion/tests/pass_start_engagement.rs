@@ -235,8 +235,7 @@ fn start_side_pass_has_no_automatic_ramp() {
 /// #3748 pin 1: a selected Helix, Ramp or Plunge on Outside is used as
 /// selected, and the path names it exactly once, with the recommended Arc.
 #[test]
-fn a_selected_entry_is_kept_and_named_once() {
-    for kind in [Entry3D::Helix, Entry3D::Ramp, Entry3D::Plunge] {
+fn a_selected_entry_is_kept_and_named_once() {    for kind in [Entry3D::Helix, Entry3D::Ramp, Entry3D::Plunge] {
         let (path, _, p) = start_side_path(PassStart::Outside, kind);
         let Some(advice) = entry_advice(PassStart::Outside, kind) else { panic!("{kind:?}: no advice") };
         let named = path.notes.iter().filter(|n| n.contains(advice)).count();
@@ -354,4 +353,19 @@ fn outside_pocket_selected_entry_keeps_one_warning() {
         assert!(kept, "{entry:?}: the selected entry did not run: {:?}", path.notes);
         assert_eq!(named_warnings(&path, entry), 1, "{entry:?}: {:?}", path.notes);
     }
+}
+
+/// #3734 pin (the second review note of d41c2b76a on PR #3577, on the
+/// #3748/#3884 wording): the band path with the user's Helix entry names
+/// the entry exactly one time - the advice note once, and no stand-in
+/// note ("helix entry instead") beside it. A replacement of the selected
+/// entry would be named, and here there is none to name.
+#[test]
+fn the_replaced_helix_entry_is_named_once_on_the_band_path() {
+    let (path, _, _) = start_side_path(PassStart::Outside, Entry3D::Helix);
+    let advice = entry_advice(PassStart::Outside, Entry3D::Helix).expect("the Helix advice");
+    let named = path.notes.iter().filter(|n| n.contains(advice)).count();
+    assert_eq!(named, 1, "the entry is named {named} time(s): {:?}", path.notes);
+    let stand_ins = path.notes.iter().filter(|n| n.contains(" - helix entry instead")).count();
+    assert_eq!(stand_ins, 0, "a helix stand-in is named: {:?}", path.notes);
 }

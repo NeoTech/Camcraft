@@ -272,6 +272,10 @@ pub struct Machine {
     /// control's tool table holds. `None` when the file states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tool_number: Option<u32>,
+    /// `controller.work_offset_max` (#4088): the highest work offset the
+    /// control holds. `None` keeps the post's own limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_offset_max: Option<u32>,
     /// `tooling.d_number` (#4143): how the control numbers the tool call's D word.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub d_number: Option<super::DNumberRule>,

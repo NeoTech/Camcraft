@@ -97,6 +97,12 @@ mod tool_assembly_tests;
 pub mod lathe_assembly;
 #[cfg(test)]
 mod lathe_assembly_tests;
+// #3643: a component body from a STEP, STL or OBJ file, placed by its
+// own mounting frame (MCS or MCS_INSERT), never smaller than the steel.
+pub mod mesh_body;
+#[cfg(test)]
+mod mesh_body_tests;
+pub mod mesh_file;
 // #3646: multi-seat indexable face mills and end mills resolved to the
 // milling tool record, never smaller than the real cutter.
 pub mod milling_cutter;

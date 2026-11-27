@@ -28,6 +28,7 @@ fn the_tapers_and_nuts_match_the_recorded_table() {
             ("ER25", 1.0, 16.0, 42.0, 20.0),
             ("ER32", 2.0, 20.0, 50.0, 22.5),
             ("ER40", 3.0, 26.0, 63.0, 29.0),
+            ("ER50", 5.0, 34.0, 78.0, 40.0),
         ]
     );
     assert_eq!((WELDON_SCREW, FLARE), (1.0, 1.0), "1 mm screw allowance, 45-degree flare");
@@ -79,6 +80,7 @@ fn every_entry_draws_a_valid_profile_with_its_flange_and_nose() {
         let (nose_r, takes) = match e.clamp {
             Clamp::Er(er) => (er.nut_d * 0.5, er.max_bore),
             Clamp::Weldon { bore, body_d } => (body_d * 0.5 + WELDON_SCREW, bore),
+            Clamp::Shrink { bore, nose_d, .. } => (nose_d * 0.5 + SHRINK_MARGIN, bore),
         };
         let Some(t) = e.taper else {
             assert!((reach(gauge - 0.5) - nose_r).abs() < 1e-9, "{}: a standalone body runs at nut width", e.name());
@@ -88,7 +90,14 @@ fn every_entry_draws_a_valid_profile_with_its_flange_and_nose() {
         let mid_flange = gauge - t.standoff - t.flange_t * 0.5;
         assert!(reach(mid_flange) >= t.flange_d * 0.5, "{}: the flange is judged whole", e.name());
         assert!(s.max_radius() >= t.flange_d * 0.5);
-        assert!((reach(nose + 0.5) - nose_r).abs() < 1e-9, "{}: the nose reads its table diameter", e.name());
+        if let Clamp::Shrink { .. } = e.clamp {
+            // The nose cone's band is held at its top radius: the nose
+            // face reads the table, the band is never under it.
+            assert!(pts.get(1).is_some_and(|p| (p.z - nose).abs() < 1e-9 && (p.r - nose_r).abs() < 1e-9), "{}: the nose face", e.name());
+            assert!(reach(nose + 0.5) >= nose_r, "{}: the nose band", e.name());
+        } else {
+            assert!((reach(nose + 0.5) - nose_r).abs() < 1e-9, "{}: the nose reads its table diameter", e.name());
+        }
         assert!(nose_r > takes * 0.5, "{}: the body is wider than what it holds", e.name());
         assert!(e.fits_shank(takes).is_ok(), "{}", e.name());
     }
@@ -154,7 +163,9 @@ fn the_er20_chuck_outline_is_the_table() {
 /// cone ending at the flange front, and the gauge length must hold it.
 #[test]
 fn the_flare_envelope_runs_45_degrees_into_the_flange_front() {
-    for e in library().iter().filter(|e| e.taper.is_some()) {
+    // A shrink-fit chuck's flare meets its nose cone or its body, as
+    // holder_library_shrink_tests.rs pins.
+    for e in library().iter().filter(|e| e.taper.is_some() && !matches!(e.clamp, Clamp::Shrink { .. })) {
         let t = e.taper.expect("filtered");
         let pts = e.points(20.0, e.gauge_len).expect("draws");
         let front = 20.0 + e.gauge_len - t.front_face();

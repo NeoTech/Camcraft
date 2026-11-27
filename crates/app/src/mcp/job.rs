@@ -253,7 +253,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("skims", "array", json!([])),
                         ("four_axis", "object", Value::Null),
                         ("sharp_corners", "boolean", json!(false)),
+                        ("overlap", "number", json!(0.0)),
                         ("lead_arc_radius", "number", Value::Null),
+                        ("compensation", "string", json!("computer")),
                     ],
                 );
             }

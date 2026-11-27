@@ -7,7 +7,7 @@
 
 use super::page_layout_windows::assert_window_layout;
 use crate::egui_app::tool_library_dialog::recipes_tab::{MARK, SUGGEST, TAB};
-use crate::egui_app::tool_library_dialog::{HOLDERS_PAGE, TOOLS_PAGE, categories, holder_view, holders, preview};
+use crate::egui_app::tool_library_dialog::{HOLDERS_PAGE, TOOLS_PAGE, categories, frame, holder_view, holders, preview};
 use super::*;
 use egui_kittest::kittest::NodeT;
 
@@ -23,7 +23,9 @@ fn library_window(h: &H) -> egui::Rect {
 /// The tool library is its own window: (#3897) the Cutting tools | Holders
 /// switch first, then the file buttons, the source row, then the Document
 /// list with the categories on its left. It floats beside the dock and
-/// leaves the Properties pane free, so both can be used at once.
+/// leaves the Properties pane free, so both can be used at once. #4334:
+/// the header row holds the title, the tabs and the close button; the
+/// footer (the hint, then Close at the right) stands under the rows.
 #[test]
 fn layout_window_tool_library() {
     let _g = snapshot_guard();
@@ -47,6 +49,21 @@ fn layout_window_tool_library() {
     assert!((tools.top() - holders.top()).abs() < 2.0 && tools.right() <= holders.left() + 1.0, "Cutting tools {tools:?} | Holders {holders:?}");
     let all = rect(categories::ALL);
     assert!(all.right() < rect("Recipes").left(), "the categories {all:?} stand left of the rows");
+    // #4334: the header: the title, the tabs, the close button on one row.
+    let title = node
+        .query_all_by_label(crate::egui_app::tool_library_dialog::TITLE)
+        .find(|n| n.accesskit_node().role() != egui::accesskit::Role::Window)
+        .unwrap_or_else(|| panic!("the header names the window"))
+        .rect();
+    let x = rect(frame::CLOSE_WINDOW);
+    assert!(title.right() <= tools.left() + 1.0 && (title.center().y - tools.center().y).abs() < 4.0, "the title {title:?} heads the tabs {tools:?}");
+    assert!(x.left() > holders.right() && (x.center().y - holders.center().y).abs() < 4.0, "the close button {x:?} ends the header row");
+    assert!(title.bottom() <= rect("New tool…").top() + 1.0, "the header {title:?} stands above the page");
+    // #4334: the footer under the rows: the hint at the left, Close at the right.
+    let (hint, close) = (rect(frame::HINT_TOOLS), rect(frame::CLOSE));
+    assert!(close.top() > rect("Recipes").bottom(), "Close {close:?} stands under the rows");
+    assert!(hint.right() < close.left() && (hint.center().y - close.center().y).abs() < 4.0, "the hint {hint:?} and Close {close:?} share the footer row");
+    assert!(win.expand(1.0).contains_rect(close), "Close {close:?} stays in the window {win:?}");
     let Some(props) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
         panic!("the Properties leaf is not laid out");
     };
@@ -79,8 +96,9 @@ fn the_tool_library_window_closes_and_opens_again() {
 }
 
 /// #3893: a tool open in the window. The list folds into a rail on the
-/// left; the editor stands right of it: the heading, the Tool and Details
-/// tabs, the rows, then Apply at the foot. #3897: the preview (its 3D /
+/// left; the editor stands right of it: (#4334) the header with the way
+/// back and the name, the Tool and Details tabs, the rows, then the footer
+/// with Duplicate, Cancel and Apply (at the right). #3897: the preview (its 3D /
 /// Side toggle and the Dimensions and Holder toggles) stands right of the
 /// rows, under the heading. #3896: the Recipes tab stands between Tool and Details, and
 /// its Suggest row stands under the tabs. The window still leaves the
@@ -111,7 +129,19 @@ fn layout_window_tool_editor() {
             .unwrap_or_else(|| panic!("the editor has no widget labelled {label:?}"))
             .rect()
     };
-    let heading = format!("Tool: {name}");
+    // #4334: the way back heads the window; the name follows it.
+    let heading = frame::BACK.to_owned();
+    let title = node
+        .query_all_by_label(&name)
+        .map(|n| n.rect())
+        .min_by(|a, b| a.top().total_cmp(&b.top()))
+        .unwrap_or_else(|| panic!("the window does not name {name}"));
+    let back = rect(frame::BACK);
+    assert!(title.left() > back.right() && (title.center().y - back.center().y).abs() < 4.0, "the name {title:?} follows the way back {back:?}");
+    let (apply, cancel, dup) = (rect(frame::APPLY), rect(frame::CANCEL), rect(frame::DUPLICATE));
+    assert!(dup.right() <= cancel.left() + 1.0 && cancel.right() <= apply.left() + 1.0, "Duplicate, Cancel, Apply from left to right");
+    assert!((dup.center().y - apply.center().y).abs() < 4.0 && (cancel.center().y - apply.center().y).abs() < 4.0, "the three share the footer row");
+    assert!(win.expand(1.0).contains_rect(apply), "Apply {apply:?} stays in the window {win:?}");
     let mut last: Option<(&str, f32)> = None;
     for a in [heading.as_str(), "Details", "Diameter", "Apply"] {
         let r = rect(a);
@@ -141,8 +171,13 @@ fn layout_window_tool_editor() {
     assert!(beside || flutes.top() >= holder.bottom() - 1.0, "Flutes {flutes:?} follows Holder {holder:?}");
     assert!(win.expand(1.0).contains_rect(flutes), "the Flutes toggle {flutes:?} stays in the window {win:?}");
     let rail = rect("All tools");
-    let row = rect(&name);
-    assert!(rail.right() < rect("Diameter").left() && row.right() < rect(&heading).left(), "the rail {rail:?} stands left of the editor");
+    // #4334: the name shows twice - in the header and as the rail's row.
+    let row = node
+        .query_all_by_label(&name)
+        .map(|n| n.rect())
+        .max_by(|a, b| a.top().total_cmp(&b.top()))
+        .unwrap_or_else(|| panic!("the rail has no row {name}"));
+    assert!(rail.right() < rect("Diameter").left() && row.top() > rect(&heading).bottom(), "the rail {rail:?} stands left of the editor, under the header");
     assert!(node.query_all_by_label("Import library…").next().is_none(), "the file row folds away with the list");
     let Some(props) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
         panic!("the Properties leaf is not laid out");
@@ -202,4 +237,27 @@ fn layout_window_holders() {
     assert!(back.top() < taper.top(), "the way back {back:?} heads the view");
     assert!(dims.left() > taper.right(), "the drawing's toggle {dims:?} stands right of the facts {taper:?}");
     assert!(win.expand(1.0).contains_rect(dims), "the toggle stays in the window {win:?}");
+}
+
+/// #3898 (U7): the "My library" source. The component groups stand left
+/// of the rows; the filter and the buttons of a picked row head the rows;
+/// the document's component table follows them.
+#[test]
+fn layout_window_my_library() {
+    use crate::egui_app::tool_library_dialog::components;
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.run_steps(2);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
+    h.run_steps(2);
+    super::tool_library_editor::click_window_button(&mut h, components::SOURCE);
+    assert_window_layout(&h, "Tool library", &[components::SOURCE, "Component filter", components::ADD, components::DOCUMENT]);
+    let win = library_window(&h);
+    let node = super::tool_library_editor::library_window(&h);
+    let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
+    let (all, filter, add, doc) = (rect(components::ALL), rect("Component filter"), rect(components::ADD), rect(components::DOCUMENT));
+    assert!(all.right() < filter.left(), "the group column {all:?} stands left of the rows {filter:?}");
+    assert!(filter.top() < add.top(), "the filter heads the buttons");
+    assert!(add.top() < doc.top(), "the document's table follows the library rows");
+    assert!(win.expand(1.0).contains_rect(add), "the buttons stay in the window {win:?}");
 }

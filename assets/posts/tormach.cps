@@ -23,7 +23,8 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 axisInversion = true; // verified on the engine's mirrored stream for a flipped WCS X/Y and an inverted machine X/Y (#2475): trace equivalence test + golden
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
-workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
+workOffsetMax = 500;    // LinuxCNC G-code reference: G54-G59.3 (1-9) and G54.1 P1..P500 (10-500) (#931, #4228)
+millSpindleReverse = true; // reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 endUnits = "G20 G21";     // #596 / #2189: switches end units before M30 when asked
 coolantModes = true;      // #3446: reads PARAM Coolant (#112/#150)
@@ -69,6 +70,11 @@ explainWords = {
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var wcsIndex = 1;          // the offset number wcsWord writes (#931)
+var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
+var compG = "";            // G41/G42/G40 pending for the next straight block (#39, #4228)
+var compD = "";            // D<tNo>
+var compOn = false;        // compensation is active
+var compNoted = false;     // wear comp note emitted for this section
 var sRpm = 0;              // spindle/T order follows the stream: PARAMs,
 var spindleWait = false;   // TOOL, SECTION - the preamble writes them
 var toolWait = false;      // when the first motion needs them legal
@@ -280,6 +286,16 @@ function planeWord(g) {  // "" while modal; the word (and the new state) on chan
   return "G" + g;
 }
 function restorePlane() { var pw = planeWord(17); if (pw) block([pw]); }
+// #391: a control offsets the cutter in the ACTIVE plane, and every mill
+// generator compensates in XY - so the block that writes G41/G42/G40
+// states G17 when an XZ/YZ arc left G18/G19 modal, and no arc leaves
+// G17 while compensation is engaged (refused by name, see onCircular).
+function compPlaneWord(cg) { return cg ? planeWord(17) : ""; }
+function compPlaneRefuse(g) {
+  if (!compOn || g === 17) return false;
+  msg("an " + (g === 18 ? "XZ (G18)" : "YZ (G19)") + " arc while cutter compensation is engaged - the control would compensate in that plane; cancel compensation (G40) first");
+  return true;
+}
 // The center words of the arc's plane as increments from the start
 // point (G91.1, stated in the header): a shared translation cancels in
 // an increment, so the origin must NOT enter them.
@@ -459,17 +475,39 @@ function retract() {
   }
 }
 
-// Cutter compensation in the control: not stated by this post yet -
-// refused by name, never a centre path under a Control op.
-function onRadiusCompensation() {
-  msg("control cutter compensation (G41/G42) is not supported by this post - choose In computer, or the Fanuc post");
+// Cutter radius compensation in the control (#4228; PathPilot / LinuxCNC
+// G41 left / G42 right / G40 cancel with D<tool_number>).
+function onRadiusCompensation(side) {
+  var s = String(side || properties.Compensation || "off");
+  if (s === "off") {
+    compG = compOn ? "G40" : "";
+    compD = "";
+    compOn = false;
+    return;
+  }
+  if (inCycle) { msg("cutter compensation inside a canned-cycle group"); return; }
+  compG = (s === "left") ? "G41" : "G42";
+  compD = "D" + ni(tNo);
+  compOn = true;
+  if (properties.CompensationType === "wear" && !compNoted) {
+    block(["(WEAR COMP - " + compD + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS)"]);
+    compNoted = true;
+  }
+}
+function compRefuse(what) {
+  if (compG) {
+    msg("cutter compensation must engage or cancel on G1, not " + what);
+    compG = ""; compD = ""; compOn = false;
+  }
 }
 
-// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// #931, #4228: PARAM WorkOffset arrives as the 1-based offset number (the engine
 // refuses one above workOffsetMax by setup name); the word is ours to write.
 function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
-  if (!(n >= 1 && n <= 9 && n === Math.floor(n))) return "";
-  return n <= 6 ? "G" + (53 + n) : "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+  if (!(n >= 1 && n <= workOffsetMax && n === Math.floor(n))) return "";
+  if (n <= 6) return "G" + (53 + n);
+  if (n <= 9) return "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+  return "G54.1 P" + n;                 // PathPilot / LinuxCNC: G54.1 P1..P500
 }
 function offsetWord(value) {
   var n = Number(value), w = workOffsetName(n);
@@ -479,6 +517,8 @@ function offsetWord(value) {
 }
 
 function onParameter(name, value) {
+  if (name === "OperationName") spinRev = false;
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1614
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
@@ -591,6 +631,7 @@ function startPreamble() {
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
+    if (compOn) msg("tool change before cutter compensation cancel (G40)");
     toolNote();
     // The initial spindle tool is unknown. Only a repeated tool that this
     // program already loaded can skip the trip to G30 and the tool change.
@@ -617,7 +658,7 @@ function startPreamble() {
   var touchProbe = spindleWait && !(sRpm > 0);
   if (spindleWait && sRpm > 0) {
     block([beltNote(sRpm)]);
-    block(["S" + ni(sRpm), "M3"]);
+    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
     spindleOn = true;
   }
   if (probeStop) { block(["M5"]); spindleOn = false; }
@@ -630,6 +671,12 @@ function startPreamble() {
 
 function endPreamble() {
   if (!sectionOpen) return;
+  if (compOn || compG) {
+    msg("section ends with cutter compensation active - missing cancel");
+    compG = ""; compD = ""; compOn = false;
+  }
+  compNoted = false;
+  spinRev = false;
   restorePlane();            // the plane never leaks past its section
   g94();                     // #796: no section leaves G93 behind
   sectionOpen = false;
@@ -1113,6 +1160,7 @@ function probeSeat() {
   inCycle = false;
 }
 function onRapid() {
+  compRefuse("G0");
   startPreamble();
   if (chainRapid() || !motionFor(properties, "")) return;
   if (aNext) { turnMove(properties, true); return; }
@@ -1125,15 +1173,27 @@ function onLinear() {
   if (spindleStopped("feed move G1")) return;
   if (aNext) { turnMove(properties, false); return; }
   if (!startXY(properties)) return;  // #1614: refused - the move is not written
-  block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
+  var cg = compG, cd = compD;
+  compG = ""; compD = "";
+  var cp = compPlaneWord(cg);
+  var words = [];
+  if (cp) words.push(cp);
+  words.push("G1");
+  if (cg) words.push(cg);
+  words = words.concat(xyz(properties));
+  if (cd) words.push(cd);
+  words.push(fw(properties.FeedRate));
+  block(words);
 }
 function onCircular() {
+  compRefuse("an arc");
   startPreamble();
   // #3442: an arc whose written ends coincide is no arc block (arcFate, PRELUDE).
   var fate = arcFate(arcWord, arcIncOf(fu));  // #3474: I J K are increments from the start
   if (fate !== "arc") { if (fate === "linear") onLinear(); return; }
   if (chainCut() || !motionFor(properties, "arc move")) return;
   var p = properties;
+  if (compPlaneRefuse(planeOf(p))) return;
   if (indexed()) {  // #785: a tilted path is chords; an arc here is unstated
     aRefuse("arc on an indexed A" + inOp() + " - the indexed frame posts lines only");
     return;
@@ -1314,6 +1374,12 @@ function onCycle() {
   // (the stream's synthesized tap feed), no P - PathPilot sizes the
   // bottom dwell itself, and the MX mills tap from the spindle encoder.
   else if (p.CycleType === "TAP") {
+    var isLeftTap = spinRev || p.CycleType === "LEFT_TAP" || String(p.TappingDirection || "") === "reverse" || String(p.CycleDirection || "") === "reverse" || String(p.ThreadHand || "") === "left";
+    if (isLeftTap) {
+      if (!tapRefused) tapRefused = true; else return;
+      msg("left-hand rigid tapping (G74) is not supported on PathPilot - use thread milling");
+      return;
+    }
     // A machine that says it cannot rigid-tap (the R8 770M, 1100M, PCNC 440
     // and the Mach3-era PCNC 770 / 1100: tapping heads, tension/compression
     // holders and thread milling only) refuses the

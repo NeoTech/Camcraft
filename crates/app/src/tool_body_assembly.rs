@@ -275,7 +275,7 @@ pub fn rebuild_body(template: &ToolBody, pieces: Vec<BodyPiece>) -> Result<ToolB
     let combined: Vec<Triangle> = pieces.iter().flat_map(|p| p.facets.iter().copied()).collect();
     let mut body = match &template.frame {
         BodyFrame::Spindle { axis, offset, .. } => tool_body::build(&source, *axis, *offset, combined)?,
-        BodyFrame::Lathe { place, zone, .. } => tool_body_lathe::build(&source, *place, *zone, combined)?,
+        BodyFrame::Lathe { place, zone, pad, .. } => tool_body_lathe::build_padded(&source, *place, *zone, combined, *pad)?,
     };
     body.pieces = pieces;
     Ok(body)

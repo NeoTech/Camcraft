@@ -119,6 +119,8 @@ mod entity;
 // #2463: a linked model's source file and its digest.
 mod source_dto;
 pub use source_dto::SourceDto;
+// #3915: a `.sc` model's source face record (no version step).
+mod source_faces_dto;
 // #1339: who vouched for a mesh of unknown fidelity.
 mod vouch_dto;
 pub use vouch_dto::VouchDto;
@@ -193,6 +195,11 @@ mod disk_stamp;
 pub use disk_stamp::DiskStamp;
 mod json;
 pub use json::*;
+// #3645: the component table and the tool stacks on file.
+mod component_wire;
+pub use component_wire::*;
+mod assembly_wire;
+pub use assembly_wire::{assembly_from_dto, assembly_to_dto, stack_from_dto, LinkDto, MountDto};
 mod apply;
 mod fidelity_migrate;
 mod pocket_adaptive_migrate;

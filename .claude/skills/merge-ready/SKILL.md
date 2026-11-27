@@ -332,9 +332,10 @@ counted independent review, `--check` validation, or merge approval.
      `gh pr merge N --merge --delete-branch`;
    - a fork PR: `gh pr merge N --merge` (the fork's branch is not ours to
      delete).
-   - a PR whose head is a side branch (`side/*`, the switch-over PR):
-     only on the maintainer's word, and `gh pr merge N --merge` without
-     `--delete-branch` (AGENTS.md **Side branch**).
+   - a PR whose head is a side branch (`side/*`, the PR to `main`):
+     only by the session that the maintainer's word for that PR names, and
+     `gh pr merge N --merge` without `--delete-branch` (AGENTS.md
+     **Side branch**).
 3. Confirm `gh pr view N --json state` is `MERGED`; note the merge commit.
 4. About 5 seconds, then re-read the next PR's `mergeable` (retry while
    `UNKNOWN`). The simulation said it is clean; if GitHub says `CONFLICTING`
@@ -382,7 +383,7 @@ Do not re-review, re-gate or refresh anything between wave-1 merges.
   and remove `in-review` and `claimed` from those issues. A sub-PR whose
   base is a side branch closes no issue: its issue keeps `in-review` and
   gets the comment `merged to side/<name> in PR #M; closes at the
-  switch-over` (AGENTS.md **Side branch**).
+  switch of its kind` (AGENTS.md **Side branch**).
 - **Process files:** if a merged PR changed process files (`AGENTS.md`,
   `.claude/agents/`, `.claude/skills/`, `scripts/gate.*`, `xtask/`), once
   for the whole batch: run `cargo xtask process-bump` in a worktree off the

@@ -130,7 +130,7 @@ fn edit_in_tool_library_opens_the_window_on_the_tool() {
     h.get_by_label(EDIT_IN_LIBRARY).click();
     h.run_steps(3);
     assert_eq!(h.state().state.tool_library.as_ref().and_then(|v| v.open_tool()), Some(TOOL), "the window opens on the tool");
-    assert!(library_window(&h).query_all_by_label(&format!("Tool: {TOOL}")).next().is_some(), "the editor names the tool");
+    assert!(library_window(&h).query_all_by_label(TOOL).next().is_some(), "the editor names the tool");
     assert_eq!(h.state().state.ui_target, UiTarget::Tool(TOOL.into()), "Properties keeps its subject");
     h.get_by_label(EDIT_IN_LIBRARY).click();
     h.run_steps(3);

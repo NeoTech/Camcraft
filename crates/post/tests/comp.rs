@@ -180,7 +180,7 @@ fn every_wear_post_notes_the_register_once_and_control_writes_no_note() {
     let wear = STREAM.replace("COMP RIGHT 3000
 ", "COMP RIGHT 3000 WEAR
 ");
-    for (stem, note) in [("haas", "(WEAR COMP - D2 "), ("mazak", "(WEAR COMP - D2 "), ("sinumerik", "; WEAR COMP - D1 ")] {
+    for (stem, note) in [("haas", "(WEAR COMP - D2 "), ("mazak", "(WEAR COMP - D2 "), ("sinumerik", "; WEAR COMP - D1 "), ("tormach", "(WEAR COMP - D2 ")] {
         let out = engine::run(&post(stem), &Value::Null, &wear).unwrap();
         assert!(out.warnings.is_empty(), "{stem}: {:?}", out.warnings);
         assert_eq!(out.program.matches(note).count(), 1, "{stem}: {}", out.program);
@@ -189,7 +189,7 @@ fn every_wear_post_notes_the_register_once_and_control_writes_no_note() {
 
 #[test]
 fn every_other_shipped_post_refuses_control_compensation_by_name() {
-    for stem in ["heidenhain", "fanuc-lathe", "tormach", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
+    for stem in ["heidenhain", "fanuc-lathe", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
         let cps = post(stem);
         let out = engine::run(&cps, &Value::Null, STREAM).unwrap_or_else(|e| panic!("{stem}: {e}"));
         assert!(

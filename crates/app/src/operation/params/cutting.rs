@@ -42,11 +42,23 @@ impl OpParams {
                         h.write_u8(3);
                         w(h, p.clearance);
                     }
+                    // #3216: the centre slit's run-out clearance places
+                    // its threading point in the air, so it moves the
+                    // stamp as any open run's does.
+                    super::WireSide::Centre => {
+                        h.write_u8(4);
+                        w(h, p.clearance);
+                    }
                 }
                 // #540: written only when set, so no contour's stamp moves.
                 if let Some(c) = p.burnout {
                     h.write(b"burnout");
                     w(h, c);
+                }
+                // #4134: only a control or wear offset is digested, so no
+                // computer-compensated cut's stamp moves.
+                if p.compensation.in_control() {
+                    h.write(p.compensation.label().as_bytes());
                 }
                 match p.picks.first(crate::path_picks::PickRole::Start).map(|k| [k.xy.x, k.xy.y]) {
                     Some([x, y]) => {
@@ -80,6 +92,12 @@ impl OpParams {
                 // #537: likewise only a stated 4-axis cut.
                 if let Some(f) = &p.four_axis {
                     super::wire_ruled::digest(f, h);
+                }
+                // #3216: only a stated closing overlap is digested, so
+                // every plain lap's stamp stays what it was.
+                if p.overlap != 0.0 {
+                    h.write(b"overlap");
+                    w(h, p.overlap);
                 }
             }
             // The sinker burn (#541): every stored number, the datum

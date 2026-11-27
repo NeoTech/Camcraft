@@ -1,6 +1,7 @@
 //! Exercise the standalone post on one control release. The independent coordinates below
 //! follow the iTNC 530 Klartext manual for NC software 34049x-03 (533 190-22).
-//! Gate map: covers assets/posts/heidenhain-klartext.cps, post::machine, post::engine.
+//! Gate map: covers assets/posts/heidenhain-klartext.cps, post::machine, post::engine,
+//! post::heidenhain_dialect.
 
 #[macro_use]
 mod recorded;
@@ -381,3 +382,5 @@ fn successive_sections_with_the_same_tool_recheck_transfer_without_another_excha
 #[path = "klartext/arc_tests.rs"]
 mod arc_tests;
 
+#[path = "klartext/dialect_tests.rs"]
+mod dialect_tests;

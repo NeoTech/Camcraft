@@ -11,12 +11,17 @@
 //! suite `fanuc_post.rs` already locks); the four stage-B dialects get
 //! one subdirectory each.
 //!
+//! #3461: no table here has one row for each post. The rows come from
+//! the app registry (`posting::BUILTINS` and its family lists) and from
+//! each post's own manifest, so a new post changes no line of this file.
+//!
 //! Gate map (M4.4): covers cl::cl, post::post, app::posting.
 
 mod common;
 
 use camcraft_app::cl::{CycleKind, MoveKind};
 use camcraft_app::machine::parse_mch;
+use camcraft_app::posting;
 use common::legacy_program::as_program;
 use camcraft_app::post::{cnc, engine, machine};
 use serde_json::json;
@@ -48,27 +53,43 @@ const GOLDENS: &[&str] = &[
     "tap_plate",
 ];
 
-/// (registry name, .cps file, golden subdir - "" means the shared top).
+/// (registry name, .cps stem) of each shipped post, in registry order.
+fn registry() -> Vec<(&'static str, &'static str)> {
+    posting::BUILTINS
+        .iter()
+        .map(|(name, file)| {
+            let stem = file.0.strip_suffix(".cps").unwrap_or_else(|| panic!("{name}: {} is not a .cps file", file.0));
+            (*name, stem)
+        })
+        .collect()
+}
+
+/// The registry entries of one family list of `posting`, in registry order.
+fn family(names: &[&str]) -> Vec<(&'static str, &'static str)> {
+    registry().into_iter().filter(|(n, _)| names.contains(n)).collect()
+}
+
+/// The families that are not milling dialects: the registry's own lists.
+const NON_MILL: [&[&str]; 4] = [posting::LATHE_POSTS, posting::PLASMA_POSTS, posting::WIRE_POSTS, posting::SINKER_POSTS];
+
+/// Fanuc's goldens are at the top of `golden/nc/` (M1.7b); each other
+/// milling dialect has a subdirectory with its stem as the name.
+fn golden_subdir(stem: &'static str) -> &'static str {
+    if stem == "fanuc" { "" } else { stem }
+}
+
+/// (registry name, .cps stem, golden subdir - "" means the shared top).
 /// The MILLING dialects: the `.cl` goldens are mill programs (XY
 /// contours, Z-down holes), so these are the posts they conform on.
-const POSTS: &[(&str, &str, &str)] = &[
-    ("Fanuc", "fanuc", ""),
-    ("Haas", "haas", "haas"),
-    ("Siemens 840D", "sinumerik", "sinumerik"),
-    ("Siemens 810M", "sinumerik-810m", "sinumerik-810m"),
-    ("Heidenhain", "heidenhain", "heidenhain"),
-    ("Mazak", "mazak", "mazak"),
-    ("Tormach PathPilot", "tormach", "tormach"),
-    ("grblHAL", "grblhal", "grblhal"),
-    ("TinyG", "tinyg", "tinyg"),
-    ("LinuxCNC", "linuxcnc", "linuxcnc"),
-    ("Grbl 1.1", "grbl", "grbl"),
-    ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
-    ("Makera Carvera", "carvera", "carvera"),
-    ("Mach4", "mach4", "mach4"),
-    ("RichAuto DSP A11", "richauto", "richauto"),
-    ("Mach3", "mach3", "mach3"),
-];
+/// Each registry entry that no non-mill family lists is one, except
+/// Klartext (below).
+fn mill_posts() -> Vec<(&'static str, &'static str, &'static str)> {
+    registry()
+        .into_iter()
+        .filter(|(n, _)| *n != KLARTEXT.0 && !NON_MILL.iter().any(|f| f.contains(n)))
+        .map(|(n, s)| (n, s, golden_subdir(s)))
+        .collect()
+}
 
 /// #1357: the Tormach goldens are runnable programs - posted for a real
 /// Tormach (the 770MX, an inch machine) from the golden dressed with the
@@ -124,37 +145,25 @@ const REFUSED: &[(&str, &str, &str)] = &[
 /// `script_heidenhain_klartext`. The generic VMC has neither machine fact.
 const KLARTEXT: (&str, &str) = ("Heidenhain Klartext", "heidenhain-klartext");
 
-/// The TURNING dialects (M13.5): their goldens are the lathe
-/// documents' own streams (`lathe_post.rs`); on a mill golden they
-/// must REFUSE by name - never project a Y move onto a diameter.
-const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach PathPilot Lathe", "tormach-lathe")];
-
-/// The PLASMA dialects (#671): their goldens are the plasma streams'
-/// own (`plasma_post.rs`, `nc/tormach-plasma/`); on a mill golden they
-/// refuse by name (`plasma_post_refusals.rs`).
-const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-plasma")];
-
-/// The WIRE EDM dialects (#533): their golden is the wire stream's own
-/// (`wire_post.rs`, `nc/wire-iso/`); a mill golden they refuse by name.
-const WIRE_POSTS: &[(&str, &str)] = &[
-    ("Generic ISO Wire EDM", "wire-iso"),
-    ("Sodick Wire EDM (Mark 21)", "sodick-wire"),
-    ("Sodick Wire EDM (LN2W)", "sodick-ln2w"),
-    ("Agie Wire EDM (AgieVision)", "agie-native"),
-    ("G-EDM Wire EDM", "g-edm"),
-];
-
-/// The SINKER EDM dialects (#542): their golden is the sinker burn's
-/// own (`crates/post/tests/script_sinker_iso.rs`, `nc/sinker-iso/`); a
-/// mill golden over a mill machine they refuse by name (the script's
-/// own machine check - the app's serves door, #1232, refuses first).
-const SINKER_POSTS: &[(&str, &str)] = &[("Sinker EDM (ISO)", "sinker-iso")];
+// The other families are the registry's own lists (`family`):
+// - TURNING (M13.5): their goldens are the lathe documents' own streams
+//   (`lathe_post.rs`); on a mill golden they must REFUSE by name - never
+//   project a Y move onto a diameter.
+// - PLASMA (#671): their goldens are the plasma streams' own
+//   (`plasma_post.rs`, `nc/tormach-plasma/`); on a mill golden they refuse
+//   by name (`plasma_post_refusals.rs`).
+// - WIRE EDM (#533): their golden is the wire stream's own (`wire_post.rs`,
+//   `nc/wire-iso/`); a mill golden they refuse by name.
+// - SINKER EDM (#542): their golden is the sinker burn's own
+//   (`crates/post/tests/script_sinker_iso.rs`, `nc/sinker-iso/`); a mill
+//   golden over a mill machine they refuse by name (the script's own
+//   machine check - the app's serves door, #1232, refuses first).
 
 #[test]
 fn every_sinker_post_refuses_every_mill_golden_by_name() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
-    for (name, cps_stem) in SINKER_POSTS {
+    for (name, cps_stem) in family(posting::SINKER_POSTS) {
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         for g in GOLDENS {
             let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
@@ -173,7 +182,7 @@ fn every_sinker_post_refuses_every_mill_golden_by_name() {
 fn every_lathe_post_refuses_every_mill_golden_by_name() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/lathe.mch")).expect("machine json");
-    for (name, cps_stem) in LATHE_POSTS {
+    for (name, cps_stem) in family(posting::LATHE_POSTS) {
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         for g in GOLDENS {
             let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
@@ -198,17 +207,17 @@ fn every_lathe_post_refuses_every_mill_golden_by_name() {
 fn every_builtin_posts_every_golden_byte_exact() {
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     let mut written = 0usize;
-    for (name, cps_stem, sub) in POSTS {
+    for (name, cps_stem, sub) in mill_posts() {
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         for g in GOLDENS {
             let (mch, stream) = golden_input(cps_stem, g);
             // #902: the program's unit is the document's. The Tormach
             // goldens stand for an inch document on the 770MX (what they
             // were run as in PathPilot); the rest for an mm one.
-            let units = if *cps_stem == "tormach" { json!({ "Units": "inch" }) } else { serde_json::Value::Null };
+            let units = if cps_stem == "tormach" { json!({ "Units": "inch" }) } else { serde_json::Value::Null };
             let out = engine::run_with(&cps, &mch, &stream, &units)
                 .unwrap_or_else(|e| panic!("{name} on {g}: must post: {e}"));
-            if let Some((_, _, why)) = REFUSED.iter().find(|(s, gg, _)| s == cps_stem && gg == g) {
+            if let Some((_, _, why)) = REFUSED.iter().find(|(s, gg, _)| *s == cps_stem && gg == g) {
                 assert!(
                     out.warnings.iter().any(|w| w.contains(why)),
                     "{name} on {g}: must refuse by name ({why}), got {:?}",
@@ -378,13 +387,13 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
-    for (name, cps_stem, _) in POSTS {
+    for (name, cps_stem, _) in mill_posts() {
         // #51: Heidenhain supports the full G55 + tap stream.
         // #707: the Carvera refuses the tap the same way (no canned
         // cycles, no spindle reverse); its G55 stands.
         // #710: grblHAL has no G84, so its golden drops only the tap;
         // TinyG the same (its drill chains post as plain moves).
-        let stream = match *cps_stem {
+        let stream = match cps_stem {
             "carvera" => synth_stream_with("G55", false),
             // #1914: one work origin (the pendant zero), no tap.
             "richauto" => synth_stream_with("G54", false),
@@ -422,12 +431,12 @@ fn the_dialects_actually_differ() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let stream = as_program("drill_peck", &read("crates/app/tests/golden/drill_peck.cl"));
-    let texts: Vec<(&str, String)> = POSTS
-        .iter()
+    let texts: Vec<(&str, String)> = mill_posts()
+        .into_iter()
         .map(|(name, stem, _)| {
             let cps = read(&format!("assets/posts/{stem}.cps"));
             (
-                *name,
+                name,
                 engine::run(&cps, &mch, &stream)
                     .unwrap_or_else(|e| panic!("{name} on drill_peck: {e}"))
                     .program,
@@ -443,67 +452,48 @@ fn the_dialects_actually_differ() {
 
 #[test]
 fn every_builtin_registry_entry_compiles() {
-    // The registry text the app embeds must match the shipped files -
-    // a stale include or a renamed file is a compile-time... no:
-    // include_str! is compile-time, but the NAMES are the persistence
-    // contract, so spell the registry out here against posting.rs.
-    let names: Vec<&str> = camcraft_app::posting::BUILTINS.iter().map(|(n, _)| *n).collect();
-    let mut want: Vec<&str> = POSTS.iter().map(|(n, _, _)| *n).collect();
-    want.push(KLARTEXT.0);
-    want.extend(LATHE_POSTS.iter().map(|(n, _)| *n));
-    want.extend(PLASMA_POSTS.iter().map(|(n, _)| *n));
-    want.extend(WIRE_POSTS.iter().map(|(n, _)| *n));
-    want.extend(SINKER_POSTS.iter().map(|(n, _)| *n));
-    assert_eq!(names, want, "the picker lists what the registry ships");
-    for (n, _) in SINKER_POSTS {
-        assert!(camcraft_app::posting::SINKER_POSTS.contains(n), "{n} is a sinker dialect in the registry's own table");
+    // The NAMES are the persistence contract: each post's own suite pins
+    // its name (#3461). Here the registry must be one partition: unique
+    // names, a shipped file for each, and each entry in exactly one
+    // family. Entry 0 is Fanuc and stays Fanuc (`PostRef::Builtin`).
+    let reg = registry();
+    assert_eq!(reg.first(), Some(&("Fanuc", "fanuc")), "entry 0 of the registry stays Fanuc");
+    for (i, (name, stem)) in reg.iter().enumerate() {
+        assert!(!reg[..i].iter().any(|(n, _)| n == name), "{name} is in the registry two times");
+        assert!(repo(&format!("assets/posts/{stem}.cps")).is_file(), "{name}: assets/posts/{stem}.cps is not shipped");
     }
-    for (n, _) in PLASMA_POSTS {
-        assert!(camcraft_app::posting::PLASMA_POSTS.contains(n), "{n} is a plasma dialect in the registry's own table");
+    for list in NON_MILL {
+        for n in list {
+            assert!(reg.iter().any(|(r, _)| r == n), "{n} is in a family list of posting.rs but not in BUILTINS");
+        }
     }
-    for (n, _) in WIRE_POSTS {
-        assert!(camcraft_app::posting::WIRE_POSTS.contains(n), "{n} is a wire EDM dialect in the registry's own table");
+    assert_eq!(family(&[KLARTEXT.0]), vec![KLARTEXT], "Klartext is a registry entry with its own file");
+    let mills = mill_posts();
+    let mut sorted: Vec<&str> = mills.iter().map(|(n, _, _)| *n).collect();
+    sorted.push(KLARTEXT.0);
+    for list in NON_MILL {
+        sorted.extend(family(list).into_iter().map(|(n, _)| n));
     }
-    for (n, _) in LATHE_POSTS {
-        assert!(
-            camcraft_app::posting::LATHE_POSTS.contains(n),
-            "{n} is a turning dialect in the registry's own table"
-        );
-    }
+    sorted.sort_unstable();
+    let mut names: Vec<&str> = reg.iter().map(|(n, _)| *n).collect();
+    names.sort_unstable();
+    assert_eq!(sorted, names, "each registry entry is in exactly one family");
 }
 
-/// (.cps file, the file extension its manifest declares). The engine
-/// never reads `extension`, so nothing else would catch a wrong one:
-/// #52 - a TNC ISO program is a `.I` file (HEIDENHAIN "TNC 640 User's
-/// Manual, ISO programming", ID 892909-25, p. 143); the rest write `.nc`.
-const EXTENSIONS: &[(&str, &str)] = &[
-    ("fanuc", "nc"),
-    ("haas", "nc"),
-    ("sinumerik", "nc"),
-    ("sinumerik-810m", "mpf"),
+/// (.cps stem, file extension) of the posts whose control reads a file
+/// type other than `.nc`; each other shipped post declares `nc`. The
+/// engine never reads `extension`, so nothing else would catch a wrong
+/// one: #52 - a TNC ISO program is a `.I` file (HEIDENHAIN "TNC 640
+/// User's Manual, ISO programming", ID 892909-25, p. 143).
+const NOT_NC: &[(&str, &str)] = &[
+    ("agie-native", "agie"),
     ("heidenhain", "I"),
-    ("mazak", "nc"),
-    ("tormach", "nc"),
-    ("grblhal", "nc"),
-    ("tinyg", "gcode"),
+    ("heidenhain-klartext", "H"),
     ("linuxcnc", "ngc"),
-    ("grbl", "nc"),
-    ("doosan-dnm", "nc"),
-    ("carvera", "nc"),
-    ("mach4", "nc"),
     // #1907: the program a Laguna Swift's A11 runs is a .mmg file.
     ("richauto", "mmg"),
-    ("mach3", "nc"),
-    ("heidenhain-klartext", "H"),
-    ("fanuc-lathe", "nc"),
-    ("tormach-lathe", "nc"),
-    ("tormach-plasma", "nc"),
-    ("wire-iso", "nc"),
-    ("sodick-wire", "nc"),
-    ("sodick-ln2w", "nc"),
-    ("agie-native", "agie"),
-    ("g-edm", "nc"),
-    ("sinker-iso", "nc"),
+    ("sinumerik-810m", "mpf"),
+    ("tinyg", "gcode"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.
@@ -515,19 +505,16 @@ fn declared_extension(script: &str) -> Option<&str> {
 
 #[test]
 fn every_builtin_declares_its_controls_file_extension() {
-    let mut stems: Vec<&str> = POSTS.iter().map(|(_, s, _)| *s).collect();
-    stems.push(KLARTEXT.1);
-    stems.extend(LATHE_POSTS.iter().map(|(_, s)| *s));
-    stems.extend(PLASMA_POSTS.iter().map(|(_, s)| *s));
-    stems.extend(WIRE_POSTS.iter().map(|(_, s)| *s));
-    stems.extend(SINKER_POSTS.iter().map(|(_, s)| *s));
-    let pinned: Vec<&str> = EXTENSIONS.iter().map(|(s, _)| *s).collect();
-    assert_eq!(pinned, stems, "every shipped post has its extension pinned");
-    for (stem, want) in EXTENSIONS {
+    let reg = registry();
+    for (stem, _) in NOT_NC {
+        assert!(reg.iter().any(|(_, s)| s == stem), "{stem}: a NOT_NC row for a post that is not in the registry");
+    }
+    for (_, stem) in reg {
+        let want = NOT_NC.iter().find(|(s, _)| *s == stem).map_or("nc", |(_, e)| *e);
         let cps = read(&format!("assets/posts/{stem}.cps"));
         assert_eq!(
             declared_extension(&cps),
-            Some(*want),
+            Some(want),
             "{stem}.cps declares the .{want} extension"
         );
     }

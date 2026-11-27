@@ -361,6 +361,13 @@ in `docs/decisions/617-sodick-wire-post.md` and
 `docs/decisions/2649-sodick-ln-pass-structure.md`. Its goldens ride
 under `nc/sodick-wire/` (`sodick_wire_post.rs`, `sodick_wire_passes.rs`).
 
+An open run's skims (#3216 over #538) rethread: the wire is cut at each
+pass's run-out, the travel between passes carries no wire, and each pass
+is threaded anew at its own run-in in the air; a closed cut's skims keep
+one threading, as before. The Sodick post refuses an open run's skims by
+name at its rapid guard instead of writing a structure its manual does
+not state.
+
 `g-edm.cps` (#2700, "G-EDM Wire EDM") is the fourth `WIRE_POSTS` entry,
 never the default. It serves G-EDM builds on G-RBLv3 (a Grbl derivative):
 Grbl-family words only (`G21` / `G20 G90 G17`, `G0`, `G1`, `G2` / `G3`

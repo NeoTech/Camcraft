@@ -98,7 +98,7 @@ fn check_form(nc: &str, what: &str) -> Vec<String> {
             if head == 'G' {
                 assert!(
                     matches!(w, "G00" | "G01" | "G02" | "G03" | "G17" | "G40" | "G90"
-                        | "G200" | "G205" | "G206" | "G207" | "G247"),
+                        | "G200" | "G206" | "G207" | "G247"),
                     "{what}: {w} is outside the exact move/cycle/preset G-word allowlist: {l:?}"
                 );
             }
@@ -215,10 +215,14 @@ fn heidenhain_native_cycles_and_preset_use_numbered_tnc_blocks() {
     let out = run(&native_cycles());
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let b = check_form(&out.program, "native cycles");
-    for g in ["G200", "G205", "G206", "G207", "G247 Q339=2"] {
+    for g in ["G200", "G206", "G207", "G247 Q339=2"] {
         assert!(b.iter().any(|line| line.starts_with(g)), "missing {g}: {}", out.program);
     }
-    assert_eq!(b.iter().flat_map(|line| line.split_whitespace()).filter(|w| *w == "M99").count(), 4);
+    // #4224: the peck hole posts its checked chain, never a G205.
+    for line in ["G01 X+20 Y+10 Z-2 F120", "G00 X+20 Y+10 Z-1", "G01 X+20 Y+10 Z-4 F120"] {
+        assert!(b.iter().any(|l| l == line), "missing {line}: {}", out.program);
+    }
+    assert_eq!(b.iter().flat_map(|line| line.split_whitespace()).filter(|w| *w == "M99").count(), 3);
     assert!(!out.program.contains("G80") && !out.program.contains("M89"));
 }
 
@@ -351,25 +355,25 @@ fn heidenhain_dwell_writes_g04_f_in_iso_for_all_controllers_and_defaults() {
     assert!(out.program.contains("G04 F0.5*"), "TNC 640 -07 writes G04 F: {}", out.program);
     assert!(!out.program.contains("FUNCTION DWELL"));
 
-    // 5. Spaced NC string (e.g. "340 590-06") writes G04 F
+    // 5. #4095: a spaced NC string is not canonical: refused by name at
+    // the program start, nothing written.
     let mut tnc_spaced = itnc_mch.clone();
     tnc_spaced["controller"] = json!({
         "identity": { "model": "TNC 640", "nc_software": "340 590-06" }
     });
-    let out = engine::run(&cps, &tnc_spaced, &stream).expect("posts with spaced nc");
-    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert!(out.program.contains("G04 F0.5*"), "Spaced NC software writes G04 F: {}", out.program);
-    assert!(!out.program.contains("FUNCTION DWELL"));
+    let why = engine::run(&cps, &tnc_spaced, &stream).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(why.contains("NC software \"340 590-06\" is not a canonical HEIDENHAIN identifier"), "{why}");
 
-    // 6. Unknown model (e.g. "TNC 426") writes G04 F
-    let mut tnc_unknown = itnc_mch.clone();
-    tnc_unknown["controller"] = json!({
-        "identity": { "model": "TNC 426", "nc_software": "280 472-01" }
-    });
-    let out = engine::run(&cps, &tnc_unknown, &stream).expect("posts with tnc 426");
-    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert!(out.program.contains("G04 F0.5*"), "Unknown model writes G04 F: {}", out.program);
-    assert!(!out.program.contains("FUNCTION DWELL"));
+    // 6. TNC 426/430 280 472 (the first DIN/ISO release) and TNC 410
+    // (3 coordinate decimals) write G04 F
+    for (model, nc) in [("TNC 426", "280472-01"), ("TNC 410", "286060-01")] {
+        let mut older = itnc_mch.clone();
+        older["controller"] = json!({ "identity": { "model": model, "nc_software": nc } });
+        let out = engine::run(&cps, &older, &stream).unwrap_or_else(|e| panic!("posts with {model} {nc}: {e}"));
+        assert!(out.warnings.is_empty(), "{model} {nc}: {:?}", out.warnings);
+        assert!(out.program.contains("G04 F0.5*"), "{model} {nc} writes G04 F: {}", out.program);
+        assert!(!out.program.contains("FUNCTION DWELL"));
+    }
 
     // 7. Default/generic machine without controller identity writes G04 F
     let base_mch: serde_json::Value =

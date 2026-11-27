@@ -43,7 +43,10 @@ pub fn read_tool_csys(_text: &str) -> Result<ToolCsysReport, String> {
 pub enum CsysRole {
     /// "PCS": the primary (reference) coordinate system of the item.
     Primary,
-    /// "MCS": where the item mounts onto an adaptive item.
+    /// "MCS": where the item mounts onto an adaptive item. "MCS_INSERT"
+    /// (#3643) is the same role on an insert: where it sits in its seat.
+    /// A file that names both has two mounting frames, and
+    /// [`ToolCsysReport::find`] refuses it as ambiguous.
     Mounting,
     /// "CIP": the coordinate system at the cutting part.
     InProcess,
@@ -61,12 +64,12 @@ pub enum CsysRole {
 
 impl CsysRole {
     /// The role an ISO 13399 name states. Case and surrounding blanks
-    /// are ignored; anything else (`PCS_1`, `CSW_A`) is `Other`.
+    /// are ignored; anything else (`PCS_1`, `CSW_A`, `MCS_1`) is `Other`.
     pub fn classify(name: &str) -> CsysRole {
         let n = name.trim().to_ascii_uppercase();
         match n.as_str() {
             "PCS" => return CsysRole::Primary,
-            "MCS" => return CsysRole::Mounting,
+            "MCS" | "MCS_INSERT" => return CsysRole::Mounting,
             "CIP" => return CsysRole::InProcess,
             "CSIF" => return CsysRole::Interface,
             "CSW" => {

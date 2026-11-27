@@ -3,7 +3,7 @@
     "model": "Fehlmann Picomax 55 (iTNC 530)",
     "vendor": "Fehlmann",
     "kind": "mill",
-    "description": "Three-axis CNC mode with a fixed W head. Set W before setting the preset. Sources: Fehlmann parameters 14108131.MP, operating manual 141-49-07-E and programming manual P07-35-06-E. Reference-frame travel limits are unstated."
+    "description": "Three-axis CNC mode with a fixed W head. Set W before setting the preset. Sources: Fehlmann parameters 14108131.MP, operating manual 141-49-07-E and programming manual P07-35-06-E. Reference-frame travel limits are unstated. The preset table rows 0..5 come from the 2008 delivery CD (PRESET.PR); check the table at the control and raise controller.work_offset_max if the shop added rows."
   },
   "kinematics": { "default": {
     "units": { "length": "mm", "angle": "degrees" },
@@ -24,6 +24,7 @@
   "controller": {
     "post": "Heidenhain Klartext",
     "identity": { "model": "iTNC 530", "nc_software": "340490-03" },
+    "work_offset_max": 5,
     "synced_configuration": { "parts": {
       "X": { "coordinate": 0, "max_rapid_speed": 11000 },
       "Y": { "coordinate": 1, "max_rapid_speed": 11000 },

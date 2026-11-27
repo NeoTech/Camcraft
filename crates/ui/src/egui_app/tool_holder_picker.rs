@@ -98,15 +98,17 @@ pub(super) fn apply_holder_button(ui: &mut Ui, state: &mut State) {
 }
 
 /// One line on what a picker row is: an entry as [`describe`] says, or
-/// a taper's Weldon row with the bores it takes the tool's shank into.
+/// a taper's Weldon or shrink-fit row with the bores it takes the tool's
+/// shank into.
 fn describe_row(r: &PickerRow, u: Unit) -> String {
     match r {
         PickerRow::Entry(e) => describe(e, u),
-        PickerRow::Weldon { taper: t, bores } => {
+        PickerRow::Weldon { taper: t, bores } | PickerRow::Shrink { taper: t, bores } => {
             let l = |v: f64| units::len(v, u, 2);
             let b: Vec<String> = bores.iter().map(|b| format!("Ø{}", l(*b))).collect();
+            let kind = if matches!(r, PickerRow::Shrink { .. }) { "shrink fit" } else { "Weldon" };
             format!(
-                "{} {} Ø{} × {} {}; Weldon, bore for the tool's shank: {}",
+                "{} {} Ø{} × {} {}; {kind}, bore for the tool's shank: {}",
                 t.name,
                 t.ring,
                 l(t.flange_d),
@@ -131,6 +133,9 @@ fn describe(e: &HolderEntry, u: Unit) -> String {
             l(er.max_bore)
         ),
         Clamp::Weldon { bore, body_d } => format!("Weldon bore Ø{}, body Ø{}", l(bore), l(body_d)),
+        Clamp::Shrink { bore, nose_d, body_d } => {
+            format!("shrink-fit bore Ø{}, nose Ø{}, body Ø{}", l(bore), l(nose_d), l(body_d))
+        }
     };
     match e.taper {
         Some(t) => format!("{} {} Ø{} × {} {}; {nose}", t.name, t.ring, l(t.flange_d), l(t.flange_t), u.suffix()),

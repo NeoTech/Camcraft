@@ -42,6 +42,10 @@
 use crate::holder_profile::{area2, clip, FINE_BAND, MAX_BODY_HEIGHT, MAX_FINE_BANDS};
 use crate::lathe_insert_zone::{InsertZone, MAX_INSERT_REACH};
 
+// #3643: the bands grown by a meshed body's chord deviation.
+#[path = "lathe_clearance_pad.rs"]
+mod pad;
+
 type Tri = [[f64; 3]; 3];
 
 /// The farthest the tip may stand from the body's bounding box (mm):

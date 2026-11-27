@@ -14,6 +14,11 @@
 //! condition's id, wire and gap, so an edited tab never posts a stale
 //! path.
 //!
+//! #3216: a centre slit's run-out clearance places its threading
+//! point, so the clearance moves the stamp as any open run's does -
+//! an edited or re-stated clearance reads Stale, never Ok with the
+//! old path.
+//!
 //! Gate map (#1370, #537, #539): covers app::operation (params' stamp_with
 //! wire arm, wire_ruled::digest, stamp, wire_op::stamp_condition),
 //! app::commands (operation edit and generate), app::project
@@ -54,7 +59,9 @@ fn prism(pts: &[(f64, f64)]) -> Mesh {
 
 fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
     WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -227,6 +234,43 @@ fn the_four_sides_stamp_apart_and_a_closed_cut_ignores_the_clearance() {
     }
 }
 
+/// #3216 rework: a centre slit's run-out clearance places its threading
+/// point in the air, so the clearance moves the stamp as any open
+/// run's does. Changing only the clearance marks a generated centre
+/// slit Stale - through the edit command and in a reloaded project -
+/// where it once read Ok with a path cut at the old run-out.
+#[test]
+fn a_centre_slits_clearance_marks_its_path_stale() {
+    let (world, mut h) = doc();
+    // A centre slit along the cut-off's own run: the wire rides the
+    // run itself, the kerf burning both sides.
+    let SrcRef::Selection(items) = model::operation_of(&world, &model::find_by_name(&world, "Cutoff1").expect("op")).expect("op").src else {
+        panic!("the cut-off is a selection");
+    };
+    let op = wire_op(WireSide::Centre, None);
+    let c = CreateOperation::new(&world, "Slit1", "EDM-W025", SrcRef::Selection(items), OpParams::WireContour(op)).expect("centre op");
+    h.execute(&world, c);
+    h.execute(&world, GenerateOperation::new(&world, "Slit1").expect("the centre slit generates"));
+    assert_eq!(status(&world, "Slit1"), OpStatus::Ok);
+    // The stamp reads the clearance: 1 mm and 3 mm stamp apart.
+    let base = stamp_of(&world, params(&world, "Slit1"));
+    let wider = stamp_of(&world, WireContourOp { clearance: 3.0, ..params(&world, "Slit1") });
+    assert!(base.is_some() && wider.is_some());
+    assert_ne!(base, wider, "the centre slit's clearance moves the stamp");
+    // Through the commands: the edit reads Stale, undo brings Ok back.
+    edit(&world, &mut h, "Slit1", WireContourOp { clearance: 3.0, ..params(&world, "Slit1") });
+    assert_eq!(status(&world, "Slit1"), OpStatus::Stale, "a new run-out clearance is a different program");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world, "Slit1"), OpStatus::Ok);
+    // In a reloaded project: the file's own clearance, the same stale
+    // verdict - the old path never posts as the new slit.
+    let back = reopened(&world, "centre", &["centre"], &|w| {
+        w.insert("clearance".into(), 3.0.into());
+    });
+    assert!((params(&back, "Slit1").clearance - 3.0).abs() < 1e-12, "the file's clearance was re-stated");
+    assert_eq!(status(&back, "Slit1"), OpStatus::Stale, "the reloaded slit reads Stale at its new run-out");
+}
+
 /// An edit of another operation, a closed cut's clearance re-stated in
 /// its file, and a plain save / load round trip leave the cuts Ok.
 #[test]
@@ -264,8 +308,9 @@ fn four(pairing: WirePairingRule, sync: &[(Pt, Pt)], tolerance: f64) -> WireCont
 /// move; if a toolchain changes `DefaultHasher`, re-pin it only after
 /// checking the arm still writes nothing for `four_axis: None`.
 /// Re-pinned for the v3 stamp salt and the mounted wire tool digest,
-/// and again for the v4 salt (#2901).
-const ONE_PROFILE_STAMP: u64 = 9_618_028_259_464_931;
+/// and again for the v4 salt (#2901), and again for the #3704
+/// generator-output term (that term moves every stamp once).
+const ONE_PROFILE_STAMP: u64 = 10_966_340_153_851_473_914;
 
 /// Done means (M3, PR #1181 item 2): the pairing rule, each sync point
 /// on each side of each pair, and the tolerance each move the stamp, so

@@ -1169,7 +1169,7 @@ pub(crate) const REGION_RGB: [f32; 3] = [0.95, 0.58, 0.15];
 /// doubles a standing outline nor vanishes because the panel disagrees
 /// with the selection about who is shown - and a translucent fill never
 /// covers where no outline stands.
-pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>)> {
+pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>, Option<u64>)> {
     let mut out = Vec::new();
     for (name, entity) in model::named_entities(&state.world) {
         if state.hidden_paths.contains(&name)
@@ -1182,16 +1182,16 @@ pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>)> {
             continue;
         };
         // A per-frame display read: a sketch Z span may come from the frame memo.
-        let (region, z) = operation::display_heights(|| {
+        let ((region, fill_id), z) = operation::display_heights(|| {
             (
-                crate::frame_memo::region_of(&state.world, &name, &op),
+                crate::frame_memo::region_with_id(&state.world, &name, &op),
                 operation::region_z(&state.world, op.setup.as_deref(), Some(&op.src), &op.params),
             )
         });
         if let Some(z) = z
             && (region.is_some() || !operation::chains_of(&state.world, &op).is_empty())
         {
-            out.push((z, region));
+            out.push((z, region, fill_id));
         }
     }
     out
@@ -1200,7 +1200,7 @@ pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>)> {
 /// The levels of [`shown_regions`] - one truth, read at the height-plane
 /// gate.
 pub(crate) fn shown_region_levels(state: &State) -> Vec<f64> {
-    shown_regions(state).into_iter().map(|(z, _)| z).collect()
+    shown_regions(state).into_iter().map(|(z, _, _)| z).collect()
 }
 /// Safety level (our own palette): the clearance plane everything starts
 /// above, and - Contour only - the shorter retract between passes.

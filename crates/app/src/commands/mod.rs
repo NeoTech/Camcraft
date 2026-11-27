@@ -82,6 +82,8 @@ pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
 pub mod tool_assembly;
+// #3645: the undoable pull of a user library component.
+pub mod component_sync;
 // #93 slice 2: a milling tool's drawn cutter outline.
 pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
@@ -89,6 +91,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #3915: picks follow their faces by SolidCraft name at a re-import.
+pub mod update_model_follow;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
 // #1339: a person vouches for a mesh of unknown fidelity.
@@ -162,6 +166,7 @@ pub use set_wcs_flip::SetWcsFlip;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
+pub use component_sync::SyncDocumentComponent;
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use electrode::ElectrodeFromFaces;

@@ -63,7 +63,7 @@ impl Stock {
         for (i, op) in ops.iter().enumerate() {
             let tool = op_sdf_tool(op, flank, false, drill);
             for chunk in op.moves.chunks(super::field_batch::BATCH_MOVES) {
-                f.subtract_batch(chunk, &tool, chord_tol).map_err(|e| match e {
+                f.subtract_batch_fitted(chunk, &tool, chord_tol).map_err(|e| match e {
                     StockError::Invalid(s) => StockError::Invalid(format!("op {i}: {s}")),
                     other => other,
                 })?;

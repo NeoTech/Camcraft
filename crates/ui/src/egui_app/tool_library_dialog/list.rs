@@ -7,6 +7,8 @@
 //! (`categories`), and each Document row starts with a small drawing of
 //! the tool (`thumbs`, cached) and has a Gauge column: the holder's gauge
 //! length plus the stick-out, for a tool in a library holder.
+//! #3898 (U7): a third source, "My library", shows the component library
+//! (`components`).
 //! Provenance: our own catalog and library controls; no HSMWorks material
 //! involved.
 
@@ -38,6 +40,8 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
             .on_hover_text("the tools of this document");
         ui.selectable_value(&mut picked, ToolSource::Catalog, "Catalog")
             .on_hover_text("the built-in catalog: Add puts a tool into the document");
+        ui.selectable_value(&mut picked, ToolSource::Library, super::components::SOURCE)
+            .on_hover_text("the tool components: the built-in ones, your own library file and the document's");
     });
     if picked != source
         && let Some(view) = state.tool_library.as_mut()
@@ -47,6 +51,10 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     let rows = match picked {
         ToolSource::Document => document_tools(state),
         ToolSource::Catalog => catalog_tools(state),
+        ToolSource::Library => {
+            super::components::draw(ui, state);
+            return;
+        }
     };
     filter_row(ui, state, &rows);
     let category = state.tool_library.as_ref().and_then(|v| v.category);
@@ -79,6 +87,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
                 match picked {
                     ToolSource::Document => document_list(ui, state, &shown),
                     ToolSource::Catalog => catalog_list(ui, state, &shown),
+                    ToolSource::Library => {}
                 }
             });
     });

@@ -1,6 +1,11 @@
 //! Solidcraft import is a geometry API, independent of app document wiring.
 //! Provenance: our own API contract over the public Solidcraft reader.
-//! Gate map (M4.4): covers camcraft_geometry::solidcraft.
+//! Gate map (M4.4): covers camcraft_geometry::solidcraft,
+//! camcraft_geometry::source_faces.
+
+// #3915: the SolidCraft face names beside the imported facets.
+#[path = "solidcraft/source_faces.rs"]
+mod source_faces;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
