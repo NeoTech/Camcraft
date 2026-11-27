@@ -314,7 +314,7 @@ fn trochoid_wide_channel_leaves_no_post_at_the_start() {
     assert!(q.max_deg <= 90.0 + 1e-9, "max {:.1} deg at {:?}", q.max_deg, q.max_at);
 }
 
-mod common;
+use crate::common;
 
 #[test]
 fn trochoid_slot_shape_mask_holds_shape_and_engagement() {

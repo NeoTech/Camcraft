@@ -502,7 +502,7 @@ fn hsm_one() {
     }
 }
 
-mod common;
+use crate::common;
 
 #[test]
 fn adaptive_pocket_shape_mask_holds_shape_and_engagement() {

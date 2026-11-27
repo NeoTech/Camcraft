@@ -342,7 +342,8 @@ fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
         ("post", &["heidenhain_arc_centre", "heidenhain_block_form", "heidenhain_cycles", "probe_spindle",
             "probe_spindle_stop", "comment_escape", "lathe_post_refusals", "doosan_dnm_post"]),
         ("sim", &["boundary_walls", "real_tip"]),
-        ("motion", &["arcs"]),
+        // #3189: `arcs` is a module of the `contour2d` directory suite.
+        ("motion", &["contour2d"]),
         ("cl", &["origin_approach"]),
         ("app", &[]),
     ];
@@ -356,8 +357,11 @@ fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
             if krate != "motion" {
                 assert!(!motion.iter().any(|b| b == n), "{n} still in crates/motion/tests");
             }
-            let src = scan::read(&root().join(format!("crates/{krate}/tests/{n}.rs")));
-            assert!(!src.contains("camcraft_app"), "{n} imports camcraft_app");
+            let sources = crate::suites::sources(&crate::suites::entry(&root(), krate, n)).unwrap_or_default();
+            assert!(!sources.is_empty(), "{n} has no source files");
+            for s in sources {
+                assert!(!scan::read(&s.path).contains("camcraft_app"), "{n} imports camcraft_app ({})", s.path.display());
+            }
         }
     }
 }
