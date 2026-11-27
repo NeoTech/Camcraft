@@ -33,8 +33,12 @@ pub(crate) const REFUSED: &str = "Refused by";
 /// #3930: the folded body section's heading, and its AccessKit name.
 pub(crate) const BODY: &str = "Body";
 
-const WARN: Color32 = Color32::from_rgb(230, 170, 60);
-const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+fn warn_ink() -> Color32 {
+    crate::egui_app::theme::current().warn_ink
+}
+fn bad_ink() -> Color32 {
+    crate::egui_app::theme::current().bad_ink
+}
 
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     ui.add_space(8.0);
@@ -97,7 +101,7 @@ fn notes(ui: &mut Ui, state: &mut State, u: Unit) {
     };
     if reseeded {
         ui.colored_label(
-            WARN,
+            warn_ink(),
             format!("The tool length changed: the stick-out follows the new tool ({}). Apply holder to store it.", l(projection)),
         );
     }
@@ -106,7 +110,7 @@ fn notes(ui: &mut Ui, state: &mut State, u: Unit) {
         && let Some(mount) = camcraft_app::machine::document_of(&state.world).1.and_then(|m| m.spindle_mount)
         && !mount.eq_ignore_ascii_case(taper.name)
     {
-        ui.colored_label(WARN, format!("The machine's spindle takes {mount}: this holder has a {} taper.", taper.name));
+        ui.colored_label(warn_ink(), format!("The machine's spindle takes {mount}: this holder has a {} taper.", taper.name));
     }
     // The check line names a shank refusal of the draft; this names the
     // rest of what Apply holder would refuse on the stored tool (another
@@ -117,11 +121,11 @@ fn notes(ui: &mut Ui, state: &mut State, u: Unit) {
     // the draft note judges the unapplied tool numbers only.
     let m = super::model::of(state);
     if let Some(err) = m.holder_err.clone().filter(|_| !(check.is_err() && same_shank)) {
-        ui.colored_label(BAD, format!("Apply holder refuses this: {err}"));
+        ui.colored_label(bad_ink(), format!("Apply holder refuses this: {err}"));
     }
     if let Some(note) = m.draft_err.clone().filter(|_| check.is_ok()) {
         ui.colored_label(
-            WARN,
+            warn_ink(),
             format!("Draft note: the unapplied tool numbers do not take this holder ({note}). Apply holder checks the stored tool."),
         );
     }

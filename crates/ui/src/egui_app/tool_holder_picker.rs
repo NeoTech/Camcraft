@@ -17,7 +17,9 @@ use camcraft_app::units::{self, Unit};
 
 use crate::state::State;
 
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
 
 /// #3895: the picker without its Apply holder button - the pick, the
 /// gauge length, the projection and what the pick is. The tool library
@@ -64,7 +66,7 @@ pub(super) fn holder_fields(ui: &mut Ui, state: &mut State, u: Unit) {
         holder_library::picker_rows().into_iter().find(|r| r.name() == n).map(|r| describe_row(&r, u))
     });
     if let Some(w) = what {
-        ui.colored_label(NOTE, w);
+        ui.colored_label(note_ink(), w);
     }
 }
 

@@ -123,6 +123,11 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
                         ui.end_row();
                     }
                 });
+            // #1992: a gutter under the table for the floating scroll bar.
+            // Without it the bar's hover strip covers the last row, and a
+            // click on the centre of its Edit button misses the button.
+            let bar = ui.spacing().scroll;
+            ui.add_space(bar.bar_width + bar.bar_inner_margin + bar.bar_outer_margin);
         });
     let names: Vec<String> = used.iter().map(|(t, _)| t.clone()).collect();
     if let Some(why) = tool_numbers::clash(&state.world, &names) {

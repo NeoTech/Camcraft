@@ -25,11 +25,15 @@ use egui::{Align2, Color32, FontId, Painter, Pos2, Sense, Shape, Stroke, Ui, Vec
 use camcraft_app::units::{self, Unit};
 
 use super::model::ToolModel;
-use crate::egui_app::tool_model_view::BG;
+use crate::egui_app::tool_model_view::tool_ground;
 use crate::egui_app::tool_preview::{self, Scale};
 
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const DIM: Color32 = Color32::from_rgb(0x7F, 0xB4, 0xD8);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
+fn dim_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_dim
+}
 /// Room around the drawing for the dimension columns and their values.
 const LEFT: f32 = 112.0;
 const RIGHT: f32 = 120.0;
@@ -75,7 +79,7 @@ pub(crate) fn drawn() -> (u64, Vec2) {
 pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) {
     let (resp, painter) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
-    painter.rect_filled(rect, 4.0, BG);
+    painter.rect_filled(rect, 4.0, tool_ground());
     let (lo, hi) = margins(rect.size(), show.dims);
     let mut inner = egui::Rect::from_min_max(rect.min + lo, rect.max - hi);
     // #4336: room for the spindle nose above the holder, when it fits.
@@ -91,7 +95,7 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
         return;
     };
     DRAWN.with(|d| d.set((d.get().0.saturating_add(1), inner.size())));
-    painter.text(rect.right_top() + Vec2::new(-6.0, 6.0), Align2::RIGHT_TOP, format!("{TO_SCALE} · {}", u.suffix()), font(), NOTE);
+    painter.text(rect.right_top() + Vec2::new(-6.0, 6.0), Align2::RIGHT_TOP, format!("{TO_SCALE} · {}", u.suffix()), font(), note_ink());
     if show.flutes {
         flutes(&painter, &s, m);
     }
@@ -99,7 +103,7 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
         spindle_nose(&painter, &s, m, rect.top() + 4.0);
     }
     if show.dims {
-        painter.text(rect.min + Vec2::new(6.0, 6.0), Align2::LEFT_TOP, format!("dimensions in {}", u.suffix()), font(), NOTE);
+        painter.text(rect.min + Vec2::new(6.0, 6.0), Align2::LEFT_TOP, format!("dimensions in {}", u.suffix()), font(), note_ink());
         dims(&painter, &s, m, u, show.holder);
     }
 }
@@ -107,7 +111,7 @@ pub(super) fn draw(ui: &mut Ui, m: &ToolModel, u: Unit, size: Vec2, show: Show) 
 /// #4336: the visible groove lines of the flutes, thin, in the dark ground
 /// ink over the light steel.
 fn flutes(p: &Painter, s: &Scale, m: &ToolModel) {
-    let stroke = Stroke::new(1.0, BG);
+    let stroke = Stroke::new(1.0, tool_ground());
     for line in &m.flute_lines {
         let pts: Vec<Pos2> = line.iter().map(|&(z, x)| s.at(z, x)).filter(|q| q.x.is_finite() && q.y.is_finite()).collect();
         if pts.len() > 1 {
@@ -130,10 +134,10 @@ fn spindle_nose(p: &Painter, s: &Scale, m: &ToolModel, top: f32) {
         return;
     }
     let corners = [Pos2::new(l, face), Pos2::new(l, top), Pos2::new(r, top), Pos2::new(r, face), Pos2::new(l, face)];
-    p.extend(Shape::dashed_line(&corners, Stroke::new(1.0, NOTE), 4.0, 3.0));
-    p.text(Pos2::new(r + 4.0, (top + face) * 0.5), Align2::LEFT_CENTER, NOSE, font(), NOTE);
+    p.extend(Shape::dashed_line(&corners, Stroke::new(1.0, note_ink()), 4.0, 3.0));
+    p.text(Pos2::new(r + 4.0, (top + face) * 0.5), Align2::LEFT_CENTER, NOSE, font(), note_ink());
     if let Some(name) = &m.holder_name {
-        p.text(Pos2::new(l - 4.0, (top + face) * 0.5), Align2::RIGHT_CENTER, name, font(), NOTE);
+        p.text(Pos2::new(l - 4.0, (top + face) * 0.5), Align2::RIGHT_CENTER, name, font(), note_ink());
     }
 }
 
@@ -172,7 +176,7 @@ fn dims(p: &Painter, s: &Scale, m: &ToolModel, u: Unit, holder: bool) {
         (d.flute_len, zs, format!("shank Ø {} × {}", len(d.shank_d), len(d.shank_len))),
     ] {
         if let Some(mid) = vertical(p, s, xr, z0, z1, true) {
-            p.text(Pos2::new(xr + 4.0, mid), Align2::LEFT_CENTER, text, font(), NOTE);
+            p.text(Pos2::new(xr + 4.0, mid), Align2::LEFT_CENTER, text, font(), note_ink());
         }
     }
     // Left: the stick-out (tip to holder face) and, outside it, the gauge
@@ -180,12 +184,12 @@ fn dims(p: &Painter, s: &Scale, m: &ToolModel, u: Unit, holder: bool) {
     let xl = s.at(0.0, -r_max).x - GAP;
     let xt = xl - GAP - 4.0;
     if let Some(mid) = vertical(p, s, xl, 0.0, d.stick_out, false) {
-        p.text(Pos2::new(xt, mid), Align2::RIGHT_CENTER, format!("stick-out {}", len(d.stick_out)), font(), NOTE);
+        p.text(Pos2::new(xt, mid), Align2::RIGHT_CENTER, format!("stick-out {}", len(d.stick_out)), font(), note_ink());
     }
     if let Some((hd, hl)) = d.holder.filter(|_| holder) {
         if vertical(p, s, xl - GAP, 0.0, d.gauge, false).is_some() {
             let y = s.at(d.gauge, 0.0).y + 8.0;
-            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge length {}", super::assembly_group::short(d.gauge, u)), font(), NOTE);
+            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge length {}", super::assembly_group::short(d.gauge, u)), font(), note_ink());
         }
         let hr = hd.max(0.0) * 0.5;
         let y = s.at(d.gauge, 0.0).y - GAP * 0.5;
@@ -200,12 +204,12 @@ fn horizontal(p: &Painter, a: Pos2, b: Pos2, y: f32, text: &str, align: Align2) 
     if !(a.x.is_finite() && b.x.is_finite() && y.is_finite()) || (b.x - a.x).abs() < 1.0 {
         return;
     }
-    let thin = Stroke::new(0.5, DIM);
+    let thin = Stroke::new(0.5, dim_ink());
     p.line_segment([a, Pos2::new(a.x, y)], thin);
     p.line_segment([b, Pos2::new(b.x, y)], thin);
     line_with_ticks(p, Pos2::new(a.x, y), Pos2::new(b.x, y));
     let dy = if align == Align2::CENTER_TOP { 2.0 } else { -2.0 };
-    p.text(Pos2::new((a.x + b.x) * 0.5, y + dy), align, text, font(), NOTE);
+    p.text(Pos2::new((a.x + b.x) * 0.5, y + dy), align, text, font(), note_ink());
 }
 
 /// A vertical dimension line from height `z0` to `z1` at screen `x`, with
@@ -216,7 +220,7 @@ fn vertical(p: &Painter, s: &Scale, x: f32, z0: f64, z1: f64, right: bool) -> Op
         return None;
     }
     let (y0, y1) = (s.at(z0, 0.0).y, s.at(z1, 0.0).y);
-    let thin = Stroke::new(0.5, DIM);
+    let thin = Stroke::new(0.5, dim_ink());
     let toward = if right { x - GAP * 0.75 } else { x + GAP * 0.75 };
     p.line_segment([Pos2::new(toward, y0), Pos2::new(x, y0)], thin);
     p.line_segment([Pos2::new(toward, y1), Pos2::new(x, y1)], thin);
@@ -226,7 +230,7 @@ fn vertical(p: &Painter, s: &Scale, x: f32, z0: f64, z1: f64, right: bool) -> Op
 
 /// The dimension line with a short slanted tick at each end.
 fn line_with_ticks(p: &Painter, a: Pos2, b: Pos2) {
-    let stroke = Stroke::new(1.0, DIM);
+    let stroke = Stroke::new(1.0, dim_ink());
     p.line_segment([a, b], stroke);
     let t = Vec2::new(3.0, -3.0);
     for q in [a, b] {

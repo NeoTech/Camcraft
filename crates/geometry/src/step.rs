@@ -112,8 +112,10 @@ fn read(data: &[u8], budget: usize, chord_cap: f64, keep_open: bool, assume_mm: 
 
     let stop = camcraft_kernel::CancelToken::new();
     let _watch = crate::kernel_import::Watchdog::start(stop.clone(), "STEP import");
+    let t_import = std::time::Instant::now();
     let import = import_step_model_assuming(&mut SolidcoreKernel::default(), data, &stop, assume_mm)
         .map_err(|e| StepError::Refused(locate(data, e.to_string())))?;
+    tracing::debug!(ms = t_import.elapsed().as_millis() as u64, "kernel read done: solids={} sheets={}", import.solids.len(), import.sheets.len());
     // #1874: a file that states no length unit is never read in a guessed
     // one; the caller states the unit, or the file is refused.
     if import.length_units_mm.is_empty() {
@@ -139,8 +141,12 @@ fn read(data: &[u8], budget: usize, chord_cap: f64, keep_open: bool, assume_mm: 
         let mut total = 0usize;
         for solid in &import.solids {
             let label = solid_label(solid.item, &solid.name);
+            let t_solid = std::time::Instant::now();
             let mesh = match machining_mesh(solid, chord, &stop) {
-                Ok(mesh) => mesh,
+                Ok(mesh) => {
+                    tracing::debug!(ms = t_solid.elapsed().as_millis() as u64, "solid '{label}' meshed, triangles={}", mesh.triangles.len());
+                    mesh
+                }
                 Err(MeshRefusal::FaceLeftOut { .. }) if keep_open => {
                     let open = partial_mesh(solid, chord, &stop).map_err(|e| refused(&label, e))?;
                     holes.push(hole(&label, solid.record.faces.len(), &open.left_out));

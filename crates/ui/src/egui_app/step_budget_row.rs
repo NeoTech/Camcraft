@@ -21,8 +21,11 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, entity: &Entity) {
         ui.label(format!("A re-import keeps {recorded} unless a budget is set below"));
     }
     let mut commit = false;
+    // #1992: the label takes its own line. On one row with the field and
+    // Set, the row was wider than the Properties pane at 1280 x 720, and
+    // Set stood past its right edge.
+    let l = ui.label(format!("{} (next import)", step_budget::NAME));
     ui.horizontal(|ui| {
-        let l = ui.label(format!("{} (next import)", step_budget::NAME));
         let r = ui.add(TextEdit::singleline(&mut state.step_budget.draft).desired_width(110.0)).labelled_by(l.id);
         commit |= r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
         commit |= ui.button("Set").clicked();
