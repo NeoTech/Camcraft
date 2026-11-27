@@ -1,5 +1,5 @@
 //! #889: the Tool library page's "Import tool holders" toggle. It
-//! stands beside Import library as a checkbox, ticked by default; a
+//! stands (#4335: in the Import… menu) as a checkbox, ticked by default; a
 //! click flips the choice the import passes to `ImportTools` as its
 //! `holders` parameter and writes it to the per-user preferences (never
 //! the document or the history). Unticked, a library carrying a holder
@@ -17,7 +17,8 @@ use camcraft_app::tool_library;
 use egui::accesskit::Toggled;
 use egui_kittest::kittest::NodeT;
 
-const LABEL: &str = "Import tool holders";
+const LABEL: &str = crate::egui_app::tool_library_dialog::list_header::HOLDERS;
+const IMPORT: &str = crate::egui_app::tool_library_dialog::list_header::IMPORT;
 const TOOL: &str = "Lib6";
 
 fn temp_dir(tag: &str) -> std::path::PathBuf {
@@ -62,7 +63,11 @@ fn the_toggle_stands_on_the_page_ticked_and_is_remembered_per_user() {
     let store = temp_dir("pref").join(FILE_NAME);
     harness.state_mut().state.load_prefs_from(store.clone());
     harness.run();
-    assert!(harness.query_by_label("Import library…").is_some(), "the import button stands");
+    assert!(harness.query_by_label(IMPORT).is_some(), "the import button stands");
+    // #4335: the choice stands in the Import… menu.
+    harness.get_by_label(IMPORT).click();
+    harness.run();
+    harness.run();
     let dirty = harness.state().state.history.is_dirty();
     let node = harness.get_by_label(LABEL);
     assert_eq!(node.accesskit_node().role(), egui::accesskit::Role::CheckBox);

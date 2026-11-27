@@ -2,8 +2,8 @@
 //! is open while `State::tool_library` is `Some`. Like the tool shape
 //! window, it is ephemeral view state: never a command, never saved,
 //! never undoable. The edits it starts ("Add", Import, Apply) are commands.
-//! The Tool type and Name filters stay in `State::tool_catalog_kind` and
-//! `State::tool_catalog_name`, so they hold between two openings.
+//! The search text (#4335) stays in `State::tool_search`, so it holds
+//! between two openings.
 //! #3893 (U2): a tool open in the window has its OWN draft
 //! ([`ToolEditorView`]). Properties keeps `State::tool_ui`, so the two can
 //! show different tools and never write into each other's draft.

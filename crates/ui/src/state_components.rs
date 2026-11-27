@@ -52,7 +52,6 @@ pub enum ComponentGroup {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ComponentsView {
     pub group: Option<ComponentGroup>,
-    pub filter: String,
     /// The id of the component the "Compatible" filter is set on.
     pub compatible: Option<String>,
     /// The library row the action buttons act on.

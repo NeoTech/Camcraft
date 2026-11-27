@@ -47,7 +47,7 @@ fn setup_tool_list_edit_opens_tool_settings_in_properties() {
     assert_eq!(h.state().state.ui_target, UiTarget::Tool(TOOL.into()), "the setup's tool row opens the named Properties subject");
     assert!(h.state().state.tool_shape_editor.is_none(), "the setup tool list edits Properties directly");
     assert!(here(&h, "Diameter"));
-    assert!(h.query_by_label("Import library…").is_none());
+    assert!(h.query_by_label(crate::egui_app::tool_library_dialog::list_header::IMPORT).is_none());
 }
 
 #[test]
@@ -57,11 +57,11 @@ fn browser_library_door_opens_the_window_and_tool_selection_focuses_properties()
     h.run_steps(2);
     h.get_by_label("Tool library…").click();
     h.run_steps(3);
-    assert!(h.query_by_label("Import library…").is_some(), "the browser door opens the catalog");
+    assert!(h.query_by_label(crate::egui_app::tool_library_dialog::list_header::IMPORT).is_some(), "the browser door opens the catalog");
     select_tool(&mut h);
     assert!(here(&h, "Diameter"), "selecting a tool brings Properties in front of the catalog");
     // #3892: the library is a window beside the dock, so it stays open.
-    assert!(h.query_by_label("Import library…").is_some(), "the library window stays open beside Properties");
+    assert!(h.query_by_label(crate::egui_app::tool_library_dialog::list_header::IMPORT).is_some(), "the library window stays open beside Properties");
     crate::actions::open_tool_shape_editor(&mut h.state_mut().state, TOOL);
     h.run_steps(2);
     assert!(h.state().state.tool_shape_editor.is_some());
@@ -80,7 +80,7 @@ fn selected_tool_settings_live_in_properties_without_the_catalog() {
     let diameter = h.get_by_label("6.000 mm").rect();
     assert!(diameter.min.x > properties_x && diameter.max.x <= 1280.0, "the summary belongs to Properties");
     assert_eq!(props_spins(&h), 0, "the summary has no number field");
-    for label in ["New tool…", "Import library…", "Import tool holders", "Support features"] {
+    for label in ["New tool…", crate::egui_app::tool_library_dialog::list_header::IMPORT, "Import tool holders", "Support features"] {
         assert!(h.query_by_label(label).is_none(), "catalog control {label:?} must not occupy Properties");
     }
     assert_eq!(h.state().state.ui_target, UiTarget::Tool(TOOL.into()));
@@ -151,7 +151,8 @@ fn tools_ribbon_opens_the_tool_library_window_without_retargeting_properties() {
     assert_eq!(h.state().state.ui_target, before, "opening the catalog preserves the Properties subject");
     assert!(painted(&h).iter().any(|(t, _)| t == "Tool library"), "the window's title is painted");
     assert!(h.query_by_label("Catalog").is_some(), "the catalog is visible");
-    assert_eq!(h.get_by_label("Import tool holders").accesskit_node().role(), egui::accesskit::Role::CheckBox);
+    // #4335: "Import tool holders" stands in the Import… menu.
+    assert_eq!(h.get_by_label(crate::egui_app::tool_library_dialog::list_header::IMPORT).accesskit_node().role(), egui::accesskit::Role::Button);
     assert_eq!(h.get_by_label("New tool…").accesskit_node().role(), egui::accesskit::Role::Button);
     // #3892: the library is its own window now, not a dock tab.
     assert!(h.query_all_by_role(egui::accesskit::Role::Window).any(|n| n.accesskit_node().label().as_deref() == Some("Tool library")), "the library opens its own window");

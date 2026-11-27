@@ -154,6 +154,7 @@ mod tool_library_components;
 mod tool_library_stack;
 mod tool_library_turning_stack;
 mod tool_library_mockup;
+mod tool_library_search;
 // #4336 (U10 of #3663): the Tool tab, the assembly check and the side drawing.
 mod tool_library_tool_tab;
 mod anchors;
