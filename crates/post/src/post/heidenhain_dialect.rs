@@ -16,7 +16,7 @@ use crate::machine::ControllerIdentity;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-pub use super::heidenhain_profiles::{C200, Cycle247, Dwell, Flags, Tri};
+pub use super::heidenhain_profiles::{C200, Cycle247, Dwell, Flags, HscMode, Tri};
 use super::heidenhain_profiles::{Ids, Rels, Row, PARAXIAL, ROWS};
 
 /// A canonical NC software identifier: 6 digits, `-`, 2 release digits,
