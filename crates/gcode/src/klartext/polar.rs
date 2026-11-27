@@ -13,7 +13,7 @@ use crate::domain::{check_len, check_point};
 use crate::types::GcodeError;
 
 /// Largest polar angle input of the control, in degrees.
-const MAX_ANGLE: f64 = 99_999.9999;
+const MAX_ANGLE: f64 = 99_999.999_9;
 /// Largest sweep of one arc move of a `CP` block, in degrees.
 const PIECE_DEG: f64 = 90.0;
 
