@@ -117,6 +117,7 @@ fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
     let op = WireContourOp {
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -157,6 +158,7 @@ fn gouging_die() -> World {
     let op = WireContourOp {
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -480,6 +482,7 @@ fn cutoff_doc_side(wrong: bool, centre: bool, skims: Vec<WireSkim>) -> World {
     let op = WireContourOp {
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

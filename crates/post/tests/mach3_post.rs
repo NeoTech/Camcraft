@@ -1,4 +1,5 @@
 //! Issue #4148: Mach3 sequence numbers and G64 path mode.
+//! Issue #4149: Mach3 extended work offsets with G59 P.
 //!
 //! Provenance: public Mach3 G-code and programming manual (machsupport.com);
 //! no vendor materials consulted. Original clean-room tests.
@@ -92,4 +93,74 @@ fn mach3_sequence_numbers_cap_and_refuse_over_99999() {
         "must not emit 6-digit sequence number: {}",
         out_over.program
     );
+}
+
+#[test]
+fn mach3_work_offsets_g54_through_g59_and_extended_g59_p() {
+    let cps = mach3_post();
+    let mch = default_vmc();
+
+    // 1-6 post as G54-G59
+    let expected_standard = [
+        (1, "G54"),
+        (2, "G55"),
+        (3, "G56"),
+        (4, "G57"),
+        (5, "G58"),
+        (6, "G59"),
+    ];
+    for (offset, word) in expected_standard {
+        let stream = format!(
+            "PARAM SetupName Fixture\nPARAM OperationName Op1\nPARAM OperationKind Contour\n{}",
+            SIMPLE_STREAM.replace("PARAM WorkOffset 1", &format!("PARAM WorkOffset {offset}"))
+        );
+        let out = engine::run(&cps, &mch, &stream).expect("mach3 runs");
+        assert!(out.warnings.is_empty(), "offset {offset} warnings: {:?}", out.warnings);
+        assert!(
+            out.program.contains(&format!("G17 G90 {word} G40 G80")),
+            "offset {offset} must emit {word} in preamble:\n{}",
+            out.program
+        );
+        assert!(
+            out.program.contains(&format!("(OPERATION: Op1 - CONTOUR - {word})")),
+            "offset {offset} must name {word} in operation note:\n{}",
+            out.program
+        );
+    }
+
+    // Extended offsets: 7 posts as G59 P7, 254 posts as G59 P254
+    for offset in [7, 8, 54, 100, 254] {
+        let stream = format!(
+            "PARAM SetupName Fixture\nPARAM OperationName Op1\nPARAM OperationKind Contour\n{}",
+            SIMPLE_STREAM.replace("PARAM WorkOffset 1", &format!("PARAM WorkOffset {offset}"))
+        );
+        let out = engine::run(&cps, &mch, &stream).expect("mach3 runs");
+        assert!(out.warnings.is_empty(), "offset {offset} warnings: {:?}", out.warnings);
+        let expected_word = format!("G59 P{offset}");
+        assert!(
+            out.program.contains(&format!("G17 G90 {expected_word} G40 G80")),
+            "offset {offset} must emit {expected_word} in preamble:\n{}",
+            out.program
+        );
+        assert!(
+            out.program.contains(&format!("(OPERATION: Op1 - CONTOUR - {expected_word})")),
+            "offset {offset} must name {expected_word} in operation note:\n{}",
+            out.program
+        );
+    }
+
+    // Offsets above 254 are refused (255 and 256 per Using Mach3Mill section 10.7.18)
+    for offset in [255, 256] {
+        let stream_over =
+            SIMPLE_STREAM.replace("PARAM WorkOffset 1", &format!("PARAM WorkOffset {offset}"));
+        let out_over = engine::run(&cps, &mch, &stream_over).expect("mach3 runs");
+        assert!(
+            out_over.warnings.iter().any(|w| {
+                w.contains(&format!("work offset {offset}"))
+                    || w.contains(&format!("uses work offset {offset}"))
+            }),
+            "must refuse offset {offset} > 254: {:?}",
+            out_over.warnings
+        );
+    }
 }

@@ -127,6 +127,8 @@ mod rotary_stated_axis;
 mod rotary_flow_page;
 // #2181: the transport row of the calculation before playback.
 mod transport_precalc;
+// #4266: the sim playback's work turn as the scene draws it.
+mod sim_work_turn;
 mod sim_op_steps;
 mod page_layout;
 mod page_layout_windows;
@@ -140,8 +142,12 @@ mod tool_library_preview;
 mod tool_library_assembly;
 // #3896: the Recipes tab of the tool library window's editor.
 mod tool_library_recipes;
+// #3898: the copies, the add's undo step and the caches (review of #4271).
+mod tool_library_component_copies;
 // #3897 (U6 of #3663): the Holders page and the mock-up gaps.
 mod tool_library_holders_ui;
+// #3898 (U7 of #3663): My library, the component editor and the stack.
+mod tool_library_components;
 mod tool_library_mockup;
 mod anchors;
 mod stock_fit;

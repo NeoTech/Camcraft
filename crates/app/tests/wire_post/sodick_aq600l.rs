@@ -53,6 +53,7 @@ fn wire(side: WireSide, start: (f64, f64), top: f64, taper_deg: f64, skims: &[&s
         skims: skims.iter().map(|c| WireSkim { condition: (*c).into(), reverse: false }).collect(),
         sharp_corners,
         lead_arc_radius: None,
+        compensation: Default::default(),
         overlap: 0.0,
     }
 }
@@ -268,3 +269,6 @@ fn the_mark_21_post_keeps_its_own_words_on_the_aq600l() {
     let err = post(&taper(), MARK21, "taper-mark21").expect_err("Mark 21 writes a vertical cut only");
     assert!(err.contains("angle-word move") || err.contains("is tapered"), "{err}");
 }
+
+#[path = "sodick_aq600l_offset.rs"]
+mod offset;

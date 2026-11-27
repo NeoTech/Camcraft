@@ -46,6 +46,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         sharp_corners: false,
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
     })
 }
 

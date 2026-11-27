@@ -12,6 +12,13 @@ use super::*;
 /// the name is part of the question. Callers that build a stamp for an
 /// operation that has no entity yet (or none that matters) pass `""`,
 /// which reads as "no predecessors" and writes no rest term.
+/// The generator-output version (#3704): the second rule at the salt. A
+/// change of generator output that fixes a defect bumps this number in the
+/// same PR, and every cache a project saved under the old number reads
+/// Stale once and clears on regenerate. A refactor whose output stays
+/// byte-identical does not bump it.
+pub const GENERATOR_OUTPUT_VERSION: u64 = 1;
+
 #[must_use]
 /// `setup` is the operation's declared setup (M3.2 A): the stock entity,
 /// the resolved heights and the re-machining mask all read it, so an
@@ -25,6 +32,21 @@ pub fn current_stamp(
     params: &OpParams,
     op_name: &str,
     setup: Option<&str>,
+) -> Option<GenStamp> {
+    stamp_at(world, tool_name, src, params, op_name, setup, GENERATOR_OUTPUT_VERSION)
+}
+
+/// The digest at an explicit generator-output version - the test seam for
+/// the #3704 rule: version - 1 is the stamp a document saved before a bump
+/// carries.
+fn stamp_at(
+    world: &World,
+    tool_name: &str,
+    src: &SrcRef,
+    params: &OpParams,
+    op_name: &str,
+    setup: Option<&str>,
+    generator_version: u64,
 ) -> Option<GenStamp> {
     let mut h = std::hash::DefaultHasher::new();
     // v2: heights became From+Offset expressions and their resolved
@@ -44,6 +66,18 @@ pub fn current_stamp(
     // rapid verdicts judged it: it reads Stale once and regenerates.
     // Bump this salt again whenever a verify law a cache records changes.
     h.write(b"camcraft-op-stamp-v4");
+    // (#3704) The second rule at this salt: a change of generator output
+    // that fixes a defect makes old caches stale. The PR that changes what
+    // a generator emits - a moved start, dive, lead, level or entry, any
+    // emitted move - bumps GENERATOR_OUTPUT_VERSION above in the same PR.
+    // Every cache stamped under the lower number reads Stale once and
+    // clears on regenerate (the one-time churn the salt bumps above
+    // produce; one knob for the output itself, beside the verify-law
+    // knobs). A refactor whose output is byte-identical does not bump it.
+    // PR #3684 changed where the levels above a tabbed contour start and
+    // would have bumped it, so the project saved before it reads Stale
+    // instead of posting the old 18 mm plunge at the first tab window.
+    h.write_u64(generator_version);
     // #4062: cached milling envelopes have no finished-part verdict
     // for vertical rapids until the operation is generated again.
     let kind = params.kind().info();
@@ -530,3 +564,7 @@ fn write_sketch_digest(sketch: &crate::schema::Sketch, h: &mut std::hash::Defaul
     }
     h.write_usize(chains.rejected.len());
 }
+
+#[cfg(test)]
+#[path = "stamp_tests.rs"]
+mod tests;

@@ -226,6 +226,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
+            // #4134: the control's wire offset over the judged path.
+            super::wire_comp::apply(op, &cond.0, &mut path)?;
             return Ok((path, Vec::new()));
         }
         let picks = if let Some(sketch) = &wire_sketch {
@@ -239,6 +241,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // #3215: a model's profile has its arcs read back from the facets,
         // bounded by the model's chord; a drawn chain keeps its polygon.
         let arcs = wire_sketch.is_none().then_some(crate::geometry::import::step::CHORD_CAP + material.excess);
+        let comp_cond = cond.0.clone();
         let (path, warnings) = super::wire_op::generate_wire(
             op,
             arcs,
@@ -254,6 +257,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
         }
+        super::wire_comp::apply(op, &comp_cond, &mut path)?;
         return Ok((path, warnings));
     }
     // The program ahead, cut only when a law asks (#89, #96 review).

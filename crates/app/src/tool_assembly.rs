@@ -12,8 +12,10 @@
 //!   gives the tool record and the body that the laws read, or the
 //!   resolver's named refusal. Nothing is written here: the commands
 //!   (`crate::commands::tool_assembly`) land the result.
-//! - **The spindle side only.** A lathe-held tool is refused: the lathe
-//!   side of the resolver is still open on #3643.
+//! - **A turning tool takes the lathe resolver** (#3643,
+//!   `tool_assembly_lathe`): the Turning record and its lathe-frame
+//!   body. Every other lathe-held kind is refused by name. A spindle
+//!   stack refuses a row that has a lathe body by name.
 //! - **A multi-seat cutter is derived whole** (#3646). When the insert
 //!   sits on a body row with cutter facts, the whole milling record
 //!   comes from `camcraft_tools::milling_cutter` (diameter, corner,
@@ -26,10 +28,15 @@ use flecs_ecs::prelude::{Entity, World};
 
 use camcraft_tools::milling_cutter;
 use camcraft_tools::tool_assembly::{resolve, AssemblyNode};
+/// #3898: how a link sits on its parent, for the callers outside this crate.
+pub use camcraft_tools::tool_assembly::Mount;
 
 use crate::schema::{AssemblyLink, DocumentComponent, DocumentComponents, ToolAssembly, ToolBody};
 use crate::tool_body::{build_spun, BodyFrame, LATHE_HELD};
 use crate::tools::Tool;
+
+#[path = "tool_assembly_lathe.rs"]
+mod lathe;
 
 /// What an assembly's body is called where a file name would be.
 pub const ASSEMBLY_SOURCE: &str = "tool assembly";
@@ -92,20 +99,16 @@ pub struct Derived {
     pub tool: Tool,
     /// The judged holder body; `None` when no component has a body.
     pub body: Option<ToolBody>,
-    /// From the cutting tip to the spindle gauge line.
+    /// From the cutting tip to the spindle gauge line; 0 for a lathe
+    /// tool, which has no spindle gauge line.
     pub gauge_len: f64,
 }
 
 /// Resolve `links` over `table` for the tool `name` (now `current`).
-/// Refused by name: a lathe-held tool, a component the table does not
-/// hold, each resolver refusal, and a united body that cannot be drawn.
+/// A lathe-held tool goes to the lathe resolver. Refused by name: a
+/// component the table does not hold, each resolver refusal, a lathe
+/// body in a spindle stack, and a united body that cannot be drawn.
 pub fn derive(name: &str, current: &Tool, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<Derived, String> {
-    if LATHE_HELD.contains(&current.kind) {
-        return Err(format!(
-            "tool '{name}': a {} is lathe-held - a lathe assembly is not resolved yet (#3643)",
-            current.kind
-        ));
-    }
     let mut nodes = Vec::with_capacity(links.len());
     let mut rows = Vec::with_capacity(links.len());
     for link in links {
@@ -117,6 +120,16 @@ pub fn derive(name: &str, current: &Tool, links: &[AssemblyLink], table: &[Docum
         };
         nodes.push(AssemblyNode { component: row.component.clone(), geometry: row.geometry.clone(), mount: link.mount.clone() });
         rows.push(row);
+    }
+    if LATHE_HELD.contains(&current.kind) {
+        return lathe::derive(name, current, nodes, &rows);
+    }
+    if let Some(row) = rows.iter().find(|r| r.lathe_body.is_some()) {
+        return Err(format!(
+            "tool '{name}': the component '{}' has a lathe body - a {} takes revolved holder bodies only",
+            row.component.id(),
+            current.kind
+        ));
     }
     let r = resolve(&nodes).map_err(|e| format!("tool '{name}': assembly: {e}"))?;
     let tool = match r.tool {

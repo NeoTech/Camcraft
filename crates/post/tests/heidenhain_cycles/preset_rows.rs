@@ -76,7 +76,7 @@ fn an_unstated_or_larger_machine_maximum_keeps_the_post_limit() {
 /// engine, never read as no limit.
 #[test]
 fn a_malformed_work_offset_max_is_refused_by_name() {
-    for bad in [json!(0), json!(-1), json!(2.5), json!("5"), json!(256)] {
+    for bad in [json!(0), json!(-1), json!(2.5), json!("5"), json!(1001)] {
         let mut file: Value = serde_json::from_str(PICOMAX).expect("machine file");
         file["controller"]["work_offset_max"] = bad.clone();
         let read = parse_mch(&file.to_string()).expect_err("the reader refuses it");

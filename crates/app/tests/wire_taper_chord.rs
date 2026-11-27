@@ -93,6 +93,7 @@ fn punch(taper_deg: f64) -> World {
     let op = WireContourOp {
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

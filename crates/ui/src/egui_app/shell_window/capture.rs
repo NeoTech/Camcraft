@@ -39,9 +39,26 @@ const BYTES_PER_PIXEL: u32 = 4;
 /// The channel message from the map callback (any thread) to the frame
 /// loop: the picture, and the tokens that were waiting when it began.
 struct ShotDone {
-    image: Arc<ColorImage>,
+    image: Option<Arc<ColorImage>>,
     tokens: Vec<UserData>,
+    in_flight: Arc<AtomicBool>,
 }
+
+// The map callback and deterministic tests share this completion path.
+fn complete(
+    tx: &Sender<ShotDone>,
+    in_flight: &Arc<AtomicBool>,
+    tokens: Vec<UserData>,
+    image: Option<Arc<ColorImage>>,
+) {
+    // Send failures too. A receiver dropped during shutdown owns no picture.
+    let _ = tx.send(ShotDone { image, tokens, in_flight: Arc::clone(in_flight) });
+    in_flight.store(false, Ordering::Release);
+}
+
+#[cfg(test)]
+#[path = "capture_tests.rs"]
+mod tests;
 
 /// Byte order of one pixel, as indices into the copied row. The surface
 /// format decides it; the copied bytes of an sRGB format are already
@@ -122,12 +139,11 @@ impl Shot {
         // the callback has unmapped and dropped it).
         let read_back = buffer.clone();
         buffer.map_async(wgpu::MapMode::Read, 0..buffer.size(), move |result| {
-            if let Err(err) = result {
-                diag_warn!("report capture (#1696): read-back map failed: {err}");
-                in_flight.store(false, Ordering::Release);
-                return;
-            }
-            let done = (|| -> Option<ShotDone> {
+            let image = (|| -> Option<Arc<ColorImage>> {
+                if let Err(err) = result {
+                    diag_warn!("report capture (#1696): read-back map failed: {err}");
+                    return None;
+                }
                 let mapped = match read_back.get_mapped_range(..) {
                     Ok(view) => view,
                     Err(err) => {
@@ -160,17 +176,12 @@ impl Shot {
                         ));
                     }
                 }
-                Some(ShotDone {
-                    image: Arc::new(ColorImage::new([width as usize, height as usize], pixels)),
-                    tokens,
-                })
+                Some(Arc::new(ColorImage::new([width as usize, height as usize], pixels)))
             })();
-            if let Some(done) = done {
-                // A receiver outliving the shell means shutdown; the
-                // picture then belongs to nobody - drop it quietly.
-                let _ = tx.send(done);
+            if image.is_none() {
+                diag_warn!("report capture (#2745): picture was not read; the text report is complete");
             }
-            in_flight.store(false, Ordering::Release);
+            complete(&tx, &in_flight, tokens, image);
         });
     }
 }
@@ -217,7 +228,9 @@ impl Capture {
     /// keeps redrawing so a completion is picked up without an input
     /// event, and a wedged map still reaches its timeout.
     pub(super) fn busy(&self) -> bool {
-        self.in_flight.load(Ordering::Acquire) || !self.waiting.is_empty()
+        // Keep redrawing until the frame consumes the completion, even if
+        // the callback already cleared its flag during device.poll.
+        self.shot_since.is_some() || !self.waiting.is_empty()
     }
 
     /// Ready to start a capture this frame? Prunes timed-out waits and
@@ -296,7 +309,9 @@ impl Capture {
             mapped_at_creation: false,
         });
         let tokens = self.waiting.drain(..).map(|(token, _)| token).collect();
-        self.in_flight.store(true, Ordering::Release);
+        // Each shot owns its flag. A callback after a timeout must not
+        // release a newer shot or deliver its obsolete result.
+        self.in_flight = Arc::new(AtomicBool::new(true));
         self.shot_since = Some(Instant::now());
         Some(Shot {
             tex: self.tex.clone()?,
@@ -315,16 +330,23 @@ impl Capture {
     /// The token travels back untouched, so each door answers only its
     /// own request; `report::window` is the only door on the native
     /// shell's root viewport today (#1696).
-    pub(super) fn drain_events(&mut self) -> Vec<egui::Event> {
+    pub(super) fn drain_events(&mut self, state: &mut State) -> Vec<egui::Event> {
         let mut out = Vec::new();
         while let Ok(done) = self.rx.try_recv() {
+            if self.shot_since.is_none() || !Arc::ptr_eq(&done.in_flight, &self.in_flight) {
+                continue; // A timed-out shot cannot answer a fresh request.
+            }
             self.shot_since = None;
             for token in done.tokens {
-                out.push(egui::Event::Screenshot {
-                    viewport_id: egui::ViewportId::ROOT,
-                    user_data: token,
-                    image: Arc::clone(&done.image),
-                });
+                if let Some(image) = &done.image {
+                    out.push(egui::Event::Screenshot {
+                        viewport_id: egui::ViewportId::ROOT,
+                        user_data: token,
+                        image: Arc::clone(image),
+                    });
+                } else {
+                    super::super::report::capture_failed(state, &token);
+                }
             }
         }
         out

@@ -51,6 +51,7 @@ mod arc_lead;
 mod arc_offset;
 mod arc_span;
 mod burnout;
+mod comp;
 mod exit;
 mod laws;
 mod model_arcs;
@@ -78,6 +79,7 @@ pub use tabs::{cutoff_split, TabParams, MAX_TABS};
 
 pub use taper::{wire_contour_tapered, WireCorner, WireTaper};
 
+pub use comp::wire_comp_spans;
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
 pub use exit::{wire_contour_exit, END_TIE};
 pub use open::{CLEARANCE_MAX, EDGE_TOL};

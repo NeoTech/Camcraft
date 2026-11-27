@@ -24,9 +24,8 @@ pub const LEGACY_WORDS: [&str; 6] = ["G54", "G55", "G56", "G57", "G58", "G59"];
 /// The maximum of a script that declares none: the six legacy words.
 pub const DEFAULT_MAX: u32 = 6;
 
-/// The sanity bound on any offset index or declared maximum (the app
-/// keeps a setup's offset in a `u8`).
-pub const MAX_BOUND: u32 = 255;
+/// The sanity bound on any offset index or declared maximum.
+pub const MAX_BOUND: u32 = 1000;
 
 /// The 1-based offset index a `PARAM WorkOffset` value names: a whole
 /// number `1..=MAX_BOUND`, or - so streams written before #931 still
@@ -45,7 +44,7 @@ pub fn index_of(value: &Value) -> Option<u32> {
         _ => return None,
     };
     let whole = n.is_finite() && n.fract() == 0.0 && n >= 1.0 && n <= f64::from(MAX_BOUND);
-    // A whole number in 1..=255 converts exactly.
+    // A whole number in 1..=1000 converts exactly.
     whole.then_some(n as u32)
 }
 

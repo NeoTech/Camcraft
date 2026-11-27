@@ -112,6 +112,10 @@ pub(super) fn wire_gate(world: &World, setup: Option<&str>, tool: &str, params: 
             if let Some(why) = operation::wire_sketch_arcs::lead_arc_refusal(w) {
                 return Err(CommandError::Invalid(why));
             }
+            // #4134: what the control's wire offset cannot engage on.
+            if let Some(why) = operation::wire_comp::refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
             let cond = operation::wire_op::condition_of(world, setup, tool, w).map_err(CommandError::Invalid)?;
             // #3991: the arc lead radius against the resolved kerf offset.
             if let Some(why) = operation::wire_sketch_arcs::lead_arc_radius_refusal(w, &cond) {

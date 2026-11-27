@@ -102,6 +102,7 @@ fn punch_setup(
     );
     let wire = WireContourOp {
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(height),
         bottom_z: Height::fixed(0.0),
         condition: "AGIE_QN2".into(),

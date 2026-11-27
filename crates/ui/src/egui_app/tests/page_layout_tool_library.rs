@@ -203,3 +203,26 @@ fn layout_window_holders() {
     assert!(dims.left() > taper.right(), "the drawing's toggle {dims:?} stands right of the facts {taper:?}");
     assert!(win.expand(1.0).contains_rect(dims), "the toggle stays in the window {win:?}");
 }
+
+/// #3898 (U7): the "My library" source. The component groups stand left
+/// of the rows; the filter and the buttons of a picked row head the rows;
+/// the document's component table follows them.
+#[test]
+fn layout_window_my_library() {
+    use crate::egui_app::tool_library_dialog::components;
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.run_steps(2);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Tools").click();
+    h.run_steps(2);
+    super::tool_library_editor::click_window_button(&mut h, components::SOURCE);
+    assert_window_layout(&h, "Tool library", &[components::SOURCE, "Component filter", components::ADD, components::DOCUMENT]);
+    let win = library_window(&h);
+    let node = super::tool_library_editor::library_window(&h);
+    let rect = |l: &str| node.query_all_by_label(l).next().unwrap_or_else(|| panic!("no {l:?} in the window")).rect();
+    let (all, filter, add, doc) = (rect(components::ALL), rect("Component filter"), rect(components::ADD), rect(components::DOCUMENT));
+    assert!(all.right() < filter.left(), "the group column {all:?} stands left of the rows {filter:?}");
+    assert!(filter.top() < add.top(), "the filter heads the buttons");
+    assert!(add.top() < doc.top(), "the document's table follows the library rows");
+    assert!(win.expand(1.0).contains_rect(add), "the buttons stay in the window {win:?}");
+}

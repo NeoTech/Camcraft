@@ -7,7 +7,9 @@
 //! shared insert updates both tools in one undo step and their
 //! operations go Stale, and undo and redo restore the exact state; an
 //! edit that breaks a seat is refused by the tool's name and changes
-//! nothing; the face mill is refused a plunge into solid. Provenance:
+//! nothing; the face mill is refused a plunge into solid; the facts and
+//! the running data save and reopen identically, and a fact on the
+//! wrong row refuses the file (#3645 wire format). Provenance:
 //! our own tests over our own commands; standard entry practice (a
 //! cutter without centre teeth never plunges into solid).
 
@@ -279,4 +281,46 @@ fn the_face_mill_is_refused_a_plunge_into_solid() {
     assert!(msg.contains(CENTER_CUT_REFUSAL), "refused by the centre-cutting law: {msg}");
     // The centre-cutting end mill plunges into its own tight hole.
     assert!(bore(&w, EM, 13.0).is_ok());
+}
+
+fn reopened(text: &str) -> Result<World, String> {
+    let w = camcraft_app::world::new_world();
+    camcraft_app::project::open(&w, text).map(|_| w).map_err(|e| e.to_string())
+}
+
+#[test]
+fn multi_seat_rows_and_insert_running_data_save_and_reopen_identically() {
+    let (w, _h) = shop();
+    let text = camcraft_app::project::save_text(&w).expect("save");
+    let file: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let row = |id: &str| file["components"].as_array().and_then(|r| r.iter().find(|r| r["id"] == id).cloned()).expect("row");
+    assert_eq!(row("face-50")["milling"]["dc"], serde_json::json!(50.0), "the body's facts are on file");
+    assert_eq!(row(INSERT)["running"]["tool_material"], serde_json::json!("carbide"), "the insert's data is on file");
+    assert!(row("bt40-cyl20").get("milling").is_none() && row("bt40-cyl20").get("running").is_none(), "no empty keys");
+    let w2 = reopened(&text).expect("open");
+    assert_eq!(snapshot(&w2), snapshot(&w), "the rows, their facts, the records and the stacks");
+    assert_eq!(camcraft_app::project::save_text(&w2).expect("save"), text, "save -> open -> save is byte-stable");
+}
+
+#[test]
+fn a_cutter_fact_on_the_wrong_row_or_an_unknown_key_refuses_the_file() {
+    let (w, _h) = shop();
+    let text = camcraft_app::project::save_text(&w).expect("save");
+    let with = |f: &dyn Fn(&mut serde_json::Value)| {
+        let mut v: serde_json::Value = serde_json::from_str(&text).expect("json");
+        let rows = v["components"].as_array_mut().expect("components");
+        for r in rows.iter_mut() {
+            f(r);
+        }
+        reopened(&v.to_string()).err().unwrap_or_default()
+    };
+    let facts = serde_json::json!({ "dc": 50.0, "kapr_deg": 90.0, "apmx": 8.0, "center_cutting": false });
+    let e = with(&|r| if r["id"] == INSERT { r["milling"] = facts.clone() });
+    assert!(e.contains(INSERT) && e.contains("not a cutter body"), "{e}");
+    let e = with(&|r| if r["id"] == "face-50" { r["running"] = serde_json::json!({ "tool_material": "carbide" }) });
+    assert!(e.contains("face-50") && e.contains("not an insert"), "{e}");
+    let e = with(&|r| if r["id"] == "face-50" { r["milling"]["teeth"] = serde_json::json!(4) });
+    assert!(e.contains("teeth"), "an unknown key is refused: {e}");
+    let e = with(&|r| if r["id"] == INSERT { r["running"]["tool_material"] = serde_json::json!("diamond") });
+    assert!(e.contains("diamond"), "an unknown tool material is refused: {e}");
 }
