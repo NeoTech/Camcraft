@@ -35,6 +35,12 @@
 //! #4334 (U8): one frame around the pages (`frame`): a header with the
 //! way back, the name and the Cutting tools | Holders tabs, and one footer
 //! with a hint and the page's buttons (Close; Duplicate, Cancel, Apply).
+//! #4335 (U9): the tool list has one header row and one search box
+//! (`list_header`, `search`).
+//! #4338 (U12): the Holders page has one header row with a search, and a
+//! user holder opens in the holder form (`holder_form`): each field an
+//! input, the drawing, the tools that use it; Apply is one undoable
+//! `EditDocumentComponent` that derives each of those tools again.
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
@@ -45,20 +51,27 @@ pub(crate) mod component_edit;
 pub(crate) mod components;
 mod details_tab;
 pub(crate) mod frame;
+pub(crate) mod holder_drawing;
+pub(crate) mod holder_form;
 /// #3908: display only - private to this window, so no law can read it.
 mod flutes;
 pub(crate) mod holder_view;
 pub(crate) mod holders;
 pub(crate) mod list;
+pub(crate) mod list_header;
+mod list_rows;
 pub(crate) mod model;
 pub(crate) mod preview;
 mod rail;
+pub(crate) mod recipes_actions;
+mod recipes_derived;
 mod recipes_fill;
 pub(crate) mod recipes_tab;
+pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
 pub(crate) mod thumbs;
-mod tool_tab;
+pub(crate) mod tool_tab;
 
 use egui::{Id, Ui, Window};
 
@@ -157,10 +170,13 @@ fn body(ui: &mut Ui, state: &mut State) {
     if gone {
         state.close_tool_in_library();
     }
-    let Some(face) = frame::face(state) else {
+    let Some(mut face) = frame::face(state) else {
         return;
     };
-    let component_changed = component_edit::changed(state);
+    let draft = frame::Draft { changed: component_edit::changed(state), holder_refusal: holder_form::refusal(state) };
+    if let frame::Face::UserHolder { users, .. } = &mut face {
+        *users = holder_form::users(state).len();
+    }
     let band = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 6));
     let head = egui::Panel::top("tool_library_head")
         .frame(band)
@@ -168,7 +184,7 @@ fn body(ui: &mut Ui, state: &mut State) {
         .inner;
     let foot = egui::Panel::bottom("tool_library_foot")
         .frame(band)
-        .show(ui, |ui| frame::footer(ui, state, &face, component_changed))
+        .show(ui, |ui| frame::footer(ui, state, &face, &draft))
         .inner;
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 6)))
@@ -184,8 +200,12 @@ fn page(ui: &mut Ui, state: &mut State) {
     let Some(page) = state.tool_library.as_ref().map(|v| v.page) else {
         return;
     };
-    if state.tool_library.as_ref().is_some_and(|v| v.component_edit.is_some()) {
-        component_edit::draw(ui, state);
+    if let Some(d) = state.tool_library.as_ref().and_then(|v| v.component_edit.as_ref()) {
+        if d.shape.is_some() {
+            holder_form::draw(ui, state);
+        } else {
+            component_edit::draw(ui, state);
+        }
         return;
     }
     match page {
@@ -212,11 +232,14 @@ fn act(state: &mut State, face: &frame::Face, ask: frame::Ask) {
             }
         }
         (Ask::Close, _) => state.close_tool_library(),
-        (Ask::Back | Ask::Cancel, Face::Component(_)) => component_edit::close(state),
+        (Ask::Back | Ask::Cancel, Face::Component(_) | Face::UserHolder { .. }) => component_edit::close(state),
         (Ask::Back | Ask::Cancel, Face::Tool { .. }) => state.close_tool_in_library(),
         (Ask::Back | Ask::Cancel, Face::Holder(_)) => state.open_holder_in_library(None),
         (Ask::Back | Ask::Cancel, Face::List(..)) => {}
         (Ask::Apply, Face::Component(_)) => component_edit::apply(state),
+        (Ask::Apply, Face::UserHolder { .. }) => holder_form::apply(state),
+        (Ask::Duplicate, Face::UserHolder { .. }) => holder_form::duplicate(state),
+        (Ask::Duplicate, _) => {}
         (Ask::Apply, Face::Tool { .. }) => apply_tool(state),
         (Ask::Apply, _) => {}
     }

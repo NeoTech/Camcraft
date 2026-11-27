@@ -11,17 +11,11 @@
 use egui::Color32;
 
 use super::colorvision::EDGE_WIRE;
-use super::{contrast, theme};
+use super::theme;
 
-/// The luminance past which a ground counts as light (mid-grey sits at
-/// 0.18; dark's ink is 0.02, light's 0.85).
-const LIGHT_GROUND: f64 = 0.18;
-
-/// Whether a ground reads light.
-#[must_use]
-pub fn light_ground(ground: Color32) -> bool {
-    contrast::luma(ground) > LIGHT_GROUND
-}
+/// Whether a ground reads light. The test and its threshold moved to the
+/// UI kit with the theme (#4394); the old path stays for the viewport.
+pub use super::contrast::light_ground;
 
 /// The wireframe line on a light viewport: the dark ground's cool gray
 /// vanishes on paper, so the light ground gets a dark ink (8:1 on the

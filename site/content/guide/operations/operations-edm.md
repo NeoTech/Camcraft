@@ -456,7 +456,7 @@ atom) judges the burn".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-burn" /> }} ![Side view of an electrode plunging into a cavity and retracting.](../../../operation-paths.svg#SinkerBurn)
@@ -527,7 +527,7 @@ electrode-length checks.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-side-burn" /> }} ![Side view of an electrode plunging, moving toward one wall and returning.](../../../operation-paths.svg#SinkerSideBurn)

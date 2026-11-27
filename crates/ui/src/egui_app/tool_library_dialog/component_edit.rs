@@ -68,7 +68,7 @@ pub(super) fn close(state: &mut State) {
 /// The open draft and its document row, from State's cache (a still frame
 /// reads no table). `None` when no component is open, or when it left the
 /// document.
-fn current(state: &mut State) -> Option<(ComponentDraft, DocumentComponent, SyncStatus, Vec<String>)> {
+pub(super) fn current(state: &mut State) -> Option<(ComponentDraft, DocumentComponent, SyncStatus, Vec<String>)> {
     let d = state.tool_library.as_ref().and_then(|v| v.component_edit.clone())?;
     let derived = state.component_derived(None);
     let (row, status, users) = derived.rows.iter().find(|(r, _, _)| r.component.id() == d.id).cloned()?;

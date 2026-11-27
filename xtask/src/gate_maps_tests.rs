@@ -244,8 +244,9 @@ fn post_change_selects_the_post_dialect_suites() {
     let got = selected("crates/post/src/post/mod.rs", "app");
     assert!(got.iter().any(|b| b == "conformance"), "conformance missing from {got:?}");
     // #921 / #926: fanuc_post and the heidenhain / doosan suites live in camcraft-post, so a post change selects them there.
+    // #3188: they are modules of the `script_dialects` and `script_cycles` directory suites.
     let own = selected("crates/post/src/post/mod.rs", "post");
-    for must in ["fanuc_post", "heidenhain_cycles", "heidenhain_block_form", "doosan_dnm_post"] {
+    for must in ["script_dialects", "script_cycles"] {
         assert!(own.iter().any(|b| b == must), "{must} missing from {own:?}");
     }
     assert!(count("crates/post/src/post/mod.rs", "app") >= 20, "post change selects too few app suites");
@@ -257,7 +258,7 @@ fn post_submodule_change_narrows_but_still_selects() {
     let got = selected("crates/post/src/post/engine.rs", "app");
     assert!(!got.is_empty());
     let own = selected("crates/post/src/post/engine.rs", "post");
-    assert!(own.iter().any(|b| b == "heidenhain_cycles"), "{own:?}");
+    assert!(own.iter().any(|b| b == "script_cycles"), "{own:?}");
 }
 
 #[test]
@@ -339,9 +340,9 @@ fn no_gate_map_names_a_moved_module_as_app() {
 #[test]
 fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
     let owners: [(&str, &[&str]); 5] = [
-        ("post", &["heidenhain_arc_centre", "heidenhain_block_form", "heidenhain_cycles", "probe_spindle",
-            "probe_spindle_stop", "comment_escape", "lathe_post_refusals", "doosan_dnm_post"]),
-        ("sim", &["boundary_walls", "real_tip"]),
+        // #3188: the moved post and sim files are modules of these directory suites.
+        ("post", &["script_dialects", "script_cycles", "script_probe"]),
+        ("sim", &["gouge_laws", "reach_laws"]),
         // #3189: `arcs` is a module of the `contour2d` directory suite.
         ("motion", &["contour2d"]),
         ("cl", &["origin_approach"]),
@@ -358,10 +359,9 @@ fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
                 assert!(!motion.iter().any(|b| b == n), "{n} still in crates/motion/tests");
             }
             let sources = crate::suites::sources(&crate::suites::entry(&root(), krate, n)).unwrap_or_default();
-            assert!(!sources.is_empty(), "{n} has no source files");
-            for s in sources {
-                assert!(!scan::read(&s.path).contains("camcraft_app"), "{n} imports camcraft_app ({})", s.path.display());
-            }
+            assert!(!sources.is_empty(), "{n}: no suite sources");
+            let src: String = sources.iter().map(|s| scan::read(&s.path)).collect();
+            assert!(!src.contains("camcraft_app"), "{n} imports camcraft_app");
         }
     }
 }

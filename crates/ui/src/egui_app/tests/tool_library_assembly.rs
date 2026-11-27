@@ -96,14 +96,14 @@ fn last() -> std::rc::Rc<preview_model::ToolModel> {
 fn apply_holder_is_one_set_tool_body() {
     let mut h = window();
     assert!(shows(&h, HEADING), "the Tool tab has the assembly group");
-    assert!(shows(&h, "Library holder"), "the group holds the holder pick");
+    assert!(shows(&h, "Apply holder"), "the group holds the holder pick");
     let done = h.state().state.history.done_len();
     pick(&mut h, "BT30 ER20");
     let d = holder(&mut h).clone();
     assert_eq!((d.library.as_deref(), d.gauge, d.projection), (Some("BT30 ER20"), 60.0, 55.0), "entry gauge, tool stickout");
     holder(&mut h).projection = 70.0;
     h.run_steps(2);
-    assert!(shows(&h, "Total gauge length"), "the group shows the total");
+    assert!(shows(&h, "= 60 mm of the holder + 70 mm stick-out."), "the group shows the total and its sum");
     let dims = last().dims;
     assert!((dims.stick_out - 70.0).abs() < 1e-6, "the preview's stick-out is the draft projection: {dims:?}");
     assert!((dims.gauge - 130.0).abs() < 1e-6, "the preview's gauge is projection plus gauge length: {dims:?}");
@@ -286,7 +286,7 @@ fn a_turning_tool_has_the_body_section_and_no_holder_pick() {
     h.run_steps(2);
     open_in_window(&mut h, INSERT);
     assert!(shows(&h, HEADING), "the group heading stands");
-    assert!(!shows(&h, "Library holder"), "a turning tool has no holder pick");
+    assert!(!shows(&h, "Apply holder"), "a turning tool has no holder pick");
     assert!(shows(&h, "import its holder in the Body section"), "the group says where the holder goes");
     open_body(&mut h);
     assert!(shows(&h, "Import body…"), "Import body… stands in the window's Body section");
