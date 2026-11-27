@@ -161,7 +161,7 @@ fn the_side_view_paints_the_dimension_labels() {
         format!("dimensions in {}", u.suffix()),
     ];
     if let Some((hd, hl)) = d.holder {
-        want.push(format!("gauge length {}", len(d.gauge)));
+        want.push(format!("gauge length {}", crate::egui_app::tool_library_dialog::assembly_group::short(d.gauge, u)));
         want.push(format!("holder Ø {} × {}", len(hd), len(hl)));
     }
     for w in &want {

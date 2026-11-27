@@ -185,7 +185,7 @@ fn dims(p: &Painter, s: &Scale, m: &ToolModel, u: Unit, holder: bool) {
     if let Some((hd, hl)) = d.holder.filter(|_| holder) {
         if vertical(p, s, xl - GAP, 0.0, d.gauge, false).is_some() {
             let y = s.at(d.gauge, 0.0).y + 8.0;
-            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge length {}", len(d.gauge)), font(), NOTE);
+            p.text(Pos2::new(xt, y), Align2::RIGHT_CENTER, format!("gauge length {}", super::assembly_group::short(d.gauge, u)), font(), NOTE);
         }
         let hr = hd.max(0.0) * 0.5;
         let y = s.at(d.gauge, 0.0).y - GAP * 0.5;
