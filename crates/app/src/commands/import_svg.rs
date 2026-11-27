@@ -83,7 +83,7 @@ impl ImportSvg {
             other => CommandError::Svg(other.to_string()),
         })?;
         let name = profile_name(world, path, options.name.as_deref())?;
-        Ok(ImportSvg(ImportDxf::placed(name, Sketch { setup, data: Arc::new(data) })))
+        Ok(ImportSvg(ImportDxf::placed(name, Sketch { setup, data: Arc::new(data), recipe: None })))
     }
 
     /// The name the profile lands under.

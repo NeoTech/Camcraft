@@ -60,6 +60,8 @@ pub(crate) fn profile_view(world: &World, name: &str) -> Option<Value> {
         // Where that is in the setup's frame; null while the setup has no stock.
         "origin": pose.map(|p| vec![fnum(p.pos.x), fnum(p.pos.y), fnum(p.pos.z)]),
         "rotation": pose.map(|p| p.rot.iter().map(|v| fnum(*v)).collect::<Vec<_>>()),
+        // #3194: the dimensions a recipe profile was made from; null on a drawing or a text.
+        "recipe": profile.recipe.map(crate::project::RecipeDto::from),
     }))
 }
 

@@ -247,11 +247,15 @@ pub struct GeomPrintMemo {
 /// source units, the join tolerance, the chains and the import summary;
 /// it is shared (`Arc`) and freed when the last holder goes. Written only
 /// by `ImportDxf`, `InsertText` (#2679: typed text as engraving strokes),
-/// `MoveSketch`, `DeleteEntity` and the project loader.
+/// `MoveSketch`, `CreateSketchRecipe` and `EditSketchRecipe` (#3194),
+/// `DeleteEntity` and the project loader. `recipe` is the shape a
+/// recipe profile was made from; `data` is always that recipe's outline.
+/// A drawing or a text has no recipe.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct Sketch {
     pub setup: Option<String>,
     pub data: std::sync::Arc<crate::sketch_data::SketchData>,
+    pub recipe: Option<crate::sketch_recipe::SketchRecipe>,
 }
 
 /// Unit tag marking an entity as a work coordinate system origin: a

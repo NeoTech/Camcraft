@@ -46,6 +46,9 @@ mod slot_tool_fit;
 #[path = "mcp/source_names.rs"]
 mod source_names;
 // #1880: import_svg, the importSvg script verb and the ImportSvg command.
+// #3194: quick ops - recipe profiles and their 2D Contour.
+#[path = "mcp/sketch_recipe.rs"]
+mod sketch_recipe;
 #[path = "mcp/svg.rs"]
 mod svg;
 #[path = "mcp/trochoid_pass_start.rs"]

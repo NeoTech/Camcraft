@@ -122,6 +122,8 @@ pub mod schema;
 pub mod script;
 // #1862: DXF profiles placed on a setup's stock, and the virtual model reference.
 pub use camcraft_geometry::sketch_data;
+// #3194: shapes stated by their dimensions, compiled to sketch outlines.
+pub use camcraft_geometry::sketch_recipe;
 // #1863: the DXF primitives a sketch's data holds, for the viewport's drawing.
 pub use camcraft_geometry::dxf;
 pub mod sketch;

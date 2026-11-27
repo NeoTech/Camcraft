@@ -10,6 +10,10 @@
 //! cannot carry chains its primitives do not give. The virtual model
 //! reference is not stored either; it is read from the world.
 //!
+//! A recipe profile (#3194, v85) also stores its `recipe`. On load the
+//! recipe is compiled again and must give the stored primitives bit for
+//! bit, so a stored recipe cannot describe a shape its outline is not.
+//!
 //! Every profile is read and chained before any world write
 //! ([`read_all`]), so a corrupt one refuses the file by name and leaves
 //! no half-loaded document.
@@ -44,6 +48,10 @@ pub struct SketchDto {
     pub vertices: usize,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub skipped: BTreeMap<String, usize>,
+    /// #3194 (v85): the shape a recipe profile was made from; absent on
+    /// a drawing or a text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe: Option<super::RecipeDto>,
 }
 
 /// One primitive, mm and radians; `layer` indexes `SketchDto::layers`.
@@ -86,6 +94,7 @@ pub(super) fn collect(world: &World, entity: &flecs_ecs::prelude::Entity) -> Opt
         entities: data.summary().entities,
         vertices: data.summary().vertices,
         skipped: data.summary().skipped.clone(),
+        recipe: sketch.recipe.map(super::RecipeDto::from),
     })
 }
 
@@ -150,7 +159,14 @@ fn read(name: &str, dto: &SketchDto) -> Result<Sketch, ProjectError> {
     let summary = ImportSummary { entities: dto.entities, vertices: dto.vertices, skipped: dto.skipped.clone() };
     let data = SketchData::from_parts(primitives, dto.layers.clone(), units, Some(dto.join_tolerance), summary)
         .map_err(|e| bad(e.to_string()))?;
-    Ok(Sketch { setup: dto.setup.clone(), data: std::sync::Arc::new(data) })
+    let recipe = dto.recipe.map(crate::sketch_recipe::SketchRecipe::from);
+    if let Some(recipe) = recipe {
+        let outline = recipe.primitives().map_err(|e| bad(format!("its recipe is not usable: {e}")))?;
+        if outline != data.primitives() {
+            return Err(bad(format!("its outline is not the outline of its {} recipe", recipe.shape())));
+        }
+    }
+    Ok(Sketch { setup: dto.setup.clone(), data: std::sync::Arc::new(data), recipe })
 }
 
 /// Every profile of the file, by name, read before any world write.

@@ -105,7 +105,7 @@ impl ImportDxf {
             other => CommandError::Dxf(other.to_string()),
         })?;
         let name = profile_name(world, path, options.name.as_deref())?;
-        Ok(ImportDxf { name, sketch: Sketch { setup, data: Arc::new(data) } })
+        Ok(ImportDxf { name, sketch: Sketch { setup, data: Arc::new(data), recipe: None } })
     }
 
     /// The name the profile lands under.
