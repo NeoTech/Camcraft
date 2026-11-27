@@ -30,13 +30,14 @@ fn disabled(h: &H, what: &str) -> bool {
     library_window(h).get_by_role_and_label(Role::SpinButton, &field_name(what)).accesskit_node().is_disabled()
 }
 
-/// Drag the Brass row's `what` field 40 px to the right.
+/// Drag the Brass row's `what` field 40 px to the right. A press on a
+/// disabled field drags the window, which repaints: step, do not `run`.
 fn drag(h: &mut H, what: &str) {
     let at = library_window(h).get_by_role_and_label(Role::SpinButton, &field_name(what)).rect().center();
     h.drag_at(at);
-    h.run();
+    h.run_steps(1);
     h.hover_at(at + egui::Vec2::new(40.0, 0.0));
-    h.run();
+    h.run_steps(1);
     h.drop_at(at + egui::Vec2::new(40.0, 0.0));
     h.run_steps(2);
 }
