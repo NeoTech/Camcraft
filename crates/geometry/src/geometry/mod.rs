@@ -21,6 +21,8 @@ pub mod revision;
 pub mod slice;
 mod slice_bodies;
 mod slice_weld;
+// #3915: the SolidCraft names under a face or a welded patch.
+pub mod source_names;
 pub mod stock;
 pub mod stock_axis;
 pub mod units;

@@ -37,8 +37,14 @@ mod pattern_folder_post;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;
+// #3915: import_model's `changes` when it updates a model.
+#[path = "mcp/reimport_changes.rs"]
+mod reimport_changes;
 #[path = "mcp/slot_tool_fit.rs"]
 mod slot_tool_fit;
+// #3915: SolidCraft face names on features and picks.
+#[path = "mcp/source_names.rs"]
+mod source_names;
 // #1880: import_svg, the importSvg script verb and the ImportSvg command.
 #[path = "mcp/svg.rs"]
 mod svg;
