@@ -25,8 +25,8 @@ pub(super) use crate::state::State;
 pub(super) use super::heights_page::{HEIGHT_SRC_ID, LEVELS, corner_note, height_editor, retract_hop, retract_radius_hop, retract_note};
 pub(super) use super::kind_editors::*;
 pub(super) use super::layout::{
-    CTRL_W, auto_opt, auto_value, button, check_row, consequence, group, hint, list_row, prop_row,
-    radio_pair, small_button,
+    CTRL_W, auto_opt, auto_value, button, button_enabled, check_row, consequence, drag_row, drag_sized_row, group,
+    hint, list_row, list_row_truncated, prop_row, radio_pair, small_button, small_button_enabled, text_row,
 };
 pub(super) use super::lead_page;
 pub(super) use super::op_tabs::{SEC_FEEDS, SEC_GEO, SEC_HEIGHTS, SEC_LEADS, SEC_MACHINE, SEC_PASSES};
@@ -213,11 +213,7 @@ pub(crate) fn int_range_row<N: egui::emath::Numeric>(
     v: &mut N,
     range: std::ops::RangeInclusive<N>,
 ) {
-    let r = ui.add(DragValue::new(v).range(range));
-    let r = ring(ui, r);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    super::layout::drag_row(ui, DragValue::new(v).range(range));
 }
 
 /// A lens-free number with its unit as the suffix ("°", "s", "%").
