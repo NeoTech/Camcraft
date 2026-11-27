@@ -12,6 +12,8 @@ refusal means in general, see [Reading a refusal](@/guide/reference/refusals.md)
 Lengths are in mm (inches in an inch document), feeds in mm/min (in/min),
 times in seconds, power in percent of the laser source's maximum.
 
+Blue shows the operation travel; gray shows the workpiece. The schematic is not a generated NC path and has no scale.
+
 ## The machine, the tool and the post
 
 **A laser cutter.** Laser Profile needs a setup whose machine is a laser
@@ -30,7 +32,9 @@ simulation does not judge laser removal either.
 
 ## Laser Profile
 
-{{ <icon name="op-laser-profile" /> }} **For:** cutting parts out of flat
+{{ <icon name="op-laser-profile" /> }} ![Top view of the beam cutting the hole first from a pierce inside it, then the plate outline from a pierce in the scrap.](../../../operation-paths.svg#LaserProfile)
+
+**For:** cutting parts out of flat
 sheet with a laser beam: one through-cut per contour, with the kerf offset
 to the waste side, leads that start in the scrap, and holes cut before the
 outline that frees the part. The cut follows the same rules as the

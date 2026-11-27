@@ -295,4 +295,10 @@
 <rect width="600" height="240" fill="white"/>
 <text x="20" y="28">Rotary Flow - oblique view</text><rect class="stock" x="80" y="85" width="330" height="85" rx="8"/><ellipse class="stock" cx="80" cy="127" rx="25" ry="42"/><ellipse class="stock" cx="410" cy="127" rx="25" ry="42"/><path class="center" d="M45 127 H455"/><path class="link" d="M120 85 L220 170 M220 85 L320 170"/><path class="cut" d="M145 85 L245 170 M170 85 L270 170 M195 85 L295 170"/>
 <text x="20" y="225">Passes blend between the picked helical edges</text></g>
+<view id="LaserProfile" viewBox="0 11760 600 240"/>
+<g id="LaserProfile-diagram" transform="translate(0 11760)" role="img" aria-labelledby="LaserProfile-title LaserProfile-desc">
+<title id="LaserProfile-title">Laser Profile - top view</title><desc id="LaserProfile-desc">The beam cuts the hole first from a pierce inside it, then pierces in the scrap outside the plate and cuts the outline with the kerf on the waste side.</desc>
+<rect width="600" height="240" fill="white"/>
+<text x="20" y="28">Laser Profile - top view</text><rect class="stock" x="80" y="65" width="330" height="115" rx="8"/><path class="cut" d="M245 122 A10 10 0 0 1 255 112 M255 112 H285 V142 H225 V112 H255"/><ellipse class="cut" cx="245" cy="122" rx="4" ry="4"/><path class="cut" d="M60 100 A25 25 0 0 1 75 125 M75 125 V60 H415 V185 H75 V125"/><ellipse class="cut" cx="60" cy="100" rx="4" ry="4"/>
+<text x="20" y="225">Hole first, then the outline; each pierce in the scrap</text></g>
 </svg>
