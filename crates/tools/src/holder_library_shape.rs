@@ -103,6 +103,12 @@ pub fn tapers() -> Vec<Taper> {
     out
 }
 
+/// A value read back from an outline, on a micrometre grid: the form
+/// compares it with what the user typed.
+fn grid(v: f64) -> f64 {
+    (v * 1e6).round() / 1e6
+}
+
 fn positive(v: f64, what: &'static str) -> Result<f64, ShapeError> {
     if v.is_finite() && v > 0.0 { Ok(v) } else { Err(ShapeError::NotPositive(what)) }
 }
@@ -198,7 +204,7 @@ impl HolderShape {
             ConnectionCode::Cylindrical { d } => (ShapeClamp::Shrink, *d),
             _ => return None,
         };
-        let gauge_len = geometry.port(port).map(|f| -f.origin()[2]).filter(|g| g.is_finite() && *g > 0.0)?;
+        let gauge_len = geometry.port(port).map(|f| grid(-f.origin()[2])).filter(|g| g.is_finite() && *g > 0.0)?;
         let points = geometry.body()?.profile().points();
         // Each radius of the outline is a candidate for the nose and the
         // body; the margins the library adds come off again.
@@ -217,10 +223,10 @@ impl HolderShape {
         };
         let base = Self { taper, clamp, bore, gauge_len, nose_d: 0.0, largest_d: 0.0 };
         for &rn in &radii {
-            let nose_d = 2.0 * (rn - margin);
+            let nose_d = grid(2.0 * (rn - margin));
             if clamp == ShapeClamp::Shrink {
                 for &rb in radii.iter().filter(|r| **r >= rn) {
-                    let s = Self { nose_d, largest_d: 2.0 * (rb - margin), ..base };
+                    let s = Self { nose_d, largest_d: grid(2.0 * (rb - margin)), ..base };
                     if same(&s) {
                         return Some(s);
                     }

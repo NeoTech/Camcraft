@@ -13,6 +13,10 @@ fn zr(g: &ComponentGeometry) -> Vec<(f64, f64)> {
     g.body().expect("a body").profile().points().iter().map(|p| (p.z, p.r)).collect()
 }
 
+fn close(a: &[(f64, f64)], b: &[(f64, f64)]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9)
+}
+
 /// The outline's radius at height `z` (the larger one at a step).
 fn radius_at(pts: &[(f64, f64)], z: f64) -> f64 {
     pts.windows(2)
@@ -46,7 +50,7 @@ fn each_builtin_taper_holder_reads_back_as_its_shape() {
         let g = ComponentGeometry::holder(&e, ADAPTIVE_PORT, e.gauge_len).expect("the library draws it");
         let s = HolderShape::of(&kind, &g, ADAPTIVE_PORT).unwrap_or_else(|| panic!("{} reads back", e.name()));
         assert_eq!(s.kind().expect("codes"), kind, "{}", e.name());
-        assert_eq!(zr(&s.geometry(ADAPTIVE_PORT).expect("draws")), zr(&g), "{}: the same outline", e.name());
+        assert!(close(&zr(&s.geometry(ADAPTIVE_PORT).expect("draws")), &zr(&g)), "{}: the same outline", e.name());
         assert!((s.gauge_len - e.gauge_len).abs() < 1e-9);
         n += 1;
     }
@@ -95,7 +99,8 @@ fn an_edited_outline_is_never_smaller_than_the_steel() {
         }
         // The form reads back what it wrote.
         let kind = s.kind().expect("codes");
-        assert_eq!(zr(&HolderShape::of(&kind, &g, ADAPTIVE_PORT).expect("reads back").geometry(ADAPTIVE_PORT).expect("draws")), pts);
+        let back = HolderShape::of(&kind, &g, ADAPTIVE_PORT).expect("reads back");
+        assert!(close(&zr(&back.geometry(ADAPTIVE_PORT).expect("draws")), &pts), "{s:?} reads back as {back:?}");
         checked += 1;
     }
     assert!(checked > 60, "shapes checked: {checked}");

@@ -70,6 +70,16 @@ pub use components_ui::{
 #[cfg(test)]
 pub(crate) use components_ui::library_loads;
 pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
+#[path = "state_holder_form.rs"]
+mod holder_form;
+#[cfg(test)]
+pub(crate) use holder_form::shape_reads;
+pub(crate) use holder_form::shape_of;
+#[path = "state_holder_search.rs"]
+mod holder_search;
+pub(crate) use holder_search::{HolderHits, HolderItem, holder_hits};
+#[cfg(test)]
+pub(crate) use holder_search::holder_searches;
 #[path = "state_component_views.rs"]
 mod component_views;
 pub use component_views::{

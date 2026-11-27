@@ -148,6 +148,8 @@ mod tool_library_recipes;
 mod tool_library_component_copies;
 // #3897 (U6 of #3663): the Holders page and the mock-up gaps.
 mod tool_library_holders_ui;
+// #4338 (U12 of #3663): the holder search and the holder form.
+mod tool_library_holder_form;
 // #3898 (U7 of #3663): My library, the component editor and the stack.
 mod tool_library_components;
 mod tool_library_stack;
