@@ -42,8 +42,40 @@ fn the_picomax_control_is_the_itnc_49x_profile() {
             drill_c200: C200::Q211,
             cycle247: Cycle247::PresetTable,
             dwell: Dwell::Cycle9,
+            g62_mode: HscMode::Option2,
+            g62_t_max_um: 10_000,
         }
     );
+}
+
+/// #4226: the G62 P01 word and the largest T (docs/decisions/4226-g62-smoothing.md).
+#[test]
+fn g62_mode_and_t_range_boundaries() {
+    for (model, nc, mode, max) in [
+        ("TNC 410", "286060-01", HscMode::No, 0),
+        ("TNC 426", "280470-01", HscMode::No, 0),
+        ("TNC 426", "280472-01", HscMode::No, 10_000),
+        ("iTNC 530", "340420-05", HscMode::Yes, 10_000),
+        ("iTNC 530", "340422-01", HscMode::Yes, 10_000),
+        ("iTNC 530", "340490-04", HscMode::Option2, 10_000),
+        ("iTNC 530", "340490-05", HscMode::Option2, 99_999_999),
+        ("iTNC 530", "606425-04", HscMode::Option2, 99_999_999),
+        ("TNC 320", "340551-02", HscMode::No, 0),
+        ("TNC 320", "340551-03", HscMode::Yes, 10_000),
+        ("TNC 320", "340551-04", HscMode::Yes, 99_999_999),
+        ("TNC 320", "771851-04", HscMode::Yes, 99_999_999),
+        ("TNC 320", "771851-05", HscMode::Yes, 10_000),
+        ("TNC 620", "817600-04", HscMode::Yes, 99_999_999),
+        ("TNC 620", "817600-05", HscMode::Yes, 10_000),
+        ("TNC 640", "340590-01", HscMode::Yes, 99_999_999),
+        ("TNC 640", "340595-07", HscMode::Yes, 99_999_999),
+        ("TNC 640", "340595-08", HscMode::Yes, 10_000),
+        ("TNC 640", "340595-18", HscMode::Yes, 10_000),
+        ("TNC7", "817625-20", HscMode::Yes, 10_000),
+    ] {
+        let f = flags(model, nc);
+        assert_eq!((f.g62_mode, f.g62_t_max_um), (mode, max), "{model} {nc}");
+    }
 }
 
 #[test]
@@ -244,6 +276,8 @@ fn the_script_value_names_the_flags_or_the_refusal() {
     assert_eq!(v["drillC200"], "q395");
     assert_eq!(v["cycle247"], "presetTable");
     assert_eq!(v["dwell"], "cycle9");
+    assert_eq!(v["g62Mode"], "option2");
+    assert_eq!(v["g62TMaxUm"], 99_999_999);
     assert!(v.get("error").is_none());
     let e = script_value(&json!({ "model": "TNC 640", "nc_software": "340595-12" }));
     assert!(e["error"].as_str().is_some_and(|s| s.contains("TNC 640 NC 340595-12")), "{e}");

@@ -73,9 +73,19 @@ pub(super) fn kind_name(index: usize) -> &'static str {
 }
 
 /// Type, the cutting shape and the tool body's lengths. #3893: the tool
-/// library window's Tool tab draws these same rows.
+/// library window's Tool tab draws these same rows (#4336: in its own
+/// order, from the pieces below).
 pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
-    let u = state.units();
+    type_row(ui, state);
+    diameter_row(ui, state);
+    kind_specific(ui, state);
+    corner_row(ui, state);
+    flute_row(ui, state);
+    shank_rows(ui, state);
+}
+
+/// The Type combo; a new kind seeds its own rows.
+pub(super) fn type_row(ui: &mut Ui, state: &mut State) {
     let exists = state.tool_ui.exists;
     let before = state.tool_ui.kind;
     let offered: Vec<usize> = TOOL_KINDS
@@ -95,6 +105,11 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
     if state.tool_ui.kind != before {
         super::tool_settings::seed_kind(state, before);
     }
+}
+
+/// The diameter row, named by what the kind calls its diameter.
+pub(super) fn diameter_row(ui: &mut Ui, state: &mut State) {
+    let u = state.units();
     match state.tool_ui.tool_kind() {
         tools::ToolKind::Electrode => {
             // #541: the burning face's two sides.
@@ -125,6 +140,11 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
             prop_row(ui, "Diameter", |ui| num_row(ui, u, &mut state.tool_ui.diameter));
         }
     }
+}
+
+/// The rows only some kinds read: the kind rows, the lathe orientation,
+/// the thread mill's pitch and the dovetail's flank angle.
+pub(super) fn kind_specific(ui: &mut Ui, state: &mut State) {
     // Kind-read fields (the inert-unless-the-kind-reads-them law): a point
     // angle means nothing on an end mill, a pitch means nothing on a drill.
     kind_rows(ui, state);
@@ -134,6 +154,11 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
     super::tool_thread_mill_row::thread_mill_rows(ui, state);
     // #1444: a dovetail cutter's flank angle.
     super::tool_undercut_row::dovetail_row(ui, state);
+}
+
+/// The corner radius, where the kind has one.
+pub(super) fn corner_row(ui: &mut Ui, state: &mut State) {
+    let u = state.units();
     if state.tool_ui.tool_kind() == tools::ToolKind::BallNose {
         // #263: a ball's corner IS its ball, half the diameter - shown,
         // never edited, since no reader takes any other number.
@@ -157,11 +182,21 @@ pub(super) fn geometry(ui: &mut Ui, state: &mut State) {
     ) {
         prop_row(ui, "Corner radius", |ui| num_row(ui, u, &mut state.tool_ui.corner_r));
     }
+}
+
+/// The flute length (a form mill's outline sets it).
+pub(super) fn flute_row(ui: &mut Ui, state: &mut State) {
+    let u = state.units();
     if state.tool_ui.tool_kind() == tools::ToolKind::FormMill {
         form_length_row(ui, state, "Flute length", state.tool_ui.flute_len);
     } else {
         prop_row(ui, "Flute length", |ui| num_row(ui, u, &mut state.tool_ui.flute_len));
     }
+}
+
+/// The shank's diameter and length.
+pub(super) fn shank_rows(ui: &mut Ui, state: &mut State) {
+    let u = state.units();
     prop_row(ui, "Shank diameter", |ui| num_row(ui, u, &mut state.tool_ui.shank_d));
     prop_row(ui, "Shank length", |ui| num_row(ui, u, &mut state.tool_ui.shank_len));
 }
@@ -316,11 +351,12 @@ fn speeds(ui: &mut Ui, state: &mut State) {
 }
 
 /// #3930: the Cutting data rows that are not the per-material table - the
-/// tool's own rpm and feed, the lathe rows and centre cutting. The tool
-/// library window's Recipes tab draws them under its table.
+/// tool's own rpm and feed and the lathe rows. The tool library window's
+/// Recipes tab draws them under its table.
 pub(super) fn cutting_base(ui: &mut Ui, state: &mut State) {
     speeds(ui, state);
-    lathe_and_entry(ui, state);
+    // #4336: centre cutting moved to the Tool tab (its CUTTER group).
+    super::tool_turning_row::turning_rows(ui, state);
 }
 
 /// The lathe steel's rows and the centre-cutting flag.
@@ -329,17 +365,33 @@ fn lathe_and_entry(ui: &mut Ui, state: &mut State) {
     super::tool_turning_row::turning_rows(ui, state);
     // M11.3: an entry may plunge into solid only with a centre-cutting
     // tool; otherwise it helixes, ramps, or the operation is refused.
+    centre_cutting_row(ui, state);
+}
+
+/// M11.3: the centre-cutting flag (#4336: also in the Tool tab's CUTTER group).
+pub(super) fn centre_cutting_row(ui: &mut Ui, state: &mut State) {
     check_row(ui, "Centre cutting (may plunge into solid)", &mut state.tool_ui.center_cutting);
 }
 
 /// The catalog facts, the workpiece material and the tool-table number.
-/// #3893: the tool library window's Details tab draws these same rows.
 pub(super) fn catalog(ui: &mut Ui, state: &mut State) {
+    catalog_facts(ui, state, true);
+    number_row(ui, state);
+}
+
+/// The workpiece material and the catalog facts. #4336: the window's
+/// Details tab draws them without the helix angle (`helix`), which its
+/// Tool tab shows with the cutter.
+pub(super) fn catalog_facts(ui: &mut Ui, state: &mut State, helix: bool) {
     text_row(ui, "Material group", &mut state.tool_ui.material_group, "tool_material_group", CTRL_W * 1.3);
     super::layout::hint(ui, "workpiece material these base speeds and feeds are set for");
-    super::tool_catalog_rows::catalog_rows(ui, &mut state.tool_ui);
-    // #221 / #2442: the machine's tool-table number - the post's T and H
-    // words. New tools take the lowest unused number when 0.
+    super::tool_catalog_rows::catalog_rows(ui, &mut state.tool_ui, helix);
+}
+
+/// #221 / #2442: the machine's tool-table number - the post's T and H
+/// words. New tools take the lowest unused number when 0. #4336: the
+/// window's Tool tab draws it under the type.
+pub(super) fn number_row(ui: &mut Ui, state: &mut State) {
     let min = if state.tool_ui.exists { 1 } else { 0 };
     let help = if state.tool_ui.exists {
         "controller tool number (T and H words)"

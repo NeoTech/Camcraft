@@ -13,7 +13,7 @@
 //! thresholds, the follow law's linear-light form and every number are
 //! ours.
 
-use super::theme::Tokens;
+use crate::theme::Tokens;
 use egui::Color32;
 
 /// Body-text contrast floor (WCAG 1.4.3 AA for normal text): every
@@ -22,6 +22,18 @@ pub const BODY: f64 = 4.5;
 /// The floor for meaningful non-text (WCAG 1.4.11): the selection
 /// stroke against its ground.
 pub const UI: f64 = 3.0;
+
+/// The luminance past which a ground counts as light (mid-grey sits at
+/// 0.18; dark's ink is 0.02, light's 0.85). Moved here from the UI
+/// crate's `ground_ink` (#4394): the theme's visuals and the file overlay
+/// both ask it, and both live in the kit now.
+pub const LIGHT_GROUND: f64 = 0.18;
+
+/// Whether a ground reads light.
+#[must_use]
+pub fn light_ground(ground: Color32) -> bool {
+    luma(ground) > LIGHT_GROUND
+}
 
 /// sRGB gamma -> linear-light per channel (WCAG 2.1's definition).
 fn lin(v: u8) -> f64 {
