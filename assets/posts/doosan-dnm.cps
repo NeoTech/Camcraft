@@ -871,7 +871,8 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", "G17", wcsWord, "G40", "G49", "G80"]);
+  // #4346: a control left in G95 reads an mm/min F word as mm/rev - state G94.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
   uprightAfterTilt();
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);

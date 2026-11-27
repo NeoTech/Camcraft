@@ -35,6 +35,8 @@
 //! #4334 (U8): one frame around the pages (`frame`): a header with the
 //! way back, the name and the Cutting tools | Holders tabs, and one footer
 //! with a hint and the page's buttons (Close; Duplicate, Cancel, Apply).
+//! #4335 (U9): the tool list has one header row and one search box
+//! (`list_header`, `search`).
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
@@ -50,15 +52,20 @@ mod flutes;
 pub(crate) mod holder_view;
 pub(crate) mod holders;
 pub(crate) mod list;
+pub(crate) mod list_header;
+mod list_rows;
 pub(crate) mod model;
 pub(crate) mod preview;
 mod rail;
+pub(crate) mod recipes_actions;
+mod recipes_derived;
 mod recipes_fill;
 pub(crate) mod recipes_tab;
+pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
 pub(crate) mod thumbs;
-mod tool_tab;
+pub(crate) mod tool_tab;
 
 use egui::{Id, Ui, Window};
 
