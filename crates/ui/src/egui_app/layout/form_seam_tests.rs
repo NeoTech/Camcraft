@@ -1,5 +1,5 @@
 //! #1122: form-seam guard tests — the migrated page families (holes,
-//! turning) stay at zero raw egui control calls. Unmigrated families are
+//! turning, multi-axis) stay at zero raw egui control calls. Unmigrated families are
 //! outside the guard until their own PR adds them.
 //! Provenance: our own source-level guard over `crates/ui/src/egui_app`.
 
@@ -51,16 +51,26 @@ const FAMILIES: &[Family<'_>] = &[
             ("thread_infeed_page.rs", include_str!("../thread_infeed_page.rs")),
         ],
     },
+    Family {
+        name: "multi-axis",
+        max_raw: 0,
+        sources: &[
+            ("multiaxis_page.rs", include_str!("../multiaxis_page.rs")),
+            ("rotary_page.rs", include_str!("../rotary_page.rs")),
+            ("multiaxis_deburr_page.rs", include_str!("../multiaxis_deburr_page.rs")),
+        ],
+    },
 ];
 
 #[test]
 fn form_seam_guard_covers_only_the_migrated_families() {
     let names: Vec<_> = FAMILIES.iter().map(|f| f.name).collect();
-    assert_eq!(names, ["holes", "turning"], "unmigrated families must not block a migration");
+    assert_eq!(names, ["holes", "turning", "multi-axis"], "unmigrated families must not block a migration");
     assert!(FAMILIES.iter().all(|f| f.max_raw == 0), "a migrated family has no raw call");
     let files = |i: usize| FAMILIES[i].sources.iter().map(|(name, _)| *name).collect::<Vec<_>>();
     assert_eq!(files(0), ["holes_page.rs", "thread_page.rs"]);
     assert_eq!(files(1), ["turning_page.rs", "turning_more_page.rs", "turning_start_exit_rows.rs", "thread_infeed_page.rs"]);
+    assert_eq!(files(2), ["multiaxis_page.rs", "rotary_page.rs", "multiaxis_deburr_page.rs"]);
 }
 
 #[test]
