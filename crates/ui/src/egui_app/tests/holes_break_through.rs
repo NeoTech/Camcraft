@@ -197,9 +197,17 @@ fn drill_break_through_from_is_disabled_where_it_has_no_effect() {
             .accesskit_node()
             .is_disabled()
     };
+    // The reason is the disabled row's hover text: hover the label.
+    let hover_says = |h: &mut Harness<'static, ShellUi>, w: &str| {
+        let at = h.get_by_label("Break-through from").rect().center();
+        h.input_mut().events.push(egui::Event::PointerMoved(at));
+        h.run_steps(60);
+        structural::painted(h).iter().any(|(t, _)| t.contains(w))
+    };
     assert!(disabled(&h), "no hole yet: the combo is disabled");
-    assert!(h.query_by_label("no effect: no hole in the list is through").is_some());
+    assert!(hover_says(&mut h, "no hole in the list is through"), "{:?}", structural::painted(&h));
     set_holes(&mut h, vec![through_hole()]);
     assert!(!disabled(&h), "a through hole: the combo is live");
-    assert!(h.query_by_label("no effect: no hole in the list is through").is_none());
+    assert!(!hover_says(&mut h, "no hole in the list is through"), "{:?}", structural::painted(&h));
+    assert!(hover_says(&mut h, "adds the drill point cone"), "{:?}", structural::painted(&h));
 }

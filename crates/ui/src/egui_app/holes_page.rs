@@ -334,13 +334,20 @@ fn break_through_from_row(ui: &mut Ui, from: &mut camcraft_app::drilling::BreakT
         BreakThroughFrom::Tip => 1,
     };
     let before = idx;
-    ui.add_enabled_ui(idle.is_none(), |ui| {
+    let row = ui.add_enabled_ui(idle.is_none(), |ui| {
         prop_row(ui, "Break-through from", |ui| combo(ui, "d_bt_from", &mut idx, &["Full diameter", "Tip"]));
     });
     if idx != before {
         *from = if idx == 1 { BreakThroughFrom::Tip } else { BreakThroughFrom::FullDiameter };
     }
-    hint(ui, idle.unwrap_or("Full diameter adds the drill point cone so the full diameter breaks through; Tip measures to the point tip"));
+    match idle {
+        // A disabled row shows no plain hover text: the reason rides the
+        // disabled hover of the whole row.
+        Some(why) => {
+            row.response.on_disabled_hover_text(why);
+        }
+        None => hint(ui, "Full diameter adds the drill point cone so the full diameter breaks through; Tip measures to the point tip"),
+    }
 }
 
 /// The hole kinds' depth override, inside the Levels group: off, every
