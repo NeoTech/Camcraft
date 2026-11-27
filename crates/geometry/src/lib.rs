@@ -18,6 +18,8 @@
 
 pub mod geometry;
 pub mod geo2d;
+// #3195: hole patterns from numbers (point list, line, grid, bolt circle).
+pub mod hole_pattern;
 
 pub mod boundary_chains;
 pub mod dxf;

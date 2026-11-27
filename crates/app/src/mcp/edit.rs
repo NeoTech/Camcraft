@@ -27,7 +27,7 @@ pub(super) fn seed(kind: usize) -> OpParams {
 }
 
 /// A kind by its label ("Pocket", any case) or its file key ("pocket").
-fn kind_index(name: &str) -> Result<usize, String> {
+pub(super) fn kind_index(name: &str) -> Result<usize, String> {
     let want = name.trim().to_ascii_lowercase();
     (0..KindInfo::ALL.len())
         .find(|&i| {
@@ -50,7 +50,7 @@ pub(super) fn find_op(env: &Env, name: &str) -> Result<String, String> {
 /// field object) and read the result back as domain params. A key the
 /// kind does not have is refused by name - serde would drop it, and a
 /// silently dropped edit reads as "done as asked".
-fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
+pub(super) fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
     let Value::Object(patch) = patch else {
         return Err("\"params\" must be an object of fields".into());
     };
