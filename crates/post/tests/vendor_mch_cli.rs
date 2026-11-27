@@ -67,7 +67,9 @@ fn the_cli_posts_a_tilted_stream_on_the_shipped_tilthead() {
     assert!(!err.contains("warning"), "no warning for a stream inside the machine: {err}");
     let nc = nc.expect("written");
     assert!(nc.contains("G43.4"), "TCPM armed for the tilt: {nc}");
-    assert!(nc.contains("A30") && nc.contains("B15"), "the angles posted: {nc}");
+    // #4417: the tilt head's A carries its B, so the pose A30 B15 posts
+    // as the joint angles of that chain.
+    assert!(nc.contains("A30.867 B12.953"), "the angles posted: {nc}");
     assert!(nc.contains("M8"), "the file's flood code: {nc}");
     let (app, warnings) = app_program("assets/machines/tilthead.mch", TILTED);
     assert!(warnings.is_empty(), "{warnings:?}");

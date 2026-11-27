@@ -274,8 +274,10 @@ fn rotary_angle_words_are_degrees_in_an_inch_program() {
     let index = "PARAM ClearancePlane 10\nTOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
     let cases: [(&str, &str, &str, &[&str]); 3] = [
         // #3540: the last two words are the program end's return to zero.
-        ("fanuc", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0.", "A0.", "B12.25", "A-45.", "A0.", "B0."]),
-        ("doosan-dnm", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0.", "A0.", "B12.25", "A-45.", "A0.", "B0."]),
+        // #4417: A-45 B12.25 turns both rotaries; on the tilt head (A carries
+        // B) its joint angles are A-45.66 B8.629.
+        ("fanuc", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0.", "A0.", "B12.25", "A-45.66", "B8.629", "A0.", "B0."]),
+        ("doosan-dnm", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0.", "A0.", "B12.25", "A-45.66", "B8.629", "A0.", "B0."]),
         ("doosan-dnm", "assets/machines/doosan-dnm.mch", index, &["A90.", "A127.5", "A0."]),
     ];
     for (stem, mch_rel, stream, want) in cases {

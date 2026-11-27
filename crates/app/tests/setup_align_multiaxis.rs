@@ -73,8 +73,17 @@ fn bench_machine() -> Machine {
             AxisLimits { name: "X".into(), ..Default::default() },
             AxisLimits { name: "Y".into(), ..Default::default() },
             AxisLimits { name: "Z".into(), ..Default::default() },
-            AxisLimits { name: "A".into(), rotary: true, axis: Some([1.0, 0.0, 0.0]), ..Default::default() },
-            AxisLimits { name: "B".into(), rotary: true, axis: Some([0.0, 1.0, 0.0]), ..Default::default() },
+            // #4417: a head whose B carries its A - the pose law's own nest,
+            // so the letters are the joint angles. An unstated nest is refused.
+            AxisLimits {
+                name: "A".into(),
+                rotary: true,
+                axis: Some([1.0, 0.0, 0.0]),
+                turns_part: Some(false),
+                parent: Some("B".into()),
+                ..Default::default()
+            },
+            AxisLimits { name: "B".into(), rotary: true, axis: Some([0.0, 1.0, 0.0]), turns_part: Some(false), ..Default::default() },
         ],
         ..Default::default()
     }
