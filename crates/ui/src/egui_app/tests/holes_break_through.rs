@@ -132,6 +132,8 @@ fn drill_break_through_from_defaults_to_full_diameter_and_switches_to_tip() {
         *break_through_from
     };
     assert_eq!(current(&h), BreakThroughFrom::FullDiameter);
+    // #2528: the choice acts only on a through hole.
+    set_holes(&mut h, vec![through_hole()]);
     assert_eq!(h.query_all_by_label("Break-through from").count(), 1);
     let combo = h.get_by_label("Break-through from");
     let y = combo.rect().center().y;
@@ -144,4 +146,60 @@ fn drill_break_through_from_defaults_to_full_diameter_and_switches_to_tip() {
     h.get_by_label("Tip").click();
     h.run_steps(2);
     assert_eq!(current(&h), BreakThroughFrom::Tip);
+}
+
+fn through_hole() -> camcraft_app::drilling::Hole {
+    camcraft_app::drilling::Hole {
+        xy: camcraft_app::geo2d::Point2::new(0.0, 0.0),
+        radius: 2.0,
+        entry_z: 10.0,
+        floor_z: 0.0,
+        through: true,
+        stepped: false,
+    }
+}
+
+fn set_holes(h: &mut Harness<'static, ShellUi>, list: Vec<camcraft_app::drilling::Hole>) {
+    let OpParams::Drill { holes, .. } = &mut h.state_mut().state.op_ui.params else {
+        panic!("drill params");
+    };
+    *holes = list;
+    h.run_steps(3);
+}
+
+/// #2528: the Break-through from choice is disabled, with the reason,
+/// where it changes nothing: no through hole, a stated Bottom, a spot,
+/// tap or ream cycle, and a lathe's axial drill.
+#[test]
+fn drill_break_through_from_is_disabled_where_it_has_no_effect() {
+    use camcraft_app::drilling::CycleChoice as C;
+    use super::super::holes_page::break_through_from_idle as idle;
+    let through = [through_hole()];
+    let blind = [camcraft_app::drilling::Hole { through: false, ..through_hole() }];
+    assert_eq!(idle(false, false, &through, &C::Auto), None, "a through hole on a mill");
+    assert_eq!(idle(false, false, &through, &C::Peck), None);
+    assert!(idle(true, false, &through, &C::Auto).is_some_and(|w| w.contains("lathe")));
+    assert!(idle(false, true, &through, &C::Auto).is_some_and(|w| w.contains("Bottom")));
+    for c in [C::Spot, C::Tap, C::FloatingTap, C::Ream] {
+        assert!(idle(false, false, &through, &c).is_some_and(|w| w.contains("spot, tap or ream")), "{c:?}");
+    }
+    assert!(idle(false, false, &blind, &C::Auto).is_some_and(|w| w.contains("no hole in the list is through")));
+    assert!(idle(false, false, &[], &C::Auto).is_some());
+
+    // On the page: disabled with the reason, enabled once a hole is through.
+    let _g = snapshot_guard();
+    let mut h = page("Drill", Unit::Millimeters);
+    let disabled = |h: &Harness<'static, ShellUi>| {
+        let y = h.get_by_label("Break-through from").rect().center().y;
+        h.query_all_by_role(egui::accesskit::Role::ComboBox)
+            .find(|n| (n.rect().center().y - y).abs() < 15.0)
+            .expect("Break-through from combo")
+            .accesskit_node()
+            .is_disabled()
+    };
+    assert!(disabled(&h), "no hole yet: the combo is disabled");
+    assert!(h.query_by_label("no effect: no hole in the list is through").is_some());
+    set_holes(&mut h, vec![through_hole()]);
+    assert!(!disabled(&h), "a through hole: the combo is live");
+    assert!(h.query_by_label("no effect: no hole in the list is through").is_none());
 }
