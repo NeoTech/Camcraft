@@ -179,6 +179,15 @@ impl Curve {
     /// cyclic sequence within [`KERNEL_TOL`] (law 3).
     #[must_use]
     pub fn same_cut(&self, other: &Self) -> bool {
+        self.turn_of(other).is_some()
+    }
+
+    /// How `other` runs against this curve when it is the same cut
+    /// ([`Curve::same_cut`]): `Some(false)` in the same direction,
+    /// `Some(true)` reversed, `None` when it is not the same cut. A curve
+    /// that matches both ways reads as the same direction.
+    #[must_use]
+    pub(crate) fn turn_of(&self, other: &Self) -> Option<bool> {
         let arc_same = match (self.arc, other.arc) {
             (None, None) => true,
             (Some(a), Some(b)) => a.near(&b),
@@ -186,16 +195,19 @@ impl Curve {
         };
         let lead_same = lead::same_lead(self.lead, other.lead);
         if self.k != other.k || self.family != other.family || self.closed != other.closed || !arc_same || !lead_same {
-            return false;
+            return None;
         }
         let n = self.pts.len();
         if n != other.pts.len() {
-            return false;
+            return None;
         }
         let rev: Vec<PlanePoint> = self.pts.iter().rev().copied().collect();
         let matches = |seq: &[PlanePoint], s: usize| (0..n).all(|j| seq[(s + j) % n].near(&other.pts[j]));
         let starts = if self.closed { n } else { 1 };
-        (0..starts).any(|s| matches(&self.pts, s) || matches(&rev, s))
+        if (0..starts).any(|s| matches(&self.pts, s)) {
+            return Some(false);
+        }
+        (0..starts).any(|s| matches(&rev, s)).then_some(true)
     }
 }
 

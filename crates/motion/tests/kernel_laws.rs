@@ -6,7 +6,9 @@
 //! must improve it.
 //!
 //! Gate map: covers the test helpers `common/law_measure` and the old
-//! planners of camcraft_motion::machining2d and machining3d (read only).
+//! planners of camcraft_motion::machining2d and machining3d (read only),
+//! and the order and link stages of the kernel (camcraft_pathkernel::order,
+//! camcraft_pathkernel::link; #4177) on the same fixtures.
 //! Provenance: our own design record (#4024, "the laws as checks" and the
 //! switch-over proof); no vendor material consulted.
 
@@ -23,3 +25,5 @@ mod laws_profiles;
 mod laws_holes;
 #[path = "kernel_laws/laws_slots.rs"]
 mod laws_slots;
+#[path = "kernel_laws/k4_order_link.rs"]
+mod k4_order_link;

@@ -99,9 +99,22 @@ impl Mark {
         Ok(Self { curve: i, ..self })
     }
 
+    /// This mark moved with its curve to index `i` of an ordered set; a
+    /// stretch of a reversed curve is given in the new direction (#4177).
+    pub(crate) fn follow(self, i: usize, reversed: bool) -> Self {
+        let span = match self.span {
+            Span::Part(mut pts) if reversed => {
+                pts.reverse();
+                Span::Part(pts)
+            }
+            s => s,
+        };
+        Self { curve: i, kind: self.kind, span }
+    }
+
     /// The total order of the marks of a set: curve, kind, the whole curve
     /// before a stretch, then the points.
-    pub(super) fn cmp_set(&self, o: &Self) -> Ordering {
+    pub(crate) fn cmp_set(&self, o: &Self) -> Ordering {
         self.curve.cmp(&o.curve).then(self.kind.cmp(&o.kind)).then_with(|| match (&self.span, &o.span) {
             (Span::Whole, Span::Whole) => Ordering::Equal,
             (Span::Whole, Span::Part(_)) => Ordering::Less,

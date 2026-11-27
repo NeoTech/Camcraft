@@ -132,10 +132,12 @@ fn each_later_stage_refuses_the_chain_region_of_a_trace_by_name() {
     // branch plan an area only. Each stage that reads the region must refuse
     // the chain region by a named reason: never a panic, never a plan. The
     // follow-up #4236 makes these stages accept it; then this table changes
-    // with it. The order, load and link stages have no planner on this
-    // branch yet (traits only, K3 and K4): #4236 covers them too.
+    // with it. The order stage refuses it; the link stage lifts for a named
+    // reason (it proves no in-plane link on it). The load stage has no
+    // planner on this branch yet (a trait only, K3).
     use camcraft_pathkernel::entry::{self, ArcChoice, EntryChoice, EntryKind, EntryPlanner, EntryStage, Heights};
-    use camcraft_pathkernel::link::LinkPolicy;
+    use camcraft_pathkernel::link::{Hop, Level, LinkPolicy, LinkProof, LinkStage, LinkTally, NOT_PLANAR_LINK};
+    use camcraft_pathkernel::order::{ORDER_NOT_PLANAR, OrderStage};
     use camcraft_pathkernel::plan::Cut;
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -164,18 +166,32 @@ fn each_later_stage_refuses_the_chain_region_of_a_trace_by_name() {
         link: Box::new(StraightLink),
         entry: Box::new(ProvedEntry),
     };
-    type Call<'a> = Box<dyn Fn() -> Result<(), Refusal> + 'a>;
+    // Each call gives the named reason of its refusal (or lift), or none
+    // when the stage accepts the chain region.
+    type Call<'a> = Box<dyn Fn() -> Option<&'static str> + 'a>;
+    let named = |r: Result<(), Refusal>| r.err().map(|e| e.reason());
+    let order = OrderChoice { start: StartSide::Auto, direction: Default::default() };
+    let cuts = [cut.clone()];
     let table: Vec<(&str, &str, Call<'_>)> = vec![
-        ("entry stage: entry", entry::NOT_PLANAR, Box::new(|| stage.entry(&cut, &r, &Region::empty(), &choice).map(|_| ()))),
-        ("entry stage: exit", entry::NOT_PLANAR, Box::new(|| stage.exit(&cut, &r, &Region::empty()).map(|_| ()))),
-        ("law kit: planar", kit::NOT_PLANAR, Box::new(|| kit::planar(&r).map(|_| ()))),
-        ("law kit: run", kit::NOT_PLANAR, Box::new(|| kit::run(&planners, &case, StartSide::Auto).map(|_| ()))),
+        ("order stage", ORDER_NOT_PLANAR, Box::new(|| named(OrderStage.order(set.clone(), &r, &order, None).map(|_| ())))),
+        (
+            "link stage",
+            NOT_PLANAR_LINK,
+            Box::new(|| match LinkStage.link(&cut, &cut, &r, Level::new(&cuts, &cuts), LinkPolicy::StayWhereProved, &mut LinkTally::default()) {
+                Hop::Lift(why) => Some(why.get()),
+                Hop::Stay(_) => None,
+            }),
+        ),
+        ("entry stage: entry", entry::NOT_PLANAR, Box::new(|| named(stage.entry(&cut, &r, &Region::empty(), &choice).map(|_| ())))),
+        ("entry stage: exit", entry::NOT_PLANAR, Box::new(|| named(stage.exit(&cut, &r, &Region::empty()).map(|_| ())))),
+        ("law kit: planar", kit::NOT_PLANAR, Box::new(|| named(kit::planar(&r).map(|_| ())))),
+        ("law kit: run", kit::NOT_PLANAR, Box::new(|| named(kit::run(&planners, &case, StartSide::Auto).map(|_| ())))),
     ];
     for (what, reason, call) in table {
         match catch_unwind(AssertUnwindSafe(&call)) {
             Err(_) => panic!("{what}: panics on the chain region of a trace"),
-            Ok(Ok(())) => panic!("{what}: accepts the chain region of a trace (a finding of #4236)"),
-            Ok(Err(e)) => assert_eq!(e.reason(), reason, "{what}"),
+            Ok(None) => panic!("{what}: accepts the chain region of a trace (a finding of #4236)"),
+            Ok(Some(got)) => assert_eq!(got, reason, "{what}"),
         }
     }
 }

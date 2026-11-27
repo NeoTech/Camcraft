@@ -82,6 +82,18 @@ pub(crate) fn in_area(area: &Region, p: Point2) -> bool {
         })
 }
 
+/// The distance from `q` to the nearest edge of `loops` (infinite for none).
+pub(crate) fn to_loops(q: Point2, loops: &[Loop]) -> f64 {
+    let mut best = f64::INFINITY;
+    for l in loops {
+        let pts = l.points();
+        for (a, b) in pts.iter().zip(pts.iter().cycle().skip(1)) {
+            best = best.min(seg_dist(q, *a, *b));
+        }
+    }
+    best
+}
+
 /// True when every point of every loop of `r` is finite.
 pub(crate) fn region_finite(r: &Region) -> bool {
     r.loops().iter().all(|l| l.points().iter().all(|p| finite(&[p.x, p.y])))

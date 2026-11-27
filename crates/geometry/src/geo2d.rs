@@ -17,6 +17,7 @@ use thiserror::Error;
 
 mod arc;
 mod clip_line;
+mod segments;
 mod slivers;
 mod sweep;
 // #4176: the medial axis and the one-sided offset of an open polyline.
@@ -27,6 +28,7 @@ mod side_offset;
 pub use arc::{MAX_ARC_CHORDS, arc_points};
 pub use clip_line::RingClip;
 pub use medial::{MEDIAL_MAX_SAMPLES, MEDIAL_REF, MedialAxis, MedialCurve};
+pub use segments::{point_segment_distance, segment_gap, segments_cross};
 pub use side_offset::{SidePiece, offset_side};
 
 use clipper2_rust::{
