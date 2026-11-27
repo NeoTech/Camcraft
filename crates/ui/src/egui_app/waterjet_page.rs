@@ -112,7 +112,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<JetTabsOp>) {
         prop_row(ui, &format!("Tab {} X", i + 1), |ui| num(ui, u, &mut xy[0]));
         prop_row(ui, &format!("Tab {} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
         prop_row(ui, &format!("Tab {} position", i + 1), |ui| {
-            if ui.button(format!("Remove tab position {}", i + 1)).clicked() {
+            if button(ui, format!("Remove tab position {}", i + 1)).clicked() {
                 remove = Some(i);
             }
         });
@@ -122,7 +122,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<JetTabsOp>) {
         t.at.remove(i);
     }
     prop_row(ui, "Tab positions", |ui| {
-        if ui.add_enabled(t.at.len() < 256, egui::Button::new("Add tab position")).clicked() {
+        if button_enabled(ui, t.at.len() < 256, "Add tab position").clicked() {
             t.at.push([0.0, 0.0]);
         }
     });

@@ -4,6 +4,7 @@ use egui::Ui;
 use camcraft_app::schema::Operation;
 use crate::state::{CommandKind, State};
 use super::super::fields::combo_owned;
+use super::super::layout::named_by;
 
 /// Tool, Source and Setup as label | control rows of the header grid.
 pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>, exists: bool) {
@@ -26,10 +27,11 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
         ui.label("Tool");
         ui.label("none").on_hover_text("no tools in the document - the Tools page has a catalog");
     } else {
-        ui.label("Tool");
+        let l = ui.label("Tool");
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
-        ui.horizontal(|ui| { super::super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); super::super::tool_icons::tool_combo(ui, &state.world, "op_tool", &mut t_idx, &tools); });
+        // #1119: the combo is named by the row's label.
+        named_by(ui, l.id, |ui| ui.horizontal(|ui| { super::super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); super::super::tool_icons::tool_combo(ui, &state.world, "op_tool", &mut t_idx, &tools); }));
         if t_idx != before
             && let Some(t) = tools.get(t_idx)
         {
@@ -62,7 +64,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     };
     let mut src_items = super::super::op_source::source_items(&state.world, op_setup.as_deref(), &state.op_ui.params);
     let models: Vec<String> = src_items.iter().skip(1).cloned().collect();
-    ui.label("Source");
+    let source_label = ui.label("Source");
     let mut s_idx: usize = if state.op_ui.src_kind == 2 {
         src_items.push("Selection".to_owned());
         src_items.len() - 1
@@ -79,7 +81,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
         0
     };
     let before = s_idx;
-    combo_owned(ui, "op_src", &mut s_idx, &src_items);
+    named_by(ui, source_label.id, |ui| combo_owned(ui, "op_src", &mut s_idx, &src_items));
     if s_idx != before {
         match s_idx.checked_sub(1).and_then(|i| models.get(i)) {
             None => {
@@ -104,7 +106,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     // Setup membership (M3.2 A): moving is never a stamp edit -
     // SetOperationSetup keeps the stamp and lets the resolved-Z digest
     // say whether the op went Stale.
-    ui.label("Setup");
+    let setup_label = ui.label("Setup");
     let setups = camcraft_app::setup::names(&state.world);
     if setups.is_empty() {
         ui.label("global (no setups)").on_hover_text("this document has no setups yet - the global stock and offsets apply");
@@ -112,7 +114,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
         let cur = live.and_then(|o| o.setup.clone()).or_else(|| setups.first().cloned());
         let mut s_idx = setups.iter().position(|n| Some(n) == cur.as_ref()).unwrap_or(0);
         let before = s_idx;
-        combo_owned(ui, "op_setup", &mut s_idx, &setups);
+        named_by(ui, setup_label.id, |ui| combo_owned(ui, "op_setup", &mut s_idx, &setups));
         if s_idx != before
             && let Some(n) = setups.get(s_idx)
         {
@@ -129,13 +131,13 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
 fn coolant_row(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>) {
     let Some(op) = live else { return };
     use camcraft_app::operation::CoolantMode;
-    ui.label("Coolant").on_hover_text(
+    let l = ui.label("Coolant").on_hover_text(
         "the cutting fluid the post switches on for this operation - the machine's own code for it; a choice the machine states no code for blocks the post by name",
     );
     let labels: Vec<String> = CoolantMode::ALL.iter().map(|m| m.label().to_owned()).collect();
     let mut idx = CoolantMode::ALL.iter().position(|m| *m == op.coolant).unwrap_or(1);
     let before = idx;
-    combo_owned(ui, "op_coolant", &mut idx, &labels);
+    named_by(ui, l.id, |ui| combo_owned(ui, "op_coolant", &mut idx, &labels));
     if idx != before
         && let Some(m) = CoolantMode::ALL.get(idx)
     {

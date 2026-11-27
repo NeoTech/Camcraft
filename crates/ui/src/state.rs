@@ -62,6 +62,7 @@ mod tool_library_dialog;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
+pub use tool_library_dialog::{DerivedKey, RecipesView};
 #[path = "state_components.rs"]
 mod components_ui;
 pub use components_ui::{
@@ -85,6 +86,9 @@ mod component_views;
 pub use component_views::{
     ComponentRow, ComponentViews, Derived as ComponentDerived, StackValues, StackView, SwapOffer, ViewBuilds, candidates,
 };
+#[path = "state_tool_list.rs"]
+mod tool_list;
+pub use tool_list::{ListBuilds, ToolHits, ToolListCache, ToolRow};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -1758,9 +1762,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
-    /// Catalog filters are temporary view state, outside the document and history.
-    pub tool_catalog_kind: Option<camcraft_app::tools::ToolKind>,
-    pub tool_catalog_name: String,
+    /// #4335: the tool library's search text - view state, outside the
+    /// document and the history; it holds between two openings.
+    pub tool_search: String,
     /// #899: how the Tool library page's Import treats a name the
     /// document already has. View state - the import itself is the command.
     pub tool_import_mode: camcraft_app::commands::ImportMode,
@@ -2237,6 +2241,8 @@ pub struct State {
     pub component_lib: ComponentLib,
     /// #3898: the component pages' derived sets, keyed on their inputs.
     pub component_views: ComponentViews,
+    /// #4335: the tool list's rows and the search's hits.
+    pub tool_list: ToolListCache,
     /// #2397: Properties is showing the blank new-tool form. The Tool
     /// target with the empty name is the destination; this says which of
     /// its two faces shows - the pointer to the library, or the draft.
@@ -2423,8 +2429,7 @@ impl State {
             frame_rate: crate::egui_app::frame_rate::FrameRate::default(),
             gpu_line: None,
             spindle_as_vc: false,
-            tool_catalog_kind: None,
-            tool_catalog_name: String::new(),
+            tool_search: String::new(),
             tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
@@ -2586,6 +2591,7 @@ impl State {
             tool_library: None,
             component_lib: ComponentLib::default(),
             component_views: ComponentViews::default(),
+            tool_list: ToolListCache::default(),
             new_tool_form: false,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
