@@ -81,8 +81,10 @@ default planner switch does not change. The first recipe (#3752) calls it.
 **The pins.** Unit tests in `kernel_emit/tests.rs` on hand-made plans.
 The K4 pin of motion (`kernel_laws`) now builds the whole plan (guide,
 order, link, and the entry and exit stage with a helix asked) and converts
-it with the real converter: the counts stay (disc and dog bone Inside 0
-lifts; Outside 13 and 15, each named; 0 crossings). The new pin
+it with the real converter. It also asserts the converter's counts of
+entries, stay-down links, lifts and exits against the plan. Before the
+merge of #4254 the counts stayed (Inside 0 lifts; Outside 13 and 15, each
+named; 0 crossings). After it, see "The merge of #4254" below. The new pin
 `k6a_plan_emit` runs the verifier of `camcraft-sim` and the entry measure
 on the same converted plans.
 
@@ -91,19 +93,24 @@ clearance Z 10, a helix asked):
 
 | Fixture | Moves | Lifts (named) | Entries | Verifier |
 |---|---|---|---|---|
-| disc, Inside | 7355 | 0 | 1 into solid (read as a ramp: the helix is chords) | nothing |
-| disc, Outside | 6402 | 13 (13) | 14 in air | nothing |
+| disc, Inside | 7336 | 0 | 1 into solid (read as a ramp: the helix is chords) | nothing |
+| disc, Outside | 6497 | 0 | 1 in air | 3 `Crossing` |
 | dog bone, Inside | 5368 | 0 | 1 into solid (ramp) | nothing |
-| dog bone, Outside | 4784 | 15 (15) | 16 in air | nothing |
+| dog bone, Outside | 4719 | 0 | 1 in air | 1 `Crossing` |
+
+These are the readings after the merge of #4254. Before it they were
+7355 / 6402 (13 lifts, 14 entries) / 5368 / 4784 (15 lifts, 16 entries),
+with no verifier warning.
 
 The verifier area is the stock grown by four tool radii, less the part.
 With the band of `fixture::band` (two radii) the verifier gave 72 and 84
 `Gouge` warnings on Outside. Each one is on an air entry or its arc lead
 outside the band, 17 mm or more from the part: the band was too small for
 the air round the stock, and no warning is near the part. The law measure
-also reads 44 (disc) and 52 (dog bone) Outside feeds whose centre leaves
-the reach of `fixture::centre_reach` (the stock grown by one radius):
-these are the same arc leads in the air. The K4 pin does not assert the
+also reads Outside feeds whose centre leaves the reach of
+`fixture::centre_reach` (the stock grown by one radius): 44 (disc) and 52
+(dog bone) before #4254, 4 and 3 after it (one air entry each). These are
+the arc leads in the air. The K4 pin does not assert the
 reach. The entry stage plans them in the kernel's air zone, so this is a
 reading of the entry stage, not of the converter.
 
@@ -120,8 +127,38 @@ The merge of `side/path-kernel` (df9ec30) into this branch showed that
 `k3_load` is red on the side head itself: #4265 was gated on a branch
 without #4253 (the link edge band). The disc Outside row with constant
 engagement reads 337 moves above the limit and 77 unnamed, not 334 and
-74. The old test pen gives the same 337. This PR pins the row as measured,
-with a comment that names the cause.
+74. The old test pen gives the same 337. This PR pinned the row as
+measured, with a comment that names the cause.
+
+**The merge of #4254 (the approach from the air, PR #4275).** The two PRs
+changed the same pins. The resolution keeps both:
+- `k3_load` reads `cuts_path_with` (this PR) and takes the Outside rows
+  of #4254 unchanged: they measure the same on the merged tree (disc
+  [415, 145, 19] / [344, 122, 81], dog bone [739, 180, 13] /
+  [683, 143, 69]). The row 337 / 77 of this PR is replaced: the
+  approach stretches of #4254 are feeds of the cuts-only path too.
+- The K4 pin keeps the real converter and takes the lift counts of #4254
+  (0 on each case).
+- The converter emits the approach stretches as feeds of a stay-down
+  link. It refuses nothing: an approach is points of a `Hop::Stay` path,
+  not a new step kind.
+- New on the merged tree: the converted Outside paths have feed
+  crossings, 3 on the disc and 1 on the dog bone. Each is in the air,
+  one tool radius outside the stock: a link of #4254 runs along the air
+  line (y -29) to the door of its approach and crosses the arc lead of
+  the first entry. The link stage proves a link against the cuts, the
+  links and the planned cuts, not against the leads of the entry stage.
+  The kernel's test pen has no leads, so #4254 read 0. The verifier
+  reports them as `Crossing` only: no gouge, no rapid in stock, no
+  plunge into stock. The K4 pin asserts the counts as measured
+  (`CROSSINGS`), so a new crossing makes it red. Follow-up: #4300.
+- The disc Inside path has 7336 moves, not 7355: the link tries of #4254
+  (`tries` in `link/proof.rs`) change some link routes. No count changes.
+
+Changed: the K4 assertion "no feed crosses another" is now the measured
+table `CROSSINGS`. The zero holds for the kernel's test pen, but not for
+the converted plan with its entry leads. Fixing the link proof is kernel work, out of the scope of a
+merge-time refresh (#4300).
 
 **Cost to change later.** A retract plane under the clearance height, or
 exact arcs for leads and helices, are local changes in `pen.rs` and need

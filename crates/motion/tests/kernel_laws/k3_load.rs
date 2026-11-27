@@ -30,15 +30,20 @@ impl StockRead for Left {
 /// 32 worst 180 (dog bone). The worst Inside is the first ring round the
 /// part: a full-width cut with no pass beside it, named (`FRESH_CUT`). The
 /// unnamed moves of Outside are on the stock edge line, where a piece
-/// starts after a lift: there the kernel's read and the meter of #4154
-/// differ (follow-up issue named in the decision file).
+/// starts: there the kernel's read and the meter of #4154 differ
+/// (follow-up issue named in the decision file). Since #4254 a link comes
+/// in to such a start from the air, at depth: the approach is a stretch of
+/// a link, and the load stage reads the cuts only, so its moves above the
+/// limit are not named yet (#4272; before #4254 the Outside rows were
+/// [402, 145, 13], [334, 118, 74] on the disc and [724, 167, 3],
+/// [678, 143, 66] on the dog bone; with #4253 the disc row with constant
+/// engagement read [337, 118, 77], #4269). The path is the cuts-only path
+/// of the plan (`cuts_path_with`): the approach stretches are its feeds.
 const READ: [(&str, &str, [u32; 3], [u32; 3]); 4] = [
     ("disc", "Inside", [3507, 173, 0], [833, 173, 1]),
-    // #4269: 337 and 77 on the side head after the merge of #4253 (the link
-    // edge band) and #4265; #4265 had measured 334 and 74 without #4253.
-    ("disc", "Outside", [402, 145, 13], [337, 118, 77]),
+    ("disc", "Outside", [415, 145, 19], [344, 122, 81]),
     ("dog bone", "Inside", [2587, 173, 0], [581, 173, 1]),
-    ("dog bone", "Outside", [724, 167, 3], [678, 143, 66]),
+    ("dog bone", "Outside", [739, 180, 13], [683, 143, 69]),
 ];
 
 #[test]
