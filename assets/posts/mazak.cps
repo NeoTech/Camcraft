@@ -588,7 +588,10 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
+  // #4343: every F word is a feed per minute, so the preamble states G94.
+  // A control left in G95 (feed per revolution) by an earlier program or
+  // MDI would read F1200 as 1200 per revolution.
+  block(["G17", "G90", "G94", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
