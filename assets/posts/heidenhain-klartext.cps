@@ -14,7 +14,7 @@ serves = ["mill"];
 programUnits = "mm";
 coolantModes = true;
 failOnWarning = true;
-workOffsetIndex = true;
+workOffsetIndex = true; floatingTapping = true; // #4227: cycle 206 needs the explicit floating-holder choice
 workOffsetMax = 6; manualToolChange = ["manual-retract-top"]; // #4085: it writes the stop and checks for this change
 
 var blockNumber = 0;
@@ -179,8 +179,9 @@ function onToolChange(number, name) {
 var toolDefinitions = Object.create(null);
 function checkToolDefinition() {
   var kind = typeof section.ToolKind === "string" ? section.ToolKind.toLowerCase() : "";
-  if (["flat end mill", "ball-nose", "bull-nose", "chamfer mill"].indexOf(kind) === -1) {
-    refuse("unsupported milling tool kind " + (kind || "(unstated)"));
+  // #4227: a drill or a tap cuts only in a drilling cycle (axialOnly).
+  if (["flat end mill", "ball-nose", "bull-nose", "chamfer mill", "drill", "tap"].indexOf(kind) === -1) {
+    refuse("unsupported tool kind " + (kind || "(unstated)"));
   }
   var diameter = required(section.ToolDiameter, "ToolDiameter");
   var cornerRadius = section.ToolCornerRadius === undefined ? 0 : section.ToolCornerRadius;
@@ -312,12 +313,18 @@ function motion() {
   return p;
 }
 function onRapid() {
+  if (!inSection) refuse("motion outside an operation section");
+  if (holeMove(true)) return;
   var p = motion();
   block("L " + xyz(p.X, p.Y, p.Z) + " R0 FMAX");
 }
 function onLinear() {
+  if (!inSection) refuse("motion outside an operation section");
+  if (holeMove(false)) return;
+  axialOnly("feed");
   var p = motion();
   block("L " + xyz(p.X, p.Y, p.Z) + " R0 F" + rate(p.FeedRate, machine.feedRateMax, "feed"));
+  dwellAtDepth();
 }
 function onCircular() {
   // #3442: an arc whose written ends coincide is no C block (arcFate,
@@ -326,6 +333,8 @@ function onCircular() {
   var fate = arcFate(function (k, v) { return local(v, k); });
   if (fate === "linear") { onLinear(); return; }
   if (fate === "none") { motion(); return; }
+  closeHole();
+  axialOnly("arc");
   var p = motion();
   if (p.CircularPlane !== "XY" || p.Z !== p.StartZ) refuse("only constant-Z XY arcs are supported");
   var centre = p.IJKIncrement || {};
@@ -361,6 +370,9 @@ function onCircular() {
 }
 function onSectionEnd() {
   if (!inSection || !moved) refuse("operation section is empty or has no start");
+  closeHole();
+  owedDwell();
+  cycleSig = "";
   if (lastPoint[2] < section.ClearancePlane ||
       local(lastPoint[2], "Z") < local(section.ClearancePlane, "Z")) {
     refuse("operation ends below ClearancePlane; provide a verified retract before stopping the spindle");
@@ -376,10 +388,183 @@ function onClose() {
   block("END PGM " + programName + " MM");
 }
 
+// ------------------------------------------------------------ cycles
+// #4227: iTNC 530 Cycle Programming (NC 340 49x): cycles 9 DWELL TIME,
+// 200 DRILLING, 206 TAPPING NEW and 207 RIGID TAPPING NEW, at the
+// parameter set of the resolver's drillC200 "q211" level (no Q395).
+// A native cycle replaces only the hole chain that it does itself, and
+// each replaced move is compared with the cycle's own motion:
+// - DRILL / SPOT, cycle 200 with Q202 = the whole depth: one feed to the
+//   depth, the dwell Q211, FMAX back to Q200 (= R). Q204 = Q200, so the
+//   second clearance move is no move.
+// - TAP, cycle 207 (rigid) or 206 (floating): feed to the depth at the
+//   pitch feed, the spindle reverses, feed back to Q200 (= R).
+// PECK and DEEP post the checked chain as L blocks: the native peck
+// re-approach is not provably the chain (#4224,
+// docs/decisions/4224-heidenhain-peck-chain.md). Their dwell, and only
+// theirs, is cycle 9 after the last feed to the depth.
+// docs/decisions/4227-klartext-cycles.md records the choices.
+var CYCLE_TOL = 1e-6;
+var hole = null;          // the open hole: {x, y, r, steps, native, name}
+var cycleSig = "";        // the last CYCL DEF written in this section
+var pendingDwell = null;  // {z, s}: cycle 9 owed after the feed to the depth
+var dwellTaken = 0;       // the dwell the open cycle wrote (Q211 or cycle 9)
+function qword(n, v) {
+  // Increments and Q values carry four decimals, with an explicit sign.
+  var s = Number(v).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  if (s === "-0" || !s) s = "0";
+  return "Q" + n + "=" + (s.charAt(0) === "-" ? s : "+" + s);
+}
+function toolKindWord() {
+  return typeof section.ToolKind === "string" ? section.ToolKind.toLowerCase() : "";
+}
+function cycleDef(text, words) {
+  block("CYCL DEF " + text + " ~");
+  for (var i = 0; i < words.length; ++i) writeln("  " + words[i] + (i + 1 < words.length ? " ~" : ""));
+}
+function sameHole(p) {
+  return hole !== null && Math.abs(p.X - hole.x) < CYCLE_TOL && Math.abs(p.Y - hole.y) < CYCLE_TOL;
+}
+// A move of the open hole's chain. Native: compare it with the cycle's next
+// own move and write nothing (true). Explicit chain: false, the caller posts it.
+function holeMove(rapid) {
+  var p = properties;
+  if (hole === null) return false;
+  if (!sameHole(p) || p.Z > hole.r + CYCLE_TOL) {
+    if (hole.steps.length) refuse(hole.name + " ends before the hole chain returns to R");
+    hole = null;
+    return false;
+  }
+  if (!hole.native) return false;
+  // The tool stands at R after the cycle: a rapid there (the hop when the
+  // hop plane is R) moves nothing.
+  if (!hole.steps.length && rapid && Math.abs(p.Z - hole.r) <= CYCLE_TOL) { motion(); return true; }
+  var step = hole.steps.shift();
+  var feed = rapid ? null : p.FeedRate;
+  if (!step || step.rapid !== rapid || Math.abs(p.Z - step.z) > CYCLE_TOL ||
+      (!rapid && !(Math.abs(feed - step.f) <= CYCLE_TOL * Math.max(1, step.f)))) {
+    refuse("the hole chain is not the motion of " + hole.name);
+  }
+  motion();
+  return true;
+}
+function closeHole() {
+  if (hole !== null && hole.steps.length) refuse(hole.name + " ends before the hole chain returns to R");
+  hole = null;
+}
+// A drill or tap cuts only along the axis of a drilling cycle's hole.
+function axialOnly(what) {
+  var kind = toolKindWord();
+  if (kind !== "drill" && kind !== "tap") return;
+  var p = properties;
+  if (kind === "tap" || !sameHole(p) || Math.abs(p.StartX - p.X) > CYCLE_TOL ||
+      Math.abs(p.StartY - p.Y) > CYCLE_TOL || what === "arc") {
+    refuse("a " + kind + " tool cuts only inside its drilling cycle (" + what + ")");
+  }
+}
+function dwellWords(s) {
+  if (dialect.dwell !== "cycle9") {
+    refuse("controller profile " + dialect.profile + " does not confirm cycle 9 DWELL TIME, which this post writes");
+  }
+  var t = Number(s.toFixed(3));
+  if (!(t > 0) || t > 3600) refuse("dwell " + s + " s is outside 0.001 to 3600 s");
+  block("CYCL DEF 9.0 DWELL TIME");
+  block("CYCL DEF 9.1 DWELL " + t);
+  cycleSig = ""; // define the machining cycle again before its next call
+}
+function dwellAtDepth() {
+  var p = properties;
+  if (pendingDwell === null || !sameHole(p) || Math.abs(p.Z - pendingDwell.z) > CYCLE_TOL) return;
+  dwellWords(pendingDwell.s);
+  pendingDwell = null;
+}
+function owedDwell() {
+  if (pendingDwell !== null) refuse("drilling dwell without a feed move to the hole bottom");
+}
+function onCycle() {
+  if (!inSection) refuse("drilling cycle outside an operation section");
+  closeHole();
+  owedDwell();
+  dwellTaken = 0;
+  var p = properties, type = String(p.CycleType);
+  var tap = type === "TAP", floating = tap && p.TappingMode === "floating";
+  var name = tap ? (floating ? "cycle 206" : "cycle 207") : (type === "PECK" || type === "DEEP" ? type + " chain" : "cycle 200");
+  function bad(why) { refuse("drilling cycle " + type + ": " + why); }
+  if (["SPOT", "DRILL", "PECK", "DEEP", "TAP"].indexOf(type) === -1) bad("unsupported cycle kind");
+  var kind = toolKindWord();
+  if (tap !== (kind === "tap")) bad(tap ? "a tapping cycle requires a tap tool" : "a tap tool cuts only in a tapping cycle");
+  if (p.A !== undefined || p.B !== undefined || p.C !== undefined) bad("rotary or tilted hole");
+  var x = required(p.X, "hole X"), y = required(p.Y, "hole Y"), r = required(p.R, "hole R");
+  var bottom = required(p.Z, "hole depth"), entry = required(p.EntryZ, "hole entry");
+  // The tool stands over the hole at R: the stream rapids there first.
+  if (Math.abs(lastPoint[0] - x) > CYCLE_TOL || Math.abs(lastPoint[1] - y) > CYCLE_TOL ||
+      Math.abs(lastPoint[2] - r) > CYCLE_TOL) {
+    bad("the tool is not at the hole's R plane when the cycle starts");
+  }
+  var clearance = r - entry, depth = bottom - entry;
+  if (clearance < 0 || clearance > 99999.9999 || depth >= 0 || depth < -99999.9999) {
+    bad("needs a nonnegative R clearance and a negative depth below the hole entry");
+  }
+  if (finite(p.ChainBottomZ) && Math.abs(p.ChainBottomZ - bottom) > CYCLE_TOL) bad("the depth disagrees with the hole chain bottom");
+  var dwell = finite(p.P) ? Number(p.P) : 0;
+  if (!(dwell >= 0) || dwell > 3600) bad("invalid dwell");
+  if (type === "PECK" || type === "DEEP") {
+    // #4224: the checked chain posts as L blocks; cycle 9 dwells at its depth.
+    hole = { x: x, y: y, r: r, steps: [], native: false, name: name };
+    if (dwell > 0) pendingDwell = { z: bottom, s: dwell };
+    dwellTaken = dwell;
+    return;
+  }
+  var feedIn = finite(p.FeedRate) ? p.FeedRate : p.ChainFeedRate;
+  var feed = rate(feedIn, machine.feedRateMax, "cycle feed");
+  var words = [qword(200, clearance), qword(201, depth)];
+  var text;
+  if (tap) {
+    var rpm = rate(section.SpindleSpeed, machine.spindleMax, "SpindleSpeed");
+    if (rpm !== Math.round(rpm)) bad("tapping needs an integral spindle speed to state the pitch");
+    if (floating) {
+      if (Math.abs(feedIn - feed) > 0.0000005) bad("the floating tapping feed cannot be written at the control's feed resolution");
+      if (dwell > 0.5) bad("cycle 206 dwell must be at most 0.5 s to avoid wedging the tap");
+      text = "206 TAPPING NEW";
+      words.push(qword(206, feed), qword(211, dwell));
+    } else {
+      var pitch = feedIn / rpm;
+      if (pitch < 0.0001 || pitch > 99.9999 || Math.abs(pitch - Math.round(pitch * 10000) / 10000) > 0.0000005) {
+        bad("the tapping feed and spindle speed give no pitch at the control's resolution");
+      }
+      if (machine.rigidTapping === false) bad("rigid tapping is unavailable on this machine; select a floating holder explicitly if installed");
+      if (dwell !== 0) bad("cycle 207 has no dwell parameter");
+      text = "207 RIGID TAPPING NEW";
+      words.push(qword(239, pitch));
+    }
+  } else {
+    if (dialect.drillC200 !== "q211") {
+      bad("controller profile " + dialect.profile + " has cycle 200 level " + dialect.drillC200 + ", not the q211 level that this post writes");
+    }
+    // One plunge: the plunging depth is the whole depth.
+    text = "200 DRILLING";
+    words.push(qword(206, feed), qword(202, -depth), qword(210, 0));
+  }
+  words.push(qword(203, local(entry, "Z")), qword(204, clearance));
+  if (!tap) words.push(qword(211, dwell));
+  dwellTaken = tap && !floating ? 0 : dwell;
+  var sig = text + "|" + words.join("|");
+  if (sig !== cycleSig) { cycleDef(text, words); cycleSig = sig; }
+  block("CYCL CALL");
+  hole = {
+    x: x, y: y, r: r, native: true, name: name,
+    steps: [{ rapid: false, z: bottom, f: feedIn }, tap ? { rapid: false, z: r, f: feedIn } : { rapid: true, z: r }]
+  };
+}
+// The engine sends the cycle's dwell after onCycle: the cycle wrote it.
+function onDwell(seconds) {
+  if (!(Math.abs(Number(seconds) - dwellTaken) <= CYCLE_TOL)) refuse("dwell " + seconds + " s outside a drilling cycle that writes it");
+  dwellTaken = 0;
+}
+function finite(v) { return typeof v === "number" && isFinite(v); }
+
 // Refuse before the host can substitute an ordinary motion or comment for a
 // record that requests a material change, spindle synchronization or probing.
-function onCycle() { refuse("unsupported drilling cycle " + properties.CycleType); }
-function onDwell() { refuse("unsupported dwell"); }
 function onRadiusCompensation() { refuse("unsupported control cutter compensation"); }
 function onThreadCycle() { refuse("unsupported threading cycle"); }
 function onThreadCycleEnd() { refuse("unsupported threading cycle"); }

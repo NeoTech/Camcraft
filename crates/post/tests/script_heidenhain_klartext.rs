@@ -382,5 +382,8 @@ fn successive_sections_with_the_same_tool_recheck_transfer_without_another_excha
 #[path = "klartext/arc_tests.rs"]
 mod arc_tests;
 
+#[path = "klartext/cycle_tests.rs"]
+mod cycle_tests;
+
 #[path = "klartext/dialect_tests.rs"]
 mod dialect_tests;
