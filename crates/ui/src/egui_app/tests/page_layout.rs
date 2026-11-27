@@ -297,7 +297,7 @@ fn layout_page_home() {
     let band = h.get_by_role_and_label(egui::accesskit::Role::Button, "Donate").rect();
     let screen = h.ctx.content_rect();
     let mut last: Option<(&str, f32)> = None;
-    for a in [TITLE, super::super::home::NO_RECENT, OPEN] {
+    for a in [TITLE, super::super::home::NO_RECENT, OPEN, "Tip of the day"] {
         let r = h.query_all_by_label(a).next().unwrap_or_else(|| panic!("home page: no widget labelled {a:?}")).rect();
         assert!(r.top() > band.bottom(), "home page: {a:?} {r:?} is below the top band");
         assert!(r.bottom() < screen.bottom(), "home page: {a:?} {r:?} is on the screen");

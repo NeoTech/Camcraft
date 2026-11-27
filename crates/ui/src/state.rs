@@ -1975,6 +1975,10 @@ pub struct State {
     /// #2384: the start page is up, opened over this `doc_version`; a
     /// changed document closes it (`egui_app::home::is_open`). View state.
     pub home_page: Option<u64>,
+    /// #3030: manual Help window, ephemeral and never saved in a project.
+    pub tips_open: bool,
+    /// #3030: per-user start-page tip preference.
+    pub show_start_tip: bool,
     /// The open recent-files drop-down (#662) under the Open (projects)
     /// or Model (models) button - the same door law, one open at a time.
     pub ribbon_recent_open: Option<camcraft_app::recent::RecentKind>,
@@ -2494,6 +2498,8 @@ impl State {
             ribbon_theme_open: false,
             ribbon_settings_open: false,
             home_page: None,
+            tips_open: false,
+            show_start_tip: true,
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,

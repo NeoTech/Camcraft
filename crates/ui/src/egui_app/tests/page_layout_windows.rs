@@ -6,6 +6,14 @@ use egui_kittest::kittest::NodeT;
 
 type H = Harness<'static, ShellUi>;
 
+#[test]
+fn layout_window_tips() {
+    let mut h = shell_harness();
+    h.state_mut().state.tips_open = true;
+    h.run_steps(3);
+    assert_window_layout(&h, "Tips", &["Drive CamCraft from your AI agent", "Undo AI changes", "Verify before you post", "Start from an example"]);
+}
+
 /// Every anchor exists, sits inside `container`, and stacks top to bottom.
 fn assert_stack_in(h: &H, container: egui::Rect, who: &str, anchors: &[&str]) {
     let mut last: Option<(&str, f32)> = None;

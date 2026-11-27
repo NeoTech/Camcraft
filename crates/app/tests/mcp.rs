@@ -10,6 +10,8 @@
 //! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
 
 mod common;
+#[path = "mcp/tips.rs"]
+mod tips;
 #[path = "mcp/add_tool_spindle_warning.rs"]
 mod add_tool_spindle_warning;
 #[path = "mcp/background_generate.rs"]

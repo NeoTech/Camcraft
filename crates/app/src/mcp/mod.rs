@@ -18,6 +18,7 @@
 pub mod provider;
 // #1947: the tool reference and local prompt, generated from the tool table.
 pub mod catalog;
+pub mod tips;
 mod provider_calls;
 mod fallback;
 mod schema_validation;

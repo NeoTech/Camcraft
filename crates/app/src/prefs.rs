@@ -54,6 +54,8 @@ pub struct ViewPrefs {
     pub cadmpeg_path: Option<String>,
     /// #2428: check GitHub for a newer release at startup (at most once/day).
     pub check_for_updates: bool,
+    /// #3030: show the optional tip on the start page (not in a project).
+    pub show_start_tip: bool,
     /// #2428: UTC Unix timestamp (seconds) of the last startup update check.
     pub last_update_check_utc: Option<u64>,
 }
@@ -67,6 +69,7 @@ impl Default for ViewPrefs {
             ai_offline_only: false,
             cadmpeg_path: None,
             check_for_updates: true,
+            show_start_tip: true,
             last_update_check_utc: None,
         }
     }
@@ -103,6 +106,8 @@ struct OnDisk {
     /// #2428: written only when false (update checks default to on).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     check_for_updates: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    show_start_tip: Option<bool>,
     /// #2428: written only when set (epoch seconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_update_check_utc: Option<serde_json::Value>,
@@ -142,6 +147,7 @@ impl ViewPrefs {
             ai_offline_only,
             cadmpeg_path,
             check_for_updates,
+            show_start_tip: (!self.show_start_tip).then_some(false),
             last_update_check_utc,
         };
         serde_json::to_string_pretty(&disk).unwrap_or_else(|e| {
@@ -204,6 +210,7 @@ impl ViewPrefs {
                 ai_offline_only,
                 cadmpeg_path,
                 check_for_updates,
+                show_start_tip: disk.show_start_tip != Some(false),
                 last_update_check_utc,
             },
             notes,

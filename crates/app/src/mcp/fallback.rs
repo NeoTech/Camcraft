@@ -69,6 +69,7 @@ pub fn is_read_only_tool(name: &str) -> bool {
     matches!(
         name,
         "get_job"
+            | "list_tips"
             | "get_selection"
             | "list_operation_types"
             | "list_tool_catalog"

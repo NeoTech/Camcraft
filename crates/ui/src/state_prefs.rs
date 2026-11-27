@@ -38,6 +38,7 @@ impl State {
         self.import_tool_holders = !stored.skip_tool_holders;
         self.ai_chat.offline_only = stored.ai_offline_only;
         self.check_for_updates = stored.check_for_updates;
+        self.show_start_tip = stored.show_start_tip;
         self.last_update_check_utc = stored.last_update_check_utc;
         if !self.check_for_updates {
             self.update_available = None;
@@ -72,6 +73,7 @@ impl State {
             // the path that the file states.
             cadmpeg_path: prefs::load(path).0.cadmpeg_path,
             check_for_updates: self.check_for_updates,
+            show_start_tip: self.show_start_tip,
             last_update_check_utc: self.last_update_check_utc,
         };
         // The refusal is logged where it happens (app::prefs::save); the
