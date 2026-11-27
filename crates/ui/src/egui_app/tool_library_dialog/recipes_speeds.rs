@@ -132,10 +132,10 @@ pub(super) fn draw(ui: &mut Ui, t: &mut ToolUi, u: Unit, lines: &[String]) {
         ui.horizontal(|ui| {
             weak(ui, "=");
             let vc = surface_speed(t.diameter, rpm).unwrap_or_default();
-            if let Some(v) = field(ui, vc_display(vc, u), vc_suffix(u), 0, 1.0, vc_refusal(t.diameter), &format!("{VC} ({label})"), line) {
-                if let Ok(n) = rpm_for(vc_metric(v, u), t.diameter) {
-                    set_rpm(t, at, n);
-                }
+            if let Some(v) = field(ui, vc_display(vc, u), vc_suffix(u), 0, 1.0, vc_refusal(t.diameter), &format!("{VC} ({label})"), line)
+                && let Ok(n) = rpm_for(vc_metric(v, u), t.diameter)
+            {
+                set_rpm(t, at, n);
             }
             weak(ui, "surface speed,");
             let fz = feed_per_tooth(feed, rpm, t.flutes).unwrap_or_default();
@@ -143,10 +143,10 @@ pub(super) fn draw(ui: &mut Ui, t: &mut ToolUi, u: Unit, lines: &[String]) {
                 Unit::Millimeters => (3, 0.001),
                 Unit::Inches => (4, 0.0001),
             };
-            if let Some(v) = field(ui, fz_display(fz, u), fz_suffix(u), prec, speed, fz_refusal(rpm, t.flutes), &format!("{FZ} ({label})"), line) {
-                if let Ok(f) = feed_for(fz_metric(v, u), rpm, t.flutes) {
-                    set_feed(t, at, f);
-                }
+            if let Some(v) = field(ui, fz_display(fz, u), fz_suffix(u), prec, speed, fz_refusal(rpm, t.flutes), &format!("{FZ} ({label})"), line)
+                && let Ok(f) = feed_for(fz_metric(v, u), rpm, t.flutes)
+            {
+                set_feed(t, at, f);
             }
             weak(ui, &format!("per tooth ({label})"));
         });
