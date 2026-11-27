@@ -394,5 +394,5 @@ mod cycle_tests;
 #[path = "../klartext/dialect_tests.rs"]
 mod dialect_tests;
 
-#[path = "klartext/smoothing_tests.rs"]
+#[path = "../klartext/smoothing_tests.rs"]
 mod smoothing_tests;
