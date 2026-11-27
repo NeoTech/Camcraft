@@ -38,6 +38,7 @@ fn params() -> WaterjetParams {
         clearance_z: 10.0,
         cut_z: 0.0,
         model_excess: 0.0,
+        voice: crate::sheet::Voice::WATERJET,
     }
 }
 

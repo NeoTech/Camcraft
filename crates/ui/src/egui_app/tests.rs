@@ -151,6 +151,7 @@ mod tool_library_holders_ui;
 // #3898 (U7 of #3663): My library, the component editor and the stack.
 mod tool_library_components;
 mod tool_library_stack;
+mod tool_library_turning_stack;
 mod tool_library_mockup;
 mod anchors;
 mod stock_fit;

@@ -19,10 +19,13 @@ use std::time::Duration;
 
 use camcraft_kernel::KernelError;
 use camcraft_kernel::solidcore_impl::SolidcoreKernel;
-use camcraft_kernel::solidcraft::{MAX_COORD_MM, SolidcraftImport, import_solidcraft};
+use camcraft_kernel::solidcraft::{
+    MAX_COORD_MM, MAX_NAME_BYTES, NAMES_FORMAT, SolidcraftImport, import_solidcraft,
+};
 use sc_util::Parts;
 use serde_json::json;
-use solidcore::kernel::CancelToken;
+use solidcore::kernel::{CancelToken, UpstreamFixes};
+use solidcore_record::brep::envelope;
 use solidcore_record::native;
 
 fn import(bytes: &[u8]) -> Result<SolidcraftImport, KernelError> {
@@ -194,6 +197,130 @@ fn damaged_bodies_never_panic_or_hang() {
         Ok((ok, panics)) => println!(
             "{ok} damaged bodies still imported; {panics} caught panics reported by name"
         ),
+        Err(e) => panic!("{e}"),
+    }
+}
+
+/// The sample's final model body; its names record has the same index.
+const FINAL: usize = 13;
+
+/// A 10 x 20 x 30 block (six faces) as the body of a `Saved`, encoded:
+/// quick to import, so the names run is bounded by the names, not the body.
+fn block_body() -> Vec<u8> {
+    solidcore_ops::session::set_thread_fixes(UpstreamFixes::NAMES.iter().copied())
+        .expect("every fix on, as Solidcraft runs");
+    let b = solidcore_ops::make_box([0.0; 3], [10.0, 20.0, 30.0]).expect("block");
+    let (record, _) = b.to_record().expect("record of the block");
+    encode(&native::Saved {
+        solid: record,
+        metadata: envelope::Metadata {
+            version: envelope::VERSION,
+            color: None,
+            paint: None,
+            boundaries: None,
+            face_sources: None,
+            history: None,
+            preserve_boundaries: false,
+        },
+        runtime: native::Runtime {
+            size: 0.0,
+            coarse_missing: None,
+        },
+    })
+}
+
+#[test]
+fn hostile_names_never_panic_or_refuse_the_import() {
+    // #3915: the sample with a six-face block as its final body, marked as
+    // format 10 with six names of our own; then hostile values put into
+    // the names record and its index.
+    let body = block_body();
+    let mut base = Parts::sample();
+    base.manifest(|m| {
+        m["format"] = json!(NAMES_FORMAT);
+        m["model"]["model_bodies"][FINAL]["names"] = json!(FINAL);
+        m["model"]["names"][FINAL] = json!({
+            "faces": (0..6).map(|f| format!("F1:side:l{f}")).collect::<Vec<_>>(),
+            "info": (0..6).map(|_| json!([[], [], true, []])).collect::<Vec<_>>(),
+        });
+    });
+    // The base reads its six names, so the damage below reaches the reader.
+    match import(&with_body(&base, &body)) {
+        Ok(i) => assert_eq!(i.names.map(|n| n.len()), Some(6), "{:?}", i.names_note),
+        Err(e) => panic!("the block design is refused: {e}"),
+    }
+    let hostile = [
+        json!(null),
+        json!(true),
+        json!(-1),
+        json!(u64::MAX),
+        json!(1e300),
+        json!(""),
+        json!("x".repeat(MAX_NAME_BYTES + 1)),
+        json!([]),
+        json!([[]]),
+        json!({}),
+        json!({ "faces": [], "info": [] }),
+        json!([[], [], true, [], "F1", "F2"]),
+        json!([[], [], "true", []]),
+        json!([[], [], true, [], 7]),
+    ];
+    let mut seed = 0x3915_fa5e_3915_fa5e_u64;
+    let mut cases: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..30 {
+        let v = hostile[(next(&mut seed) % hostile.len() as u64) as usize].clone();
+        let (at, inner) = (next(&mut seed) as usize, next(&mut seed) as usize);
+        let mut c = base.clone();
+        c.manifest(|m| {
+            let names = &mut m["model"]["names"][FINAL];
+            let len = names["faces"].as_array().map_or(1, Vec::len).max(1);
+            match i % 6 {
+                0 => {
+                    if let Some(s) = names["faces"].get_mut(at % len) {
+                        *s = v;
+                    }
+                }
+                1 => {
+                    if let Some(s) = names["info"].get_mut(at % len) {
+                        *s = v;
+                    }
+                }
+                2 => {
+                    if let Some(s) = names["info"]
+                        .get_mut(at % len)
+                        .and_then(|x| x.get_mut(inner % 5))
+                    {
+                        *s = v;
+                    }
+                }
+                3 => m["model"]["model_bodies"][FINAL]["names"] = v,
+                4 => *names = v,
+                _ => names["faces"] = v,
+            }
+        });
+        cases.push((format!("names {i}"), with_body(&c, &body)));
+    }
+    let limit = Duration::from_secs(120);
+    let outcome = step_util::bounded_cancel("names mutations", limit, move |stop| {
+        let mut read = 0usize;
+        for (case, bytes) in &cases {
+            let mut k = SolidcoreKernel::default();
+            let i = import_solidcraft(&mut k, bytes, stop)
+                .map_err(|e| format!("{case}: the names refused the import: {e}"))?;
+            // Exactly one of the two: names that fit, or a note why not.
+            match (&i.names, &i.names_note) {
+                (Some(n), None) if n.len() == i.solid.record.faces.len() => read += 1,
+                (None, Some(_)) => {}
+                other => return Err(format!("{case}: names and note disagree: {other:?}")),
+            }
+            if stop.is_cancelled() {
+                return Err(format!("time bound reached at {case}"));
+            }
+        }
+        Ok(read)
+    });
+    match outcome {
+        Ok(read) => println!("{read} hostile names records still fit (the damage left them whole)"),
         Err(e) => panic!("{e}"),
     }
 }

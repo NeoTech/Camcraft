@@ -20,27 +20,27 @@ use super::{JetTabs, MAX_TABS};
 /// The shortest stretch (mm) of cut between two tabs.
 const MIN_RUN: f64 = 1e-3;
 
-fn invalid(why: String) -> GenError {
-    Voice::WATERJET.invalid(why)
+fn invalid(v: Voice, why: String) -> GenError {
+    v.invalid(why)
 }
 
 /// The door: count, width and positions, by name.
-pub(super) fn door(t: &JetTabs) -> Result<(), GenError> {
+pub(super) fn door(t: &JetTabs, v: Voice) -> Result<(), GenError> {
     if t.count == 0 || t.count > MAX_TABS {
-        return Err(invalid(format!("the tab count must be 1 to {MAX_TABS} (it states {}) - for no tabs, turn tabs off", t.count)));
+        return Err(invalid(v, format!("the tab count must be 1 to {MAX_TABS} (it states {}) - for no tabs, turn tabs off", t.count)));
     }
     if !(t.width.is_finite() && t.width > 0.0) {
-        return Err(invalid(format!("the tab width must be a positive number of mm (it states {})", t.width)));
+        return Err(invalid(v, format!("the tab width must be a positive number of mm (it states {})", t.width)));
     }
     if t.at.len() != t.count as usize {
-        return Err(invalid(format!(
+        return Err(invalid(v, format!(
             "the tab count is {} but {} tab position(s) are stated - each tab needs exactly one position",
             t.count,
             t.at.len()
         )));
     }
     if t.at.iter().any(|p| !(p.x.is_finite() && p.y.is_finite())) {
-        return Err(invalid("a tab position is not a finite point".into()));
+        return Err(invalid(v, "a tab position is not a finite point".into()));
     }
     Ok(())
 }
@@ -61,7 +61,7 @@ pub(super) struct Gap {
 /// Lay every tab on the ring nearest it. `rings[k]` is the jet-centre
 /// ring of contour `k` (counter-clockwise), `None` for an open run.
 /// Returns the gaps per contour, sorted along the ring.
-pub(super) fn lay(t: &JetTabs, rings: &[Option<Vec<Point2>>], r: f64) -> Result<Vec<Vec<Gap>>, GenError> {
+pub(super) fn lay(t: &JetTabs, rings: &[Option<Vec<Point2>>], r: f64, v: Voice) -> Result<Vec<Vec<Gap>>, GenError> {
     let mut out: Vec<Vec<Gap>> = vec![Vec::new(); rings.len()];
     let h = t.width * 0.5 + r;
     for (i, at) in t.at.iter().enumerate() {
@@ -73,10 +73,10 @@ pub(super) fn lay(t: &JetTabs, rings: &[Option<Vec<Point2>>], r: f64) -> Result<
             .map(|(k, (seg, foot))| (k, seg, foot, dist(*at, foot)))
             .min_by(|a, b| a.3.total_cmp(&b.3));
         let Some((k, seg, foot, off)) = best else {
-            return Err(invalid(format!("tab {no} has no closed contour to lie on - tabs hold closed contours only")));
+            return Err(invalid(v, format!("tab {no} has no closed contour to lie on - tabs hold closed contours only")));
         };
         if !(off.is_finite() && off <= r + t.width + 1e-9) {
-            return Err(invalid(format!(
+            return Err(invalid(v, format!(
                 "tab {no} at X{:.3} Y{:.3} stands {off:.3} mm from the nearest cut - place it on a contour's edge",
                 at.x, at.y
             )));
@@ -98,7 +98,7 @@ pub(super) fn lay(t: &JetTabs, rings: &[Option<Vec<Point2>>], r: f64) -> Result<
             let (g, next) = (gaps[i], gaps[(i + 1) % n]);
             let next_lo = if i + 1 == n { next.lo + len } else { next.lo };
             if next_lo - g.hi < MIN_RUN {
-                return Err(invalid(if n == 1 {
+                return Err(invalid(v, if n == 1 {
                     format!("tab {} leaves no contour to cut - its gap ({:.3} mm) takes the whole cut", g.no, 2.0 * g.half)
                 } else {
                     format!("tabs {} and {} overlap or leave no cut between them - spread them apart", g.no.min(next.no), g.no.max(next.no))

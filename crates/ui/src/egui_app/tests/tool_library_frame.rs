@@ -149,3 +149,23 @@ fn each_face_has_its_hint() {
         assert_eq!(face.has_back(), back, "{face:?}");
     }
 }
+
+/// The header and the footer are named frame pieces: each frame of the open
+/// window records one `frame_cost` span for each (crates/ui/AGENTS.md
+/// "Frame cost").
+#[test]
+fn the_header_and_the_footer_name_their_frame_cost() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::Button, "Tools").click();
+    h.run_steps(3);
+    let ((), costs) = crate::frame_cost::record(|| {
+        for _ in 0..4 {
+            h.step();
+        }
+    });
+    for name in [frame::HEADER_SPAN, frame::FOOTER_SPAN] {
+        let calls = costs.iter().find(|c| c.name == name).map_or(0, |c| c.count);
+        assert!(calls >= 4, "each frame records {name} ({calls} calls in 4 frames): {costs:?}");
+    }
+}

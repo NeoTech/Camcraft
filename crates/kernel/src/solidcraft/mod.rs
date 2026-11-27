@@ -4,7 +4,9 @@
 //! and only when the cache is provably this document's: every version is
 //! one we read, the cache's SHA-256 digests match the document and the
 //! payload, and the body slice decodes. Anything else is refused by name,
-//! never shown stale or in part.
+//! never shown stale or in part. From model cache format 10, SolidCraft's
+//! name for each face of the body is read beside it (#3915, `names`); names
+//! that do not fit are dropped with a note and never refuse the import.
 //! Provenance: the container, model-cache and final-state layout are read
 //! from Solidcraft's published source and documentation (tangency-labs/
 //! solidcraft, Apache-2.0: docs/design-container.md "Model cache",
@@ -16,6 +18,7 @@
 //! material consulted.
 
 mod cache;
+mod names;
 mod sha256;
 mod zip;
 
@@ -28,6 +31,7 @@ use crate::KernelError;
 use crate::solidcore_impl::SolidcoreKernel;
 use crate::solidcore_step::{RecordSource, StepSolid, build_record};
 
+pub use names::{MAX_NAME_BYTES, NAMES_FORMAT, SourceName};
 pub use sha256::{hex_digest, Sha256};
 pub use zip::looks_like_zip;
 
@@ -67,6 +71,12 @@ pub struct SolidcraftImport {
     pub units: String,
     /// The Solidcraft version that wrote the cache (recorded, not compared).
     pub app: String,
+    /// SolidCraft's name of each record face, in record order (`names[i]`
+    /// is `solid.record.faces[i]`), from a format-10 cache (#3915). `None`
+    /// for another format, or when the names do not fit (`names_note`).
+    pub names: Option<Vec<SourceName>>,
+    /// Why the names of a format-10 cache were not read; `None` otherwise.
+    pub names_note: Option<String>,
 }
 
 pub(crate) fn refused(detail: impl Into<String>) -> KernelError {
@@ -181,6 +191,12 @@ fn import_guarded(
     if stop.is_cancelled() {
         return Err(timed_out("decoding the final body"));
     }
+    // #3915: the names never refuse the import; a misfit is a note.
+    let (names, names_note) =
+        match names::read(&manifest, body.names.as_ref(), body.record.faces.len()) {
+            Ok(names) => (names, None),
+            Err(note) => (None, Some(note)),
+        };
     let solid =
         build_record(k, RecordSource::Solidcraft, body.name, body.record, Vec::new()).map_err(|(stage, why)| {
             if stop.is_cancelled() {
@@ -206,5 +222,7 @@ fn import_guarded(
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_owned(),
+        names,
+        names_note,
     })
 }

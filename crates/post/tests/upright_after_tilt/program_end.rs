@@ -9,7 +9,7 @@
 //! FANUC G49 cancel of tool length and tool centre point control; our own
 //! design notes only.
 
-use super::{dump_of, tilted_path, upright_path, word, Toolpath};
+use super::{dump_of, p, tilted_path, upright_path, word, Move, MoveKind, Toolpath, UP};
 use camcraft_post::post::{cnc, engine};
 use serde_json::json;
 
@@ -87,6 +87,45 @@ fn doosan_unclamps_and_clamps_a_at_program_end() {
     let zero = end.iter().position(|l| word(l, 'A').is_some_and(|v| v.abs() < 1e-9)).unwrap_or_else(|| panic!("A0:\n{prog}"));
     assert!(end[..zero].iter().any(|l| l.trim() == "M11"), "M11 before the A return:\n{prog}");
     assert!(end[zero + 1..].iter().any(|l| l.trim() == "M10"), "M10 after the A return:\n{prog}");
+}
+
+/// #4348: a tilted section whose last move stands upright again. No
+/// rotary is held off zero, so no return is written, but G43.4 is still
+/// active on the control. A reference return is not a G code that FANUC
+/// permits in G43.4 mode, so G49 comes first.
+fn tilt_back_to_zero_path() -> Toolpath {
+    let mut moves = tilted_path().moves;
+    moves.truncate(4); // down upright, then the one leaned feed
+    moves.push(Move::new(MoveKind::Feed, p(10.0, 0.0, 0.0), p(20.0, 0.0, 0.0), Some(500.0)).with_axis(UP));
+    moves.push(Move::new(MoveKind::Rapid, p(20.0, 0.0, 0.0), p(20.0, 0.0, 20.0), None).with_axis(UP));
+    Toolpath::new(moves)
+}
+
+fn assert_g49_before_end_retract(stem: &str, opts: serde_json::Value, retract: &str) {
+    let out = post(stem, &dump_of(&tilt_back_to_zero_path(), "LeanBack", 1), opts);
+    let prog = &out.program;
+    let lines: Vec<&str> = prog.lines().collect();
+    let arm = lines.iter().rposition(|l| l.contains("G43.4")).unwrap_or_else(|| panic!("{stem}: G43.4 arms TCPM:\n{prog}"));
+    let end = &lines[arm + 1..];
+    let up = end.iter().position(|l| l.contains(retract)).unwrap_or_else(|| panic!("{stem}: the program end retracts ({retract}):\n{prog}"));
+    assert!(end[..up].iter().any(|l| l.trim() == "G49"), "{stem} ({retract}): G49 cancels G43.4 before the end retract:\n{prog}");
+    assert!(end.iter().any(|l| l.trim() == "M30"), "{stem}: M30 ends the program:\n{prog}");
+    if retract == "G28" {
+        let tail: Vec<&str> = lines.iter().rev().take(6).copied().collect();
+        assert_eq!(tail, ["%", "M30", "G28 X0 Y0", "G91 G28 Z0", "G49", "M5"], "{stem}: the end order:\n{prog}");
+    }
+}
+
+#[test]
+fn fanuc_cancels_tcpm_before_program_end_after_a_tilt_back_to_zero() {
+    assert_g49_before_end_retract("fanuc", json!({}), "G28");
+    assert_g49_before_end_retract("fanuc", json!({ "safeRetract": "G53" }), "G53");
+}
+
+#[test]
+fn doosan_cancels_tcpm_before_program_end_after_a_tilt_back_to_zero() {
+    assert_g49_before_end_retract("doosan-dnm", json!({ "rotaryBrake": true }), "G28");
+    assert_g49_before_end_retract("doosan-dnm", json!({ "rotaryBrake": true, "safeRetract": "G53" }), "G53");
 }
 
 /// An upright program ends byte for byte as before: no G49, no angle.

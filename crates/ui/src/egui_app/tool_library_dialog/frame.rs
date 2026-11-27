@@ -30,6 +30,9 @@ pub(crate) const HINT_HOLDERS: &str = "Click a holder to see its facts and the t
 pub(crate) const HINT_HOLDER: &str = "Copy as user holder to make a holder that you can edit.";
 pub(crate) const HINT_APPLY: &str = "Apply is one undo step.";
 pub(crate) const HINT_COMPONENT: &str = "Apply component changes each tool built from it in one undo step.";
+/// The `frame_cost` names of the header and the footer (crates/ui/AGENTS.md "Frame cost").
+pub(crate) const HEADER_SPAN: &str = "ui/tool_library.header";
+pub(crate) const FOOTER_SPAN: &str = "ui/tool_library.footer";
 /// Why Duplicate is not offered yet (#4340).
 pub(crate) const NO_DUPLICATE: &str =
     "a copy must keep the holder and the component stack of the tool; until it can, add a tool with New tool…";
@@ -85,6 +88,7 @@ pub(crate) fn face(state: &State) -> Option<Face> {
 
 /// The header row: back, title, tabs, then the close button at the right.
 pub(crate) fn header(ui: &mut Ui, state: &State, face: &Face) -> Option<Ask> {
+    let _s = crate::frame_cost::span(HEADER_SPAN);
     let page = state.tool_library.as_ref().map_or(LibraryPage::Tools, |v| v.page);
     let mut ask = None;
     ui.horizontal(|ui| {
@@ -132,6 +136,7 @@ pub(crate) fn header(ui: &mut Ui, state: &State, face: &Face) -> Option<Ask> {
 /// The footer: the tool editor's refusal (if any), then the hint on the
 /// left and the face's buttons on the right.
 pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, component_changed: bool) -> Option<Ask> {
+    let _s = crate::frame_cost::span(FOOTER_SPAN);
     if matches!(face, Face::Tool { .. })
         && let Some(msg) = state.error_for(ErrorScope::Tool)
     {

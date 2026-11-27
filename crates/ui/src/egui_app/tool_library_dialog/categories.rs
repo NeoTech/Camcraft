@@ -53,7 +53,7 @@ pub(crate) fn category_of(kind: ToolKind) -> ToolCategory {
         ToolKind::Bore => ToolCategory::BoringBars,
         ToolKind::Turning | ToolKind::Groove | ToolKind::Thread | ToolKind::Form => ToolCategory::Turning,
         ToolKind::Probe => ToolCategory::Probes,
-        ToolKind::Torch | ToolKind::Waterjet | ToolKind::Electrode | ToolKind::Wire => ToolCategory::BeamAndWire,
+        ToolKind::Torch | ToolKind::Waterjet | ToolKind::Laser | ToolKind::Electrode | ToolKind::Wire => ToolCategory::BeamAndWire,
     }
 }
 

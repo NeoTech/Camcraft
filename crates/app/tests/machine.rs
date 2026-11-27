@@ -36,6 +36,9 @@ mod axis_support;
 mod axis_chain;
 #[path = "machine/axis_rows.rs"]
 mod axis_rows;
+// #4081: the laser machine kind and the laser head at the app doors.
+#[path = "machine/laser_kind.rs"]
+mod laser_kind;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()

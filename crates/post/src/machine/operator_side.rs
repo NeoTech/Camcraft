@@ -55,7 +55,7 @@ impl OperatorSide {
     pub const fn default_for(kind: Kind) -> Self {
         match kind {
             Kind::Lathe => Self::PlusY,
-            Kind::Mill | Kind::MillTurn | Kind::Plasma | Kind::Waterjet | Kind::WireEdm | Kind::SinkerEdm => Self::MinusY,
+            Kind::Mill | Kind::MillTurn | Kind::Plasma | Kind::Waterjet | Kind::Laser | Kind::WireEdm | Kind::SinkerEdm => Self::MinusY,
         }
     }
 
