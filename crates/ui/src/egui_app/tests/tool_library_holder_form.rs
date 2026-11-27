@@ -161,7 +161,7 @@ fn a_still_frame_searches_reads_and_checks_nothing() {
     assert_eq!(holder_drawing::builds(), b, "a still frame builds no drawing");
     draft(&mut h, |d| {
         if let Some(s) = d.shape.as_mut() {
-            s.gauge_len = 90.0;
+            s.gauge_len = 130.0;
         }
     });
     assert!(holder_form::checks() > c && holder_drawing::builds() > b, "a new value checks and draws again");
