@@ -8,7 +8,7 @@
 //! (`registry`).
 //!
 //! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, region_chain, selection, guide, guide::choice, guide::rings, guide::rows, guide::cover, guide::mark, guide::all, guide::medial, guide::trace, guide::helix, guide::lead, order, order::side, order::chain, order::stage, load, link, link::proof, link::route, link::approach, entry, entry::air, entry::column, entry::exit, entry::hole, entry::material, entry::proof, entry::room, entry::stage, plan, recipe}.
-//! Provenance: our own design record docs/decisions/4024-path-kernel-design.md.
+//! Provenance: our own design record RECOMMENDED.md `## #4024`.
 
 #[path = "laws/air_approach.rs"]
 mod air_approach;
@@ -66,6 +66,12 @@ mod link_rule;
 mod load;
 #[path = "laws/load_stage.rs"]
 mod load_stage;
+// #4407: the pins of "no silent recovery", outside `laws/` (another PR
+// edits that directory at the same time).
+#[path = "no_silent/entry.rs"]
+mod no_silent_entry;
+#[path = "no_silent/exit.rs"]
+mod no_silent_exit;
 #[path = "laws/order.rs"]
 mod order;
 #[path = "laws/order_link.rs"]
