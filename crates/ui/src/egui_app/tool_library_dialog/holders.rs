@@ -9,8 +9,14 @@
 //! document (its component table) head the list; a click opens one in
 //! the component editor, and a built-in holder's view copies it as a
 //! user holder.
-//! Frame cost: the library rows are built once for each thread; a frame
-//! reads the document's holder references and formats the rows.
+//! #4338 (U12): one header row - the search (taper, clamp, bore or collet
+//! size and name, each term must match; "N of M holders"; Esc clears it),
+//! New holder, Import and Export. New holder makes a user holder of the
+//! machine's taper and opens it in the holder form (`holder_form`).
+//! Frame cost: the library rows and their search words are built once for
+//! each thread; the search result is kept for its input
+//! (`state::holder_hits`); a frame reads the document's holder references
+//! and formats the rows.
 //! Provenance: our own list over our own holder library; no HSMWorks
 //! material involved.
 
@@ -18,13 +24,16 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use egui::{RichText, Ui};
+use egui::{Key, RichText, Ui, WidgetInfo, WidgetType};
 
-use camcraft_app::holder_library::{self, Clamp, HolderEntry};
+use camcraft_app::component::ComponentKind;
+use camcraft_app::component_library::BUILTIN_PREFIX;
+use camcraft_app::connection_code::ConnectionCode;
+use camcraft_app::holder_library::{self, Clamp, ER_SIZES, HolderEntry};
 use camcraft_app::tool_body;
 use camcraft_app::units::{self, Unit};
 
-use crate::state::{ComponentGroup, ErrorScope, State};
+use crate::state::{ComponentAction, ComponentGroup, ComponentRow, ErrorScope, HolderHits, HolderItem, State, holder_hits};
 
 /// The label of the row that shows every taper.
 pub(crate) const ALL: &str = "All holders";
@@ -37,6 +46,15 @@ pub(crate) const READ_ONLY: &str =
 pub(crate) const USER_HOLDERS: &str = "USER HOLDERS";
 /// #3898: the button on a built-in holder that makes a user holder of it.
 pub(crate) const COPY: &str = "Copy as user holder";
+/// #4338: the search box (its AccessKit name) and its hint.
+pub(crate) const SEARCH: &str = "Holder search";
+const SEARCH_HINT: &str = "Search taper, clamp, size or name";
+/// #4338: the header row's buttons.
+pub(crate) const NEW: &str = "New holder…";
+pub(crate) const IMPORT: &str = "Import…";
+pub(crate) const EXPORT: &str = "Export…";
+/// Why Import and Export are not offered yet.
+pub(crate) const NO_FILES: &str = "holder files follow in #4389";
 /// The column heads.
 pub(crate) const HEADS: [&str; 7] = ["Name", "Taper", "Clamp", "Clamps Ø", "Gauge length", "Largest Ø", "Used by"];
 const TAPER_W: f32 = 170.0;
@@ -52,6 +70,44 @@ pub(crate) struct Row {
 
 thread_local! {
     static ROWS: OnceCell<Rc<Vec<Row>>> = const { OnceCell::new() };
+    static ITEMS: OnceCell<Rc<Vec<HolderItem>>> = const { OnceCell::new() };
+}
+
+/// The library rows' search words, in the rows' order (built once).
+pub(crate) fn items() -> Rc<Vec<HolderItem>> {
+    ITEMS.with(|i| {
+        Rc::clone(i.get_or_init(|| {
+            Rc::new(
+                rows()
+                    .iter()
+                    .map(|r| {
+                        let (from, to) = super::holder_view::clamps(&r.entry);
+                        let words = format!("{} {} {}", r.name, group_name(r.taper), clamp_text(&r.entry)).to_lowercase();
+                        HolderItem { words, from, to, taper: r.taper.to_owned() }
+                    })
+                    .collect(),
+            )
+        }))
+    })
+}
+
+/// A document holder or adapter as the search reads it: its name, its
+/// sides and the shank range its workpiece side takes.
+fn user_item((r, _, _): &ComponentRow) -> Option<HolderItem> {
+    if !matches!(crate::state::group_of(&r.component), ComponentGroup::Holders | ComponentGroup::Adapters) {
+        return None;
+    }
+    let (machine, tool) = super::components::sides(&r.component);
+    let (from, to) = match r.component.kind() {
+        ComponentKind::AdaptiveItem { csw: ConnectionCode::Er { size }, .. } => {
+            let name = format!("ER{size}");
+            ER_SIZES.iter().find(|e| e.name == name).map_or((-1.0, -1.0), |e| (e.min_bore, e.max_bore))
+        }
+        ComponentKind::AdaptiveItem { csw: ConnectionCode::Weldon { d } | ConnectionCode::Cylindrical { d }, .. } => (*d, *d),
+        _ => (-1.0, -1.0),
+    };
+    let words = format!("{} {machine} {tool}", r.component.name()).to_lowercase();
+    Some(HolderItem { words, from, to, taper: machine })
 }
 
 /// The library's rows, in the library's order (built once).
@@ -123,7 +179,23 @@ pub(crate) fn range_text(e: &HolderEntry, u: Unit) -> String {
 
 /// The largest diameter of the holder: the flange's or the nose's.
 pub(crate) fn largest_d(e: &HolderEntry) -> f64 {
-    e.taper.map_or(0.0, |t| t.flange_d).max(e.body_r() * 2.0)
+    super::holder_drawing::largest_d(e)
+}
+
+/// The built-in holder New holder copies: the machine taper's ER32 chuck
+/// (or its first holder), else BT40 ER32.
+pub(crate) fn new_holder_id(rows: &[Row], machine: Option<&str>) -> String {
+    let of = |t: &str| {
+        let mine: Vec<&Row> = rows.iter().filter(|r| r.taper.eq_ignore_ascii_case(t)).collect();
+        mine.iter().find(|r| matches!(r.entry.clamp, Clamp::Er(er) if er.name == "ER32")).or(mine.first()).map(|r| r.name.clone())
+    };
+    let name = machine.and_then(of).unwrap_or_else(|| "BT40 ER32".to_owned());
+    format!("{BUILTIN_PREFIX}holder:{name}")
+}
+
+/// "N of M holders".
+pub(crate) fn count_text(hits: &HolderHits) -> String {
+    format!("{} of {} holders", hits.shown(), hits.total())
 }
 
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
@@ -133,9 +205,12 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     let Some(view) = state.tool_library.as_ref().map(|v| v.holders.clone()) else {
         return;
     };
+    let derived = state.component_derived(None);
+    let hits = holder_hits(&view.filter, view.taper.as_deref(), &items(), &derived.rows, user_item);
     let mut pick_taper = None;
     let mut open = None;
     let mut edit = None;
+    let mut new = false;
     let mut filter = view.filter.clone();
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
@@ -144,15 +219,13 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         });
         ui.separator();
         ui.vertical(|ui| {
-            let label = ui.label("Holder filter");
-            ui.add(egui::TextEdit::singleline(&mut filter).desired_width(ui.available_width())).labelled_by(label.id);
-            ui.weak(READ_ONLY);
+            new = header_row(ui, &mut filter, &hits);
             if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
                 super::super::error_text::error_text(ui, super::super::colorvision::text_inks(ui, &state.world).error, &msg);
             }
-            edit = user_holders(ui, state, &filter);
+            edit = user_holders(ui, &derived.rows, &hits);
             egui::ScrollArea::both().id_salt("tool_library_holders").auto_shrink([false, false]).show(ui, |ui| {
-                open = table(ui, &rows, &users, machine.as_deref(), &view.taper, &filter, state.units());
+                open = table(ui, &rows, &users, machine.as_deref(), &hits, state.units());
             });
         });
     });
@@ -168,32 +241,47 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     if let Some(id) = edit {
         super::component_edit::open(state, &id);
     }
+    if new {
+        state.queue_component(ComponentAction::CopyAsUser { id: new_holder_id(&rows, machine.as_deref()) });
+    }
+}
+
+/// #4338: the search box with its count, then New holder, Import and
+/// Export. Esc in the box clears it. Gives whether New holder was clicked.
+fn header_row(ui: &mut Ui, filter: &mut String, hits: &HolderHits) -> bool {
+    let mut new = false;
+    ui.horizontal(|ui| {
+        let w = (ui.available_width() - 420.0).max(140.0);
+        let r = ui.add(egui::TextEdit::singleline(filter).hint_text(SEARCH_HINT).desired_width(w));
+        r.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, SEARCH));
+        let r = r.on_hover_text("each word must match: the taper, the clamp, a bore or collet size, the name (\"BT40 ER32\", \"shrink 12\"); Esc clears");
+        if (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(Key::Escape)) {
+            filter.clear();
+        }
+        ui.weak(count_text(hits));
+        new = ui.button(NEW).on_hover_text("a user holder of the machine's taper, in this document, that you can edit (one undo step)").clicked();
+        let _ = ui.add_enabled(false, egui::Button::new(IMPORT)).on_disabled_hover_text(NO_FILES);
+        let _ = ui.add_enabled(false, egui::Button::new(EXPORT)).on_disabled_hover_text(NO_FILES);
+    });
+    new
 }
 
 /// #3898: the document's holders and adapters (its component table), each
 /// with its library status and the tools whose stack uses it. A click on
 /// a name opens it in the component editor. Gives the id to edit.
-fn user_holders(ui: &mut Ui, state: &mut State, filter: &str) -> Option<String> {
-    let d = state.component_derived(None);
-    let f = filter.to_lowercase();
-    let shown: Vec<_> = d
-        .rows
-        .iter()
-        .filter(|(r, _, _)| matches!(crate::state::group_of(&r.component), ComponentGroup::Holders | ComponentGroup::Adapters))
-        .filter(|(r, _, _)| r.component.name().to_lowercase().contains(&f))
-        .collect();
-    ui.label(RichText::new(USER_HOLDERS).small().weak());
-    if shown.is_empty() {
-        ui.weak("The document holds no holder component. Copy a built-in holder, or add one from My library.");
+fn user_holders(ui: &mut Ui, rows: &[ComponentRow], hits: &HolderHits) -> Option<String> {
+    // The document holds no holder: the list shows the library alone.
+    if hits.user_total == 0 {
         return None;
     }
+    ui.label(RichText::new(USER_HOLDERS).small().weak());
     let mut edit = None;
     egui::Grid::new("tool_library_user_holders").striped(true).show(ui, |ui| {
         for h in ["Name", "Machine side", "Tool side", "Library", "Used by"] {
             ui.label(RichText::new(h).strong());
         }
         ui.end_row();
-        for (r, status, users) in shown {
+        for (r, status, users) in hits.user.iter().filter_map(|n| rows.get(*n)) {
             if ui.selectable_label(false, r.component.name()).on_hover_text("edit this holder").clicked() {
                 edit = Some(r.component.id().to_owned());
             }
@@ -201,8 +289,7 @@ fn user_holders(ui: &mut Ui, state: &mut State, filter: &str) -> Option<String> 
             ui.label(machine);
             ui.label(tool);
             ui.label(super::components::status_text(status));
-            let n = users.len();
-            ui.label(if n == 1 { "1 tool".to_owned() } else { format!("{n} tools") });
+            ui.label(super::holder_view::count(users.len()));
             ui.end_row();
         }
     });
@@ -243,17 +330,9 @@ fn taper_column(ui: &mut Ui, rows: &[Row], machine: Option<&str>, picked: Option
     out
 }
 
-/// The holder rows, grouped by taper; gives the name the user opened.
-fn table(
-    ui: &mut Ui,
-    rows: &[Row],
-    users: &HashMap<String, Vec<String>>,
-    machine: Option<&str>,
-    taper: &Option<String>,
-    filter: &str,
-    u: Unit,
-) -> Option<String> {
-    let f = filter.to_lowercase();
+/// The holder rows the search shows, grouped by taper; gives the name the
+/// user opened.
+fn table(ui: &mut Ui, rows: &[Row], users: &HashMap<String, Vec<String>>, machine: Option<&str>, hits: &HolderHits, u: Unit) -> Option<String> {
     let mut open = None;
     egui::Grid::new("tool_library_holder_rows").striped(true).show(ui, |ui| {
         for h in HEADS {
@@ -261,10 +340,7 @@ fn table(
         }
         ui.end_row();
         for t in tapers(rows, machine) {
-            if taper.as_deref().is_some_and(|p| p != t) {
-                continue;
-            }
-            let shown: Vec<&Row> = rows.iter().filter(|r| r.taper == t && r.name.to_lowercase().contains(&f)).collect();
+            let shown: Vec<&Row> = hits.library.iter().filter_map(|n| rows.get(*n)).filter(|r| r.taper == t).collect();
             if shown.is_empty() {
                 continue;
             }
@@ -281,7 +357,7 @@ fn table(
                 ui.label(units::len(r.entry.gauge_len, u, 2));
                 ui.label(units::len(largest_d(&r.entry), u, 2));
                 let n = users.get(&tool_body::holder_key(&r.name)).map_or(0, Vec::len);
-                ui.label(if n == 1 { "1 tool".to_owned() } else { format!("{n} tools") });
+                ui.label(super::holder_view::count(n));
                 ui.end_row();
             }
         }

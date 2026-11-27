@@ -168,7 +168,7 @@ impl Edm {
         match k {
             Kind::WireEdm => !sinker,
             Kind::SinkerEdm => !wire,
-            Kind::Mill | Kind::Lathe | Kind::MillTurn | Kind::Plasma | Kind::Waterjet => false,
+            Kind::Mill | Kind::Lathe | Kind::MillTurn | Kind::Plasma | Kind::Waterjet | Kind::Laser => false,
         }
     }
 }

@@ -11,12 +11,14 @@ mod domain;
 mod error;
 mod frame;
 mod interp;
+mod klartext;
 mod lexer;
 mod motion;
 mod section;
 mod tooling;
 pub mod types;
 
+pub use klartext::{parse_klartext, parse_klartext_with, KlartextOptions};
 pub use domain::{MAX_ABS_MM, MAX_DWELL_S, MAX_FEED_MM_MIN};
 pub use types::{
     ArcCenterMode, CoolantState, CycleReturnMode, CycleType, Dialect, DistanceMode, DwellEvent,

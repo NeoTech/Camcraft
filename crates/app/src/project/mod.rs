@@ -119,6 +119,8 @@ mod entity;
 // #2463: a linked model's source file and its digest.
 mod source_dto;
 pub use source_dto::SourceDto;
+// #3915: a `.sc` model's source face record (no version step).
+mod source_faces_dto;
 // #1339: who vouched for a mesh of unknown fidelity.
 mod vouch_dto;
 pub use vouch_dto::VouchDto;

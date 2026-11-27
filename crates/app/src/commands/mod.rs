@@ -91,6 +91,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #3915: picks follow their faces by SolidCraft name at a re-import.
+pub mod update_model_follow;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
 // #1339: a person vouches for a mesh of unknown fidelity.

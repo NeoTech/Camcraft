@@ -208,8 +208,8 @@ that machine can run. Mill-turning is a lathe with live tooling, not
 turning on a mill: see [Mill-turn](@/guide/check-and-post/machines.md#mill-turn). CamCraft also ships machine files for several
 Tormach mills, and **View > Panels > Machines** browses, validates and
 edits `.mch` machine files. The pane's kind filter offers **All** and every
-machine kind: Mill, Lathe, Mill-turn, Plasma, Waterjet, Wire EDM and Sinker
-EDM. New blank takes its kind from the same list, and is off under **All**. See [Machine types](@/guide/check-and-post/machines.md) for what each kind allows.
+machine kind: Mill, Lathe, Mill-turn, Plasma, Waterjet, Laser, Wire EDM and
+Sinker EDM. New blank takes its kind from the same list, and is off under **All**. See [Machine types](@/guide/check-and-post/machines.md) for what each kind allows.
 
 A machine file states facts such as axis travel, spindle speed range and
 rigid-tapping support. CamCraft checks a program against the facts the

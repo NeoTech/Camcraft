@@ -75,7 +75,7 @@ fn opened_rotary(kind: usize) -> State {
 
 /// The group's unnamed header checkbox: the one on the title's row.
 fn group_checkbox<'a>(h: &'a Harness<'static, State>) -> egui_kittest::Node<'a> {
-    let row = h.get_by_label(GROUP).rect();
+    let row = h.get_by_role_and_label(egui::accesskit::Role::Label, GROUP).rect();
     h.query_all_by(move |n| n.role() == Role::CheckBox)
         .find(|n| {
             let c = n.rect().center().y;
@@ -109,7 +109,7 @@ fn live_axis(state: &State) -> Option<[f64; 3]> {
 /// The control on `label`'s row: the node of `role` whose vertical
 /// centre falls inside the label's rect (the dialog's own `on_row`).
 fn on_row<'a>(h: &'a Harness<'static, State>, label: &str, role: Role) -> egui_kittest::Node<'a> {
-    let lab = h.get_by_label(label).rect();
+    let lab = h.get_by_role_and_label(egui::accesskit::Role::Label, label).rect();
     h.query_all_by(move |n| n.role() == role)
         .find(|n| {
             let c = n.rect().center().y;
@@ -177,7 +177,7 @@ fn the_help_text_follows_the_resolver_machine_line_first() {
     assert!(h.query_by_label("Direction Z").is_some(), "the armed group draws its rows");
     h.ctx
         .style_mut_of(h.ctx.theme(), |s| s.interaction.tooltip_delay = 0.0);
-    h.hover_at(h.get_by_label("Direction Z").rect().center());
+    h.hover_at(h.get_by_role_and_label(egui::accesskit::Role::Label, "Direction Z").rect().center());
     h.run_steps(2);
     let texts = painted_texts(&h);
     assert!(

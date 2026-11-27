@@ -100,6 +100,7 @@ var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none 
 var smoothMode = "";        // #616: "finish" or "rough"
 var smoothActive = false;   // #616: this section wrote its smoothing words
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
+var tcpmLeft = false;      // #4348: the last section ended with G43.4 still active (no G49 written since)
 var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
 var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a G49 turns nothing
@@ -808,7 +809,10 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", wcsWord, "G40", "G49", "G80"]);
+  // #4346: the control can keep G18 / G19 or G95 from an earlier program
+  // or MDI (B-64604EN-2, the power-on plane and feed mode) - state both.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
+  planeG = 17;
   uprightAfterTilt();
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
@@ -898,7 +902,9 @@ function endPreamble() {
   afterOp();
   // The next preamble carries G49, which cancels TCPM too - so the
   // arm and the angle memory reset here, and a later tilt re-arms by
-  // commanding all three words (stage D).
+  // commanding all three words (stage D). At the program end there is
+  // no next preamble: onClose reads tcpmLeft (#4348).
+  tcpmLeft = tcpmOn;
   tcpmOn = false;
   lastA = 0; lastB = 0; lastC = 0;
 }
@@ -1389,6 +1395,9 @@ function onClose() {
   // #504: a trip home with nothing written after it (a trailing Go
   // home) already is the program-end home - written once, not twice.
   if (!uprightAtEnd() && linesWritten() !== homedAt) {
+    // #4348: a reference return is not permitted in G43.4 mode (FANUC
+    // 30i B-63944EN/02): a section that tilted back to zero left TCPM on.
+    if (tcpmLeft) block(["G49"]);
     retractHome(true);
   }
   var u = endUnitsWord();

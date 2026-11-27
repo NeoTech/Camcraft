@@ -1,12 +1,15 @@
 //! Solidcraft `.sc` design import (#1456): the kernel reads the design's
 //! cached final body (`camcraft_kernel::solidcraft`) and meshes it with the
 //! machining mesh at the importer's chord cap; this module turns that mesh
-//! into geometry facets and preserves every kernel refusal reason.
+//! into geometry facets and preserves every kernel refusal reason. From a
+//! format-10 cache it also hands out SolidCraft's name of each record face
+//! over the facets it became (#3915, `source_faces`).
 //! Provenance: our own glue over camcraft-kernel's public API (its reader
 //! follows Solidcraft's published source, tangency-labs, Apache-2.0); no
 //! HSMWorks material consulted.
 
 use crate::geometry::Mesh;
+use crate::source_faces::SourceFaces;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SolidcraftError {
@@ -28,9 +31,10 @@ pub use camcraft_kernel::solidcraft::hex_digest as sha256_hex;
 pub use camcraft_kernel::solidcraft::Sha256;
 
 /// The final body of a Solidcraft design as a watertight mesh, in mm,
-/// with what the import did (one note each). At most `budget` facets.
+/// with what the import did (one note each) and, from a format-10 cache,
+/// SolidCraft's names over its facets (#3915). At most `budget` facets.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn parse(data: &[u8], budget: usize, chord_cap: f64) -> Result<(Mesh, Vec<String>), SolidcraftError> {
+pub fn parse(data: &[u8], budget: usize, chord_cap: f64) -> Result<(Mesh, Vec<String>, Option<SourceFaces>), SolidcraftError> {
     use camcraft_kernel::machining_mesh::machining_mesh;
     use camcraft_kernel::solidcore_impl::SolidcoreKernel;
     use camcraft_kernel::solidcraft::import_solidcraft;
@@ -50,12 +54,33 @@ pub fn parse(data: &[u8], budget: usize, chord_cap: f64) -> Result<(Mesh, Vec<St
     if !design.design.is_empty() {
         notes.insert(0, format!("Solidcraft design '{}': the cached final body only (no parameters or feature history)", design.design));
     }
-    Ok((Mesh::from_facets(facets), notes))
+    if let Some(note) = &design.names_note {
+        notes.push(format!("Solidcraft: {note}"));
+    }
+    let faces = design.names.and_then(|names| source_faces(names, &mesh.tri_face, facets.len(), &mut notes));
+    Ok((Mesh::from_facets(facets), notes, faces))
+}
+
+/// SolidCraft's names over the facets (#3915): facet `i` came from record
+/// face `tri_face[i]` (`push_facets` keeps the triangle order). A record
+/// that does not tile the facets is dropped with a note; names never
+/// refuse the import.
+#[cfg(not(target_arch = "wasm32"))]
+fn source_faces(names: Vec<camcraft_kernel::solidcraft::SourceName>, tri_face: &[u32], facets: usize, notes: &mut Vec<String>) -> Option<SourceFaces> {
+    let names = names
+        .into_iter()
+        .map(|n| crate::source_faces::FaceName { name: n.name, verified: n.verified, former: n.former })
+        .collect();
+    let record = SourceFaces::from_tri_face(tri_face, names).filter(|r| tri_face.len() == facets && r.tiles(facets));
+    if record.is_none() {
+        notes.push("Solidcraft: the face names do not fit the mesh's facets; they were not kept".into());
+    }
+    record
 }
 
 /// The browser build keeps solidcore out of its wasm: a `.sc` is refused
 /// by name there.
 #[cfg(target_arch = "wasm32")]
-pub fn parse(_data: &[u8], _budget: usize, _chord_cap: f64) -> Result<(Mesh, Vec<String>), SolidcraftError> {
+pub fn parse(_data: &[u8], _budget: usize, _chord_cap: f64) -> Result<(Mesh, Vec<String>, Option<SourceFaces>), SolidcraftError> {
     Err(SolidcraftError::Refused("Solidcraft designs open in the desktop app only, not in the browser build".into()))
 }

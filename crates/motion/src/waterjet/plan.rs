@@ -25,8 +25,8 @@ pub(super) struct Plan {
     pub comp: Option<(CompSide, Vec<Piece>)>,
 }
 
-fn invalid(why: String) -> GenError {
-    Voice::WATERJET.invalid(why)
+fn invalid(v: Voice, why: String) -> GenError {
+    v.invalid(why)
 }
 
 /// The waste side's normal for travel `t`: a hole's waste is its
@@ -58,8 +58,8 @@ fn leads(
     let tries = if p.control_comp { 1 } else { LEAD_TRIES };
     let ask_in = LeadAsk { s, t: t_in, n: waste(t_in, inner, ccw), len: p.lead_in, straight, entry: true };
     let ask_out = LeadAsk { s: e, t: t_out, n: waste(t_out, inner, ccw), len: p.lead_out, straight, entry: false };
-    let (pierce, lead_in) = lead(ask_in, forbidden, tries, notes, ("waterjet", label)).ok_or("in")?;
-    let (_, lead_out) = lead(ask_out, forbidden, tries, notes, ("waterjet", label)).ok_or("out")?;
+    let (pierce, lead_in) = lead(ask_in, forbidden, tries, notes, (p.voice.short, label)).ok_or("in")?;
+    let (_, lead_out) = lead(ask_out, forbidden, tries, notes, (p.voice.short, label)).ok_or("out")?;
     Ok((pierce, lead_in, lead_out))
 }
 
@@ -92,9 +92,9 @@ pub(super) fn closed(c: &Contour, ring: &[Point2], p: &WaterjetParams, forbidden
             Ok(Plan { pierce, lit, comp })
         }
         Err(end) if inner => tight_hole(ring, (ccw, t_out), p, forbidden, notes, label).map_err(|e| {
-            invalid(format!("{label}: the lead-{end} finds no room beside the part, and {e}"))
+            invalid(p.voice, format!("{label}: the lead-{end} finds no room beside the part, and {e}"))
         }),
-        Err(end) => Err(invalid(format!(
+        Err(end) => Err(invalid(p.voice, format!(
             "{label}: the lead-{end} finds no room beside the part - shorten it, or cut this contour with the leads off"
         ))),
     }
@@ -116,14 +116,15 @@ fn tight_hole(ring: &[Point2], (ccw, _t_out): (bool, Point2), p: &WaterjetParams
     lit.extend(ride(&walk));
     let mut quiet = Vec::new();
     let ask_out = LeadAsk { s, t: t_out, n: waste(t_out, true, ccw), len: p.lead_out, straight: true, entry: false };
-    if let Some((_, out)) = lead(ask_out, forbidden, LEAD_TRIES, &mut quiet, ("waterjet", label)) {
+    if let Some((_, out)) = lead(ask_out, forbidden, LEAD_TRIES, &mut quiet, (p.voice.short, label)) {
         lit.extend(out);
     }
     notes.push(format!(
-        "waterjet: {label} is a tight hole - pierced at its centre and led in straight, its arc leads have no room"
+        "{}: {label} is a tight hole - pierced at its centre and led in straight, its arc leads have no room",
+        p.voice.short
     ));
     if p.control_comp {
-        notes.push(format!("waterjet: {label} (tight hole) rides the computer's kerf offset - G41/G42 needs room for its leads"));
+        notes.push(format!("{}: {label} (tight hole) rides the computer's kerf offset - G41/G42 needs room for its leads", p.voice.short));
     }
     Ok(Plan { pierce: cpt, lit, comp: None })
 }
@@ -140,7 +141,8 @@ pub(super) fn tabbed(c: &Contour, stretches: &[Vec<Point2>], p: &WaterjetParams,
     let ccw = ccw_of(c.role, p);
     if p.lead_shape == LeadShape::Arc && (p.lead_in > 0.0 || p.lead_out > 0.0) {
         notes.push(format!(
-            "waterjet: {label} (tabbed) is led in and out straight - an arc lead beside a tab would cut into the tab's bridge"
+            "{}: {label} (tabbed) is led in and out straight - an arc lead beside a tab would cut into the tab's bridge",
+            p.voice.short
         ));
     }
     let straight = WaterjetParams { lead_shape: LeadShape::Straight, ..p.clone() };
@@ -152,14 +154,14 @@ pub(super) fn tabbed(c: &Contour, stretches: &[Vec<Point2>], p: &WaterjetParams,
         let (t_in, t_out) = (unit(s, run[1]), unit(run[n - 2], e));
         let here = format!("{label} stretch {}", j + 1);
         let (pierce, lead_in, lead_out) = leads((s, t_in), (e, t_out), (inner, ccw), p, forbidden, notes, &here)
-            .map_err(|end| invalid(format!("{here}: the lead-{end} beside a tab finds no room - move the tab, or shorten the lead")))?;
+            .map_err(|end| invalid(p.voice, format!("{here}: the lead-{end} beside a tab finds no room - move the tab, or shorten the lead")))?;
         let mut lit = lead_in;
         lit.extend(ride(run));
         lit.extend(lead_out);
         out.push(Plan { pierce, lit, comp: None });
     }
     if p.control_comp {
-        notes.push(format!("waterjet: {label} (tabbed) rides the computer's kerf offset - each stretch is too short a G41/G42 span to trust"));
+        notes.push(format!("{}: {label} (tabbed) rides the computer's kerf offset - each stretch is too short a G41/G42 span to trust", p.voice.short));
     }
     Ok(out)
 }
@@ -169,17 +171,17 @@ pub(super) fn open(c: &Contour, p: &WaterjetParams, notes: &mut Vec<String>, lab
     let r = p.kerf * 0.5;
     let pts = match p.open_side {
         OpenSide::Center => c.pts.clone(),
-        OpenSide::Left => offset(&c.pts, r, p.cut_z, Voice::WATERJET)?,
-        OpenSide::Right => offset(&c.pts, -r, p.cut_z, Voice::WATERJET)?,
+        OpenSide::Left => offset(&c.pts, r, p.cut_z, p.voice)?,
+        OpenSide::Right => offset(&c.pts, -r, p.cut_z, p.voice)?,
     };
     let Some((&pierce, rest)) = pts.split_first() else {
-        return Err(invalid(format!("{label} has no length - there is nothing to cut along")));
+        return Err(invalid(p.voice, format!("{label} has no length - there is nothing to cut along")));
     };
     let side = match p.open_side {
         OpenSide::Center => "on its centre line",
         OpenSide::Left => "with the kerf left of its travel",
         OpenSide::Right => "with the kerf right of its travel",
     };
-    notes.push(format!("waterjet: {label} is an open run, cut {side} - pierced at its start, no leads, not judged by the kerf law"));
+    notes.push(format!("{}: {label} is an open run, cut {side} - pierced at its start, no leads, not judged by the kerf law", p.voice.short));
     Ok(Plan { pierce, lit: rest.iter().copied().map(Piece::Line).collect(), comp: None })
 }

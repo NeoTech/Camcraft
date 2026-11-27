@@ -3,8 +3,12 @@
 //! with its library status and its users, the ids that fit the
 //! "compatible" filter, and for the stack draft: what "Add component"
 //! offers, the resolver's values (gauge length, cutting diameter, corner
-//! radius) or its refusal, and for each row the parts that "Swap" offers
-//! (only the replacements with which the whole stack still resolves). Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
+//! radius; for a lathe tool the nose radius, the orientation and the
+//! insert's inscribed circle) or its refusal, and for each row the parts
+//! that "Swap" offers (only the replacements with which the whole stack
+//! still resolves). A lathe tool's empty stack offers only the roots that
+//! the lathe resolver takes (a rectangular shank or a round bar shank,
+//! #3643); a spindle tool's empty stack leaves those out. Frame cost (`crates/ui/AGENTS.md`): State owns the caches, with
 //! their input. The component table and the stacks that use each row are
 //! read once for each document version; a set is built again only when
 //! that read differs (`rev`), the library read changes, or the filter,
@@ -20,8 +24,11 @@ use std::rc::Rc;
 use camcraft_app::component::{ComponentKind, CuttingItem, ToolComponent};
 use camcraft_app::component_fit::{compatible_children, compatible_parents};
 use camcraft_app::component_library::{SyncStatus, sync_status};
+use camcraft_app::connection_code::ConnectionCode;
+use camcraft_app::orientation;
 use camcraft_app::schema::{AssemblyLink, DocumentComponent};
 use camcraft_app::tool_assembly::{self as ta, Mount};
+use camcraft_app::tool_body::LATHE_HELD;
 use camcraft_app::tools::Tool;
 
 use super::State;
@@ -46,6 +53,18 @@ pub struct StackValues {
     pub diameter: f64,
     /// The corner radius (mm).
     pub corner_r: f64,
+    /// For a lathe-held tool, what the lathe resolver gives (#3643).
+    pub lathe: Option<LatheValues>,
+}
+
+/// The values a resolved lathe stack gives its tool: `diameter` above
+/// holds the insert's inscribed circle and the gauge length is 0 (#4278).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LatheValues {
+    /// The insert's nose radius (mm).
+    pub nose_radius: f64,
+    /// The tip orientation code (1-8), stated or derived.
+    pub orientation: Option<u8>,
 }
 
 /// One replacement that "Swap" offers: its label and the whole new stack.
@@ -104,17 +123,39 @@ impl ComponentViews {
     }
 }
 
-/// The parts that can go on the stack next, with the link each one adds:
-/// the holding parts for an empty stack, else the parts that fit the last
-/// holding part (a cutting item holds nothing).
+/// The parts that can go on a spindle tool's stack next ([`candidates_for`]).
 #[must_use]
 pub fn candidates(links: &[AssemblyLink], table: &[DocumentComponent]) -> Vec<(String, AssemblyLink)> {
+    candidates_for(links, table, false)
+}
+
+/// Whether row `r` can start the stack of a lathe tool (`lathe`) or of
+/// a spindle tool. The lathe resolver takes a rectangular shank or a round
+/// bar shank as its root and needs an insert after it; a spindle stack
+/// refuses a row with a lathe body, and a rectangular shank is a lathe
+/// holder's.
+fn starts(r: &DocumentComponent, lathe: bool) -> bool {
+    let rect = matches!(r.component.mcs(), Some(ConnectionCode::RectShank { .. }));
+    if lathe {
+        let bar = matches!(r.component.mcs(), Some(ConnectionCode::Cylindrical { .. } | ConnectionCode::Weldon { .. }));
+        (rect || bar) && !matches!(r.component.kind(), ComponentKind::CuttingItem(_))
+    } else {
+        !rect && r.lathe_body.is_none() && !matches!(r.component.kind(), ComponentKind::CuttingItem(CuttingItem::Insert(_)))
+    }
+}
+
+/// The parts that can go on the stack next, with the link each one adds:
+/// the holding parts for an empty stack (the lathe roots for a lathe
+/// tool), else the parts that fit the last holding part (a cutting item
+/// holds nothing).
+#[must_use]
+pub fn candidates_for(links: &[AssemblyLink], table: &[DocumentComponent], lathe: bool) -> Vec<(String, AssemblyLink)> {
     let comps: Vec<&ToolComponent> = table.iter().map(|r| &r.component).collect();
     if links.is_empty() {
-        return comps
-            .into_iter()
-            .filter(|c| !matches!(c.kind(), ComponentKind::CuttingItem(CuttingItem::Insert(_))))
-            .map(|c| (c.name().to_owned(), AssemblyLink { component: c.id().to_owned(), mount: None }))
+        return table
+            .iter()
+            .filter(|r| starts(r, lathe))
+            .map(|r| (r.component.name().to_owned(), AssemblyLink { component: r.component.id().to_owned(), mount: None }))
             .collect();
     }
     let parent = links.iter().enumerate().rev().find_map(|(i, l)| {
@@ -140,7 +181,18 @@ pub fn candidates(links: &[AssemblyLink], table: &[DocumentComponent]) -> Vec<(S
 }
 
 fn values(name: &str, tool: &Tool, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<StackValues, String> {
-    ta::derive(name, tool, links, table).map(|d| StackValues { gauge_len: d.gauge_len, diameter: d.tool.diameter, corner_r: d.tool.corner_r })
+    ta::derive(name, tool, links, table).map(|d| {
+        let lathe = is_lathe(tool).then(|| LatheValues {
+            nose_radius: d.tool.nose_radius,
+            orientation: d.tool.orientation.or_else(|| orientation::default_for(d.tool.kind)),
+        });
+        StackValues { gauge_len: d.gauge_len, diameter: d.tool.diameter, corner_r: d.tool.corner_r, lathe }
+    })
+}
+
+/// Whether the lathe resolver builds `tool`'s stack (`tool_assembly::derive`).
+fn is_lathe(tool: &Tool) -> bool {
+    LATHE_HELD.contains(&tool.kind)
 }
 
 /// The replacements for row `at`: each part that fits where the row's
@@ -150,7 +202,7 @@ fn swaps_at(name: &str, tool: &Tool, links: &[AssemblyLink], at: usize, table: &
     let (Some(prefix), Some(old)) = (links.get(..at), links.get(at)) else {
         return Vec::new();
     };
-    candidates(prefix, table)
+    candidates_for(prefix, table, is_lathe(tool))
         .into_iter()
         .filter(|(_, c)| c.component != old.component)
         .filter_map(|(label, mut c)| {
@@ -257,7 +309,8 @@ impl State {
             Some(_) => (None, Vec::new()),
             None => (Some(Err(format!("tool '{name}' is not in the document"))), Vec::new()),
         };
-        let view = Rc::new(StackView { offer: candidates(links, table), values, swaps });
+        let lathe = tool.is_some_and(is_lathe);
+        let view = Rc::new(StackView { offer: candidates_for(links, table, lathe), values, swaps });
         v.stack = Some(((v.rev, name.to_owned(), tool.cloned(), links.to_vec()), Rc::clone(&view)));
         view
     }

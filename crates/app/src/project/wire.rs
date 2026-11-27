@@ -185,6 +185,7 @@ pub fn collect(world: &World) -> ProjectFile {
                     .then(|| crate::model_source::of(world, &entity))
                     .flatten()
                     .map(|s| super::SourceDto::of(&s)),
+                source_faces: kind.is_none().then(|| super::source_faces_dto::collect(world, &entity)).flatten(),
                 kind,
                 raw_stock_only: mark.is_some(),
                 raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),
