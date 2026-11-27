@@ -238,7 +238,9 @@ fn a_patch_pick_names_all_its_faces_and_a_missing_pick_names_none() {
 
 /// The format-10 fixture through the real import (C13 PR 1's reader): each
 /// face and patch row gets one of the two keys, and each name is a string
-/// that is not empty. The names themselves are not pinned here.
+/// that is not empty; a face pick in `get_operation_geometry` shows the
+/// same name as its row (#4214's "Done means"). The names themselves are
+/// not pinned here.
 #[test]
 fn a_sc_import_names_every_face_and_patch() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models/hole_on_pocket_wall.sc");
@@ -256,5 +258,28 @@ fn a_sc_import_names_every_face_and_patch() {
             _ => panic!("one of source_name and source_names: {row}"),
         };
         assert!(!set.is_empty() && set.iter().all(|n| !n.is_empty()), "{row}");
+    }
+    // A face that looks up, picked into a 2D Pocket: the pick shows the
+    // name keys of its `list_features` row.
+    let up = f["faces"].as_array().expect("faces").iter().find(|r| r["facing"] == json!("up")).expect("an up face");
+    c.ok("set_stock", json!({ "from_model": "plate" }));
+    c.ok("add_tool", json!({ "catalog": "EM-0400-2FL" }));
+    c.ok(
+        "add_operation",
+        json!({
+            "kind": "pocket", "tool": "EM-0400-2FL", "name": "P1", "source": "plate",
+            "params": {
+                "top_z": { "reference": "top_of_stock", "offset": 0.0 },
+                "bottom_z": { "reference": "bottom_of_selection", "offset": 0.0 },
+                "stepdown": 2.5,
+            },
+        }),
+    );
+    c.ok("set_operation_geometry", json!({ "operation": "P1", "picks": [{ "model": "plate", "id": up["id"] }] }));
+    let g = c.ok("get_operation_geometry", json!({ "operation": "P1" }));
+    let shown = &g["source"]["picks"][0];
+    assert_eq!(shown["id"], up["id"], "{g}");
+    for key in ["source_name", "source_names", "source_unverified"] {
+        assert_eq!(shown.get(key), up.get(key), "{key}: {g}");
     }
 }
