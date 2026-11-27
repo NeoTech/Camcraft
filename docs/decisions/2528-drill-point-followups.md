@@ -1,4 +1,4 @@
-## #2528 - Drill point length follow-ups: a correction to the #2441 entry, and three file splits
+## #2528 - Drill point length follow-ups: the note, the selector, a correction to the #2441 entry, file splits and post coverage
 
 **What was decided.**
 
@@ -48,6 +48,26 @@
      `circle_cw`, `ring_walls`) stay in `tests.rs`, so the other test
      modules keep their imports.
 
+3. *The Break-through note agrees with the field (item 1).* A Drill
+   measured from its full diameter said "through holes run 2.803 mm past
+   the part bottom (Break-through)" for a 1 mm field. The note now names
+   both values: "(Break-through 1.000 mm from the full diameter, plus the
+   1.803 mm drill point)". `break_through::Broke` carries the point
+   length (`with_point`); every other case keeps "(Break-through)". The
+   words "run X past the part bottom" stay, so readers of the note keep
+   working. A note is not a move, so `GENERATOR_OUTPUT_VERSION` does not
+   change; a saved cache keeps its old note until it is generated again.
+4. *The Break-through from selector is disabled where it has no effect
+   (item 2).* `holes_page::break_through_from_idle` gives the reason, in
+   the generator's order: a lathe's axial drill (always Tip), a stated
+   Bottom, a spot, tap or ream cycle (`through_tip_run`), or no through
+   hole. The combo is disabled and its hint says the reason.
+5. *A recorded full-diameter program for every post (item 5).* A new
+   recorded stream `drill_full_diameter` (one through hole, the default
+   Full diameter, tip at Z-12.803) joins `recorded::CASES`. Each post
+   suite records its golden for it (`.nc`, or `.refusal` for a post that
+   does not drill). No existing golden changes.
+
 **Why.** A decision record is what the next agent reads before it changes
 the code. A wrong statement there leads to a wrong change: for example, a
 "fix" that makes `edit_operation` reset `break_through_from`.
@@ -57,6 +77,12 @@ the code. A wrong statement there leads to a wrong change: for example, a
 - *Edit the #2441 entry in `RECOMMENDED.md`.* `docs/decisions/README.md`
   forbids it on an issue branch: each such edit conflicts with every other
   open PR.
+- *Hide the selector where it has no effect.* A disabled row with its
+  reason tells the user why the choice does nothing; a hidden row reads
+  as a missing feature.
+- *A separate test file for each post with a full-diameter hole.* The
+  recorded-case runner already posts every case through every post, so
+  one new case covers all of them with no new harness.
 - *Change `edit_operation` so that it agrees with the old text.* The code
   is correct: a patch that changes one field must not move another field.
   The text was wrong, not the code.

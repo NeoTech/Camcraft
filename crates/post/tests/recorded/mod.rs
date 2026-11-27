@@ -23,11 +23,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The recorded cases every post suite runs, in file-stem form.
-pub const CASES: [&str; 11] = [
+pub const CASES: [&str; 12] = [
     "arcs",
     "full_circle",
     "full_circle_raw",
     "drill_retract",
+    // #2528: a through hole drilled to its full diameter (motion-built,
+    // app's `recorded_post_streams.rs`).
+    "drill_full_diameter",
     "tool_change",
     "rotary",
     "probe",
@@ -246,6 +249,10 @@ macro_rules! post_suite {
         #[test]
         fn drill_retract() {
             recorded::check($script, "drill_retract");
+        }
+        #[test]
+        fn drill_full_diameter() {
+            recorded::check($script, "drill_full_diameter");
         }
         #[test]
         fn tool_change() {
