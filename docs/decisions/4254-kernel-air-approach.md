@@ -108,6 +108,23 @@ curve, but it is load that no stage reads yet: the load stage (K3) reads
 the cuts, not the links. Follow-up: the load stage reads the approach of
 a link (#4272).
 
+The K3 pin (`k3_load::kernel_load_control_round_the_disc_and_the_dog_bone`,
+merged to the side branch in PR #4265) reads the same Outside plans. Its
+rows (moves above the limit, worst degrees, moves above the limit with no
+named place) are pinned again as measured; Inside does not change:
+
+| Fixture, load control | Before | After |
+|---|---|---|
+| disc, Outside, none | 402, 145, 13 | 415, 145, 19 |
+| disc, Outside, constant 25 % | 334, 118, 74 | 344, 122, 81 |
+| dog bone, Outside, none | 724, 167, 3 | 739, 180, 13 |
+| dog bone, Outside, constant 25 % | 678, 143, 66 | 683, 143, 69 |
+
+The new unnamed moves are the approach stretches: a link, which the load
+stage does not read (#4272). With constant engagement the dog bone,
+Outside, lifts 7 times (each named): the load stage changes the curves,
+and that pin does not pin lifts.
+
 **Dropped.**
 - A tangent approach (along the start direction of the piece). Where
   the piece meets the stock edge at a slant, the extension sweeps stock

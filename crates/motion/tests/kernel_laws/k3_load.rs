@@ -29,13 +29,18 @@ impl StockRead for Left {
 /// 32 worst 180 (dog bone). The worst Inside is the first ring round the
 /// part: a full-width cut with no pass beside it, named (`FRESH_CUT`). The
 /// unnamed moves of Outside are on the stock edge line, where a piece
-/// starts after a lift: there the kernel's read and the meter of #4154
-/// differ (follow-up issue named in the decision file).
+/// starts: there the kernel's read and the meter of #4154 differ
+/// (follow-up issue named in the decision file). Since #4254 a link comes
+/// in to such a start from the air, at depth: the approach is a stretch of
+/// a link, and the load stage reads the cuts only, so its moves above the
+/// limit are not named yet (#4272; before #4254 the Outside rows were
+/// [402, 145, 13], [334, 118, 74] on the disc and [724, 167, 3],
+/// [678, 143, 66] on the dog bone).
 const READ: [(&str, &str, [u32; 3], [u32; 3]); 4] = [
     ("disc", "Inside", [3507, 173, 0], [833, 173, 1]),
-    ("disc", "Outside", [402, 145, 13], [334, 118, 74]),
+    ("disc", "Outside", [415, 145, 19], [344, 122, 81]),
     ("dog bone", "Inside", [2587, 173, 0], [581, 173, 1]),
-    ("dog bone", "Outside", [724, 167, 3], [678, 143, 66]),
+    ("dog bone", "Outside", [739, 180, 13], [683, 143, 69]),
 ];
 
 #[test]
