@@ -172,3 +172,35 @@ fn a_cross_hole_counts_the_raw_stock_over_its_mouth() {
     let buried = at(25.0, 12.0);
     assert!(buried > flush, "full retracts take more rapids than chip breaks: {buried} vs {flush}");
 }
+
+/// Review of 4cbc56ee9: a depth that sits on an Auto limit up to float
+/// roundoff picks the same cycle on every system. Both limits are
+/// inclusive within `AUTO_TOL`; two microns past a limit is the next
+/// cycle. The radial case puts 10 mm of stock over a 6 mm hole on a
+/// 4 mm drill, so the depth is exactly 4 x d.
+#[test]
+fn an_auto_limit_reads_the_same_under_roundoff() {
+    use crate::tools::ToolKind::Drill as D;
+    let up = |x: f64| f64::from_bits(x.to_bits() + 4);
+    let down = |x: f64| f64::from_bits(x.to_bits() - 4);
+    for depth in [down(16.0), 16.0, up(16.0)] {
+        assert_eq!(auto_kind(D, depth, 4.0), CycleKind::Peck, "4 x d under roundoff: {depth:e}");
+    }
+    for depth in [down(4.0), 4.0, up(4.0)] {
+        assert_eq!(auto_kind(D, depth, 4.0), CycleKind::Drill, "1 x d under roundoff: {depth:e}");
+    }
+    assert_eq!(auto_kind(D, 16.0 + 2.0 * AUTO_TOL, 4.0), CycleKind::Deep);
+    assert_eq!(auto_kind(D, 4.0 + 2.0 * AUTO_TOL, 4.0), CycleKind::Peck);
+    // The radial reading: a mouth at r 15, the stock at r 25 (or its
+    // roundoff, as the reference chain reads 25.000000000000004).
+    let tool = drill_tool(4.0);
+    let holes = [cross_hole(-6.0)];
+    let kinds_at = |stock_r: f64| {
+        let p = CrossParams { stock_r, r_d: 12.0, clearance_d: 13.0, ..radial(&tool, &holes, CycleChoice::Auto) };
+        let t = cross_drill(&p).expect("drills");
+        t.moves.iter().map(|m| m.kind).collect::<Vec<_>>()
+    };
+    let exact = kinds_at(25.0);
+    assert_eq!(kinds_at(up(25.0)), exact, "a roundoff over the stock radius keeps the cycle");
+    assert_eq!(kinds_at(down(25.0)), exact, "a roundoff under the stock radius keeps the cycle");
+}

@@ -63,7 +63,7 @@ change.
   - a radial hole reads the raw stock's surface over its mouth
     (`start_d(h, stock_r)`), clamped to `0..=r_d`.
   The issue's case (stock already faced to the plate top) still reads
-  3.5 mm and drills `G81`. Pinned by `drill_auto_material` and the motion
+  3.5 mm and drills `G81`. Pinned by `drill_prior::auto_material` and the motion
   tests `auto_counts_the_material_over_the_mouth` and
   `a_cross_hole_counts_the_raw_stock_over_its_mouth`.
 - The setup sheet names the cycle the generator chose (the op's current
@@ -75,6 +75,27 @@ change.
   ("No new dependency between our crates without a decision").
 - Dropped: the program ahead always read. Its simulation costs time, so
   it is read only where the raw stock stands above a mouth.
+
+**Second review fixes (PR #4316, review on 4cbc56ee9).**
+
+- The Auto limits are inclusive within `AUTO_TOL` (1 micron). Before, a
+  depth exactly on a limit (16 mm on a 4 mm drill: 4 x d) chose the cycle
+  by float roundoff: a stock radius read as 25.000000000000004 gave full
+  retracts on one system and chip breaks on another. The tolerance is in
+  `auto_kind`, so the axial cycle, the radial cycle and the drill page
+  agree. Pinned by `an_auto_limit_reads_the_same_under_roundoff`.
+- The cylinder reference chain of `drilling_cross_box` (three stations,
+  16 mm in material on a 4 mm drill) is recorded again. It is now the
+  chip-break peck (19 moves). The chain of efd1f26 (43 moves, full
+  retract) read the depth from the R standoff.
+- Dropped: a strict `<` at the limits (a depth on 4 x d goes Deep). The
+  law says "up to four diameters" and the drill page says the same; a
+  tolerance keeps the words and removes the roundoff.
+- Dropped: move the fixture off the limit. That fixes one case and leaves
+  the class open.
+- The two app tests of the material reading moved from a new top-level
+  binary into the `drill_prior` suite (`drill_prior/auto_material.rs`),
+  by the rule "New tests join a directory suite" (#3187).
 
 **Effect on programs.** A hole whose R plane is more than one diameter
 above its mouth can change from `G73` to `G81`, or from `G83` to `G73`,

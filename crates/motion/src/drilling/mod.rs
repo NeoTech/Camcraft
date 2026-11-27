@@ -66,7 +66,7 @@ pub use cycle::drill;
 pub use fine_bore::FINE_BORE_MAX_SHIFT_UM;
 pub use hole::{
     auto_kind, drill_point_length, through_tip_run, BreakThroughFrom, CrossHole, CycleChoice,
-    CycleParams, Hole, CHIP_BREAK, SPOT_DEPTH, THROUGH_CLEAR,
+    CycleParams, Hole, AUTO_TOL, CHIP_BREAK, SPOT_DEPTH, THROUGH_CLEAR,
 };
 pub use order::{hole_order, in_order, HOLE_PICK_TOL};
 pub use recognize::{recognize, recognize_cross};
