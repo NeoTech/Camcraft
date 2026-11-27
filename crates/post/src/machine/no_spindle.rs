@@ -1,5 +1,5 @@
-//! The "no spindle" head rules one law serves two kinds with (#669
-//! plasma, #530 EDM): a machine whose head holds a torch, a wire or an
+//! The "no spindle" head rules one law serves several kinds with (#669
+//! plasma, #530 EDM, #1881 waterjet, #4081 laser): a machine whose head holds a torch, a wire or an
 //! electrode states no spindle, no live tool and no coolant list. Each
 //! kind brings its own sentence; the walk and the keys are shared, so
 //! the reader and the Machines pane's validator can never disagree.
@@ -8,6 +8,8 @@
 //! public sources each kind was specced from).
 
 use serde_json::Value;
+
+use super::Machine;
 
 /// One kind's sentence for each refused key.
 pub(super) struct NoSpindle {
@@ -67,5 +69,45 @@ fn walk<'a>(parts: Option<&'a Value>, heads: &mut Vec<&'a Value>, rotaries: &mut
             _ => {}
         }
         walk(p.get("parts"), heads, rotaries);
+    }
+}
+
+/// The doors of an X/Y gantry with no spindle (#1881 waterjet, #4081
+/// laser): the head rules of [`head_refusals`], no rotary axis, and an X
+/// and a Y linear axis. `kind` is the word each sentence names.
+pub(super) fn xy_gantry_refusals(v: &Value, kind: &str, r: &NoSpindle) -> Vec<(String, String)> {
+    let (mut out, rotaries) = head_refusals(v, r);
+    for name in rotaries {
+        out.push((name, format!("a {kind} states no rotary axis")));
+    }
+    for name in ["X", "Y"] {
+        if !has_linear(v.pointer("/kinematics/default/parts"), name) {
+            out.push((format!("{name} axis"), format!("required for a {kind} machine")));
+        }
+    }
+    out
+}
+
+/// Whether the parts tree has a linear axis of this name.
+fn has_linear(parts: Option<&Value>, name: &str) -> bool {
+    parts.and_then(Value::as_array).is_some_and(|parts| parts.iter().any(|p| {
+        (p.get("type").and_then(Value::as_str) == Some("linear")
+            && p.get("name").or_else(|| p.get("id")).and_then(Value::as_str)
+                .is_some_and(|n| n.eq_ignore_ascii_case(name)))
+            || has_linear(p.get("parts"), name)
+    }))
+}
+
+impl Machine {
+    /// The loaded-project form of [`xy_gantry_refusals`]: no spindle, no
+    /// live tool, no coolant and no rotary axis, with X and Y linear.
+    pub(super) fn xy_gantry_sane(&self) -> bool {
+        self.spindle_min.is_none() && self.spindle_max.is_none()
+            && self.spindle_power.is_none() && self.spindle_ranges.is_empty()
+            && self.rigid_tapping.is_none() && self.spindles.is_none()
+            && self.spindle_d.is_none() && self.spindle_len.is_none()
+            && self.live_tool.is_none() && self.coolants.is_empty()
+            && self.axes.iter().all(|a| !a.rotary)
+            && [0, 1].iter().all(|&k| self.axis(k).is_some_and(|a| !a.rotary))
     }
 }

@@ -296,7 +296,7 @@ fn a_body_electrodes_outline_roundtrips_through_the_library() {
 /// the tip as sharp. A library of sharp tools keeps its older number.
 #[test]
 fn a_tip_form_round_trips_and_steps_the_version() {
-    use camcraft_app::tool_library::{CUTTER_HAND_VERSION, CUTTER_VERSION, HOLDER_REF_VERSION, TIP_FORM_VERSION};
+    use camcraft_app::tool_library::{CUTTER_VERSION, HOLDER_REF_VERSION, TIP_FORM_VERSION};
     use camcraft_app::tools::TaperTip;
     let sharp = cat("CM-0600-90");
     let (w, _h) = world_with(&[("CM", sharp.clone())]);
@@ -317,7 +317,7 @@ fn a_tip_form_round_trips_and_steps_the_version() {
     // The step is no number an older reader knows: past holder refs and
     // past the drawn cutter (version 5, PR #3906).
     const { assert!(TIP_FORM_VERSION > HOLDER_REF_VERSION && TIP_FORM_VERSION > CUTTER_VERSION) };
-    let newer = text.replacen(&format!("\"version\": {TIP_FORM_VERSION}"), &format!("\"version\": {}", CUTTER_HAND_VERSION + 1), 1);
+    let newer = text.replacen(&format!("\"version\": {TIP_FORM_VERSION}"), &format!("\"version\": {}", camcraft_app::tool_library::ASSEMBLY_VERSION + 1), 1);
     assert!(parse_tool_library(&newer).is_err_and(|e| e.contains("not supported")), "a newer number is refused");
 }
 
@@ -417,9 +417,10 @@ fn a_library_without_a_cutter_keeps_version_4_or_lower() {
     assert!(v["version"].as_u64().is_some_and(|n| n <= 4), "{text}");
     assert!(v["tools"][0]["definition"].get("cutter").is_none(), "{text}");
     // A file newer than this build refuses by version; nothing is dropped.
-    // (#4031 took version 7 for a stated left-hand cutter, so 8 is the newer one.)
-    let err = parse_tool_library(r#"{"format":"camcraft-tools","version":8,"tools":[]}"#).expect_err("version 8");
-    assert!(err.contains("version 8") && err.contains("1 to 7"), "{err}");
+    // (#4031 took version 7 for a stated left-hand cutter and #3645 took 8
+    // for tool assemblies, so 9 is the newer one.)
+    let err = parse_tool_library(r#"{"format":"camcraft-tools","version":9,"tools":[]}"#).expect_err("version 9");
+    assert!(err.contains("version 9") && err.contains("1 to 8"), "{err}");
 }
 
 /// #3369: a form mill rides the library file and the project file with

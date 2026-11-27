@@ -293,3 +293,34 @@ fn a_no_pick_chamfer_cut_into_a_sharp_pocket_rim_is_a_gouge() {
     let line = gouge_line(&world).expect("a chamfer into the sharp pocket rim posted");
     assert!(line.contains("worst 0.") || line.contains("worst 1."), "charged at the V's depth: {line}");
 }
+
+#[test]
+fn closed_model_chamfer_posts_haas_arcs_through_the_stock_gate() {
+    let points: Vec<_> = (0..256)
+        .map(|index| {
+            let angle = f64::from(index) * std::f64::consts::TAU / 256.0;
+            Point3::new(10.0 * angle.cos(), 10.0 * angle.sin(), 0.0)
+        })
+        .collect();
+    let top = |point: Point3| Point3::new(point.x, point.y, 10.0);
+    let mut facets = Vec::with_capacity(4 * points.len());
+    for index in 0..points.len() {
+        let a = points[index];
+        let b = points[(index + 1) % points.len()];
+        facets.extend([
+            Triangle::new(Point3::ZERO, b, a),
+            Triangle::new(top(Point3::ZERO), top(a), top(b)),
+            Triangle::new(a, b, top(b)),
+            Triangle::new(a, top(b), top(a)),
+        ]);
+    }
+    let world = job_on_mesh(0.5, Mesh::from_facets(facets));
+    posting::post_set(&world, &camcraft_app::schema::PostRef::Named("Haas".into()));
+    let posted = posting::post_setup_unwritten(&world).expect("normal Haas post gate");
+    let arc_blocks = posted.program.lines().filter(|line| {
+        line.split_whitespace().any(|word| matches!(word, "G2" | "G3" | "G02" | "G03"))
+    }).count();
+    assert!(arc_blocks > 0, "Haas output has no circular interpolation");
+    assert!(posted.lines < 64, "the circular model still posts as many feed lines");
+    eprintln!("{arc_blocks} arcs in {} Haas program lines", posted.lines);
+}

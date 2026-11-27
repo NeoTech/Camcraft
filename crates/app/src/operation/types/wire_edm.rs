@@ -115,6 +115,13 @@ pub struct WireContourOp {
     /// arc lead-in and lead-out of radius `r` mm (more than the kerf
     /// offset), cut on a selected DXF profile's vertical single pass.
     pub lead_arc_radius: Option<f64>,
+    /// Where the wire's offset is applied (#4134): `Computer` - the
+    /// default - posts the wire-centre path; `Control` posts the part
+    /// contour under G41 / G42 with one register for each pass, and the
+    /// control adds the offset; `Wear` posts the wire-centre path under
+    /// G41 / G42, the register holding only the wear delta. The moves
+    /// are the wire-centre path in each mode (`wire_edm::wire_comp_spans`).
+    pub compensation: crate::links::Compensation,
 }
 
 /// How the two profiles of a 4-axis cut are paired (#537) - stated,

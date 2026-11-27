@@ -61,6 +61,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
     WireContourOp {
         overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -307,8 +308,9 @@ fn four(pairing: WirePairingRule, sync: &[(Pt, Pt)], tolerance: f64) -> WireCont
 /// move; if a toolchain changes `DefaultHasher`, re-pin it only after
 /// checking the arm still writes nothing for `four_axis: None`.
 /// Re-pinned for the v3 stamp salt and the mounted wire tool digest,
-/// and again for the v4 salt (#2901).
-const ONE_PROFILE_STAMP: u64 = 9_618_028_259_464_931;
+/// and again for the v4 salt (#2901), and again for the #3704
+/// generator-output term (that term moves every stamp once).
+const ONE_PROFILE_STAMP: u64 = 10_966_340_153_851_473_914;
 
 /// Done means (M3, PR #1181 item 2): the pairing rule, each sync point
 /// on each side of each pair, and the tolerance each move the stamp, so

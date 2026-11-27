@@ -48,6 +48,8 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Lollipop => 21,
         // #3369: the form mill appends.
         crate::tools::ToolKind::FormMill => 22,
+        // #4081: the laser head appends.
+        crate::tools::ToolKind::Laser => 23,
     });
     for v in [
         tool.diameter,

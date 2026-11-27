@@ -102,6 +102,26 @@ fn the_graphics_entries_set_their_fields() {
     assert!(h.state().state.pending.is_empty(), "graphics switches are view state");
 }
 
+/// #3377: dispatch a pointer click through the actual viewport axes button.
+#[test]
+fn the_viewport_axes_button_leaves_the_ground_grid_visible() {
+    let mut h = shell_harness();
+    h.run();
+    assert!(h.state().state.show_world_axes && h.state().state.show_grid);
+    assert!(!crate::interact::ground_grid_lines(&h.state().state).is_empty());
+
+    let p = hud(h.state()).nav_rect(viewcube::Nav::Axes).center();
+    click_viewport(&mut h, p);
+
+    let st = &h.state().state;
+    assert!(!st.show_world_axes, "the viewport button hides the axes");
+    assert!(st.show_grid, "the viewport button leaves Grid on");
+    assert!(
+        !crate::interact::ground_grid_lines(st).is_empty(),
+        "the grid still draws with the viewport axes off"
+    );
+}
+
 /// The camera's forward direction (into the screen).
 fn forward(h: &Harness<'static, ShellUi>) -> [f64; 3] {
     let (_, _, (x, y, z)) = h.state().state.cam.view_basis();

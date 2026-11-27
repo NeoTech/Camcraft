@@ -12,6 +12,7 @@
 //! here: one layout module for the dock and the pages alike.
 
 mod controls;
+mod row_name;
 mod form;
 mod scroll_gutter;
 /// #2339: the saved panel arrangements - the dock's JSON, the start load.
@@ -20,6 +21,7 @@ pub(crate) mod setups;
 pub mod field_ring;
 pub(crate) use controls::*;
 pub(crate) use form::*;
+pub(crate) use row_name::*;
 pub(crate) use scroll_gutter::keep_scroll_gutter;
 #[cfg(test)]
 mod banner_tests;

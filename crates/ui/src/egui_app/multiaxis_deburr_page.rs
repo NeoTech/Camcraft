@@ -76,7 +76,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         hint(ui, "here the max tilt is measured from the edge's natural pose, and lead minus lag must stay inside it");
         // #1894 review: the shank and holder guard has no switch on this
         // kind. The kernel always runs it, so the page shows a fact.
-        prop_row(ui, "Shank and holder guard", |ui| ui.label("Always on"));
+        prop_row(ui, "Shank and holder guard", |ui| list_row(ui, "Always on"));
         hint(ui, MA_DEBURR_SHANK_HINT);
     }
     if tab == SEC_HEIGHTS {

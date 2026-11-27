@@ -324,3 +324,39 @@ fn a_mismatch_a_wrong_hand_and_degenerate_input_are_refused_by_name() {
         Err(LatheBodyError::NonFinite)
     );
 }
+
+/// #3643: the 2525M holder read from an STL with stored frames (its MCS
+/// and seat `CSW1`) gives the clearance of the same holder as boxes;
+/// a body with a pad grows the bands by it.
+#[test]
+fn an_stl_holder_mesh_gives_the_box_holder_clearance() {
+    use crate::mesh_body::{MeshBody, MeshFormat};
+    let mut stl = String::from("solid holder\n");
+    for t in body(&holder_boxes()).facets() {
+        stl.push_str("facet normal 0 0 0\nouter loop\n");
+        for p in t {
+            stl.push_str(&format!("vertex {} {} {}\n", p[0], p[1], p[2]));
+        }
+        stl.push_str("endloop\nendfacet\n");
+    }
+    let seat = Frame::new(CRP, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap_or_else(|e| panic!("{e}"));
+    let (geometry, mesh) = MeshBody::read(MeshFormat::Stl, stl.as_bytes())
+        .and_then(|b| b.with_frames(vec![("MCS".into(), Frame::IDENTITY), ("CSW1".into(), seat)]))
+        .and_then(|b| b.lathe_geometry())
+        .unwrap_or_else(|e| panic!("{e}"));
+    let boxes = ok(&turning("PCLNR2525M12", "CNMG120408"), LatheStation::RADIAL_SHANK, None);
+    let mut nodes = turning("PCLNR2525M12", "CNMG120408");
+    nodes[0] = node(holder("PCLNR2525M12"), geometry, None, Some(mesh.clone()));
+    let from_mesh = ok(&nodes, LatheStation::RADIAL_SHANK, None);
+    assert_eq!(from_mesh.params, boxes.params);
+    let want = boxes.clearance.unwrap_or_else(|| panic!("no clearance"));
+    let got = from_mesh.clearance.unwrap_or_else(|| panic!("no clearance"));
+    let (a, b): (Vec<f64>, Vec<f64>) = (got.words().collect(), want.words().collect());
+    assert!(a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-9), "{a:?} vs {b:?}");
+    // The same body with a 0.05 mm pad: the bands grow by it.
+    nodes[0].body = Some(mesh.padded(0.05).unwrap_or_else(|e| panic!("{e}")));
+    let grown = ok(&nodes, LatheStation::RADIAL_SHANK, None).clearance.unwrap_or_else(|| panic!("no clearance"));
+    assert_eq!(grown, want.padded(0.05));
+    assert!((grown.z_lo() - (want.z_lo() - 0.05)).abs() < 1e-9);
+    assert_eq!(LatheBody::mesh(vec![[[0.0; 3]; 3]]).and_then(|b| b.padded(f64::NAN)), Err(LatheBodyError::NonFinite));
+}

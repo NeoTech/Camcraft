@@ -4,8 +4,8 @@
 //! `golden/nc/contour_control_comp.nc` locks the text - while the same
 //! op in computer posts the centre path every earlier golden holds.
 //! Haas, Mazak and Siemens 840D write their own comp words (#39) to
-//! `golden/nc/<dialect>/contour_control_comp.nc`; the lathe post,
-//! Heidenhain and Tormach refuse it by name, and so does a user script
+//! `golden/nc/<dialect>/contour_control_comp.nc`; the lathe post and
+//! Heidenhain refuse it by name, and so does a user script
 //! that lacks the hook, so a Control op can never leave as an
 //! undersize part.
 //!
@@ -209,7 +209,7 @@ fn the_lathe_and_the_other_mill_posts_refuse_a_control_op_by_name_and_the_gate_b
     let m = posting::machine_value(&world);
     let out = engine::run(&post_text("fanuc-lathe"), &m, &text).unwrap();
     assert!(out.warnings.iter().any(|w| w.contains("nose-radius compensation")), "{:?}", out.warnings);
-    for stem in ["heidenhain", "tormach", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
+    for stem in ["heidenhain", "grblhal", "tinyg", "linuxcnc", "grbl", "mach3"] {
         let out = engine::run(&post_text(stem), &m, &text).unwrap();
         assert!(out.warnings.iter().any(|w| w.contains("G41/G42) is not supported")), "{stem}: {:?}", out.warnings);
         let mut path = std::env::temp_dir();

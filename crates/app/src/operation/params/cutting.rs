@@ -55,6 +55,11 @@ impl OpParams {
                     h.write(b"burnout");
                     w(h, c);
                 }
+                // #4134: only a control or wear offset is digested, so no
+                // computer-compensated cut's stamp moves.
+                if p.compensation.in_control() {
+                    h.write(p.compensation.label().as_bytes());
+                }
                 match p.picks.first(crate::path_picks::PickRole::Start).map(|k| [k.xy.x, k.xy.y]) {
                     Some([x, y]) => {
                         h.write_u8(1);

@@ -292,7 +292,7 @@ fn wire_contour_accepts_an_explicit_zero_taper_on_add_and_edit() {
 #[test]
 fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
     use camcraft_app::project::{
-        WireContourDto, WireFourAxisDto, WirePairingDto, WireSideDto, WireSkimDto, WireSyncDto, WireTabsDto,
+        WireCompensationDto, WireContourDto, WireFourAxisDto, WirePairingDto, WireSideDto, WireSkimDto, WireSyncDto, WireTabsDto,
         WireWideningDto,
     };
     use std::collections::BTreeSet;
@@ -349,6 +349,7 @@ fn list_operation_types_and_skill_match_wire_contour_dto_and_tool_law() {
         sharp_corners: true,
         overlap: 1.5,
         lead_arc_radius: Some(0.5),
+        compensation: WireCompensationDto::Control,
     };
     let dto_keys: BTreeSet<String> = serde_json::to_value(&populated)
         .expect("serialize WireContourDto")

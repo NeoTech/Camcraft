@@ -19,9 +19,10 @@
 //! EVERY posed move through [`intervals`] (a constant pose is the
 //! same walk with no turn), and reads each interval's [`Interval::swing`]:
 //! the farthest any pose INSIDE the interval strays from `am`, proven
-//! from the letter rate rather than sampled at the ends - each letter
-//! turns the axis at most one radian per radian, so the axis travels
-//! no more than the letters' summed sweep (M13.8's continuous pose).
+//! from the letter rate rather than sampled at the ends - A and C turn
+//! the axis at most one radian per radian and B at most |cos A| (#4262),
+//! so the axis travels no more than the letters' weighted sweep
+//! (M13.8's continuous pose).
 //!
 //! Provenance: the modal pose law is RS-274's; bounded sampling of a
 //! swept pose is textbook (Ericson, "Real-Time Collision Detection",
@@ -108,8 +109,11 @@ fn walk(m: &Move, a: [f64; 3], b: [f64; 3], reach: f64, chord_tol: f64, by_trave
     let la = axis_to_angles(a);
     let lb = axis_to_angles(b);
     // The letters' whole sweep in radians: the axis turns at most this
-    // much over the move, whatever path it traces on the sphere.
-    let rate: f64 = (0..3).map(|k| (lb[k] - la[k]).abs()).sum::<f64>().to_radians();
+    // much over the move, whatever path it traces on the sphere. The
+    // axis is Rz(C) (cos A sin B, -sin A, cos A cos B): A and C turn it
+    // at most one radian per radian, B only |cos A| (#4262) - at the
+    // pole A = +-90 a B 0 <-> 180 flip is one pose written two ways.
+    let rate = ((lb[0] - la[0]).abs() + max_abs_cos(la[0], lb[0]) * (lb[1] - la[1]).abs() + (lb[2] - la[2]).abs()).to_radians();
     let tol = if chord_tol.is_finite() && chord_tol > 0.0 { chord_tol } else { 0.01 };
     let reach = if reach.is_finite() { reach.max(0.0) } else { 0.0 };
     let pieces = m.segments3(tol);
@@ -152,6 +156,17 @@ fn walk(m: &Move, a: [f64; 3], b: [f64; 3], reach: f64, chord_tol: f64, by_trave
 pub(super) fn pose(a: [f64; 3], b: [f64; 3], s: f64) -> [f64; 3] {
     let l = [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s];
     angles_to_axis(l).unwrap_or([0.0, 0.0, 1.0])
+}
+
+/// The largest |cos| over the letter span `a0..a1` (degrees; A lerps
+/// on a straight line): 1 where the span holds a multiple of 180, else
+/// at an end (|cos| has no other maximum). Non-finite reads as 1.
+fn max_abs_cos(a0: f64, a1: f64) -> f64 {
+    let (lo, hi) = (a0.min(a1), a0.max(a1));
+    if !(lo.is_finite() && hi.is_finite()) || (lo / 180.0).ceil() <= hi / 180.0 {
+        return 1.0;
+    }
+    lo.to_radians().cos().abs().max(hi.to_radians().cos().abs()).min(1.0)
 }
 
 /// The angle between two unit axes, radians.
@@ -199,6 +214,35 @@ mod tests {
                 assert!(angle(iv.am, inside) <= iv.swing + 1e-12, "interval {j}, sample {k}");
             }
         }
+    }
+
+    /// #4262: B weighted by |cos A| still bounds every pose between the
+    /// samples near the pole, where B turns the axis least; and a B
+    /// 180 -> 0 flip AT the pole swings nothing (one pose, two spellings).
+    #[test]
+    fn the_cos_a_weighted_bound_holds_near_the_pole() {
+        let cases = [
+            ([-89.0, 0.0, 0.0], [-80.0, 180.0, 0.0]),
+            ([85.0, -170.0, 0.0], [88.0, 30.0, 0.0]),
+            ([-86.25, 180.0, 0.0], [-86.25, 0.0, 0.0]),
+            ([95.0, 10.0, 5.0], [80.0, 175.0, -5.0]),
+        ];
+        for (la, lb) in cases {
+            let (a, b) = (angles_to_axis(la).unwrap(), angles_to_axis(lb).unwrap());
+            let m = Move::new(MoveKind::Feed, Point3::new(0.0, 0.0, 0.0), Point3::new(0.3, 0.0, 0.0), Some(100.0));
+            let ivs = intervals(&m, a, b, 300.0, 0.01);
+            let n = ivs.len() as f64;
+            for (j, iv) in ivs.iter().enumerate() {
+                for k in 0..=64 {
+                    let s = (j as f64 + k as f64 / 64.0) / n;
+                    let inside = along(a, b, s);
+                    assert!(angle(iv.am, inside) <= iv.swing + 1e-12, "{la:?}->{lb:?} interval {j}, sample {k}");
+                }
+            }
+        }
+        let m = Move::new(MoveKind::Feed, Point3::new(0.0, 10.0, 0.0), Point3::new(0.1, 10.0, 0.0), Some(100.0));
+        let ivs = intervals(&m, [0.0, 1.0, -1e-9], [0.0, 1.0, 1e-9], 320.0, 0.01);
+        assert!(ivs.iter().all(|iv| iv.swing < 1e-8), "{:?}", ivs.iter().map(|iv| iv.swing).collect::<Vec<_>>());
     }
 
     /// A constant pose walks the move with no turn: one interval per

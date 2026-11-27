@@ -39,6 +39,8 @@ pub mod engine;
 pub mod explain;
 mod fine_bore;
 pub mod g93;
+pub mod heidenhain_dialect;
+mod heidenhain_profiles;
 pub mod invert;
 pub mod js;
 mod js_host;

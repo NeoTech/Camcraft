@@ -104,6 +104,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, tool: &Tool) {
         let id = Id::new(("spindle_speed", name, as_vc));
         let mut v = ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(shown);
         let resp = ui.add(DragValue::new(&mut v).range(0.0..=200_000.0).speed(10.0).max_decimals(1).suffix(suffix));
+        let resp = super::layout::name_by_row(ui, resp);
         if resp.dragged() || resp.has_focus() {
             ui.data_mut(|d| d.insert_temp(id, v));
         }

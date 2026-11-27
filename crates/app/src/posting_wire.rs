@@ -5,9 +5,9 @@
 //! EdmCondition`, which only a script declaring `wireEdm` may post -
 //! the engine refuses it by name for any other) and the product side
 //! (`PARAM WireSide`, commentary). The moves are the op's cached
-//! wire-centre path as generated - the kerf is already in them, so the
-//! post states compensation off and never asks the control for a
-//! second offset (#290 D5, #532's decision record).
+//! wire-centre path as generated - the kerf is in them, and the post asks
+//! the control for no second offset (#290 D5, #532) unless the op states
+//! control or wear compensation (#4134, `operation::wire_comp` spans).
 //!
 //! With skims (#538) each later pass is announced mid-section by its
 //! own `PARAM EdmCondition` (`announce_skims`).

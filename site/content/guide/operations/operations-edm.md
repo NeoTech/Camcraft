@@ -316,6 +316,17 @@ preselects `estbca25nsn060b035020`. Check the five offsets in order:
 for its rough clearance checks. Stop if the technology or offsets differ.
 Ra 0.35 µm is a requested surface finish.
 
+### Request Cobra Cut D 0.25 mm for one 40 mm punch
+
+For one closed polygon punch on 40 mm steel with Cobra Cut D 0.25 mm
+wire, add the rough condition `AGIE_COBRA_RA030` (quality **CCD030**,
+Ra 0.30 µm, 4 passes) or `AGIE_COBRA_RA070` (quality **CCD070**,
+Ra 0.70 µm, 3 passes) with the same 0.005 mm preview gap. The piece and
+the work both set the Cobra wire. Check the offsets in order: 0.250,
+0.170, 0.145 and 0.135 mm for CCD030; 0.245, 0.165 and 0.140 mm for
+CCD070. Other thicknesses, die openings, open cutoffs, punch groups and
+DXF arc punches are refused with these conditions.
+
 ### Classic Cut 2S nominal inspection
 
 Use **Setup → Post → Agie nominal inspection** to create an inspection
@@ -456,7 +467,7 @@ atom) judges the burn".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-burn" /> }} ![Side view of an electrode plunging into a cavity and retracting.](../../../operation-paths.svg#SinkerBurn)
@@ -527,7 +538,7 @@ electrode-length checks.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-side-burn" /> }} ![Side view of an electrode plunging, moving toward one wall and returning.](../../../operation-paths.svg#SinkerSideBurn)

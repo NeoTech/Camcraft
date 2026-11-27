@@ -103,7 +103,7 @@ fn the_kind_words_read_and_an_unknown_kind_still_refuses() {
     for w in ["EDM", "wire", "Die Sinker EDM"] {
         assert_eq!(Kind::from_word(w), None, "{w} is not read as a kind");
     }
-    let err = parse_mch(&WIRE.replace("wire_edm", "laser")).expect_err("unknown kind");
+    let err = parse_mch(&WIRE.replace("wire_edm", "oxyfuel")).expect_err("unknown kind");
     assert!(err.contains("wire_edm") && err.contains("sinker_edm"), "{err}");
 }
 

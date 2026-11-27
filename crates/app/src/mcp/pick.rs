@@ -160,7 +160,7 @@ pub(super) fn picks_of(env: &Env, v: Option<&Value>, key: &str) -> Result<Vec<Ge
 }
 
 pub(super) fn picks_view(w: &World, items: &[GeoSel]) -> Vec<Value> {
-    items
+    let rows = items
         .iter()
         .map(|g| {
             json!({
@@ -169,7 +169,9 @@ pub(super) fn picks_view(w: &World, items: &[GeoSel]) -> Vec<Value> {
                 "name": crate::pick::geo_label(w, g),
             })
         })
-        .collect()
+        .collect();
+    // #3915: SolidCraft names on face and patch picks of a `.sc` model.
+    super::source_names::annotate_picks(w, items, rows)
 }
 
 /// The feature-kind door: refusals the generation walks make by name,

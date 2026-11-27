@@ -375,6 +375,12 @@ ceiling), `spindleMax` rpm, `coolants[]`, `rotaries[]
 - `controllerIdentity`, when stated, has `model`, `nc_software` and an
   optional `installed_options` list. An absent list means unknown. An empty
   list means the installation has no options.
+- `heidenhainDialect`, when the machine states a controller identity, is
+  the result of the HEIDENHAIN dialect resolver (#4095,
+  `camcraft_post::post::heidenhain_dialect`): the profile name and its
+  capability flags, or `{ "error": "<why>" }` for an identity that the
+  table does not know. Each HEIDENHAIN post refuses by name what it cannot
+  serve. Other posts ignore it.
 - `linearAxes` lists the linear axis letters when the machine states a
   controller identity. It includes additional linear axes, such as W.
 - `toolChangeMode`, when stated, is `manual`, `manual-retract-top` or `changer`.

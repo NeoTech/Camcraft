@@ -137,8 +137,9 @@ fn the_command_refuses_an_offset_the_setups_post_cannot_express() {
     let msg = err.to_string();
     assert!(msg.contains("setup Setup1 uses work offset 7") && msg.contains("1-6"), "{msg}");
     set_post(&world, &mut h, Some(TORMACH));
-    assert!(SetSetupWorkOffset::new(&world, "Setup1", Some(8)).is_ok(), "Tormach has nine");
-    assert!(SetSetupWorkOffset::new(&world, "Setup1", Some(9)).is_err(), "but not ten");
+    // Tormach states 500 offsets (G54.1 P10-P500, #4299); the setup command
+    // still stops at its own sanity bound (MAX_SLOT + 1 = 255).
+    assert!(SetSetupWorkOffset::new(&world, "Setup1", Some(setup_offsets::MAX_SLOT - 1)).is_ok(), "Tormach goes past nine");
     assert!(SetSetupWorkOffset::new(&world, "Setup1", Some(setup_offsets::MAX_SLOT + 1)).is_err(), "the sanity bound");
 }
 
@@ -146,10 +147,11 @@ fn the_command_refuses_an_offset_the_setups_post_cannot_express() {
 fn the_setups_post_names_its_offsets() {
     let (world, mut h) = faced_block(Some(TORMACH));
     let t = setup::work_offset_names(&world, Some("Setup1"));
-    assert_eq!(t.max, 9);
+    assert_eq!(t.max, 500);
     assert_eq!(setup::offset_name(&world, Some("Setup1"), 1), "G54");
     assert_eq!(setup::offset_name(&world, Some("Setup1"), 7), "G59.1");
-    assert_eq!(setup::offset_name(&world, Some("Setup1"), 10), "work offset 10", "never another offset's name");
+    assert_eq!(setup::offset_name(&world, Some("Setup1"), 10), "G54.1 P10");
+    assert_eq!(setup::offset_name(&world, Some("Setup1"), 501), "work offset 501", "never another offset's name");
     set_post(&world, &mut h, None);
     assert_eq!(setup::work_offset_names(&world, Some("Setup1")).max, 6, "the document's Fanuc");
 }

@@ -69,9 +69,24 @@ fn render_offscreen(root: &Path) -> Result<(), String> {
     let out_dir = root.join("site/static/images/guide");
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| format!("create {}: {e}", out_dir.display()))?;
+    let status = render_command(root)
+        .status()
+        .map_err(|e| format!("failed to run headless UI guide renderer: {e}"))?;
+    if !status.success() {
+        return Err(format!(
+            "headless UI guide renderer exited with status {status}"
+        ));
+    }
+    Ok(())
+}
+
+fn render_command(root: &Path) -> Command {
+    let out_dir = root.join("site/static/images/guide");
     let examples_dir = root.join("examples");
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(cargo)
+    let mut cmd = Command::new(cargo);
+    crate::unit_env::apply(&mut cmd);
+    cmd
         .current_dir(root.join("crates/ui"))
         .env("CAMCRAFT_GUIDE_IMAGES_OUT", &out_dir)
         .env("CAMCRAFT_GUIDE_PROJECTS_OUT", &examples_dir)
@@ -85,15 +100,8 @@ fn render_offscreen(root: &Path) -> Result<(), String> {
             "--exact",
             "--ignored",
             "--nocapture",
-        ])
-        .status()
-        .map_err(|e| format!("failed to run headless UI guide renderer: {e}"))?;
-    if !status.success() {
-        return Err(format!(
-            "headless UI guide renderer exited with status {status}"
-        ));
-    }
-    Ok(())
+        ]);
+    cmd
 }
 
 pub fn check(root: &Path) -> Result<(), String> {
@@ -213,6 +221,28 @@ fn verify_markdown_ref(markdown: &str, page: &str, file: &str) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renderer_command_pins_inherited_unit_env_without_rendering() {
+        const CHILD: &str = "CAMCRAFT_DOCS_ENV_CHILD";
+        const PROFILE: &str = "CARGO_PROFILE_TEST_OPT_LEVEL";
+        if std::env::var_os(CHILD).is_some() {
+            assert_eq!(std::env::var(PROFILE).unwrap(), "2");
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+            let cmd = render_command(&root);
+            let env: std::collections::BTreeMap<_, _> = cmd.get_envs().collect();
+            assert_eq!(env.get(std::ffi::OsStr::new("CARGO_INCREMENTAL")), Some(&Some(std::ffi::OsStr::new("0"))));
+            assert_eq!(env.get(std::ffi::OsStr::new(PROFILE)), Some(&None));
+            assert_eq!(cmd.get_current_dir(), Some(root.join("crates/ui").as_path()));
+            assert!(cmd.get_args().any(|a| a == "egui_app::tests::guide_images::render_all_guide_images"));
+            return;
+        }
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "docs_images::tests::renderer_command_pins_inherited_unit_env_without_rendering", "--nocapture"])
+            .env(CHILD, "1").env(PROFILE, "2").env("CARGO_INCREMENTAL", "1")
+            .output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+    }
 
     #[test]
     fn short_alt_text_is_refused() {
