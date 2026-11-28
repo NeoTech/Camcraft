@@ -111,6 +111,8 @@ mod recipe_tools;
 mod assembly_tools;
 mod component_library_tools;
 mod component_tools;
+// #4391: edit a user holder by its shape fields (the holder form's door).
+mod holder_shape_tools;
 // #4389: holder files.
 mod holder_file_tools;
 

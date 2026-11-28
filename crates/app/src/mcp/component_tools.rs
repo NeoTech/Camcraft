@@ -59,6 +59,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .iter()
         .chain(super::assembly_tools::TOOLS)
         .chain(super::component_library_tools::TOOLS)
+        .chain(super::holder_shape_tools::TOOLS)
         .chain(super::holder_file_tools::TOOLS)
 }
 

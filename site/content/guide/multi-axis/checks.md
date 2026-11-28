@@ -23,6 +23,9 @@ A machine that states no travel for an axis is not checked for it ("the
 unstated-limit law"). Check your machine file's numbers against the machine's
 manual. If the problem count passes the report cap, the rest is counted.
 
+A travel refusal on an AC machine names the original move of the
+program, so you can find it in the toolpath.
+
 ## Tilt tolerance
 
 The reach laws treat a tool as upright when its tilt off +Z is within 1e-9
@@ -38,6 +41,18 @@ uncut stock and the part, and the fixture bands against the tool, at the
 pose of each move. A hit is reported as a shank hit (once per move). Shank
 avoid on the 5-axis operations moves the pose off such a hit within the Max
 tilt cone before it is reported.
+
+A Rotary Flow on a turning A axis no longer gets a false "spindle housing
+strikes a fixture" refusal when the radial pose crosses the equator of the
+A line.
+
+## Playback on a work-turning rotary
+
+On a machine with a work-turning rotary (for example a table A), the
+simulation playback draws the real kinematics. The part, the stock and
+the workholding turn about the stated rotary axis line. The tool stays
+upright. Earlier builds drew the tool swung about its own tip. This is a
+display change only: no check reads it.
 
 ## Index swing
 

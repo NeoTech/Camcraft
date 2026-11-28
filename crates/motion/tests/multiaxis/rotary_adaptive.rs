@@ -25,6 +25,7 @@
 //! heavy lane's (release --ignored, ~1 min). The fixtures and the level
 //! reader live in `rotary_adaptive_fixture/`.
 
+#[path = "../rotary_adaptive_fixture/mod.rs"]
 mod rotary_adaptive_fixture;
 
 use camcraft_motion::cl::{PathBuilder, Toolpath};
