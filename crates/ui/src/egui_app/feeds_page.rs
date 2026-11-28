@@ -18,7 +18,7 @@ use camcraft_app::tools::{ToolMaterial, WorkMaterial};
 use camcraft_app::units;
 
 use super::fields::combo;
-use super::layout::{group, hint, prop_row, prop_row_hint};
+use super::layout::{button_enabled, group, hint, list_row, prop_row, prop_row_hint};
 use crate::state::{CommandKind, State};
 
 /// The flute counts the combo offers (a stated odd count outside it is
@@ -91,7 +91,7 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
     // The suggestion readout, then the one explicit Apply.
     match cutting::suggest(&state.world, name) {
         Err(why) => {
-            ui.label(egui::RichText::new(format!("No suggestion: {why}")).weak());
+            list_row(ui, egui::RichText::new(format!("No suggestion: {why}")).weak());
         }
         Ok(s) => {
             let thin = s.thinning.map_or(String::new(), |f| {
@@ -114,7 +114,7 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
                 ui,
                 "Suggested",
                 &format!("{} ({}){thin}", s.material.label(), s.tool_material.label()),
-                |ui| ui.label(readout),
+                |ui| list_row(ui, readout),
             );
             let feed_now = cutting::feed_of(&op.params)
                 .or_else(|| {
@@ -127,8 +127,8 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
             // A turning tool that already states this Vc and f/rev.
             let data_same = s.turning.is_none()
                 || tool_now.and_then(|t| t.turning).is_some_and(|d| d.vc == s.vc && d.feed_per_rev == s.fz);
-            prop_row(ui, "Spindle", |ui| ui.label(format!("{rpm_now:.0} -> {:.0} rpm", s.rpm)));
-            prop_row(ui, "Feed", |ui| ui.label(format!("{} -> {}", units::feed(feed_now, u), units::feed(s.feed, u))));
+            prop_row(ui, "Spindle", |ui| list_row(ui, format!("{rpm_now:.0} -> {:.0} rpm", s.rpm)));
+            prop_row(ui, "Feed", |ui| list_row(ui, format!("{} -> {}", units::feed(feed_now, u), units::feed(s.feed, u))));
             for n in &s.notes {
                 hint(ui, n);
             }
@@ -141,8 +141,7 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
             } else {
                 None
             };
-            let mut ok = ui
-                .add_enabled(!dirty && !same, egui::Button::new("Apply suggestion"))
+            let mut ok = button_enabled(ui, !dirty && !same, "Apply suggestion")
                 .on_hover_text("write the suggested spindle and feed (one undoable command)");
             if let Some(w) = why {
                 ok = ok.on_disabled_hover_text(w);

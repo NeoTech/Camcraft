@@ -1,5 +1,6 @@
 //! #1122: form-seam guard tests — the migrated page families (holes,
-//! turning, multi-axis, 2D, 3D) stay at zero raw egui control calls. Unmigrated families are
+//! turning, multi-axis, 2D, 3D, the common operation tabs) stay at zero
+//! raw egui control calls. Unmigrated families are
 //! outside the guard until their own PR adds them.
 //! Provenance: our own source-level guard over `crates/ui/src/egui_app`.
 
@@ -107,12 +108,25 @@ const FAMILIES: &[Family<'_>] = &[
             ("undercut_page.rs", include_str!("../undercut_page.rs")),
         ],
     },
+    // The tabs and rows that every operation page shares: the page frame,
+    // the geometry picks, the boundary, the heights and the feeds.
+    Family {
+        name: "operation tabs",
+        max_raw: 0,
+        sources: &[
+            ("op_page.rs", include_str!("../op_page.rs")),
+            ("geo_page.rs", include_str!("../geo_page.rs")),
+            ("boundary.rs", include_str!("../boundary.rs")),
+            ("heights_page.rs", include_str!("../heights_page.rs")),
+            ("feeds_page.rs", include_str!("../feeds_page.rs")),
+        ],
+    },
 ];
 
 #[test]
 fn form_seam_guard_covers_only_the_migrated_families() {
     let names: Vec<_> = FAMILIES.iter().map(|f| f.name).collect();
-    assert_eq!(names, ["holes", "turning", "multi-axis", "2D", "3D"], "unmigrated families must not block a migration");
+    assert_eq!(names, ["holes", "turning", "multi-axis", "2D", "3D", "operation tabs"], "unmigrated families must not block a migration");
     assert!(FAMILIES.iter().all(|f| f.max_raw == 0), "a migrated family has no raw call");
     let files = |i: usize| FAMILIES[i].sources.iter().map(|(name, _)| *name).collect::<Vec<_>>();
     assert_eq!(files(0), ["holes_page.rs", "thread_page.rs"]);
@@ -120,6 +134,7 @@ fn form_seam_guard_covers_only_the_migrated_families() {
     assert_eq!(files(2), ["multiaxis_page.rs", "rotary_page.rs", "multiaxis_deburr_page.rs"]);
     assert_eq!(files(3).len(), 20, "the 2D family: {:?}", files(3));
     assert_eq!(files(4), ["mill3d_page.rs", "undercut_page.rs"]);
+    assert_eq!(files(5), ["op_page.rs", "geo_page.rs", "boundary.rs", "heights_page.rs", "feeds_page.rs"]);
 }
 
 #[test]

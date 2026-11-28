@@ -30,6 +30,8 @@ pub(crate) use scroll_gutter::keep_scroll_gutter;
 mod banner_tests;
 #[cfg(test)]
 mod form_seam_tests;
+#[cfg(test)]
+mod form_seam_ops_tests;
 
 use egui::{Rect, Sense, Ui, Vec2};
 use egui_dock::{DockState, Node, NodePath, Split, SurfaceIndex};

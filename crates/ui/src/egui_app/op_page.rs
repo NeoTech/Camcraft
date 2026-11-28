@@ -25,7 +25,7 @@ use crate::shortcut_keys::chord;
 
 use super::colorvision::text_inks;
 mod header;
-use super::layout::{Action, ActionKind, BarInks, action_bar, group, prop_grid, status_banner_located};
+use super::layout::{Action, ActionKind, BarInks, action_bar, button, group, list_row, prop_grid, small_button, status_banner_located};
 use super::op_tabs::{SEC_FEEDS, SEC_GEO, SEC_LEADS, SEC_MACHINE, SEC_PASSES};
 use super::theme::Tokens;
 
@@ -43,12 +43,12 @@ pub(super) fn no_operation_page(ui: &mut Ui) {
     ui.add_space(8.0);
     ui.heading("No operation selected");
     ui.add_space(4.0);
-    ui.label("Select an operation in the browser to edit its parameters, or create a new one.");
+    list_row(ui, "Select an operation in the browser to edit its parameters, or create a new one.");
     ui.add_space(10.0);
     ui.strong("Get started");
-    ui.label("1. Set up stock, WCS, and tools in the Setup section.");
-    ui.label("2. Create an operation from the ribbon (2D, 3D, Drill, or Multi-axis).");
-    ui.label("3. Pick geometry, adjust parameters, then Generate and Simulate.");
+    list_row(ui, "1. Set up stock, WCS, and tools in the Setup section.");
+    list_row(ui, "2. Create an operation from the ribbon (2D, 3D, Drill, or Multi-axis).");
+    list_row(ui, "3. Pick geometry, adjust parameters, then Generate and Simulate.");
     ui.add_space(8.0);
     ui.small("Tip: keep the Browser and Properties panes open while you work.");
 }
@@ -80,24 +80,24 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         super::layout::keep_scroll_gutter(ui, 120.0);
         ui.horizontal(|ui| {
             ui.heading(format!("Operation: {label}"));
-            if exists && ui.small_button("Rename").clicked() {
+            if exists && small_button(ui, "Rename").clicked() {
                 state.rename_draft = Some((target.clone(), label.clone()));
             }
         });
         if let Some(op) = &live {
-            ui.label(format!("Type: {}", op.params.kind()));
+            list_row(ui, format!("Type: {}", op.params.kind()));
         }
         let mut new_label = None;
         let mut cancel_rename = false;
         if let Some((key, draft)) = state.rename_draft.as_mut() && key == &target {
-            ui.label("Name");
+            list_row(ui, "Name");
             let response = ui.text_edit_singleline(draft);
             ui.horizontal(|ui| {
-                if ui.button("Apply name").clicked()
+                if button(ui, "Apply name").clicked()
                     || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
                     new_label = Some(draft.clone());
                 }
-                cancel_rename = ui.button("Cancel").clicked();
+                cancel_rename = button(ui, "Cancel").clicked();
             });
         }
         if let Some(new_label) = new_label {
@@ -121,7 +121,7 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
             start_exit_pick::disarm(state);
         }
         if let Some(role) = state.op_ui.start_exit_pick.filter(|_| start_exit_pick::collecting(state)) {
-            ui.label(
+            list_row(ui, 
                 RichText::new(format!("Picking {} - click on the part or stock in the viewport", role.label()))
                     .strong(),
             );
@@ -269,8 +269,7 @@ fn needs_review_banner(ui: &mut Ui, state: &mut State, target: &str) {
     ui.group(|ui| {
         ui.horizontal_wrapped(|ui| {
             ui.colored_label(warn, format!("Needs review: {}", notes.join("; ")));
-            if ui
-                .button("Mark reviewed")
+            if button(ui, "Mark reviewed")
                 .on_hover_text("Clear the migration review warning so this operation can post")
                 .clicked()
             {
