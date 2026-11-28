@@ -414,6 +414,8 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
     let loc = model::transform_of(w, &e).unwrap_or_default();
     let mut out = json!({ "model": name, "frame": "world", "truncated": false });
     let mut truncated = false;
+    // #3915: SolidCraft names on the face and patch rows of a `.sc` model.
+    let source = super::source_names::Listing::of(w, &e, &kinds);
     for k in kinds {
         let (rows, total) = match k {
             "faces" => faces_view(w, name, names.as_deref(), &g, &loc, limit),
@@ -424,6 +426,7 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
         };
         truncated |= rows.len() < total;
         let rows = if compact { super::compact::compact_rows(k, rows) } else { rows };
+        let rows = source.annotate(k, rows);
         out[k] = Value::Array(rows);
         out[format!("{k}_total")] = json!(total);
     }
