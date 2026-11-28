@@ -67,6 +67,7 @@ fn check_source_topology(
     k: &mut SolidcoreKernel,
     record: &Record,
     healed: Candidate,
+    limit: f64,
 ) -> Result<(Candidate, String), Refusal> {
     let healed_edges = healed.brep.edge_list().len();
     let healed_gap = healed.gap;
@@ -78,7 +79,7 @@ fn check_source_topology(
         (
             stage,
             format!(
-                "{healed_summary} (limit {HEAL_GAP_LIMIT:e} mm); could not check the source topology: {why}"
+                "{healed_summary} (limit {limit:e} mm); could not check the source topology: {why}"
             ),
         )
     };
@@ -90,7 +91,7 @@ fn check_source_topology(
         to_kernel(&mut k.k, record, true).map_err(|e| source_error(("build", e.to_string())))?;
     let mut source = check_topology(k, brep).map_err(source_error)?;
     let source_edges = source.brep.edge_list().len();
-    if source.gap > HEAL_GAP_LIMIT {
+    if source.gap > limit {
         let location = source.worst_edge.and_then(|worst| {
             let index = order.edges.iter().position(|&e| e == worst.edge)?;
             let vertex = worst.vertex;
@@ -105,10 +106,10 @@ fn check_source_topology(
         return Err((
             "check",
             format!(
-                "The source endpoint gap is {} mm, above the {HEAL_GAP_LIMIT} mm limit. {location} \
+                "The source endpoint gap is {} mm, above the {limit} mm limit. {location} \
                  Before healing: {source_edges} edges; after healing: {healed_edges} edges, maximum gap {} mm.",
-                over_limit_gap_mm(source.gap),
-                over_limit_gap_mm(healed_gap)
+                over_limit_gap_mm(source.gap, limit),
+                over_limit_gap_mm(healed_gap, limit)
             ),
         ));
     }
@@ -134,9 +135,9 @@ fn check_source_topology(
 }
 
 /// Keep a small excess visible even when six decimal places would hide it.
-fn over_limit_gap_mm(gap: f64) -> String {
+fn over_limit_gap_mm(gap: f64, limit: f64) -> String {
     let rounded = format!("{gap:.6}");
-    if rounded == format!("{HEAL_GAP_LIMIT:.6}") {
+    if rounded == format!("{limit:.6}") {
         gap.to_string()
     } else {
         rounded
@@ -144,32 +145,40 @@ fn over_limit_gap_mm(gap: f64) -> String {
 }
 
 /// A reader record in mm, measured and checked before the mesher gets it.
+/// `limit` is the farthest a vertex may sit off the ends of its edges (mm):
+/// [`HEAL_GAP_LIMIT`], or for a STEP file the limit that its stated
+/// tolerance sets (`EdgeGapCap::vertex_limit_mm`, #3252).
 pub(crate) fn build_record(
     k: &mut SolidcoreKernel,
     source: RecordSource,
     name: String,
     record: Record,
     mut notes: Vec<String>,
+    limit: f64,
 ) -> Result<StepSolid, Refusal> {
     // A file is untrusted. Run the converter's ordinary healing pass first.
     let brep = to_kernel_body(&mut k.k, &record, false).map_err(|e| ("build", e.to_string()))?;
     let mut body = check_topology(k, brep)?;
     let mut recovered = None;
+    // Healing that removed edges and left a gap over the default limit is
+    // undone first (#3259): the file's own edges are preferred. The file's
+    // limit then bounds what is kept either way (#3252).
     if body.gap > HEAL_GAP_LIMIT {
-        if !matches!(source, RecordSource::Step(_))
-            || body.brep.edge_list().len() >= record.edges.len()
-        {
+        let healed_away = matches!(source, RecordSource::Step(_))
+            && body.brep.edge_list().len() < record.edges.len();
+        if healed_away {
+            let (original, comparison) = check_source_topology(k, &record, body, limit)?;
+            body = original;
+            recovered = Some(comparison);
+        } else if body.gap > limit {
             return Err((
                 "check",
                 format!(
-                    "a vertex sits {:.3e} mm off its edges (limit {HEAL_GAP_LIMIT:e})",
+                    "a vertex sits {:.3e} mm off its edges (limit {limit:e})",
                     body.gap
                 ),
             ));
         }
-        let (original, comparison) = check_source_topology(k, &record, body)?;
-        body = original;
-        recovered = Some(comparison);
     }
     k.k.check_cancelled("import solid measurement")
         .map_err(|e| ("measure", e.to_string()))?;
@@ -183,6 +192,14 @@ pub(crate) fn build_record(
         })?;
     if let Some(comparison) = recovered {
         notes.push(format!("Kept the original STEP edges. {comparison}."));
+    }
+    // Never a silent widening (#3252): a gap kept over the default limit is
+    // noted with the limit that let it pass.
+    if body.gap > HEAL_GAP_LIMIT {
+        notes.push(format!(
+            "a vertex sits {:.3e} mm off its edges, over the {HEAL_GAP_LIMIT:e} mm default and within this file's limit of {limit:e} mm (twice the tolerance it states)",
+            body.gap
+        ));
     }
     Ok(StepSolid {
         item: match source {

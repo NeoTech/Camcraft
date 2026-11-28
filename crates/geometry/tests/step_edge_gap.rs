@@ -8,6 +8,8 @@
 //! whose top is a B-spline tilted by the gap while its top edges stay flat.
 //! Provenance: our own fixtures, written from ISO 10303-21/-42.
 //!
+//! #3252: a vertex the reader kept farther off its edges than the chord
+//! loosens the mesh the same way, and a smaller one keeps the chord.
 //! Gate map (#2976): covers camcraft_geometry::step (the looser mesh).
 
 #![cfg(not(target_arch = "wasm32"))]
@@ -86,4 +88,37 @@ fn the_tracked_fixtures_keep_the_chord_cap() {
         assert!(!m.notes.iter().any(|n| n.contains("reduced accuracy")), "{file}: {:?}", m.notes);
         assert!(!m.loosened, "{file}");
     }
+}
+
+/// The unit box (testdata/models/box.step) stating 0.01 mm, its corner #158
+/// moved `d` mm along each axis: `d * sqrt(2)` mm off its three edges.
+fn moved_corner(d: f64) -> Vec<u8> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models/box.step");
+    let text = std::fs::read_to_string(path).expect("fixture");
+    text.replace("1.0E-6, #12", "0.01, #12")
+        .replace(
+            "#158 = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+            &format!("#158 = CARTESIAN_POINT('', ({d}, {d}, {d}));"),
+        )
+        .into_bytes()
+}
+
+/// #3252: a corner 5.7e-3 mm off its edges, over the 0.005 mm chord, is
+/// meshed at the file's looser tolerance from the start and handed out as
+/// reduced fidelity, never at the chord it cannot honour there.
+#[test]
+fn a_vertex_gap_over_the_chord_meshes_coarser() {
+    let m = step::parse_open(&moved_corner(0.004), BUDGET, CHORD).expect("imports at reduced fidelity");
+    assert!((m.chord_mm - 0.02).abs() <= 1e-12, "chord {}", m.chord_mm);
+    assert!(m.loosened);
+    assert!(m.open.is_none());
+}
+
+/// #3252: a corner 2.8e-3 mm off its edges, under the chord, keeps the
+/// chord: the mesh is not loosened for it.
+#[test]
+fn a_vertex_gap_under_the_chord_keeps_the_chord() {
+    let m = step::parse_open(&moved_corner(0.002), BUDGET, CHORD).expect("imports at the chord");
+    assert!((m.chord_mm - CHORD).abs() <= 1e-12, "chord {}", m.chord_mm);
+    assert!(!m.loosened);
 }

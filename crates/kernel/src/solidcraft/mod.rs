@@ -198,7 +198,7 @@ fn import_guarded(
             Err(note) => (None, Some(note)),
         };
     let solid =
-        build_record(k, RecordSource::Solidcraft, body.name, body.record, Vec::new()).map_err(|(stage, why)| {
+        build_record(k, RecordSource::Solidcraft, body.name, body.record, Vec::new(), crate::solidcore_import::HEAL_GAP_LIMIT).map_err(|(stage, why)| {
             if stop.is_cancelled() {
                 timed_out("building the final body")
             } else {

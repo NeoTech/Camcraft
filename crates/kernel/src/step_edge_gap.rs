@@ -11,6 +11,8 @@
 use solidcore_step::p21::Exchange;
 use solidcore_step::units;
 
+use crate::solidcore_import::HEAL_GAP_LIMIT;
+
 /// The farthest an edge may lie off its face's surface (mm) in a file that
 /// states no uncertainty, and the least cap of any file. The reader's
 /// 1 mm reach keeps edges a visible step off their faces (0.25 mm on a 1 mm
@@ -58,6 +60,23 @@ impl EdgeGapCap {
         Self { stated_mm, cap_mm }
     }
 
+    /// The farthest a vertex may sit off the ends of its edges (mm) once
+    /// the solid is built (#3252): twice the uncertainty the file states,
+    /// never under [`HEAL_GAP_LIMIT`] and never over [`EDGE_GAP_LIMIT_MM`].
+    /// A file that states no uncertainty keeps [`HEAL_GAP_LIMIT`]. A writer
+    /// such as a CAD export leaves a vertex a few microns off a line inside
+    /// the tolerance it states; the model is then meshed at the looser
+    /// chord and reported as reduced fidelity where that gap is over the
+    /// chord (`camcraft_geometry::step`).
+    #[must_use]
+    pub fn vertex_limit_mm(&self) -> f64 {
+        self.stated_mm.map_or(HEAL_GAP_LIMIT, |s| {
+            // `s` is finite and positive (`from_stated`); an overflow to
+            // infinity clamps to the limit.
+            (STATED_FACTOR * s).clamp(HEAL_GAP_LIMIT, EDGE_GAP_LIMIT_MM)
+        })
+    }
+
     /// The cap for the file `ex`.
     #[must_use]
     pub fn read(ex: &Exchange) -> Self {
@@ -92,7 +111,9 @@ pub struct EdgeGap {
     /// The largest gap of an edge to its face's surface (mm) that the
     /// reader kept, at most: the edges the kernel measured for their
     /// pcurves, and the edges whose tolerance the reader raised over their
-    /// gap ([`raised_edge_gap`]).
+    /// gap ([`raised_edge_gap`]). Also the largest gap of a vertex to the
+    /// ends of its edges that a built solid kept (#3252), so that a mesh
+    /// held to a chord under that gap is loosened, never claimed.
     pub widest_mm: f64,
 }
 
