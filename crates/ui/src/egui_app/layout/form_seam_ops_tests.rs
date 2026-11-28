@@ -49,3 +49,28 @@ fn the_operation_tab_seam_helpers_keep_clicks_text_and_state() {
     assert_eq!(h.state().on_hits, 1, "an enabled choice takes a click");
     assert_eq!(h.state().off_hits, 0, "a greyed-out choice takes no click");
 }
+
+/// An optional group's switch has no visible caption: the seam names it
+/// "Use {title}", so a screen reader reads more than "check box".
+#[test]
+fn an_optional_groups_switch_is_named_by_its_group() {
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    let mut h = Harness::builder().with_size(egui::Vec2::new(480.0, 200.0)).build_ui_state(
+        |ui, on: &mut bool| {
+            super::group(ui, "Retract Z", Some(on), |ui| super::list_row(ui, "Offset 10.0 mm"));
+        },
+        false,
+    );
+    h.run();
+    let unnamed = h.root().children_recursive().any(|n| {
+        let a = n.accesskit_node();
+        a.role() == Role::CheckBox && a.label().is_none_or(|l| l.is_empty())
+    });
+    assert!(!unnamed, "no check box without a name");
+    h.get_by_role_and_label(Role::CheckBox, "Use Retract Z").click();
+    h.run();
+    assert!(*h.state(), "the named switch is the group's switch");
+}

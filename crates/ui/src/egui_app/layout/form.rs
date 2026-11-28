@@ -194,7 +194,12 @@ pub fn group_open<R>(
     let mut title_clicked = false;
     let mut header = state.show_header(ui, |ui| {
         if let Some(e) = enabled {
-            toggled = ui.checkbox(e, "").on_hover_text(format!("use {title}")).changed();
+            let r = ui.checkbox(e, "").on_hover_text(format!("use {title}"));
+            // #1122: the switch has no visible caption (the title beside
+            // it is the group's), so it takes its name here: a screen
+            // reader read only "check box".
+            r.ctx.accesskit_node_builder(r.id, |node| node.set_label(format!("Use {title}")));
+            toggled = r.changed();
             on = *e;
         }
         // The title folds the group as the arrow does: a header that names

@@ -4,7 +4,7 @@ use egui::Ui;
 use camcraft_app::schema::Operation;
 use crate::state::{CommandKind, State};
 use super::super::fields::combo_owned;
-use super::super::layout::named_by;
+use super::super::layout::{list_row, named_by};
 
 /// Tool, Source and Setup as label | control rows of the header grid.
 pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>, exists: bool) {
@@ -24,10 +24,10 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     if toolless {
         // no row: the wire is the machine's
     } else if tools.is_empty() {
-        ui.label("Tool");
-        ui.label("none").on_hover_text("no tools in the document - the Tools page has a catalog");
+        list_row(ui, "Tool");
+        list_row(ui, "none").on_hover_text("no tools in the document - the Tools page has a catalog");
     } else {
-        let l = ui.label("Tool");
+        let l = list_row(ui, "Tool");
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
         // #1119: the combo is named by the row's label.
@@ -64,7 +64,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     };
     let mut src_items = super::super::op_source::source_items(&state.world, op_setup.as_deref(), &state.op_ui.params);
     let models: Vec<String> = src_items.iter().skip(1).cloned().collect();
-    let source_label = ui.label("Source");
+    let source_label = list_row(ui, "Source");
     let mut s_idx: usize = if state.op_ui.src_kind == 2 {
         src_items.push("Selection".to_owned());
         src_items.len() - 1
@@ -106,10 +106,10 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
     // Setup membership (M3.2 A): moving is never a stamp edit -
     // SetOperationSetup keeps the stamp and lets the resolved-Z digest
     // say whether the op went Stale.
-    let setup_label = ui.label("Setup");
+    let setup_label = list_row(ui, "Setup");
     let setups = camcraft_app::setup::names(&state.world);
     if setups.is_empty() {
-        ui.label("global (no setups)").on_hover_text("this document has no setups yet - the global stock and offsets apply");
+        list_row(ui, "global (no setups)").on_hover_text("this document has no setups yet - the global stock and offsets apply");
     } else {
         let cur = live.and_then(|o| o.setup.clone()).or_else(|| setups.first().cloned());
         let mut s_idx = setups.iter().position(|n| Some(n) == cur.as_ref()).unwrap_or(0);
@@ -131,7 +131,7 @@ pub(super) fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Op
 fn coolant_row(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>) {
     let Some(op) = live else { return };
     use camcraft_app::operation::CoolantMode;
-    let l = ui.label("Coolant").on_hover_text(
+    let l = list_row(ui, "Coolant").on_hover_text(
         "the cutting fluid the post switches on for this operation - the machine's own code for it; a choice the machine states no code for blocks the post by name",
     );
     let labels: Vec<String> = CoolantMode::ALL.iter().map(|m| m.label().to_owned()).collect();

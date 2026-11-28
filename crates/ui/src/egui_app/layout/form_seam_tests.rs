@@ -115,6 +115,7 @@ const FAMILIES: &[Family<'_>] = &[
         max_raw: 0,
         sources: &[
             ("op_page.rs", include_str!("../op_page.rs")),
+            ("op_page/header.rs", include_str!("../op_page/header.rs")),
             ("geo_page.rs", include_str!("../geo_page.rs")),
             ("boundary.rs", include_str!("../boundary.rs")),
             ("heights_page.rs", include_str!("../heights_page.rs")),
@@ -134,7 +135,7 @@ fn form_seam_guard_covers_only_the_migrated_families() {
     assert_eq!(files(2), ["multiaxis_page.rs", "rotary_page.rs", "multiaxis_deburr_page.rs"]);
     assert_eq!(files(3).len(), 20, "the 2D family: {:?}", files(3));
     assert_eq!(files(4), ["mill3d_page.rs", "undercut_page.rs"]);
-    assert_eq!(files(5), ["op_page.rs", "geo_page.rs", "boundary.rs", "heights_page.rs", "feeds_page.rs"]);
+    assert_eq!(files(5), ["op_page.rs", "op_page/header.rs", "geo_page.rs", "boundary.rs", "heights_page.rs", "feeds_page.rs"]);
 }
 
 #[test]

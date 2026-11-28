@@ -2,8 +2,9 @@
 
 **What was decided.**
 - The "operation tabs" family is the frame and the tabs that every
-  operation page shares: `op_page.rs`, `geo_page.rs`, `boundary.rs`,
-  `heights_page.rs` and `feeds_page.rs`. The guard holds it at 0 raw calls.
+  operation page shares: `op_page.rs`, `op_page/header.rs`, `geo_page.rs`,
+  `boundary.rs`, `heights_page.rs` and `feeds_page.rs`. The guard holds it
+  at 0 raw calls.
 - `pages.rs` is not in this family. It draws the post, setup and model
   pages, so it goes with the "setup and fixtures" family.
 - The status banner and the action bar move unchanged from
@@ -18,6 +19,10 @@
     derived value);
   - `layout::choice_button_enabled`: a selectable button that is greyed
     out while it is not enabled (a boundary role choice).
+- An optional group's enable switch (`layout::group`) had no visible
+  caption and no accessible name: AccessKit showed a check box with an
+  empty label on the Heights tab. The seam now names it "Use {title}".
+  The hover text stays "use {title}". Nothing visible changes.
 - The new helper test is in its own file (`form_seam_ops_tests.rs`),
   because `form_seam_tests.rs` is near 400 lines.
 
