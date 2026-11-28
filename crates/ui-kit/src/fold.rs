@@ -128,6 +128,50 @@ fn job(sections: &[(&str, egui::Color32)], size: f32) -> egui::text::LayoutJob {
     job
 }
 
+/// How much of a chip's state line fitted (#4503).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateFit {
+    /// Glyph and text.
+    Full,
+    /// The pane was too short for the text: the glyph alone.
+    GlyphOnly,
+    /// Not even the glyph fitted, and the state needs attention: a warn
+    /// bar at the chip's foot, so the chip never reads as clean.
+    Mark,
+    /// Not even the glyph fitted, and all is well: nothing is painted.
+    Nothing,
+}
+
+/// The height of the warn bar at the foot of a chip (`StateFit::Mark`).
+const MARK_BAR: f32 = 4.0;
+
+/// Paint the state line from `top`. When the text does not fit, paint the
+/// glyph alone. When not even the glyph fits and the state needs attention,
+/// paint a warn bar at the chip's foot, so that a chip whose title fits does
+/// not look clean by accident (the text is still in the tooltip).
+pub fn paint_state(painter: &egui::Painter, rect: Rect, top: f32, st: &ChipState, pal: &Tokens) -> StateFit {
+    let glyph_ink = match st.tone {
+        ChipTone::Ok => pal.text_dim,
+        ChipTone::Attention => pal.warn_ink,
+    };
+    let sections = [(st.glyph(), glyph_ink), (" ", pal.text), (st.text.as_str(), pal.text)];
+    if turned(painter, rect, top, job(&sections, pal.font_row), pal.text).is_some() {
+        return StateFit::Full;
+    }
+    let glyph = [(st.glyph(), glyph_ink)];
+    if turned(painter, rect, top, job(&glyph, pal.font_row), pal.text).is_some() {
+        StateFit::GlyphOnly
+    } else if st.tone == ChipTone::Attention {
+        // The title ends at least `TITLE_PAD` above the foot, so the bar
+        // never covers it.
+        let bar = Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - MARK_BAR), rect.right_bottom());
+        painter.rect_filled(bar, 0.0, glyph_ink);
+        StateFit::Mark
+    } else {
+        StateFit::Nothing
+    }
+}
+
 /// Draw one fold chip in `rect`: a full-height button with the pane's
 /// title turned to read top to bottom and, under it, the pane's safety
 /// state. The returned response is clicked when the user asks to unfold
@@ -152,12 +196,7 @@ pub fn fold_chip(
     let title_bottom = turned(&painter, rect, rect.top() + TITLE_PAD, job(&[(title, ink)], pal.font_row), ink);
     match (title_bottom, state) {
         (Some(bottom), Some(st)) => {
-            let glyph_ink = match st.tone {
-                ChipTone::Ok => pal.text_dim,
-                ChipTone::Attention => pal.warn_ink,
-            };
-            let sections = [(st.glyph(), glyph_ink), (" ", pal.text), (st.text.as_str(), pal.text)];
-            let _ = turned(&painter, rect, bottom + 2.0 * TITLE_PAD, job(&sections, pal.font_row), pal.text);
+            paint_state(&painter, rect, bottom + 2.0 * TITLE_PAD, st, pal);
         }
         (Some(_), None) => {}
         (None, _) => {
@@ -187,94 +226,4 @@ pub fn chip_rect(pane: Rect, tab_bar: f32) -> Option<Rect> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_chip_fraction_holds_the_chip_width_on_either_side() {
-        let left = chip_fraction(FoldSide::Left, CHIP_WIDTH, 1000.0).expect("a wide split folds");
-        assert!((left * 1000.0 - CHIP_WIDTH).abs() < 1e-3);
-        let right = chip_fraction(FoldSide::Right, CHIP_WIDTH, 1000.0).expect("a wide split folds");
-        assert!(((1.0 - right) * 1000.0 - CHIP_WIDTH).abs() < 1e-3);
-    }
-
-    #[test]
-    fn an_unlaid_or_narrow_split_keeps_its_fraction() {
-        assert_eq!(chip_fraction(FoldSide::Left, CHIP_WIDTH, f32::INFINITY), None);
-        assert_eq!(chip_fraction(FoldSide::Left, CHIP_WIDTH, f32::NAN), None);
-        assert_eq!(chip_fraction(FoldSide::Right, CHIP_WIDTH, 2.0 * CHIP_WIDTH), None);
-        assert_eq!(chip_fraction(FoldSide::Right, 0.0, 500.0), None);
-    }
-
-    #[test]
-    fn holds_reads_half_a_point_and_open_fraction_refuses_a_bad_share() {
-        assert!(holds(0.1, 0.1004, 1000.0));
-        assert!(!holds(0.1, 0.101, 1000.0));
-        assert_eq!(open_fraction(0.3, 0.2), 0.3);
-        for bad in [f32::NAN, f32::INFINITY, 0.0, 1.0, -0.5, 1.5] {
-            assert_eq!(open_fraction(bad, 0.2), 0.2, "{bad} is no share");
-        }
-    }
-
-    #[test]
-    fn the_chip_rect_drops_the_tab_bar_and_refuses_an_empty_pane() {
-        let pane = Rect::from_min_size(Pos2::new(0.0, 100.0), Vec2::new(CHIP_WIDTH, 400.0));
-        let r = chip_rect(pane, 24.0).expect("a tall pane has a chip");
-        assert_eq!(r.top(), 124.0);
-        assert_eq!(r.width(), CHIP_WIDTH);
-        assert_eq!(chip_rect(pane, 400.0), None);
-        assert_eq!(chip_rect(Rect::NOTHING, 24.0), None);
-    }
-
-    #[test]
-    fn the_chip_is_a_button_named_for_its_pane_and_takes_a_click() {
-        let ctx = egui::Context::default();
-        let rect = Rect::from_min_size(Pos2::new(10.0, 40.0), Vec2::new(CHIP_WIDTH, 300.0));
-        let mut clicked = false;
-        let mut run = |events: Vec<egui::Event>| {
-            let input = egui::RawInput { events, ..Default::default() };
-            let mut out = ctx.run_ui(input, |ui| {
-                let st = ChipState { tone: ChipTone::Attention, text: "2 stale".into(), detail: String::new() };
-                let resp = fold_chip(ui, rect, egui::Id::new("chip"), "Browser", Some(&st), &Tokens::DARK);
-                clicked |= resp.clicked();
-            });
-            // The font atlas delta must be taken, or epaint refuses the drop.
-            out.textures_delta.clear();
-        };
-        let at = rect.center();
-        run(vec![egui::Event::PointerMoved(at)]);
-        let press = |pressed| egui::Event::PointerButton {
-            pos: at,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        };
-        run(vec![press(true)]);
-        run(vec![press(false)]);
-        assert!(clicked, "a click on the chip is the unfold ask");
-        assert_eq!(chip_label("Browser"), "Unfold Browser");
-    }
-
-    #[test]
-    fn the_hover_step_is_visible_in_both_themes() {
-        for (name, pal) in [("dark", Tokens::DARK), ("light", Tokens::LIGHT)] {
-            let (rest_w, rest) = chip_edge(&pal, false);
-            let (hover_w, hover) = chip_edge(&pal, true);
-            assert!(hover_w > rest_w, "{name}: the hovered frame is wider");
-            let step = crate::contrast::ratio(hover, pal.ink_alt);
-            assert!(step >= 2.0, "{name}: the hover frame reads on the chip ({step:.2}:1)");
-            assert!(crate::contrast::ratio(hover, rest) > 1.2, "{name}: hover and rest frames differ");
-            let title = crate::contrast::ratio(chip_title_ink(&pal, true), pal.ink_alt);
-            assert!(title >= 4.5, "{name}: the hovered title is readable ({title:.2}:1)");
-        }
-    }
-
-    #[test]
-    fn a_state_line_carries_a_glyph_and_words() {
-        let ok = ChipState { tone: ChipTone::Ok, text: "Up to date".into(), detail: String::new() };
-        let act = ChipState { tone: ChipTone::Attention, text: "Needs regenerate".into(), detail: String::new() };
-        assert_eq!(ok.line(), "\u{2714} Up to date");
-        assert_eq!(act.line(), "\u{26A0} Needs regenerate");
-        assert_ne!(ok.glyph(), act.glyph(), "the glyph alone tells the two apart");
-    }
-}
+mod tests;

@@ -261,6 +261,16 @@ fn make_stale(h: &mut H) {
     h.run_steps(3);
 }
 
+/// The warnings of the seed's one cached toolpath, as the tree row counts them.
+fn seed_warnings(h: &H) -> usize {
+    let w = &h.state().state.world;
+    let e = model::find_by_name(w, "Contour1").expect("the seed's op");
+    let n = model::with_toolpath(w, &e, |tp| tp.warnings.len()).unwrap_or(0);
+    // A literal, so that a miscount in the chip's counter fails here.
+    assert_eq!(n, 89, "the seed's cached toolpath warnings");
+    n
+}
+
 /// The texts painted inside the leaf of `tab`, under its tab bar.
 fn chip_texts(h: &H, tab: &Tab) -> Vec<String> {
     let leaf = leaf_rect(&h.state().dock, tab).expect("docked");
@@ -277,10 +287,14 @@ fn a_stale_operation_shows_on_the_folded_browser_chip() {
     assert!(fold::fold(&mut h.state_mut().dock, &Tab::Browser));
     h.run_steps(3);
     let texts = chip_texts(&h, &Tab::Browser);
-    assert!(texts.iter().any(|t| t == "\u{2714} Up to date"), "a current job says so: {texts:?}");
+    // The seed's toolpath has warnings, which the chip counts (#4503), so
+    // it is not "Up to date" and it is not stale either.
+    let want = format!("\u{26A0} {} warnings", seed_warnings(&h));
+    assert!(texts.contains(&want), "a current job: {texts:?}");
     make_stale(&mut h);
     let texts = chip_texts(&h, &Tab::Browser);
-    assert!(texts.iter().any(|t| t == "\u{26A0} 1 stale"), "the stale count stays on screen: {texts:?}");
+    let want = format!("\u{26A0} 1 stale \u{b7} {} warnings", seed_warnings(&h));
+    assert!(texts.contains(&want), "the stale count stays on screen: {texts:?}");
 }
 
 #[test]
@@ -313,4 +327,62 @@ fn a_fold_does_not_move_the_camera() {
         assert_eq!(cam.target, before.target, "the orbit target stays");
         assert_eq!((cam.yaw, cam.pitch, cam.dist), (before.yaw, before.pitch, before.dist), "the view stays");
     }
+}
+
+/// Add a Bore operation through the command queue, with Contour1's tool.
+fn add_op(h: &mut H, name: &str) {
+    let tool = contour_tool(h);
+    add_op_with(h, name, &tool);
+}
+
+fn add_op_with(h: &mut H, name: &str, tool: &str) {
+    let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
+    h.state_mut().state.pending.push_back(CommandKind::CreateOperation {
+        name: name.into(),
+        tool: tool.into(),
+        src: SrcRef::Stock,
+        params: crate::operations::quick_params(index),
+    });
+    h.run_steps(3);
+}
+
+fn contour_tool(h: &H) -> String {
+    let w = &h.state().state.world;
+    let e = model::find_by_name(w, "Contour1").expect("the seed's op");
+    model::operation_of(w, &e).expect("op").tool
+}
+
+#[test]
+fn a_never_generated_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    add_op(&mut h, "Bore9");
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let browser = chip_texts(&h, &Tab::Browser);
+    let want = format!("\u{26A0} 1 not generated \u{b7} {} warnings", seed_warnings(&h));
+    assert!(browser.contains(&want), "Browser: {browser:?}");
+    let props = chip_texts(&h, &Tab::Properties);
+    assert!(props.iter().any(|t| t == "\u{26A0} Not generated"), "Properties: {props:?}");
+}
+
+#[test]
+fn a_blocked_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    // Deleting a tool entity by name leaves its operations without it.
+    let tool = contour_tool(&h);
+    h.state_mut().state.pending.push_back(CommandKind::DeleteByName(tool));
+    h.run_steps(3);
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let browser = chip_texts(&h, &Tab::Browser);
+    let want = format!("\u{26A0} 1 blocked \u{b7} {} warnings", seed_warnings(&h));
+    assert!(browser.contains(&want), "Browser: {browser:?} ({})", h.state().state.status);
+    let props = chip_texts(&h, &Tab::Properties);
+    assert!(props.iter().any(|t| t == "\u{26A0} Blocked"), "Properties: {props:?}");
 }
