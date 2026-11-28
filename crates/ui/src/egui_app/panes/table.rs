@@ -67,6 +67,7 @@ const fn slot(want: Option<bool>, have: bool) -> bool {
     }
 }
 
+#[cfg(test)]
 const fn meet(a: Option<bool>, b: Option<bool>) -> bool {
     match (a, b) {
         (Some(x), Some(y)) => x == y,
@@ -85,6 +86,7 @@ impl Shortcut {
     }
 
     /// Can one key press fire both shortcuts? The duplicate test's word.
+    #[cfg(test)]
     pub(in crate::egui_app) fn overlaps(&self, other: &Shortcut) -> bool {
         self.key == other.key
             && meet(self.command, other.command)
@@ -103,6 +105,7 @@ impl Shortcut {
 pub(in crate::egui_app) struct Row {
     pub cmd: Cmd,
     /// Stable id (tests, a later command search).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub id: &'static str,
     pub label: &'static str,
     /// The ribbon anchor group that shows the command, if any.
@@ -203,6 +206,7 @@ pub(in crate::egui_app) fn key_hint(c: Cmd) -> Option<String> {
 }
 
 /// A stable id for any command, the registry's included.
+#[cfg(test)]
 pub(in crate::egui_app) fn id_of(c: Cmd) -> String {
     match c {
         Cmd::Create(i) => match camcraft_app::operation::KindInfo::ALL.get(i) {
