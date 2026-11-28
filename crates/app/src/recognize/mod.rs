@@ -20,7 +20,6 @@
 
 mod create;
 mod op;
-mod pinch;
 mod shape;
 mod walls;
 
@@ -28,7 +27,7 @@ pub use create::{plan_operation, Planned};
 pub use op::{op_kind_of, operation_for};
 
 use crate::geo2d::Point2;
-use crate::geometry::feature::{FaceId, FaceKind};
+use crate::geometry::feature::{face_rings, FaceId, FaceKind};
 use crate::model;
 use flecs_ecs::prelude::World;
 
@@ -129,17 +128,18 @@ pub fn pockets_of(world: &World, name: &str) -> Result<Vec<Pocket>, String> {
             continue;
         }
         // #2440: a hole tangent to the outer ring meets it at one vertex;
-        // the ring walk calls such rings open, and `pinch` proves them.
-        let Some((outer, inner)) = pinch::rings(&mesh, &features, fi, face) else {
+        // the ring walk calls such rings open, and `face_rings` proves them.
+        let Some((outer, inner)) = face_rings(&features, fi) else {
             continue;
         };
         let Some(floor) = mesh.floor_of(&features, fi, face, &outer) else {
             continue;
         };
         let islands = inner.len();
-        // #2440: only a boss standing in the floor breaks a slot; a hole
-        // drilled through its floor does not change the channel.
-        let bosses = inner.iter().filter(|l| mesh.rises_from(&features, fi, l, floor.z)).count();
+        // #2440: only material above the floor inside an inner ring (a
+        // boss, also one deep in a recess) breaks a slot; a hole drilled
+        // through its floor does not change the channel.
+        let bosses = inner.iter().filter(|l| mesh.rises_from(&features, fi, face, l, floor.z)).count();
         if let Some(p) = shape::classify(name, face.id, floor, islands, bosses) {
             out.push(p);
         }

@@ -6,7 +6,7 @@
 //! concave-edge rule after Joshi & Chang (CAD 20(2), 1988), see
 //! `recognize`. No vendor material consulted.
 
-use crate::geo2d::Point2;
+use crate::geo2d::{overlap, Point2};
 use crate::geometry::feature::{Face, Features, Loop};
 use crate::geometry::{transform_point, Point3, Triangle};
 use crate::schema::Location;
@@ -24,6 +24,10 @@ const Z_TOL: f64 = 1e-4;
 /// needs to count as a wall facing into it: a vertical wall reads 1, a
 /// first fillet strip still reads well above this.
 const WALL_LEAN: f64 = 0.05;
+/// Boundary slack, mm, of the test for material above an inner ring: a
+/// facet that only touches the ring (a wall at a tangent hole's corner)
+/// does not count. Ten times the weld lattice.
+const OVERLAP_EPS: f64 = 1e-5;
 /// Smallest depth worth calling a pocket, mm.
 const MIN_DEPTH: f64 = 1e-3;
 
@@ -164,44 +168,55 @@ impl Mesh {
         Some(Floor { ring: pts, wall, z, top, area: face.area })
     }
 
-    /// Inner ring `lp` of the floor `fi` at `z` holds a boss: a facet off
-    /// the floor that shares an edge of the ring stands above the floor.
-    /// A hole through the floor has its wall below the floor, so it reads
-    /// false (#2440). A ring that does not key reads as a boss, the
-    /// cautious answer.
-    pub(super) fn rises_from(&self, f: &Features, fi: usize, lp: &Loop, z: f64) -> bool {
+    /// Inner ring `lp` of the floor `face` (index `fi`) at `z` has
+    /// material above the floor inside it: a facet off the floor that
+    /// shares an edge of the ring and stands above the floor, or any facet
+    /// off the floor that reaches above it and overlaps the ring's inside
+    /// seen from above. The second test finds a boss that stands in a
+    /// recess below the floor, whose ring facets all go down. A hole
+    /// through the floor has nothing above the floor inside it, so it
+    /// reads false (#2440). A ring that does not key or place reads as a
+    /// boss, the cautious answer.
+    pub(super) fn rises_from(&self, f: &Features, fi: usize, face: &Face, lp: &Loop, z: f64) -> bool {
         let keys: Option<Vec<Key>> = lp.verts.iter().map(|&v| vert_key(f, v)).collect();
-        let Some(keys) = keys.filter(|k| k.len() >= 2) else {
+        let Some(keys) = keys.filter(|k| k.len() >= 3) else {
             return true;
         };
+        let off_floor = |t: usize| !f.facet_face.get(t).is_some_and(|&g| g as usize == fi);
         let n = keys.len();
         for i in 0..n {
             let (Some(&a), Some(&b)) = (keys.get(i), keys.get((i + 1) % n)) else {
                 return true;
             };
             for &t in self.edges.get(&edge_key(a, b)).map_or(&[][..], |v| v.as_slice()) {
-                if f.facet_face.get(t as usize).is_some_and(|&g| g as usize == fi) {
-                    continue;
-                }
-                let Some(w) = self.world.get(t as usize) else { continue };
+                let Some(w) = self.world.get(t as usize).filter(|_| off_floor(t as usize)) else { continue };
                 let cz = (w[0].z + w[1].z + w[2].z) / 3.0;
                 if cz > z + Z_TOL {
                     return true;
                 }
             }
         }
-        false
-    }
-
-    /// The feature vertices `a` and `b` span a boundary edge of face
-    /// `fi`: a facet of the face and a facet of another face share it.
-    pub(super) fn bounds_face(&self, f: &Features, fi: usize, a: u32, b: u32) -> bool {
-        let (Some(ka), Some(kb)) = (vert_key(f, a), vert_key(f, b)) else {
-            return false;
+        let Some(ring) = self.world_ring(face, &keys) else {
+            return true;
         };
-        let on = self.edges.get(&edge_key(ka, kb)).map_or(&[][..], |v| v.as_slice());
-        let mine = |t: &u32| f.facet_face.get(*t as usize).is_some_and(|&g| g as usize == fi);
-        on.iter().any(mine) && !on.iter().all(mine)
+        let ring: Vec<Point2> = ring.iter().map(|p| Point2::new(p.x, p.y)).collect();
+        let (lo, hi) = overlap::bounds(&ring);
+        for (t, w) in self.world.iter().enumerate() {
+            if !off_floor(t) || self.normal.get(t).is_none_or(Option::is_none) {
+                continue;
+            }
+            if w[0].z.max(w[1].z).max(w[2].z) <= z + Z_TOL {
+                continue;
+            }
+            let tri = w.map(|p| Point2::new(p.x, p.y));
+            if tri.iter().all(|p| p.x < lo.x) || tri.iter().all(|p| p.x > hi.x) || tri.iter().all(|p| p.y < lo.y) || tri.iter().all(|p| p.y > hi.y) {
+                continue;
+            }
+            if overlap::triangle_overlaps_ring(&tri, &ring, OVERLAP_EPS) {
+                return true;
+            }
+        }
+        false
     }
 
     /// The ring's vertices in world space, read off the facet corners

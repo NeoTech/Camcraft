@@ -16,6 +16,8 @@
 use thiserror::Error;
 
 mod clip_line;
+// #2440: a triangle against the inside of a ring.
+pub mod overlap;
 mod slivers;
 mod sweep;
 

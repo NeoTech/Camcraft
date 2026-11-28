@@ -55,6 +55,9 @@ mod vertex;
 pub use vertex::{VertexId, corner_verts, resolve_vertex, vertex_id, vertex_ids};
 mod names;
 mod patch_shape;
+// #2440: a face's outer ring and holes, also across a tangent knot.
+mod rings;
+pub use rings::face_rings;
 pub use names::{FeatureNames, NameInputs, NameKind, build_feature_names};
 pub use patch_shape::{PatchShape, classify_patch};
 

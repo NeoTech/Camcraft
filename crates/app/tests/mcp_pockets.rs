@@ -179,6 +179,37 @@ fn a_boss_standing_in_the_channel_is_not_a_slot() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #2440 review: a boss that stands in a recess below the slot floor
+/// still breaks the slot. The floor (z 10) has one inner ring, the edge
+/// of a 12 x 6 mm recess (floor z 2), and each facet on that ring goes
+/// down. A 6 x 2 mm boss in the recess reaches z 15, above the slot
+/// floor, so a slot cut would gouge it. The floor lists as an open
+/// pocket, as on main before #2440.
+#[test]
+fn a_boss_standing_in_a_recess_of_the_channel_is_not_a_slot() {
+    let xs = [-30.0, -6.0, -3.0, 3.0, 6.0, 30.0];
+    let ys = [-20.0, -5.0, -3.0, -1.0, 1.0, 3.0, 5.0, 20.0];
+    let mesh = height_field(&xs, &ys, |i, j| {
+        if i == 2 && j == 3 {
+            15.0
+        } else if (1..=3).contains(&i) && (2..=4).contains(&j) {
+            2.0
+        } else if (1..=5).contains(&j) {
+            10.0
+        } else {
+            20.0
+        }
+    });
+    let (mut c, dir) = job("slot-recess-boss", &mesh);
+    let got = c.ok("detect_pockets", json!({ "model": "part" }));
+    let features = got["features"].as_array().cloned().unwrap_or_default();
+    let f = features.iter().find(|f| f["floor_z"] == json!(10.0)).expect("the channel floor is listed");
+    assert_eq!(f["kind"], json!("open_pocket"), "{got}");
+    assert_eq!(f["islands"], json!(1), "{f}");
+    assert!(f["slot"].is_null(), "{f}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// #2440, the reported part's case: a slot along Y (x 5..15, floor z 10)
 /// in a 40 x 40 x 20 block, with a blind diamond hole (centre (12, 0),
 /// half diagonal 3, floor z 4) whose corner touches the slot wall at
