@@ -94,6 +94,7 @@ fn fan_mesh() -> Mesh {
 
 fn op(pairing: WirePairingRule, sync: Vec<WireSyncPair>) -> WireContourOp {
     WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

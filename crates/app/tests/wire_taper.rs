@@ -67,6 +67,7 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
     );
     h.execute(&world, ImportModel::from_mesh("block", block()));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

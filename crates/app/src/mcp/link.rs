@@ -220,8 +220,8 @@ pub struct Registration {
     entry: Entry,
     lock_file: PathBuf,
     /// Held for the life of the window: the proof that it runs (#3995).
-    /// Dropped after `Drop::drop` removed the files.
-    _lock: std::fs::File,
+    /// Released by `Drop::drop` after it removed the files.
+    lock: std::fs::File,
 }
 
 impl Registration {
@@ -253,6 +253,13 @@ impl Drop for Registration {
                 tracing::warn!("ui link: cannot remove {}: {e}", path.display());
             }
         }
+        // Release the lock now, not at the close of the file (#4041): on
+        // Unix a child that another thread is starting holds a copy of the
+        // descriptor until its exec, and the close alone leaves the lock
+        // held while that copy lives.
+        if let Err(e) = self.lock.unlock() {
+            tracing::warn!("ui link: cannot release {}: {e}", self.lock_file.display());
+        }
     }
 }
 
@@ -271,6 +278,7 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
     let (listener, transport, address, socket) = match bind(dir, pid) {
         Ok(bound) => bound,
         Err(e) => {
+            let _ = lock.unlock();
             drop(lock);
             let _ = std::fs::remove_file(&lock_file);
             return Err(e);
@@ -287,7 +295,7 @@ pub(crate) fn open(dir: &Path) -> std::io::Result<(Listener, Registration, Strin
     };
     // Built before the write, so a failed write still removes the socket.
     let file = dir.join(format!("{pid}.json"));
-    let registration = Registration { file, socket, entry, lock_file, _lock: lock };
+    let registration = Registration { file, socket, entry, lock_file, lock };
     write_entry(&registration.file, &registration.entry)?;
     Ok((listener, registration, token))
 }

@@ -46,6 +46,16 @@ pub(super) fn hold_lock(dir: &Path, pid: u32) -> std::fs::File {
     file
 }
 
+/// End the window of a [`hold_lock`] file: release its lock at once, as
+/// the OS does when a window process ends (#4041). A plain `drop` is not
+/// enough here: on Unix a `flock` belongs to the open file, and a child
+/// that another test thread is starting holds a copy of each descriptor
+/// until its `exec`. Then the close does not release the lock, and the
+/// CLI still reads the window as alive.
+pub(super) fn release_lock(file: std::fs::File) {
+    file.unlock().expect("release the lock");
+}
+
 pub(super) fn write_entry(dir: &Path, entry: &Entry) {
     let text = serde_json::to_string(entry).expect("entry json");
     std::fs::write(dir.join(format!("{}.json", entry.pid)), text).expect("write entry");

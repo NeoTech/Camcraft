@@ -191,7 +191,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, picks, burnout, clearance, taper_deg, four_axis, sharp_corners, .. } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, picks, burnout, clearance, taper_deg, four_axis, sharp_corners, lead_arc_radius, .. } = p;
 
     if tab == SEC_GEO {
         let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
@@ -205,6 +205,17 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         // #3207: sharp inside corners keep the wire's own radius.
         check_row(ui, "Sharp inside corners at the wire radius", sharp_corners);
         hint(ui, "on: an inside corner tighter than the wire is cut, and keeps the wire radius + gap - the leftover is said as a note; off refuses it");
+        // #3991: a tangent arc lead-in and lead-out; off is the straight lead.
+        let mut on = lead_arc_radius.is_some();
+        check_row(ui, "Tangent arc lead-in and lead-out", &mut on);
+        match (on, lead_arc_radius.as_mut()) {
+            (true, Some(r)) => {
+                prop_row(ui, "Lead arc radius", |ui| num(ui, u, r));
+            }
+            (true, None) => *lead_arc_radius = Some(operation::DEFAULT_LEAD_ARC_RADIUS),
+            (false, _) => *lead_arc_radius = None,
+        }
+        hint(ui, "on: the wire enters and leaves the profile on a tangent arc, so it does not stop at the entry; the radius must be over wire radius + gap, the start hole more than twice the radius off the path - a selected DXF profile only");
         // #536: a constant taper, degrees from vertical.
         prop_row(ui, "Taper angle", |ui| {
             ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));

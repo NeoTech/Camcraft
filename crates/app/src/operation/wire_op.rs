@@ -44,6 +44,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         clearance: super::types::DEFAULT_CLEARANCE,
         skims: Vec::new(),
         sharp_corners: false,
+        lead_arc_radius: None,
     })
 }
 
@@ -413,6 +414,17 @@ pub(super) fn generate_wire(
     // cut only; beside any other cut it is refused by name here too.
     if let Some(why) = super::pick_kinds::wire_exit_refusal(op) {
         return Err(GenError::Invalid(why));
+    }
+    // #3991: the tangent arc lead is cut on a selected DXF profile
+    // (`wire_sketch_arcs`), which never reaches here; any other profile
+    // is refused by name, never cut with the straight lead silently.
+    if let Some(why) = super::wire_sketch_arcs::lead_arc_refusal(op) {
+        return Err(GenError::Invalid(why));
+    }
+    if op.lead_arc_radius.is_some() {
+        return Err(GenError::Invalid(
+            "Wire Contour: a tangent arc lead is stated on a profile that is not a selected DXF chain - the arc lead is cut on a drawing's lines and arcs so far; set the straight lead or select the profile in a DXF drawing".into(),
+        ));
     }
     let corner = corner_rule(op, &cond)?;
     // #537: two profiles paired into rulings - its own generator, read

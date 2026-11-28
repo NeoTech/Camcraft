@@ -3,7 +3,7 @@
 //! file is removed, an unproved one is skipped, and neither is dialed.
 //! Provenance: our own tests over our own link; no HSMWorks material.
 
-use super::ui_link::{cli_ui, fresh_dir, hold_lock, write_entry};
+use super::ui_link::{cli_ui, fresh_dir, hold_lock, release_lock, write_entry};
 use camcraft_app::mcp::link::{self, Entry};
 use camcraft_app::mcp::link_owner::{self, Owner};
 use camcraft_app::mcp::{link_call, LinkError, Select};
@@ -46,7 +46,7 @@ fn a_crashed_windows_file_is_removed_and_its_port_is_never_dialed() {
     let entry = false_entry(4_000_000_001, listener.local_addr().expect("addr"));
     write_entry(&dir, &entry);
     // The lock file of the crashed window: its lock went with its process.
-    drop(hold_lock(&dir, entry.pid));
+    release_lock(hold_lock(&dir, entry.pid));
     assert_eq!(link_owner::owner(&dir, entry.pid), Owner::Gone);
 
     let err = link_call(&dir, &Select::Only, "get_job", &json!({})).expect_err("no window runs");
@@ -99,7 +99,7 @@ fn a_false_server_that_proves_the_token_gets_no_tool_call_when_the_window_has_en
         let nonce = hello["nonce"].as_str().expect("nonce").to_owned();
         // The window ends during the hello; the false server answers with
         // the proof that it computes from the token in the file.
-        drop(lock);
+        release_lock(lock);
         writeln!(stream, "{}", link::hello_ok(&link::token_proof(TOKEN, &nonce, "server"))).expect("answer");
         stream.flush().expect("flush");
         line.clear();

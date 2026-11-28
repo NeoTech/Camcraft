@@ -249,6 +249,26 @@ fn wire_sharp_inside_corners_toggle_applies_and_undoes() {
     assert!(!live(&h).sharp_corners, "one undo restores the default");
 }
 
+/// #3991: the tangent arc lead is off by default (the straight lead), its
+/// row is on the geometry tab, turning it on seeds the default radius,
+/// and Apply stores it as one undoable edit.
+#[test]
+fn wire_tangent_arc_lead_toggle_applies_and_undoes() {
+    let mut h = wire_page();
+    h.state_mut().op_tab = super::super::op_tabs::SEC_GEO;
+    h.run_steps(3);
+    assert_eq!(draft(&h).lead_arc_radius, None, "the straight lead by default");
+    press(&mut h, "Tangent arc lead-in and lead-out");
+    assert_eq!(draft(&h).lead_arc_radius, Some(camcraft_app::operation::DEFAULT_LEAD_ARC_RADIUS));
+    assert_eq!(live(&h).lead_arc_radius, None, "edits wait for Apply");
+    press(&mut h, "Apply");
+    h.state_mut().drain_actions();
+    assert_eq!(live(&h).lead_arc_radius, Some(camcraft_app::operation::DEFAULT_LEAD_ARC_RADIUS));
+    let st = h.state_mut();
+    assert!(st.history.undo(&st.world));
+    assert_eq!(live(&h).lead_arc_radius, None, "one undo restores the straight lead");
+}
+
 /// Only the native Agie post reads the open-cut statements (#3996). The
 /// frames after the post change let the page draft follow the new document.
 fn agie_post(h: &mut Harness<'static, State>) {
