@@ -25,6 +25,7 @@ pub mod import_svg;
 pub mod move_sketch;
 // #2679: typed text placed as a profile of engraving strokes.
 pub mod insert_text;
+pub mod sketch_recipe;
 // #3072: typed text in an outline font placed as a profile of closed shapes.
 pub mod insert_outline_text;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -122,6 +123,7 @@ pub use import_model::ImportModel;
 pub use insert_text::{InsertText, TextOptions};
 pub use insert_outline_text::{InsertOutlineText, OutlineTextOptions};
 pub use move_sketch::MoveSketch;
+pub use sketch_recipe::{AddQuickOp, CreateSketchRecipe, EditSketchRecipe, RecipePlacement};
 pub use insert_fixture::InsertFixture;
 pub use profile_fixture::{DeriveFixtureProfile, InsertProfileFixture, SetFixtureProfile};
 pub use load_machine::LoadMachine;

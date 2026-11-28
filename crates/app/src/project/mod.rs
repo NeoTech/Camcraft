@@ -175,6 +175,9 @@ pub use multiaxis_deburr_dto::*;
 // #1862: a DXF profile's row.
 mod sketch_dto;
 pub use sketch_dto::{PrimitiveDto, SketchDto};
+// #3194: a recipe profile's shape.
+mod recipe_dto;
+pub use recipe_dto::{Across, RecipeDto};
 mod rest_dto;
 pub use rest_dto::*;
 mod approach;

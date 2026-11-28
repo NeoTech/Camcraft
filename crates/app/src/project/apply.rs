@@ -569,6 +569,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // v83 -> v84 (#3645): the tool component table and the tool
         // stacks arrive; no v83 file holds them, so nothing moves - pure
         // step-up.
+        // v84 -> v85 (#3194): a profile may hold its recipe; no v84
+        // file holds one, so nothing moves - pure step-up.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {

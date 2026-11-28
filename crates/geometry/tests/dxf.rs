@@ -9,6 +9,9 @@ use std::f64::consts::{FRAC_PI_2, PI};
 mod block_curves;
 #[path = "dxf/blocks.rs"]
 mod blocks;
+// #3194: shapes stated by their dimensions.
+#[path = "dxf/sketch_recipe.rs"]
+mod sketch_recipe;
 #[path = "dxf/curves.rs"]
 mod curves;
 

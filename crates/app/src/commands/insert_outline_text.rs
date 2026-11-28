@@ -108,7 +108,7 @@ impl InsertOutlineText {
         let name = text_name(world, &options.text, options.name.as_deref())?;
         // One turn is every turn: keep the angle in (-180, 180], as `MoveSketch` does.
         let angle = 180.0 - (180.0 - angle_deg).rem_euclid(360.0);
-        Ok(InsertOutlineText { name, at: sketch::on_face(x, y, angle), sketch: Sketch { setup, data: Arc::new(data) } })
+        Ok(InsertOutlineText { name, at: sketch::on_face(x, y, angle), sketch: Sketch { setup, data: Arc::new(data), recipe: None } })
     }
 
     /// The name the profile lands under.

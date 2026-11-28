@@ -210,7 +210,15 @@ use super::*;
 /// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
 /// A v83 reader would drop the table and the stacks, and the next
 /// component edit could not update the tools built from them.
-pub const PROJECT_VERSION: u32 = 84;
+/// v85 (#3194): a DXF profile row may hold the `recipe` it was made
+/// from (a rectangle, circle, obround or polygon by its dimensions).
+/// Absent is no recipe, what every v84 profile was, so a v84 file steps
+/// up unchanged. This step is a compatibility break: every file this
+/// build writes says v85, and a v84 reader refuses the new files (see
+/// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
+/// A v84 reader would drop the recipe, and the profile could no longer
+/// be edited by its dimensions.
+pub const PROJECT_VERSION: u32 = 85;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older

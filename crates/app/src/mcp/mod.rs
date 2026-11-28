@@ -54,6 +54,7 @@ mod live;
 mod model_tools;
 // #1862: DXF profiles placed on a setup's stock.
 mod sketch_tools;
+mod sketch_recipe_tools;
 mod svg_tools;
 // #3072: typed text in an outline font as a profile of closed shapes.
 mod outline_text_tools;
