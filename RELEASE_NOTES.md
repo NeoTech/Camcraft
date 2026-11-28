@@ -31,8 +31,8 @@ HEIDENHAIN Klartext post and reader** (cycles 200, 206, 207, 9 and 32),
 the 5-Axis Parallel**, **the Sodick LN2W wire post** (control wire offset
 and constant taper), **SolidCraft face names that follow a re-import**, and
 **many post fixes** for Fanuc, Doosan DNM, Haas, Heidenhain, Sinumerik,
-Mach3, Mach4, LinuxCNC and Tormach. 192 pull requests merged since 0.27.0
-(58 features, 76 fixes, 2 performance changes, 10 refactors, docs, tests
+Mach3, Mach4, LinuxCNC and Tormach. 193 pull requests merged since 0.27.0
+(58 features, 77 fixes, 2 performance changes, 10 refactors, docs, tests
 and process).
 
 ## Upgrade notes
@@ -140,6 +140,10 @@ Seven pull requests merged into `main` after the freeze notice, between
 PR #4509 (#4341, on the cut list) merged on 2026-11-28 and supersedes
 PR #4371. No other pull request merged after these.
 
+The red `main` of the two `wire_post` tests (#4431, #4472) is fixed in
+this release by PR #4405: the tests post into a temp folder, not a fixed
+`/tmp` name.
+
 ## Not exercised on a real control
 The pull requests record no run on a real control for these changes. The
 test goldens are regression records. Check the first program on the machine
@@ -167,6 +171,10 @@ issues need attention before you post:
 - **#4511 (P1): the Fanuc and Doosan posts lift Z with G43.4 still armed
   at a setup-change stop after a tilted section.** Filed after the cut
   line. Check the setup-change stop of a tilted program.
+- **#4496 (P1): a gauge-length edit in the generic component editor
+  redraws a user holder with the library body found by name.** That body
+  can be thinner than the real steel. Check the holder drawing after such
+  an edit.
 - **#4455 (P1): the Largest diameter field of a copied holder reads 50.0,
   but the drawing shows Ø63.** Check the holder diameter before you trust
   the clearance check.
@@ -177,14 +185,15 @@ runner. A runner without these tools fails the site step.
 All open `P1` and `P2` issues:
 - #4511 (P1): Fanuc and Doosan posts: a setup-change stop after a tilted
   section lifts Z with G43.4 still armed (filed after the cut line).
-- #4472 (P1): main is red (post-merge gate). The `wire_post` tests; the
-  fix (#4431, PR #4405) is in this release.
+- #4496 (P1): Generic component editor: a gauge-length edit redraws a user
+  holder with the library body found by name, which can be thinner than the
+  real steel (filed after the cut line).
 - #4455 (P1): Holder form: the Largest diameter field of a copied holder
   reads 50.0 but the drawing shows Ø63.
 - #4436 (P1): Fanuc and Doosan DNM posts ignore a rotary's sign_convention
   table_rh under G43.4.
-- #4417 (P1): Fanuc post writes stream A/B words that a tilt-head chain
-  (A carries B) reads as a different tool axis.
+- #4417 (P1): Fanuc post writes stream A/B words that a tilt-head chain (A
+  carries B) reads as a different tool axis.
 - #4407 (P2): Path kernel: no silent recovery from a rejected result, and
   the stale record citations (review of #4383, class B).
 - #4406 (P2): Path kernel law suite: each law assertion can break, and a
@@ -195,16 +204,16 @@ All open `P1` and `P2` issues:
   edge, with a proved approach from the air (the 13 and 15 lifts).
 - #4178 (P2): Path kernel K5: the entry and exit stage (a proof for each
   entry, a named fallback, the Exit type).
-- #4177 (P2): Path kernel K4: the order stage and the link stage (stay
-  down, a named reason for each lift).
+- #4177 (P2): Path kernel K4: the order stage and the link stage (stay down,
+  a named reason for each lift).
 - #4176 (P2): Path kernel K2: the guide stage (rings, rows, medial line,
   trace, helix).
 - #4154 (P2): Path kernel K7a: measure the kernel laws on a finished
   toolpath, and pin the readings of the old planners.
-- #4153 (P2): Path kernel: record the old-planner baseline for each
-  phase-1 kind that has none.
-- #4055 (P2): Path kernel: the camcraft-pathkernel crate skeleton, the
-  stage types and the one switch.
+- #4153 (P2): Path kernel: record the old-planner baseline for each phase-1
+  kind that has none.
+- #4055 (P2): Path kernel: the camcraft-pathkernel crate skeleton, the stage
+  types and the one switch.
 - #4038 (P2): Path kernel phase 1: Thread plans through the path kernel on
   side/path-kernel.
 - #4037 (P2): Path kernel phase 1: Slot Undercut plans through the path
@@ -286,8 +295,12 @@ All open `P1` and `P2` issues:
   branch merges to `main` first, then each kind switches in its own PR
   (PR #4326).
 - 166: the gate has a site tests step in the batch and release tiers, and
-  in quick when a site input changes (PR #4440). Also PR #4333, #4268,
-  #4247, #4388 and #4397.
+  in quick when a site input changes (PR #4440). It also covers the
+  process files of PR #4333 (heavy reach by Gate map), #4247 (stall time
+  of a build step), #4388 (Cargo unit-hash inputs), #4397 (the
+  `camcraft-ui-kit` crate in the gate lists), #4268 (MCP rows for tool
+  components), #4449 (`xtask`: native expected config paths on Windows)
+  and #4423 (`camcraft-mcp` skill: pattern folders at the post).
 
 ## Pixel snapshots
 The pixel-snapshot lanes were not run for this cut: no Windows machine was
