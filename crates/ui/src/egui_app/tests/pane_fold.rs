@@ -287,11 +287,11 @@ fn a_stale_operation_shows_on_the_folded_browser_chip() {
     // The seed's toolpath has warnings, which the chip counts (#4503), so
     // it is not "Up to date" and it is not stale either.
     let want = format!("\u{26A0} {} warnings", seed_warnings(&h));
-    assert!(texts.iter().any(|t| *t == want), "a current job: {texts:?}");
+    assert!(texts.contains(&want), "a current job: {texts:?}");
     make_stale(&mut h);
     let texts = chip_texts(&h, &Tab::Browser);
     let want = format!("\u{26A0} 1 stale \u{b7} {} warnings", seed_warnings(&h));
-    assert!(texts.iter().any(|t| *t == want), "the stale count stays on screen: {texts:?}");
+    assert!(texts.contains(&want), "the stale count stays on screen: {texts:?}");
 }
 
 #[test]
@@ -378,7 +378,7 @@ fn a_blocked_operation_shows_on_both_folded_chips() {
     h.run_steps(3);
     let browser = chip_texts(&h, &Tab::Browser);
     let want = format!("\u{26A0} 1 blocked \u{b7} {} warnings", seed_warnings(&h));
-    assert!(browser.iter().any(|t| *t == want), "Browser: {browser:?} ({})", h.state().state.status);
+    assert!(browser.contains(&want), "Browser: {browser:?} ({})", h.state().state.status);
     let props = chip_texts(&h, &Tab::Properties);
     assert!(props.iter().any(|t| t == "\u{26A0} Blocked"), "Properties: {props:?}");
 }
