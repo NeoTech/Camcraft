@@ -77,7 +77,11 @@ mod catalog_multiaxis_indexed {
         assert!(notes.is_empty(), "load notes: {notes:?}");
         let ops = setup::operation_order(&w);
         assert_eq!(ops.len(), 3, "two indexed faces and one tilted face");
-        for ((name, entity), (a, b)) in ops.iter().zip([(90.0, 0.0), (-90.0, 0.0), (30.0, 30.0)]) {
+        // #4417: the posted words are the tilt head's joint angles (A carries
+        // B); the tilted pose A30 B30 posts as A33.69 B25.659.
+        let poses = [(90.0, 0.0), (-90.0, 0.0), (30.0, 30.0)];
+        let posted = [(90.0, 0.0), (-90.0, 0.0), (33.69, 25.659)];
+        for (((name, entity), (a, b)), (pa, pb)) in ops.iter().zip(poses).zip(posted) {
             assert_eq!(operation::status_of(&w, entity), operation::OpStatus::Ok, "{name} saved cache");
             let op = model::operation_of(&w, entity).expect("pocket operation");
             let OpParams::Pocket { tilt: Some(tilt), .. } = op.params else {
@@ -85,8 +89,8 @@ mod catalog_multiaxis_indexed {
             };
             assert_eq!((tilt.a_deg, tilt.b_deg), (a, b), "{name} orientation");
             let blocks = section(&program, name);
-            assert!(blocks.iter().any(|l| word(l, 'A') == Some(a)), "{name} posts A{a}");
-            assert!(blocks.iter().any(|l| word(l, 'B') == Some(b)), "{name} posts B{b}");
+            assert!(blocks.iter().any(|l| word(l, 'A') == Some(pa)), "{name} posts A{pa}");
+            assert!(blocks.iter().any(|l| word(l, 'B') == Some(pb)), "{name} posts B{pb}");
             assert!(blocks.iter().any(|l| l.starts_with("G01 ")), "{name} cuts");
         }
         let part = model::find_by_name(&w, "indexed").expect("embedded model");

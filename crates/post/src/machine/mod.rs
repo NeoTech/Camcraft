@@ -28,6 +28,7 @@ mod laser;
 pub use laser::laser_refusals;
 mod rows;
 mod swing;
+pub mod tilt_chain;
 pub use swing::{turns_work, work_length_refusals, WORK_LENGTHS};
 mod tooling;
 pub mod reservations;

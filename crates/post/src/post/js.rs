@@ -99,10 +99,11 @@ impl Script {
         limits.set_recursion_limit(64);
         limits.set_stack_size_limit(4096);
         let host = format!(
-            "var _maxOutputLines = {}; var _outputOperation = {};\n{PRELUDE}\n{}\n{}\n{}\n{}",
+            "var _maxOutputLines = {}; var _outputOperation = {};\n{PRELUDE}\n{}\n{}\n{}\n{}\n{}",
             output_budget.max,
             serde_json::to_string(operation)?,
             super::rotary_cap::ROTARY_CAP,
+            super::tilt_chain::TILT_CHAIN_JS,
             super::arc_guard::ARC_GUARD_JS,
             super::wire_offset::WIRE_OFFSET_JS,
             super::explain::EXPLAIN_JS
