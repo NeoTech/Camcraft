@@ -893,9 +893,9 @@ model"; "tap leaves no thread core".
 {{ <icon name="op-bore" /> }} ![View of circular interpolation inside a hole.](../../../operation-paths.svg#Bore)
 
 **For:** clearing and finishing a hole with an end mill smaller than the
-hole. The **Rings** strategy cuts level by level: at each level the tool
-dives at the centre, radial sweeps open each ring band, and the last ring
-finishes the wall. The **Helical** strategy cuts a counterbore or a hole
+hole. The **Rings** strategy cuts wide holes in concentric rings, level
+by level: at each level the tool dives at the centre, radial sweeps open
+each ring band, and the last ring finishes the wall. The **Helical** strategy cuts a counterbore or a hole
 up to twice the tool diameter without a plunge (see below). Choose Bore
 over a Drill boring cycle when there is no boring bar of the right size.
 
