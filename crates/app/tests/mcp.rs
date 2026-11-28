@@ -8,7 +8,8 @@
 //! Gate map (M4.4): covers app::mcp, app::script, app::project::json,
 //! app::cli, app::tool_library, app::commands (tool_import),
 //! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35),
-//! app::pattern_folder, app::commands::pattern_folder, app::mcp::pattern_tools (#3012).
+//! app::pattern_folder, app::commands::pattern_folder, app::mcp::pattern_tools (#3012),
+//! app::commands::face_to_size, app::mcp::face_to_size_tools (#3196).
 
 mod common;
 #[path = "mcp/add_tool_spindle_warning.rs"]
@@ -23,6 +24,9 @@ mod mcp_approach_distance;
 mod mcp_finish3d_direction;
 #[path = "mcp/finish3d_pass_start.rs"]
 mod mcp_finish3d_pass_start;
+// #3196: face to size from numbers.
+#[path = "mcp/face_to_size.rs"]
+mod face_to_size;
 mod mcp_open;
 // #3449: every accepted field of a kind, optional ones and enum words.
 #[path = "mcp/op_type_fields.rs"]

@@ -7,7 +7,7 @@
 //! Provenance: our own fixture over plain facing practice (top Z, final
 //! Z, depth per pass); no vendor material consulted.
 //!
-//! Gate map: covers app::commands::face_to_size, app::mcp::face_to_size_tools.
+//! Gate map: in the `mcp` suite (crates/app/tests/mcp.rs).
 
 use camcraft_app::mcp::Server;
 
