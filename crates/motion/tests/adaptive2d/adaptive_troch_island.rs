@@ -1,15 +1,14 @@
 //! Adaptive trochoid shape checks from the project tests for issues #1509 and #2990.
 //! Gate map: covers camcraft_motion::machining2d (adaptive_troch, adaptive_troch_lanes, adaptive_troch_clean), camcraft_motion::quality.
 
-#[path = "common/adaptive_troch.rs"]
-mod fixtures;
+use crate::fixtures;
 
 use fixtures::*;
 use camcraft_motion::machining2d::PocketParams;
 use camcraft_motion::geo2d::Region;
 
 #[test]
-#[ignore = "heavy lane: motion heavy: adaptive_troch_island (154 s alone in debug, #3514)"]
+#[ignore = "heavy lane: motion heavy: adaptive2d (154 s alone in debug, #3514)"]
 fn pocket_with_island_is_cleared_without_crossing_or_excess_rest() {
     let p = PocketParams { bottom_z: -3.0, ..params() };
     let Ok(isl) = Region::new(vec![

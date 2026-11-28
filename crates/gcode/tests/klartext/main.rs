@@ -7,6 +7,8 @@ mod degenerate;
 mod paths;
 mod refusals;
 mod round_trip;
+mod round_trip_cycles;
+mod tapping;
 
 use std::sync::mpsc;
 use std::thread;

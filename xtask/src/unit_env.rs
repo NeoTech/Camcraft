@@ -65,7 +65,8 @@ pub fn notes(vars: &[(String, String)]) -> Vec<String> {
 pub fn plan_notes(vars: &[(String, String)], root: &Path, plan: &crate::plan::Plan) -> Vec<String> {
     let mut dirs = vec![root.to_path_buf()];
     if plan.steps.iter().any(|s| s.in_ui) {
-        dirs.push(root.join("crates/ui"));
+        // Two components: a "/" inside one join stays in the noted path on Windows (#4454).
+        dirs.push(root.join("crates").join("ui"));
     }
     let home = std::env::var_os("CARGO_HOME").filter(|s| !s.is_empty()).map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|p| std::path::PathBuf::from(p).join(".cargo")));
@@ -221,7 +222,9 @@ mod tests {
     #[test]
     fn plan_notes_only_scan_ui_config_for_ui_steps() {
         let root = std::env::temp_dir().join(format!("xtask-plan-config-{}", std::process::id()));
-        let ui = root.join("crates/ui/.cargo");
+        // Build the expected path by components: on Windows a "/" inside a join stays in the
+        // displayed path, and the note text then differs from this path (#4454).
+        let ui = root.join("crates").join("ui").join(".cargo");
         fs::create_dir_all(&ui).unwrap();
         fs::write(ui.join("config.toml"), "[profile.test]\ndebug = true\n").unwrap();
         let mut plan = crate::plan::Plan::default();
@@ -231,6 +234,17 @@ mod tests {
         assert!(plan_notes(&[], &root, &plan).iter().any(|s| s.contains(&ui_path)));
         assert_eq!(fs::read_to_string(ui.join("config.toml")).unwrap(), "[profile.test]\ndebug = true\n");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn plan_notes_join_the_ui_directory_by_components() {
+        // A "/" inside a join keeps a mixed separator on Windows, so the noted config path
+        // differs from a path built by components (#4454). Linux cannot show the mismatch.
+        let src = include_str!("unit_env.rs");
+        let body = src.split("pub fn plan_notes(").nth(1).unwrap_or_default();
+        let body = body.split("\n}\n").next().unwrap_or_default();
+        assert!(body.contains("join(\"crates\").join(\"ui\")"), "plan_notes must join crates and ui as two components");
+        assert!(!body.contains("join(\"crates/"), "plan_notes must not join a path that contains a separator");
     }
 
     #[test]

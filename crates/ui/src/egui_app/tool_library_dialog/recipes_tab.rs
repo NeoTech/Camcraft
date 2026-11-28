@@ -12,6 +12,9 @@
 //! the row operations take; each row's surface speed and chip load stand
 //! under the table (`recipes_derived`, computed when their input
 //! changes); the buttons (`recipes_actions`) and a units note follow.
+//! #4453: the surface speed and chip load are inputs (`recipes_speeds`):
+//! an edit sets the row's stored rpm or feed; the derived line is their
+//! hover text.
 //! Provenance: our own tab over the tool draft and the handbook relations
 //! in `recipes_fill`; no HSMWorks material involved.
 
@@ -72,9 +75,8 @@ fn rows(ui: &mut Ui, state: &mut State) {
         }
     };
     cutting_rows_with(ui, &mut state.tool_ui, u, false, Some(&Extra { lead: &lead }));
-    for line in derived(state, u) {
-        note(ui, &line);
-    }
+    let lines = derived(state, u);
+    super::recipes_speeds::draw(ui, &mut state.tool_ui, u, &lines);
     super::recipes_actions::buttons(ui, state, stock);
     note(ui, &units_note(u));
     edge_rows(ui, &mut state.tool_ui);

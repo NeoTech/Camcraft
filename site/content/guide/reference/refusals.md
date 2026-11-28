@@ -50,6 +50,10 @@ For a message that is not in this table, look it up by what you see on the
 The table quotes the identifying part of each message. The full message
 also gives the operation, dimensions or picked geometry.
 
+An operation that is refused for a bad number names the field and its
+rule, for example "stepdown must be greater than 0 (got -3)". Correct the
+named field.
+
 | The message says | What it means | What to do |
 |---|---|---|
 | `the open area is too narrow for the ... tool and ... stock to leave at every level` | 3D Pocket has no cutter-centre space after tool clearance and allowance. | Use a smaller tool, review the allowance, or pick a larger machinable area. |
