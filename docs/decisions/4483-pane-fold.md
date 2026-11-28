@@ -64,10 +64,15 @@ new one without a change to the setups file format in `camcraft-app`.
 
 **Follow-up #4503.**
 - A chip whose pane is too short for the state text paints the glyph alone
-  (check or warning), so that it never looks clean by accident. The text
-  stays in the tooltip. A pane too short even for the glyph paints a warn
+  (check or warning), so that a chip whose title fits does not look clean
+  by accident. The text stays in the tooltip. A pane too short even for the glyph paints a warn
   bar at the chip's foot when the state needs attention. Only a clean chip
-  stays bare. (The folded mark is for a pane too short for the title.)
+  stays bare. A pane too short even for the title still shows only the
+  folded mark `▸`: that arm does not show the state.
+- Known gap, light theme: `warn_ink` is 1.92:1 on the light chip ground,
+  below the 3:1 of `contrast::UI`. The glyph and the warn bar share it.
+  UI plan A (#4485) adds the `status_warn` token (a dark amber in the light
+  theme). The bar and the glyph switch to it there. No new token here.
 - The Browser chip counts the warnings of the cached toolpaths ("4 warnings"),
   read as the tree row reads them, also for a stale or blocked operation
   (its row prints its old warnings). An operation with warnings is therefore

@@ -265,7 +265,10 @@ fn make_stale(h: &mut H) {
 fn seed_warnings(h: &H) -> usize {
     let w = &h.state().state.world;
     let e = model::find_by_name(w, "Contour1").expect("the seed's op");
-    model::with_toolpath(w, &e, |tp| tp.warnings.len()).unwrap_or(0)
+    let n = model::with_toolpath(w, &e, |tp| tp.warnings.len()).unwrap_or(0);
+    // A literal, so that a miscount in the chip's counter fails here.
+    assert_eq!(n, 89, "the seed's cached toolpath warnings");
+    n
 }
 
 /// The texts painted inside the leaf of `tab`, under its tab bar.
@@ -359,7 +362,8 @@ fn a_never_generated_operation_shows_on_both_folded_chips() {
     }
     h.run_steps(3);
     let browser = chip_texts(&h, &Tab::Browser);
-    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 not generated")), "Browser: {browser:?}");
+    let want = format!("\u{26A0} 1 not generated \u{b7} {} warnings", seed_warnings(&h));
+    assert!(browser.contains(&want), "Browser: {browser:?}");
     let props = chip_texts(&h, &Tab::Properties);
     assert!(props.iter().any(|t| t == "\u{26A0} Not generated"), "Properties: {props:?}");
 }

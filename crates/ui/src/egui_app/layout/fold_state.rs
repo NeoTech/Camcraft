@@ -19,11 +19,13 @@ fn chip(tone: ChipTone, text: impl Into<String>, detail: impl Into<String>) -> C
 
 /// The Browser chip: the counts of blocked, stale and never-generated
 /// operations and the warnings of the toolpaths (#4503; a stale or blocked
-/// operation counts its old warnings too, as its tree row prints them), or "Up to date" when none needs work. `None` with no
-/// operation in the document.
+/// operation counts its old warnings too, as its tree row prints them),
+/// or "Up to date" when none needs work. `None` with no operation in the
+/// document.
 pub(crate) fn browser_state(state: &State) -> Option<ChipState> {
     let w = &state.world;
-    let (mut blocked, mut stale, mut never, mut warned, mut total) = (0_usize, 0_usize, 0_usize, 0_usize, 0_usize);
+    let (mut blocked, mut stale, mut never) = (0_usize, 0_usize, 0_usize);
+    let (mut warned, mut total) = (0_usize, 0_usize);
     for (_, e) in model::named_entities(w) {
         if !model::is_operation(w, &e) {
             continue;

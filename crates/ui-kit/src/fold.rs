@@ -147,8 +147,8 @@ const MARK_BAR: f32 = 4.0;
 
 /// Paint the state line from `top`. When the text does not fit, paint the
 /// glyph alone. When not even the glyph fits and the state needs attention,
-/// paint a warn bar at the chip's foot. A chip never looks clean by accident
-/// (the text is still in the tooltip).
+/// paint a warn bar at the chip's foot, so that a chip whose title fits does
+/// not look clean by accident (the text is still in the tooltip).
 pub fn paint_state(painter: &egui::Painter, rect: Rect, top: f32, st: &ChipState, pal: &Tokens) -> StateFit {
     let glyph_ink = match st.tone {
         ChipTone::Ok => pal.text_dim,
@@ -329,13 +329,81 @@ mod tests {
         assert_eq!(fit_at(&ctx, &ok, 20.0), StateFit::Nothing, "a clean chip may stay bare");
     }
 
+    /// The shapes that `fold_chip` itself paints for `st` in a chip of `height`.
+    fn chip_shapes(ctx: &egui::Context, st: &ChipState, height: f32) -> (Rect, Vec<egui::Shape>) {
+        let rect = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(CHIP_WIDTH, height));
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            fold_chip(ui, rect, egui::Id::new("chip"), "Browser", Some(st), &Tokens::DARK);
+        });
+        out.textures_delta.clear();
+        (rect, out.shapes.into_iter().map(|c| c.shape).collect())
+    }
+
+    /// The turned texts (title, state) as `(top, bottom)` pairs, in paint order.
+    fn turned_spans(shapes: &[egui::Shape]) -> Vec<(f32, f32)> {
+        shapes
+            .iter()
+            .filter_map(|s| match s {
+                egui::Shape::Text(t) if t.angle != 0.0 => Some((t.pos.y, t.pos.y + t.galley.size().x)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The warn bars: filled rects of the mark's height in the warn ink.
+    fn bars(shapes: &[egui::Shape]) -> Vec<Rect> {
+        let ink = Tokens::DARK.warn_ink;
+        shapes
+            .iter()
+            .filter_map(|s| match s {
+                egui::Shape::Rect(r) if r.fill == ink && (r.rect.height() - MARK_BAR).abs() < 1e-3 => Some(r.rect),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
-    fn an_attention_chip_paints_a_state_at_every_height() {
+    fn an_attention_chip_paints_a_state_below_its_title_at_every_height() {
         let ctx = egui::Context::default();
-        let st = ChipState { tone: ChipTone::Attention, text: "1 stale".into(), detail: String::new() };
-        for height in (8..700).step_by(3) {
-            let seen = fit_at(&ctx, &st, height as f32);
-            assert_ne!(seen, StateFit::Nothing, "height {height}: an attention chip must paint something");
+        let states = [
+            ChipState { tone: ChipTone::Attention, text: "1 stale".into(), detail: String::new() },
+            ChipState { tone: ChipTone::Attention, text: "1 blocked \u{b7} 3 stale \u{b7} 2 not generated".into(), detail: String::new() },
+        ];
+        let (mut full, mut glyph, mut bar) = (0, 0, 0);
+        for st in &states {
+            for height in 20..700 {
+                let (rect, shapes) = chip_shapes(&ctx, st, height as f32);
+                let spans = turned_spans(&shapes);
+                let Some(&(_, title_bottom)) = spans.first() else { continue };
+                let below = title_bottom + TITLE_PAD;
+                if let Some(&(top, _)) = spans.get(1) {
+                    assert!(top >= below, "{}: height {height}: the state starts under the title", st.text);
+                    if spans.len() == 2 && bars(&shapes).is_empty() {
+                        // Full text or glyph alone: told apart by its length.
+                        if spans[1].1 - spans[1].0 > 30.0 { full += 1 } else { glyph += 1 }
+                    }
+                } else {
+                    let found = bars(&shapes);
+                    assert_eq!(found.len(), 1, "{}: height {height}: no state and no warn bar", st.text);
+                    // The title ends at least TITLE_PAD above the foot, the bar is
+                    // MARK_BAR high: a gap of TITLE_PAD - MARK_BAR stays at least.
+                    assert!(found[0].min.y >= title_bottom + TITLE_PAD - MARK_BAR, "{}: height {height}: the bar clears the title", st.text);
+                    assert_eq!(found[0].max.y, rect.bottom(), "{}: height {height}: the bar sits at the foot", st.text);
+                    bar += 1;
+                }
+            }
+        }
+        assert!(full > 0 && glyph > 0 && bar > 0, "the sweep met every regime ({full} full, {glyph} glyph, {bar} bar)");
+    }
+
+    #[test]
+    fn a_clean_chip_paints_no_warn_bar_and_no_warn_ink() {
+        let ctx = egui::Context::default();
+        let ok = ChipState { tone: ChipTone::Ok, text: "Up to date".into(), detail: String::new() };
+        for height in 20..700 {
+            let (_, shapes) = chip_shapes(&ctx, &ok, height as f32);
+            assert!(bars(&shapes).is_empty(), "height {height}: a clean chip has no warn bar");
+            assert!(turned_spans(&shapes).len() <= 2, "height {height}: title and state at most");
         }
     }
 
