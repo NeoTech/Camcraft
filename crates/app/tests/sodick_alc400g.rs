@@ -113,6 +113,7 @@ fn punch_world(machine_text: &str, condition: &str, taper_deg: f64) -> Result<fl
     );
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: condition.into(),

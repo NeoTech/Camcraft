@@ -69,6 +69,7 @@ fn two_tabs() -> WireTabs {
 
 fn die(tabs: Option<WireTabs>, capture: bool) -> WireContourOp {
     WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

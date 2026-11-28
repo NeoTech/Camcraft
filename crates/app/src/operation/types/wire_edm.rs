@@ -19,6 +19,11 @@ pub use crate::wire_edm::{WireSide, WireWidening};
 /// past the kerf. A closed profile never reads it.
 pub const DEFAULT_CLEARANCE: f64 = 1.0;
 
+/// The tangent arc lead radius (mm) the UI seeds when the arc lead is
+/// turned on (#3991): over any common kerf offset, small enough for a
+/// start hole a little more than 1 mm off the path.
+pub const DEFAULT_LEAD_ARC_RADIUS: f64 = 0.5;
+
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
 pub const CONDITION_ID_MAX: usize = 64;
@@ -100,6 +105,11 @@ pub struct WireContourOp {
     /// `false` - the default - refuses it by name. A 4-axis cut reads
     /// its heal tolerance instead.
     pub sharp_corners: bool,
+    /// The lead (#3991): `None` - the default - is the straight lead from
+    /// the start hole to the path's nearest point; `Some(r)` is a tangent
+    /// arc lead-in and lead-out of radius `r` mm (more than the kerf
+    /// offset), cut on a selected DXF profile's vertical single pass.
+    pub lead_arc_radius: Option<f64>,
 }
 
 /// How the two profiles of a 4-axis cut are paired (#537) - stated,
@@ -214,6 +224,7 @@ impl WireContourOp {
             && self.taper_deg.abs() < 90.0
             && self.four_axis.as_ref().is_none_or(WireFourAxis::is_sane)
             && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
+            && self.lead_arc_radius.is_none_or(|r| r.is_finite() && r > 0.0 && r < 1e6)
             && self.clearance.is_finite()
             && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && sane_id(&self.condition)

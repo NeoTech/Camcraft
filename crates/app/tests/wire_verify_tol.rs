@@ -129,6 +129,7 @@ fn face_at(world: &World, z: f64) -> GeoSel {
 
 fn wire_op(four: WireFourAxis) -> WireContourOp {
     WireContourOp {
+        lead_arc_radius: None,
         top_z: Height::fixed(H),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

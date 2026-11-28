@@ -1,7 +1,8 @@
 //! The wire contour of an analytic line-and-arc profile (#3937): the
 //! drawing's lines and arcs offset by the kerf (`arc_offset`), entered by
 //! a straight lead from the stated start hole to the path's nearest
-//! point, cut as true arcs, and certified by the laws read against the
+//! point (or, when stated, the tangent arc lead of `arc_lead`, #3991),
+//! cut as true arcs, and certified by the laws read against the
 //! drawing itself (`arc_laws`).
 //!
 //! - **Seam.** The nearest point of the path to the start hole; on a
@@ -40,6 +41,7 @@ use crate::machining2d::GenError;
 use super::arc_chain::ArcChain;
 use super::arc_dist::{nearest, pt_span};
 use super::arc_laws;
+use super::arc_lead::{arc_leads, WireLead};
 use super::arc_offset::parallel_walk;
 use super::arc_span::{dist, mul, sub, add, unit, Span};
 use super::{laws, WireParams, WireSide, MIN_LEAD};
@@ -70,6 +72,15 @@ fn on_lattice(c: Point2) -> Point2 {
 /// # Errors
 /// Every refusal of the module head and of the wire contour's, by name.
 pub fn wire_contour_arcs(chain: &ArcChain, p: &WireParams) -> Result<Toolpath, GenError> {
+    wire_contour_arcs_led(chain, p, WireLead::Straight)
+}
+
+/// [`wire_contour_arcs`] with the stated lead (#3991): the straight lead,
+/// or a tangent arc lead-in and lead-out (`arc_lead`).
+///
+/// # Errors
+/// As [`wire_contour_arcs`], and each refusal of the arc lead by name.
+pub fn wire_contour_arcs_led(chain: &ArcChain, p: &WireParams, lead: WireLead) -> Result<Toolpath, GenError> {
     p.door()?;
     if p.tabs.is_some() {
         return Err(invalid("tabs are stated on a drawn line-and-arc profile - tabs are not cut on it yet; remove the tabs".into()));
@@ -109,8 +120,8 @@ pub fn wire_contour_arcs(chain: &ArcChain, p: &WireParams) -> Result<Toolpath, G
     };
     start_side(chain, start, p)?;
     let (seam, at, centred) = seam(&walk, start).ok_or_else(|| invalid("the wire path is empty".into()))?;
-    let lead = dist(start, at);
-    if !(lead.is_finite() && lead > MIN_LEAD) {
+    let lead_len = dist(start, at);
+    if !(lead_len.is_finite() && lead_len > MIN_LEAD) {
         return Err(GenError::invalid_at(
             format!(
                 "wire contour: the start hole at X{:.3} Y{:.3} stands on the wire path itself - move it off the profile by more than the kerf offset ({k:.4} mm)",
@@ -121,24 +132,39 @@ pub fn wire_contour_arcs(chain: &ArcChain, p: &WireParams) -> Result<Toolpath, G
     }
     let seq = stitch(from_seam(&walk, seam, at).iter().flat_map(Span::halves).map(snapped).collect());
     let z = p.plane_z;
+    let leads = match lead {
+        WireLead::Straight => None,
+        WireLead::Arc { radius } => Some(arc_leads(start, &seq, p.side == WireSide::Die, radius, chain, k, z)?),
+    };
     let mut b = PathBuilder::new(at3(start, z));
-    if let Some(first) = seq.first() {
-        b.push(MoveKind::Feed, at3(first.start(), z), None);
-    }
-    for s in &seq {
-        match *s {
-            Span::Line { b: e, .. } => b.push(MoveKind::Feed, at3(e, z), None),
-            Span::Arc { c, b: e, ccw, .. } => b.push_arc(MoveKind::Feed, at3(e, z), None, c, ccw),
+    match &leads {
+        Some(l) => l.lead_in.iter().for_each(|s| push_span(&mut b, s, z)),
+        None => {
+            if let Some(first) = seq.first() {
+                b.push(MoveKind::Feed, at3(first.start(), z), None);
+            }
         }
     }
-    b.push(MoveKind::Feed, at3(start, z), None);
+    for s in &seq {
+        push_span(&mut b, s, z);
+    }
+    match &leads {
+        Some(l) => l.lead_out.iter().for_each(|s| push_span(&mut b, s, z)),
+        None => b.push(MoveKind::Feed, at3(start, z), None),
+    }
     let mut path = b.finish();
     if path.moves.len() < 4 {
         return Err(invalid("the wire path lays down no cut".into()));
     }
     arc_laws::kerf(&path, chain, k, z)?;
     let rest = arc_laws::cover(&path, chain, p)?;
-    let mut said = super::pass_notes(p, start, lead, false);
+    let mut said = super::pass_notes(p, start, lead_len, false);
+    if let (Some(l), Some(line)) = (&leads, said.get_mut(1)) {
+        *line = format!(
+            "wire EDM: threaded at X{:.3} Y{:.3}; tangent arc lead-in of radius {:.4} mm (a tangent straight of {:.3} mm, then an arc onto the path's nearest point, met in the path's own direction), the profile cut counter-clockwise, the lead-out the mirror arc and a tangent straight back to the threading point; the two leads close a small waste piece between them, which drops free like the slug",
+            start.x, start.y, l.radius, l.straight
+        );
+    }
     let arcs = chain.spans().iter().filter(|s| s.is_arc()).count();
     said.push(format!(
         "wire EDM: the drawn profile is read exactly - {} line(s) and {arcs} arc(s); the path holds {} arc move(s) (G2/G3 on a post that writes arcs), concentric with the drawing's arcs, with pivot arcs about outside corners",
@@ -166,6 +192,13 @@ pub fn wire_contour_arcs(chain: &ArcChain, p: &WireParams) -> Result<Toolpath, G
     said.extend(rest.map(|r| laws::sharp_note(r, k)));
     path.notes.extend(said);
     Ok(path)
+}
+
+fn push_span(b: &mut PathBuilder, s: &Span, z: f64) {
+    match *s {
+        Span::Line { b: e, .. } => b.push(MoveKind::Feed, at3(e, z), None),
+        Span::Arc { c, b: e, ccw, .. } => b.push_arc(MoveKind::Feed, at3(e, z), None, c, ccw),
+    }
 }
 
 /// The walk must not cross itself: a crossing is a neck under the kerf

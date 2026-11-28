@@ -43,6 +43,7 @@ mod fixture_turn_tools;
 mod holders;
 mod holder_dxf_tools;
 mod job;
+mod kind_fields;
 mod listen;
 pub mod link;
 mod link_client;

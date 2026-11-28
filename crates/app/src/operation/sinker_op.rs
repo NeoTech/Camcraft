@@ -15,7 +15,7 @@ use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::sinker::{SinkerDatum, SinkerParams};
 use crate::sinker_undersize::{inverted, judge, judge_outline, SinkerPass, Undersize};
-use crate::sinker_wear::burn_compensated;
+use crate::sinker_wear::burn_compensated_between;
 use crate::tools::{Tool, ToolKind};
 use crate::verify::Warning;
 
@@ -272,7 +272,10 @@ pub(super) fn generate_sinker(
         });
     }
     let w = super::sinker_wear_op::sinker_wear(op, cond_wear);
-    let path = burn_compensated(&p, &w)?;
+    // #3333: the start and exit picks, as the orbit's start and end
+    // angles. The generator's own door: an impossible pick is refused.
+    let ends = op.orbit_ends().map_err(GenError::Invalid)?;
+    let path = burn_compensated_between(&p, &w, &ends)?;
     let mut warns = Vec::new();
     if let Some(PassRead { undersize, rough: Some((_, rough)) }) = read
         && op.pass == SinkerPass::Finish

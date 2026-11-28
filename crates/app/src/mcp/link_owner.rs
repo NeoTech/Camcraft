@@ -79,8 +79,14 @@ pub fn owner(dir: &Path, pid: u32) -> Owner {
     };
     match file.try_lock() {
         Err(TryLockError::WouldBlock) => Owner::Alive,
-        // The lock goes when `file` drops at the end of this function.
-        Ok(()) => Owner::Gone,
+        // Release the lock at once, never by the close of `file` (#4041):
+        // on Unix a child that another thread starts holds a copy of the
+        // descriptor until its exec, and a lock left held by the close
+        // makes the next test read the ended window as alive.
+        Ok(()) => match file.unlock() {
+            Ok(()) => Owner::Gone,
+            Err(e) => Owner::Unproved(format!("cannot release the lock {}: {e}", path.display())),
+        },
         Err(TryLockError::Error(e)) => Owner::Unproved(format!("cannot test the lock {}: {e}", path.display())),
     }
 }

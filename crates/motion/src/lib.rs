@@ -66,6 +66,8 @@ pub mod sinker_wear;
 pub mod sinker_orbit;
 // #545: sinker EDM side burning by a lateral electrode move.
 pub mod sinker_side;
+// #3333: the start and exit picks of the sinker kinds.
+pub mod sinker_picks;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;
