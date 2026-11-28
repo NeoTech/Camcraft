@@ -8,7 +8,7 @@ use flecs_ecs::prelude::World;
 use super::heights::height_fields;
 use super::mm;
 use crate::cl::CycleKind;
-use crate::drilling::{self, CycleChoice};
+use crate::drilling::CycleChoice;
 use crate::model;
 use crate::operation::{self, OpParams, SrcRef};
 use crate::setup;
@@ -78,7 +78,7 @@ pub(super) fn render_operations(world: &World, target: Option<&String>, out: &mu
             out.push('\n');
         }
         render_wire(world, op.setup.as_deref(), &op.tool, &op.params, out);
-        render_cycles(world, op.setup.as_deref(), &op.src, &op.tool, &op.params, out);
+        render_cycles(world, &entity, op.setup.as_deref(), &op.src, &op.params, out);
     }
     if count == 0 {
         out.push_str("  (no operations in this setup)\n");
@@ -93,14 +93,13 @@ pub(super) fn render_operations(world: &World, target: Option<&String>, out: &mu
 /// params, not at the call site.
 fn render_cycles(
     world: &World,
+    entity: &flecs_ecs::prelude::Entity,
     op_setup: Option<&str>,
     src: &operation::SrcRef,
-    tool_name: &str,
     params: &OpParams,
     out: &mut String,
 ) {
     let OpParams::Drill {
-        top_z,
         bottom_z,
         cycle,
         holes,
@@ -113,19 +112,20 @@ fn render_cycles(
         out.push_str("      (no holes)\n");
         return;
     }
-    let r_z = operation::resolve_height(world, op_setup, Some(src), *top_z);
     let override_z =
         (*bottom_z).and_then(|b| operation::resolve_height(world, op_setup, Some(src), b));
-    let tool = model::find_by_name(world, tool_name).and_then(|e| model::tool_of(world, &e));
+    // #2443: Auto's kind is the one the generator chose - it reads the
+    // stock over each hole, which the sheet cannot. Without a current
+    // cache the sheet says "auto" rather than guess.
+    let cached: Option<Vec<CycleKind>> = (operation::status_of(world, entity) == operation::OpStatus::Ok)
+        .then(|| model::toolpath_of(world, entity))
+        .flatten()
+        .map(|tp| tp.path.cycles.iter().map(|c| c.kind).collect::<Vec<_>>())
+        .filter(|k| k.len() == holes.len());
     for (i, h) in holes.iter().enumerate() {
         let bottom = override_z.unwrap_or(h.floor_z);
         let kind = match cycle {
-            CycleChoice::Auto => match (&tool, r_z) {
-                (Some(t), Some(r)) if (r - bottom).is_finite() && t.diameter.is_finite() => {
-                    kind_label(drilling::auto_kind(t.kind, r - bottom, t.diameter))
-                }
-                _ => "auto".to_string(),
-            },
+            CycleChoice::Auto => cached.as_ref().and_then(|k| k.get(i)).map_or_else(|| "auto".to_string(), |k| kind_label(*k)),
             other => choice_label(*other).to_lowercase(),
         };
         let thru = if h.through { "  thru" } else { "" };
@@ -216,6 +216,7 @@ fn choice_label(c: CycleChoice) -> &'static str {
         CycleChoice::Spot => "Spot",
         CycleChoice::Drill => "Drill",
         CycleChoice::Peck => "Peck",
+        CycleChoice::Deep => "Deep",
         CycleChoice::Tap => "Tap",
         CycleChoice::FloatingTap => "Tap (floating holder)",
         CycleChoice::Bore => "Bore",

@@ -100,6 +100,7 @@ mod op_page_names;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
+mod pane_fold;
 mod panel_setups;
 mod machines_pane;
 mod machines_edit;
@@ -145,6 +146,8 @@ mod tool_library_preview;
 mod tool_library_assembly;
 // #3896: the Recipes tab of the tool library window's editor.
 mod tool_library_recipes;
+// #4453: the Recipes tab's surface speed and chip load inputs.
+mod tool_library_recipe_speeds;
 // #3898: the copies, the add's undo step and the caches (review of #4271).
 mod tool_library_component_copies;
 // #3897 (U6 of #3663): the Holders page and the mock-up gaps.
@@ -262,6 +265,7 @@ mod recent_door;
 mod home_page;
 // #2428: startup update check, Settings dropdown toggle, and title-bar notice.
 mod update_check;
+mod settings_window;
 // #1431: the browser build's Save, Save As and Post as downloads; the rest refused by name.
 mod browser_files;
 mod browser_delete;
@@ -304,6 +308,8 @@ mod setup_post_options_bleed;
 mod import_outward;
 // #1988: painted ribbon cells, tabs, and dropdown rows expose AccessKit nodes.
 mod ribbon_accesskit;
+// #4484: the one command table, the menu bar and its layout test.
+mod command_table;
 // #1946: native AI chat dock panel, worker, Inbox::channel MCP dispatch, and offline UI tests.
 mod ai_chat;
 // #2011: EDM tool visibility matches selectable machine kinds.

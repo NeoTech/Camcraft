@@ -16,18 +16,13 @@ impl Machine<'_> {
     pub fn line_block(&mut self, b: &Block, toks: &[String]) -> Result<(), GcodeError> {
         let w = decode(b, toks, &self.q)?;
         reject_arc_words(b, &w, "L")?;
+        self.corner_words_check(b, &w, w.has_coords())?;
         self.pre_m(b, &w.m)?;
         let rate = self.feed_words(b, &w)?;
         if w.has_coords() {
             let to = self.target(b, &w)?;
-            let (kind, feed) = match w.feed {
-                Some(Feed::Max) => (MoveKind::Rapid, None),
-                _ => (
-                    MoveKind::Feed,
-                    Some(rate.ok_or_else(|| b.invalid_modal("L needs a feed rate F or FMAX"))?),
-                ),
-            };
-            self.push_line(b, kind, to, feed);
+            let (kind, feed) = line_feed(b, &w, rate, "L")?;
+            self.line_to(b, kind, to, feed)?;
         }
         self.post_m(b, &w.m, w.mb)
     }
@@ -196,7 +191,7 @@ impl Machine<'_> {
     }
 
     /// Apply an `F` word to the modal feed and return the active feed rate.
-    fn feed_words(&mut self, b: &Block, w: &Words) -> Result<Option<f64>, GcodeError> {
+    pub fn feed_words(&mut self, b: &Block, w: &Words) -> Result<Option<f64>, GcodeError> {
         if let Some(Feed::Rate(f)) = w.feed {
             self.modal.feed_rate_mm_min = Some(check_feed(b.line, f)?);
         }
@@ -262,6 +257,27 @@ impl Machine<'_> {
         self.push_line(b, MoveKind::Rapid, to, None);
         Ok(())
     }
+}
+
+/// Move kind and feed of a straight-line block: `FMAX` is a rapid for this
+/// block only, else the modal feed rate.
+pub fn line_feed(
+    b: &Block,
+    w: &Words,
+    rate: Option<f64>,
+    what: &str,
+) -> Result<(MoveKind, Option<f64>), GcodeError> {
+    Ok(match w.feed {
+        Some(Feed::Max) => (MoveKind::Rapid, None),
+        _ => {
+            (
+                MoveKind::Feed,
+                Some(rate.ok_or_else(|| {
+                    b.invalid_modal(&format!("{what} needs a feed rate F or FMAX"))
+                })?),
+            )
+        }
+    })
 }
 
 fn reject_arc_words(b: &Block, w: &Words, what: &str) -> Result<(), GcodeError> {

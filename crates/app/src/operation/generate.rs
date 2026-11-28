@@ -3139,7 +3139,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         tip_run,
                     );
                 }
+                // #2443 review: Auto counts uncut stock over a mouth as
+                // depth (the part, the raw stock, the program ahead).
+                let tops = if *cycle == drilling::CycleChoice::Auto {
+                    let stock = stock_facets.as_deref().unwrap_or(&[]);
+                    super::drill_prior::material_tops(holes, &material.facets, stock, 0.5 * d, &mut verify_prior, lathe_axial)
+                } else {
+                    Vec::new()
+                };
                 drilling::drill(&drilling::CycleParams {
+                    material_top: &tops,
                     through_clear: run,
                     break_through_from: tip_from,
                     clearance_z: hl.clearance,

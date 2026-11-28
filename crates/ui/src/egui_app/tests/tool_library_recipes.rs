@@ -22,7 +22,7 @@ use camcraft_app::tools::{Tool, ToolMaterial, WorkMaterial};
 /// A document tool that the cutting table speaks for (an end, ball, bull
 /// nose or chamfer mill), with a carbide edge, three flutes and the
 /// given material rows. Lands through `ChangeTool`.
-fn mill(h: &mut H, rows: Vec<CuttingRow>) -> String {
+pub(super) fn mill(h: &mut H, rows: Vec<CuttingRow>) -> String {
     let st = &h.state().state;
     let found = st.tool_names().into_iter().find(|n| {
         model::find_by_name(&st.world, n)
@@ -172,9 +172,10 @@ fn the_document_material_row_is_marked() {
     assert!(on_row(m[0], r[brass]), "the mark {:?} stands on the Brass row {:?}", m[0], r[brass]);
     if h.state().state.units() == camcraft_app::units::Unit::Millimeters {
         let d = tool(&h, &name).diameter;
-        let vc = format!("{:.0}", std::f64::consts::PI * d * 8000.0 / 1000.0);
-        let line = format!("= {vc} m/min surface speed");
-        assert!(library_window(&h).query_by_label_contains(&line).is_some(), "the derived line shows the Brass row's Vc {vc}");
+        let vc = std::f64::consts::PI * d * 8000.0 / 1000.0;
+        let label = format!("{} ({})", crate::egui_app::tool_library_dialog::recipes_speeds::VC, WorkMaterial::Brass.label());
+        let shown = library_window(&h).get_by_role_and_label(Role::SpinButton, &label).accesskit_node().numeric_value();
+        assert!(shown.is_some_and(|v| (v - vc).abs() < 1e-6), "the Brass row's surface speed field shows Vc {vc}: {shown:?}");
     }
     set_material(&mut h, Some(WorkMaterial::Hdpe));
     let m = marks(&h);
@@ -266,11 +267,12 @@ fn the_derived_line_follows_rpm_and_feed() {
     open_in_window(&mut h, &name);
     click_window_button(&mut h, TAB);
     let computes = |h: &H| h.state().state.tool_library.as_ref().map_or(0, |v| v.recipes.computes);
+    // #4453: the line is the hover text of the row's fields; read it from
+    // the tab's cache.
     let line = |h: &H, m: WorkMaterial| -> String {
-        library_window(h)
-            .query_all_by_label_contains("surface speed,")
-            .filter_map(|n| n.accesskit_node().label().or_else(|| n.accesskit_node().value()))
-            .find(|l| l.ends_with(&format!("({})", m.label())))
+        h.state().state.tool_library.as_ref()
+            .and_then(|v| v.recipes.derived.as_ref())
+            .and_then(|(_, lines)| lines.iter().find(|l| l.ends_with(&format!("({})", m.label()))).cloned())
             .unwrap_or_default()
     };
     let (c0, l0) = (computes(&h), line(&h, WorkMaterial::Brass));

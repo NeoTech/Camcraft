@@ -63,6 +63,7 @@ impl OpParams {
                     CycleChoice::BackBore => 6,
                     CycleChoice::Ream => 8,
                     CycleChoice::FineBore { .. } => 9,
+                    CycleChoice::Deep => 10,
                 });
                 // #1445: the fine-bore shift is params data; only a fine
                 // bore writes it, so every other op keeps its digest.

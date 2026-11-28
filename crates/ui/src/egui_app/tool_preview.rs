@@ -2,6 +2,8 @@
 //! #3894: `paint` draws into a given rect, so the tool library window's
 //! larger side view (`tool_library_dialog::side_view`) adds its dimension
 //! lines over the same drawing.
+//! #4452: a thread mill's cutting length shows its teeth
+//! (`tool_library_dialog::thread_form`), as the tool library does.
 //! Provenance: our own preview extracted from pages.rs.
 
 use camcraft_app::{
@@ -83,10 +85,11 @@ pub(super) fn paint(
     // A body replaces the parameter holder, as in the collision band stack.
     let outline = if let Some(s) = steel {
         s.to_vec()
-    } else if body.is_some() {
-        tools::Tool { holder_len: 0.0, ..t.clone() }.profile()
     } else {
-        t.profile()
+        let plain = if body.is_some() { tools::Tool { holder_len: 0.0, ..t.clone() }.profile() } else { t.profile() };
+        // #4452: a thread mill shows its teeth here too, as in the tool
+        // library's views (display only, inside the crest cylinder).
+        super::tool_library_dialog::thread_form::toothed(t, &plain).unwrap_or(plain)
     };
     // #371: a body's bands (above, len, r) widen the frame to hold them.
     let bands = body.unwrap_or_default();
