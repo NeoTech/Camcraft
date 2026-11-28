@@ -260,6 +260,7 @@ mod recent_door;
 mod home_page;
 // #2428: startup update check, Settings dropdown toggle, and title-bar notice.
 mod update_check;
+mod settings_window;
 // #1431: the browser build's Save, Save As and Post as downloads; the rest refused by name.
 mod browser_files;
 mod browser_delete;

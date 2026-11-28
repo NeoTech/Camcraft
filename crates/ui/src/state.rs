@@ -2016,8 +2016,10 @@ pub struct State {
     pub last_update_check_utc: Option<u64>,
     /// #2428: strictly newer release discovered by the startup check (or test injection).
     pub update_available: Option<camcraft_app::update_check::ReleaseInfo>,
-    /// #2428: top-band Settings dropdown open flag.
-    pub ribbon_settings_open: bool,
+    /// #4493: the Settings window is open (view state, closed on a fresh State).
+    pub settings_open: bool,
+    /// #4493: the Settings window's shown section.
+    pub settings_section: crate::egui_app::settings_window::Section,
     /// #2428: non-blocking watcher for the one-shot startup update check.
     pub(crate) update_watcher: crate::update_check::UpdateWatcher,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
@@ -2509,7 +2511,8 @@ impl State {
             ribbon_mode_open: false,
             ribbon_view_open: false,
             ribbon_theme_open: false,
-            ribbon_settings_open: false,
+            settings_open: false,
+            settings_section: crate::egui_app::settings_window::Section::Appearance,
             home_page: None,
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),

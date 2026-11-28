@@ -32,7 +32,7 @@ fn checked(h: &Harness<'static, ShellUi>, label: &str) -> Option<Toggled> {
 #[test]
 fn the_display_button_opens_and_closes_the_menu_and_the_labels_exist() {
     let mut h = open_menu();
-    for group in [menu::GROUP_MODE, menu::GROUP_LOOK_AT, menu::GROUP_GRAPHICS] {
+    for group in [menu::GROUP_MODE, menu::GROUP_LOOK_AT, menu::GROUP_VIEW] {
         assert!(h.query_by_label(group).is_some(), "group title {group:?}");
     }
     for label in ["Shaded, with edges", "Shaded", "Wireframe", "Wireframe, see-through", "Shaded, with hidden edges"] {
@@ -40,6 +40,10 @@ fn the_display_button_opens_and_closes_the_menu_and_the_labels_exist() {
     }
     for label in [menu::LOOK_AT_FACE, menu::SHOW_GRID, menu::SHOW_AXES, menu::PERSPECTIVE, menu::ORTHOGRAPHIC] {
         assert!(h.query_by_label(label).is_some(), "entry {label:?}");
+    }
+    // #4493: the line width and the anti-aliasing moved to the Settings window.
+    for gone in ["Graphics", "Line width", "Anti-aliasing"] {
+        assert!(h.query_by_label(gone).is_none(), "{gone:?} left the Display menu");
     }
     // A second press on the button closes the menu, and it stays closed.
     let p = hud(h.state()).nav_rect(viewcube::Nav::Display).center();
