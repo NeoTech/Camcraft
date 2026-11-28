@@ -171,7 +171,7 @@ pub(crate) fn shell_layout(
                 viewport_points,
                 left_press,
             });
-        layout::fold::chips(ui, dock, &mut state.pane_folds, &pal, tab_bar);
+        layout::fold::chips(ui, dock, state, &pal, tab_bar);
     });
     // A locate draft whose form the dock did not draw is dropped (#566).
     crate::locate_pick::sweep(state);

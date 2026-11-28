@@ -59,29 +59,124 @@ pub fn chip_label(title: &str) -> String {
     format!("Unfold {title}")
 }
 
+/// How a chip's state line reads: all is well, or the user must act.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChipTone {
+    Ok,
+    Attention,
+}
+
+/// The safety state that a folded pane keeps on its chip (#4245 E2): a
+/// short text with a glyph, never a colour alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChipState {
+    pub tone: ChipTone,
+    /// The short text under the title, for example "2 stale".
+    pub text: String,
+    /// More words for the tooltip (a blocked reason); may be empty.
+    pub detail: String,
+}
+
+impl ChipState {
+    /// The glyph in front of the text: a check mark or a warning sign.
+    pub fn glyph(&self) -> &'static str {
+        match self.tone {
+            ChipTone::Ok => "\u{2714}",
+            ChipTone::Attention => "\u{26A0}",
+        }
+    }
+
+    /// The state line as the chip paints it: glyph, space, text.
+    pub fn line(&self) -> String {
+        format!("{} {}", self.glyph(), self.text)
+    }
+}
+
+/// The chip's frame: the border at rest, the accent when hovered. The
+/// accent has a real step from the chip ground in both themes (the
+/// hover fill alone is about 1.03:1 in the dark theme).
+pub fn chip_edge(pal: &Tokens, hovered: bool) -> (f32, egui::Color32) {
+    if hovered { (2.0, pal.accent) } else { (1.0, pal.border) }
+}
+
+/// The title's ink: dim at rest, full text when hovered.
+pub fn chip_title_ink(pal: &Tokens, hovered: bool) -> egui::Color32 {
+    if hovered { pal.text } else { pal.text_dim }
+}
+
+/// Paint `text` turned a quarter clockwise, from `top` down, centred on
+/// the chip's middle. Returns the bottom of the text, or `None` when it
+/// does not fit above `bottom`.
+fn turned(painter: &egui::Painter, rect: Rect, top: f32, job: egui::text::LayoutJob, fallback: egui::Color32) -> Option<f32> {
+    let galley = painter.layout_job(job);
+    let size = galley.size();
+    if top + size.x > rect.bottom() - TITLE_PAD {
+        return None;
+    }
+    // Turned about its top-left corner, the text runs down and its box
+    // spans `size.y` to the LEFT of `pos`.
+    let pos = Pos2::new(rect.center().x + size.y / 2.0, top);
+    painter.add(egui::epaint::TextShape::new(pos, galley, fallback).with_angle(std::f32::consts::FRAC_PI_2));
+    Some(top + size.x)
+}
+
+fn job(sections: &[(&str, egui::Color32)], size: f32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    for (text, color) in sections {
+        job.append(text, 0.0, egui::TextFormat::simple(FontId::proportional(size), *color));
+    }
+    job
+}
+
 /// Draw one fold chip in `rect`: a full-height button with the pane's
-/// title turned to read top to bottom. The returned response is clicked
-/// when the user asks to unfold the pane.
-pub fn fold_chip(ui: &mut Ui, rect: Rect, id: egui::Id, title: &str, pal: &Tokens) -> Response {
+/// title turned to read top to bottom and, under it, the pane's safety
+/// state. The returned response is clicked when the user asks to unfold
+/// the pane.
+pub fn fold_chip(
+    ui: &mut Ui,
+    rect: Rect,
+    id: egui::Id,
+    title: &str,
+    state: Option<&ChipState>,
+    pal: &Tokens,
+) -> Response {
     let resp = ui.interact(rect, id, Sense::click());
     let label = chip_label(title);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
     let painter = ui.painter_at(rect);
-    let fill = if resp.hovered() { pal.field_hover } else { pal.ink_alt };
-    painter.rect_filled(rect, 0.0, fill);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, pal.border), StrokeKind::Inside);
-    let galley = painter.layout_no_wrap(title.to_owned(), FontId::proportional(pal.font_row), pal.text);
-    let size = galley.size();
-    if size.x + 2.0 * TITLE_PAD <= rect.height() {
-        // Turned a quarter clockwise about its top-left corner, the text
-        // runs down and its box spans `size.y` to the LEFT of `pos`.
-        let pos = Pos2::new(rect.center().x + size.y / 2.0, rect.top() + TITLE_PAD);
-        painter.add(egui::epaint::TextShape::new(pos, galley, pal.text).with_angle(std::f32::consts::FRAC_PI_2));
-    } else {
-        // Too short for the title: a mark that says the pane is folded.
-        painter.text(rect.center(), Align2::CENTER_CENTER, "\u{25B8}", FontId::proportional(pal.font_row), pal.text_dim);
+    let hovered = resp.hovered();
+    painter.rect_filled(rect, 0.0, pal.ink_alt);
+    let (edge_w, edge) = chip_edge(pal, hovered);
+    painter.rect_stroke(rect, 0.0, Stroke::new(edge_w, edge), StrokeKind::Inside);
+    let ink = chip_title_ink(pal, hovered);
+    let title_bottom = turned(&painter, rect, rect.top() + TITLE_PAD, job(&[(title, ink)], pal.font_row), ink);
+    match (title_bottom, state) {
+        (Some(bottom), Some(st)) => {
+            let glyph_ink = match st.tone {
+                ChipTone::Ok => pal.text_dim,
+                ChipTone::Attention => pal.warn_ink,
+            };
+            let sections = [(st.glyph(), glyph_ink), (" ", pal.text), (st.text.as_str(), pal.text)];
+            let _ = turned(&painter, rect, bottom + 2.0 * TITLE_PAD, job(&sections, pal.font_row), pal.text);
+        }
+        (Some(_), None) => {}
+        (None, _) => {
+            // Too short for the title: a mark that says the pane is folded.
+            painter.text(rect.center(), Align2::CENTER_CENTER, "\u{25B8}", FontId::proportional(pal.font_row), pal.text_dim);
+        }
     }
-    resp.on_hover_text(label)
+    let mut tip = label;
+    if let Some(st) = state {
+        tip.push('\n');
+        tip.push_str(&st.line());
+        if !st.detail.is_empty() {
+            tip.push_str(" - ");
+            tip.push_str(&st.detail);
+        }
+    }
+    // The chip is as high as the pane: a tooltip under its rect lands far
+    // from the pointer, so it follows the pointer.
+    resp.on_hover_text_at_pointer(tip)
 }
 
 /// The chip's rect for a folded pane: the pane's own rect less its tab bar.
@@ -139,7 +234,8 @@ mod tests {
         let mut run = |events: Vec<egui::Event>| {
             let input = egui::RawInput { events, ..Default::default() };
             let mut out = ctx.run_ui(input, |ui| {
-                let resp = fold_chip(ui, rect, egui::Id::new("chip"), "Browser", &Tokens::DARK);
+                let st = ChipState { tone: ChipTone::Attention, text: "2 stale".into(), detail: String::new() };
+                let resp = fold_chip(ui, rect, egui::Id::new("chip"), "Browser", Some(&st), &Tokens::DARK);
                 clicked |= resp.clicked();
             });
             // The font atlas delta must be taken, or epaint refuses the drop.
@@ -157,5 +253,28 @@ mod tests {
         run(vec![press(false)]);
         assert!(clicked, "a click on the chip is the unfold ask");
         assert_eq!(chip_label("Browser"), "Unfold Browser");
+    }
+
+    #[test]
+    fn the_hover_step_is_visible_in_both_themes() {
+        for (name, pal) in [("dark", Tokens::DARK), ("light", Tokens::LIGHT)] {
+            let (rest_w, rest) = chip_edge(&pal, false);
+            let (hover_w, hover) = chip_edge(&pal, true);
+            assert!(hover_w > rest_w, "{name}: the hovered frame is wider");
+            let step = crate::contrast::ratio(hover, pal.ink_alt);
+            assert!(step >= 2.0, "{name}: the hover frame reads on the chip ({step:.2}:1)");
+            assert!(crate::contrast::ratio(hover, rest) > 1.2, "{name}: hover and rest frames differ");
+            let title = crate::contrast::ratio(chip_title_ink(&pal, true), pal.ink_alt);
+            assert!(title >= 4.5, "{name}: the hovered title is readable ({title:.2}:1)");
+        }
+    }
+
+    #[test]
+    fn a_state_line_carries_a_glyph_and_words() {
+        let ok = ChipState { tone: ChipTone::Ok, text: "Up to date".into(), detail: String::new() };
+        let act = ChipState { tone: ChipTone::Attention, text: "Needs regenerate".into(), detail: String::new() };
+        assert_eq!(ok.line(), "\u{2714} Up to date");
+        assert_eq!(act.line(), "\u{26A0} Needs regenerate");
+        assert_ne!(ok.glyph(), act.glyph(), "the glyph alone tells the two apart");
     }
 }

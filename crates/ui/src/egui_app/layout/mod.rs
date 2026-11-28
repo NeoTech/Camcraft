@@ -14,6 +14,7 @@
 mod controls;
 /// #4483: side panes fold to title chips; the fold law and its chips.
 pub(crate) mod fold;
+mod fold_state;
 mod row_name;
 mod form;
 mod scroll_gutter;

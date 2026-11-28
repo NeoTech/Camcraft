@@ -10,8 +10,9 @@
 //! refused by name on the status line and the default three-pane layout
 //! stands. #4483: a setup also keeps which panes are folded (the leaf's
 //! collapsed flag) and, for a folded side pane, its open share; a setup
-//! that an older build saved loads with every pane unfolded. Provenance: our own code, specced from the egui_dock 0.21 docs
-//! and vendored sources; no HSMWorks material involved.
+//! that an older build saved loads with every pane unfolded.
+//! Provenance: our own code, specced from the egui_dock 0.21 docs and
+//! vendored sources; no HSMWorks material involved.
 
 use egui_dock::{DockState, SurfaceIndex};
 

@@ -230,3 +230,87 @@ fn an_older_setup_loads_with_every_pane_unfolded() {
         assert!(!fold::is_folded(&loaded, &tab), "{tab:?} loads open");
     }
 }
+
+// ------------------------------------------------ the state on the chips
+
+/// The seeded shell (Contour1, generated) at the plan's screen size.
+fn seeded() -> H {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1366.0, 768.0))
+        .build_ui_state(frame, ShellUi::seeded());
+    h.run_steps(3);
+    h
+}
+
+/// Make the seed's Contour1 stale through the command queue (an edit
+/// that changes what generation read).
+fn make_stale(h: &mut H) {
+    let edited = {
+        let st = &h.state().state;
+        let e = model::find_by_name(&st.world, "Contour1").expect("the seed's op");
+        let mut p = model::operation_of(&st.world, &e).expect("op").params;
+        if let OpParams::Contour { plunge_feed, .. } = &mut p {
+            *plunge_feed = 150.0;
+        }
+        p
+    };
+    h.state_mut()
+        .state
+        .pending
+        .push_back(CommandKind::EditOperationParams { name: "Contour1".into(), params: edited });
+    h.run_steps(3);
+}
+
+/// The texts painted inside the leaf of `tab`, under its tab bar.
+fn chip_texts(h: &H, tab: &Tab) -> Vec<String> {
+    let leaf = leaf_rect(&h.state().dock, tab).expect("docked");
+    super::structural::painted(h)
+        .into_iter()
+        .filter(|(_, p)| p.x >= leaf.left() - 1.0 && p.x <= leaf.right() + 1.0 && p.y > leaf.top() + 20.0)
+        .map(|(t, _)| t)
+        .collect()
+}
+
+#[test]
+fn a_stale_operation_shows_on_the_folded_browser_chip() {
+    let mut h = seeded();
+    assert!(fold::fold(&mut h.state_mut().dock, &Tab::Browser));
+    h.run_steps(3);
+    let texts = chip_texts(&h, &Tab::Browser);
+    assert!(texts.iter().any(|t| t == "\u{2714} Up to date"), "a current job says so: {texts:?}");
+    make_stale(&mut h);
+    let texts = chip_texts(&h, &Tab::Browser);
+    assert!(texts.iter().any(|t| t == "\u{26A0} 1 stale"), "the stale count stays on screen: {texts:?}");
+}
+
+#[test]
+fn the_folded_properties_chip_names_the_operation_state() {
+    let mut h = seeded();
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
+    h.run_steps(2);
+    assert!(fold::fold(&mut h.state_mut().dock, &Tab::Properties));
+    h.run_steps(3);
+    let texts = chip_texts(&h, &Tab::Properties);
+    assert!(texts.iter().any(|t| t == "\u{2714} Up to date"), "the open operation is current: {texts:?}");
+    make_stale(&mut h);
+    let texts = chip_texts(&h, &Tab::Properties);
+    assert!(texts.iter().any(|t| t == "\u{26A0} Needs regenerate"), "the open operation needs work: {texts:?}");
+}
+
+#[test]
+fn a_fold_does_not_move_the_camera() {
+    let mut h = seeded();
+    let before = h.state().state.cam;
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let folded = h.state().state.cam;
+    h.state_mut().state.layout_request = Some(LayoutRequest::Reset);
+    h.run_steps(3);
+    let after = h.state().state.cam;
+    for cam in [folded, after] {
+        assert_eq!(cam.target, before.target, "the orbit target stays");
+        assert_eq!((cam.yaw, cam.pitch, cam.dist), (before.yaw, before.pitch, before.dist), "the view stays");
+    }
+}

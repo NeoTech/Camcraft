@@ -205,18 +205,21 @@ fn folded_side_panes(dock: &DockState<Tab>) -> Vec<(Tab, egui::Rect)> {
 }
 
 /// Draw the title chip of each folded side pane under its tab bar, after
-/// the dock drew. A click on a chip unfolds that pane.
-pub(crate) fn chips(ui: &mut egui::Ui, dock: &mut DockState<Tab>, folds: &mut PaneFolds, pal: &Tokens, tab_bar: f32) {
+/// the dock drew, with the pane's safety state under the title
+/// (`fold_state`). A click on a chip unfolds that pane. Only a folded pane
+/// reads the state, so an open dock pays nothing here.
+pub(crate) fn chips(ui: &mut egui::Ui, dock: &mut DockState<Tab>, state: &mut crate::state::State, pal: &Tokens, tab_bar: f32) {
     let mut ask: Option<Tab> = None;
     for (tab, pane) in folded_side_panes(dock) {
         let Some(rect) = kit::chip_rect(pane, tab_bar) else { continue };
         let id = egui::Id::new(("pane-fold-chip", tab.title()));
-        if kit::fold_chip(ui, rect, id, tab.title(), pal).clicked() {
+        let line = super::fold_state::of(state, &tab);
+        if kit::fold_chip(ui, rect, id, tab.title(), line.as_ref(), pal).clicked() {
             ask = Some(tab);
         }
     }
     if let Some(tab) = ask {
-        unfold(dock, folds, &tab);
+        unfold(dock, &mut state.pane_folds, &tab);
         ui.ctx().request_repaint();
     }
 }
