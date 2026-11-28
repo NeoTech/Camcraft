@@ -16,7 +16,19 @@ You can keep it open beside the viewport while Properties shows another
 subject. The old Tool library dock tab is gone. **View > Tool library…**
 also opens the window. On **Cutting tools**, choose **Document** for the
 job's tools or **Catalog** for built-in tools. Tool type and name filters
-apply to both sources.
+apply to both sources. **My library** shows your own tool components (see
+[Tool components and stacks](#tool-components-and-stacks)).
+
+The window has one header and one footer on each page. The header has the
+way back, the name of the page, and the **Cutting tools** and **Holders**
+tabs. The footer shows a hint and the page buttons: **Close** on a list,
+or **Duplicate**, **Cancel** and **Apply** on an editor.
+
+The tool list has one header row with one search box, **Search tools**.
+The search reads the name, type, diameter, holder, tool number, part
+number and vendor. The header shows "N of M tools". The rail on the left
+shows each tool category. The list has a **Recipes** column and an
+**in document** column.
 
 To change a document tool in this window, choose **Edit** in the Document
 list. The list becomes a rail of tools; **All tools** returns to the list.
@@ -25,6 +37,19 @@ the material group, catalog facts and tool number. Change the fields and
 choose **Apply**. A geometry and catalog edit is one undo step. The window
 keeps its own draft; typing there does not overwrite a separate Properties
 draft. Selecting a tool in the window does not retarget Properties.
+
+The **Tool** tab shows the name, the tool number, the flutes, the helix
+angle, the tool material and centre cutting. It also shows the stick-out
+and the gauge length that comes from it. A clamping range check tells you
+when the shank is outside the clamping range of the holder. The default
+view is a side drawing of the tool to scale.
+
+When you add a tool on a machine with reserved pockets, the window shows
+the same next tool number that **Add tool** gives. A machine whose probe
+pockets are all in use gets a refusal that says what to do. If the
+tool's speed is outside the spindle range of the mounted machine, the
+window and the MCP `add_tool` tool warn at once. The machine check names
+the fix: edit the tool's speed, or apply cutting data.
 
 You can still select a document tool in the browser to edit its settings
 in Properties. **Edit tool shape** opens the existing shape window; if
@@ -48,6 +73,13 @@ the tool: `<operation>: left-hand tap <tool> is not supported by posting`.
 Right-hand output is unchanged. The hand travels with the tool in
 projects, tool libraries and undo.
 
+A cutter also stores its hand. Each tool kind that turns a spindle has a
+**Left-hand cutter (spindle reverse, M4)** row. A left-hand cutter posts
+`M4`. A post that cannot reverse the spindle refuses a left-hand cutter by
+name, at creation and at posting. A change of the hand makes the
+operations that use the tool stale. A project with a left-hand cutter
+needs project file version 83 or later.
+
 Choose **Edit tool shape** to open `Tool shape: <name>`. The holder
 library comes first, followed by the **Body** and **Profile** tabs. Body
 imports and drawn profiles are edited there; Properties keeps the tool's
@@ -70,7 +102,8 @@ the point touched off on the machine; see [Turning](@/guide/operations/operation
 
 On an operation's **Feeds** tab, open **Cutting data** and select
 **Workpiece material**. The choices include **Softwood**, **Hardwood**,
-**MDF**, **Plywood**, **Acrylic (PMMA)** and **HDPE**. State the tool's
+**MDF**, **Plywood**, **Acrylic (PMMA)** and **HDPE**. The list also has
+the metal **Copper (C11000)**, with its own cutting data rows. State the tool's
 **Tool material** and **Flutes** too. The suggestion shows cutting speed,
 chip load, spindle rpm and feed. **Apply suggestion** writes the spindle
 and feed as one undoable change; first apply or revert any other edits
@@ -90,6 +123,21 @@ guess it. The tool editor's **Cutting data** group also has **Add material
 row** for storing your own rpm and feed for each material. **Apply** saves
 those rows. A repeated material or a non-positive rpm or feed is refused
 by the tool's name. Rows and the material choice travel with the project.
+
+## Recipes tab
+
+In the Tool library window, the **Recipes** tab of a tool holds one
+recipe for each work material. A recipe is the tool's spindle speed and
+feed for that material. The tab explains this at the top. The row of the
+stock material has a star. Each row also shows the surface speed and the
+chip load that come from its speed and feed.
+
+- **Add material…** adds a row for a material that the tool has no row for.
+- **Suggest feeds and speeds** fills a row from the cutting data tables.
+- **Copy recipes from tool…** copies the rows of a different tool.
+
+Choose **Apply** to keep the rows. Check each suggested value against the
+cutter and machine specifications.
 
 ## Holders and profiles
 
@@ -123,6 +171,28 @@ that support only project version 69 or tool-library version 3 refuse
 these newer files. An older drawn copy loads as a custom profile with
 the same outline. An older holder cylinder keeps its own dimensions;
 neither is silently converted into a library reference.
+
+The holder library now has more tapers and holders:
+
+- HSK-A63, HSK-F63, HSK-E40, HSK-E32, SK30, SK40 and router ISO30 holders,
+  each with ER collet chucks and Weldon side-lock holders.
+- BT50 and CAT50 holders with ER and Weldon noses.
+- SK50 holders (ER16 to ER50, Weldon), and ER50 collet chucks on the
+  BT40, CAT40, SK40, BT50, CAT50 and SK50 tapers.
+- DIN 69882-8 shrink-fit chucks on each taper except TTS. The picker
+  groups them as one "<taper> Shrink" entry.
+- Built-in ER collets from ER11 to ER40. A built-in ER chuck, a collet
+  and a built-in solid tool make a tool stack.
+
+The **Holders** tab of the Tool library window opens the **Holders**
+page. Its search box, **Search taper, clamp, size or name**, reads the
+taper, the clamp, a size and the name. Click a holder to see its facts and
+the tools that use it. A built-in holder cannot be edited. Choose **Copy
+as user holder** to make a holder that you can edit. A user holder opens
+in a form: taper, clamp, clamping range, gauge length and diameters. A
+drawing shows the spindle nose and the shank range. **Apply** updates
+each tool that uses the holder in one undo step. CamCraft refuses an edit
+that breaks the fit of a tool, and names the tool.
 
 Check the dimensions against the real assembly. A library entry does not
 measure the holder installed on your machine.
@@ -159,6 +229,58 @@ The combined body is saved with the project and tool library.
 holder cylinder. A turning tool without a body does not have a judged
 holder. Read the operation's warnings and [refusals](@/guide/reference/refusals.md).
 
+## Tool components and stacks
+
+A tool can be built from components: for example a holder, a collet and
+a cutter body, or a lathe holder and an insert. The list of components
+that builds a tool is its component stack. The document holds a table of
+shared components. An edit of one component updates each tool that uses
+it in one undo step, and the operations of those tools go Stale.
+CamCraft refuses by name the delete of a component that a tool uses, and
+a stack whose parts do not fit.
+
+CamCraft reads ISO 1832 insert codes and ISO 5608 holder codes. It checks
+that an insert fits the seat of a holder and that a shank fits a
+coupling. Each mismatch has a named reason.
+
+In the Tool library window:
+
+- The **Tool** tab shows the **Component stack** of the tool. **Apply
+  stack** applies it as one undo step. **Detach to standalone tool** keeps
+  the tool without its links to the components.
+- The stack shows the gauge length, the cutting diameter and the corner
+  radius of the whole stack. **Swap** puts a part that fits in the place
+  of one part, in one undo step.
+- The **My library** source shows your component library and the
+  document's component table. **Show compatible parts** shows only the
+  parts that fit the selected part.
+- The component editor edits the name, the insert code and the holder
+  gauge length. Its **Apply** updates each tool that is built from the
+  part, in one undo step.
+
+Multi-seat indexable face mills and end mills take their whole tool record
+from the document's components: flutes, flute length, centre cutting,
+tool material and cutting rows. One edit of the shared insert updates
+each such tool.
+
+A turning tool can be built from a lathe holder or boring bar and an
+insert. The **Component stack** offers the lathe holders and the inserts
+that fit them. It shows the nose radius, the orientation and the
+inscribed circle. The stack gives the nose-centre tip, the orientation
+(1 to 8), the nose radius and one clearance body for the whole stack. An
+edit of the insert updates each tool that uses it.
+
+The project saves its component table and the component stack of each
+tool (project file version 84). Your own components are in the user
+component library, `components.camcomponents`, next to the built-in
+holders and starter tools. **Save to My library** adds a component to it.
+A change in the library goes into a project only when you choose **Sync
+from library**, which is one undo step. Opening a project never applies a
+library change by itself.
+
+Agents use the same commands through `list_tool_components` and the other
+tools of [MCP](@/guide/automate/mcp.md).
+
 ## Plasma torch recipes
 
 A plasma torch can carry cutting-data recipes for a material and an exact
@@ -180,7 +302,11 @@ If the chosen filename has no extension, CamCraft adds `.camtools`.
 The native format is JSON with `format: "camcraft-tools"`, a `version`,
 `units: "mm"` and a `tools` array of `{name, definition}` records.
 The writer selects the version required by the stored tool data; a
-library with holder references requires at least version 4.
+library with holder references requires at least version 4. A library
+with a left-hand cutter requires version 7. Version 8 carries tool
+components and tool stacks. The import adds the tool components in the
+same undo step and reuses a component with the same content. It refuses
+a different component with the same id.
 Lengths in `.camtools` remain millimetres even when the display uses
 inches. Controller tool numbers belong to the document and are not stored
 in `.camtools` definitions.
