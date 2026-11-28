@@ -10,7 +10,7 @@ v0.8.1).
 
 | Commit | Date | Change | Version |
 |---|---|---|---|
-| PENDING #4371 | PENDING | PENDING #4371: Mazak post: a Z retract before a tool change (#4341, PR #4371); the coordinator fills this row after the merge | 0.28.0 |
+| 740b44133 | 2026-11-28 | The Mazak, Fanuc and Doosan DNM posts lift Z by the safe retract method before each later tool change, so the G49 of the next preamble never runs at the clearance height of the previous operation; supersedes PR #4371 (#4341, PR #4509) | 0.28.0 |
 | 2394b5ad1 | 2026-11-27 | camcraft-gcode reads HEIDENHAIN Klartext tapping cycles 206 and 207, the cycle 9 dwell and the cycle 32 tolerance, so every program that the Klartext post writes reads back (PR #4460) | 0.28.0 |
 | 0117e3bb1 | 2026-11-27 | The Recipes tab edits the surface speed and the chip load of each row; the rpm or the feed follows (#4453, PR #4459) | 0.28.0 |
 | bdadb54c7 | 2026-11-27 | The tool library preview draws the teeth of a thread mill on its cutting length, not a plain cylinder (#4451, PR #4458) | 0.28.0 |

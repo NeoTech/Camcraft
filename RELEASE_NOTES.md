@@ -89,8 +89,10 @@ went through before.
   open-run skims (#3216).
 - **Pattern folders:** member operations post again at each copy of a
   linear or grid pattern (#3012).
-- **PENDING #4371:** Mazak post: a Z retract before a tool change (#4341,
-  PR #4371). The coordinator fills this line after the merge.
+- **Z retract before a tool change:** the Mazak, Fanuc and Doosan DNM
+  posts lift Z by the safe retract method before each later tool change.
+  The G49 of the next preamble never runs at the clearance height of the
+  previous operation (#4341, PR #4509, which supersedes PR #4371).
 - **Toolpaths:** 2D Offset has no full-width cuts where rings of two lobes
   merge (#3788). Adaptive clean-up passes are checked against the
   engagement limit (#3849). A round 3D Pocket level takes the short spiral
@@ -135,6 +137,8 @@ Seven pull requests merged into `main` after the freeze notice, between
 00:01 and 00:02 UTC on 2026-11-28. They are part of this release: #4467,
 #4298, #4442, #4425, #4458, #4459 and #4460. The maintainer also added
 #4410, #4449, #4423, #4424, #4368, #4441 and #4438 after the cut line.
+PR #4509 (#4341, on the cut list) merged on 2026-11-28 and supersedes
+PR #4371. No other pull request merged after these.
 
 ## Not exercised on a real control
 The pull requests record no run on a real control for these changes. The
@@ -160,6 +164,9 @@ issues need attention before you post:
   on such a machine.
 - **#4004 (P1): dovetail cutters ignore `corner_r`.** The flank is too
   thin.
+- **#4511 (P1): the Fanuc and Doosan posts lift Z with G43.4 still armed
+  at a setup-change stop after a tilted section.** Filed after the cut
+  line. Check the setup-change stop of a tilted program.
 - **#4455 (P1): the Largest diameter field of a copied holder reads 50.0,
   but the drawing shows Ø63.** Check the holder diameter before you trust
   the clearance check.
@@ -168,6 +175,8 @@ The release-tier site tests need zola 0.23.6, python3 and node on the cut
 runner. A runner without these tools fails the site step.
 
 All open `P1` and `P2` issues:
+- #4511 (P1): Fanuc and Doosan posts: a setup-change stop after a tilted
+  section lifts Z with G43.4 still armed (filed after the cut line).
 - #4472 (P1): main is red (post-merge gate). The `wire_post` tests; the
   fix (#4431, PR #4405) is in this release.
 - #4455 (P1): Holder form: the Largest diameter field of a copied holder
