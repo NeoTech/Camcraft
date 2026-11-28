@@ -66,6 +66,7 @@ fn punch_doc(skims: Vec<WireSkim>) -> World {
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "R1".into(),
@@ -81,6 +82,7 @@ fn punch_doc(skims: Vec<WireSkim>) -> World {
         clearance: operation::DEFAULT_CLEARANCE,
         skims,
         sharp_corners: false,
+        overlap: 0.0,
     };
     let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

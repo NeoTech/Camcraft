@@ -18,6 +18,8 @@ pub(super) fn checked_input(m: &Value) -> Result<Cow<'_, Value>, String> {
         }
         installation::identity(m)?;
         installation::tool_change(m)?;
+        installation::max_tool_number(m)?;
+        installation::work_offset_max(m)?;
         installation::d_number(m)?;
     }
     Ok(Cow::Borrowed(m))
@@ -43,6 +45,12 @@ pub(super) fn mirror(m: &Machine, out: &mut Map<String, Value>) {
     if let Some(mode) = m.tool_change {
         out.entry("tooling").or_insert_with(|| json!({}))["tool_change"] = json!(mode);
     }
+    if let Some(n) = m.max_tool_number {
+        out.entry("tooling").or_insert_with(|| json!({}))["max_tool_number"] = json!(n);
+    }
+    if let Some(n) = m.work_offset_max {
+        out.entry("controller").or_insert_with(|| json!({}))["work_offset_max"] = json!(n);
+    }
     if let Some(rule) = m.d_number {
         out.entry("tooling").or_insert_with(|| json!({}))["d_number"] = json!(rule.word());
     }
@@ -51,6 +59,8 @@ pub(super) fn mirror(m: &Machine, out: &mut Map<String, Value>) {
 pub(super) fn script_props(m: &Value, props: &mut Value) {
     if let Some(id) = m.pointer("/controller/identity").filter(|v| !v.is_null()) {
         props["controllerIdentity"] = id.clone();
+        // #4095: the HEIDENHAIN dialect of the stated control, or the refusal by name.
+        props["heidenhainDialect"] = super::heidenhain_dialect::script_value(id);
         let mut axes: Vec<_> = m
             .pointer("/kinematics/static/axes")
             .and_then(Value::as_array)
@@ -79,6 +89,10 @@ pub(super) fn script_props(m: &Value, props: &mut Value) {
         .or_else(|| m.get("arcTolerance").and_then(Value::as_f64))
     {
         props["arcTolerance"] = json!(tol);
+    }
+    // #4087: absent when unstated; the posts keep their own limit then.
+    if let Some(n) = m.pointer("/tooling/max_tool_number").and_then(Value::as_u64) {
+        props["toolNumberMax"] = json!(n);
     }
     // #4143: the stated D rule ("first-edge" / "tool-number"); absent when unstated.
     if let Some(rule) = m.pointer("/tooling/d_number").and_then(Value::as_str) {

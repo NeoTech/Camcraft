@@ -1,6 +1,7 @@
 //! #3896 (U5 of #3663): the arithmetic of the Recipes tab, over the
 //! window's draft only. Surface speed and feed per tooth are read from a
-//! row; "Suggest" and "Copy from tool" write the draft and queue nothing.
+//! row; "Suggest", "Copy from tool" and (#4337) "Add material" write the
+//! draft and queue nothing.
 //! Apply lands the draft as one `ChangeTool`, as for every other tool
 //! number.
 //! Provenance: the handbook relations Vc = pi x D x n / 1000 and
@@ -108,6 +109,23 @@ pub(crate) fn suggest(t: &mut ToolUi, m: WorkMaterial, machine: Option<&Machine>
     Ok(())
 }
 
+/// #4337: the materials that "Add material…" offers - each one that no
+/// plain row of the draft names yet.
+pub(crate) fn addable(rows: &[CuttingRow]) -> impl Iterator<Item = WorkMaterial> + '_ {
+    WorkMaterial::ALL.into_iter().filter(|m| !names_material(rows, *m))
+}
+
+/// #4337: "Add material…": a row for `m`, starting from the draft's own
+/// spindle rpm and feed (the default row's numbers). `false` when a row
+/// names `m` already. Writes only the draft.
+pub(crate) fn add_material(t: &mut ToolUi, m: WorkMaterial) -> bool {
+    if names_material(&t.cutting, m) {
+        return false;
+    }
+    t.cutting.push(CuttingRow::plain(Some(m), t.rpm, t.feed));
+    true
+}
+
 /// The rows "Copy from tool" takes: the plain material rows. The source's
 /// default row is its own running speed, and a torch or nozzle recipe
 /// belongs to its kind.
@@ -160,5 +178,16 @@ mod tests {
         assert_eq!(marks(Some(WorkMaterial::Brass)), [false, true]);
         assert_eq!(marks(Some(WorkMaterial::MildSteel)), [true, false], "no row names it: the default row runs");
         assert_eq!(marks(None), [false, false]);
+    }
+
+    #[test]
+    fn add_material_adds_one_row_for_a_new_material() {
+        let mut t = ToolUi { rpm: 9000.0, feed: 900.0, ..ToolUi::default() };
+        assert!(add_material(&mut t, WorkMaterial::Brass));
+        assert_eq!(t.cutting, [CuttingRow::plain(Some(WorkMaterial::Brass), 9000.0, 900.0)]);
+        assert!(!add_material(&mut t, WorkMaterial::Brass), "a material has one row");
+        assert_eq!(t.cutting.len(), 1);
+        assert!(addable(&t.cutting).all(|m| m != WorkMaterial::Brass));
+        assert_eq!(addable(&t.cutting).count(), WorkMaterial::ALL.len() - 1);
     }
 }

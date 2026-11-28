@@ -82,13 +82,24 @@ pub fn wire_contour_arcs(chain: &ArcChain, p: &WireParams) -> Result<Toolpath, G
 /// As [`wire_contour_arcs`], and each refusal of the arc lead by name.
 pub fn wire_contour_arcs_led(chain: &ArcChain, p: &WireParams, lead: WireLead) -> Result<Toolpath, GenError> {
     p.door()?;
+    // #3216: a stated closing overlap rides the seam lap of the polygon
+    // cut. The analytic line-and-arc path never cuts that ride (no
+    // `ring::past_seam` here), so it is refused by name at the generation
+    // door - a stale file whose op slipped past the command door cannot
+    // generate a lap whose note claims a ride that is not cut.
+    if p.overlap > 0.0 {
+        return Err(invalid(
+            "a closing overlap is stated on a drawn line-and-arc profile - the overlap rides the seam lap of the polygon cut, and this analytic path does not cut that ride yet; set the overlap to 0, or cut the profile as an exact polygon with the straight lead".into(),
+        ));
+    }
     if p.tabs.is_some() {
         return Err(invalid("tabs are stated on a drawn line-and-arc profile - tabs are not cut on it yet; remove the tabs".into()));
     }
     let sign = match p.side {
         WireSide::Die => 1.0,
         WireSide::Punch => -1.0,
-        WireSide::Left | WireSide::Right => {
+        // #3216: centre, like left / right, is an open run's side.
+        WireSide::Left | WireSide::Right | WireSide::Centre => {
             return Err(invalid(format!(
                 "the side is {} of travel, but the profile is closed - a closed profile states its die or punch side",
                 p.side.word()

@@ -192,6 +192,8 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
         vendor: text_of(general.and_then(|g| g.get("vendor"))),
         controller_identity: super::installation::identity(&v)?,
         tool_change: super::installation::tool_change(&v)?,
+        max_tool_number: super::installation::max_tool_number(&v)?,
+        work_offset_max: super::installation::work_offset_max(&v)?,
         d_number: super::installation::d_number(&v)?,
         ..Default::default()
     };

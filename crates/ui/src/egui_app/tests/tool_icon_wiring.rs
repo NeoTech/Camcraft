@@ -105,20 +105,20 @@ fn every_catalog_row_paints_its_kind_glyph() {
     }
     h.run();
     h.run();
+    // #4335: the catalog rows are a grid; the name cell holds the glyph
+    // and the name. Queries stay inside the window (a document tool can
+    // share a catalog name in the browser).
+    let in_window = |h: &Harness<'static, ShellUi>, name: &str| super::tool_library_editor::library_window(h).query_all_by_label(name).next().is_some();
     for (name, ct) in tools::catalog() {
-        let label = format!("{name}  \u{d8}");
         if !crate::machine_modes::tool_kind_offered(&h.state().state.world, ct.kind) {
-            assert!(
-                h.query_by_label_contains(&label).is_none(),
-                "unoffered catalog entry {name} ({:?}) stays hidden",
-                ct.kind
-            );
+            assert!(!in_window(&h, name), "unoffered catalog entry {name} ({:?}) stays hidden", ct.kind);
             continue;
         }
-        h.get_by_label_contains(&label).scroll_to_me();
+        super::tool_library_editor::library_window(&h).get_by_label(name).scroll_to_me();
         h.run();
         h.run();
-        let row = h.get_by_label_contains(&label);
+        let win = super::tool_library_editor::library_window(&h);
+        let row = win.get_by_label(name);
         assert!(glyph_in_row(&h, &row, kind_icon(&h, ct.kind)), "catalog row {name} paints no {:?} glyph", ct.kind);
     }
 }

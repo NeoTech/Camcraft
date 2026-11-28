@@ -112,6 +112,10 @@ pub(super) fn wire_gate(world: &World, setup: Option<&str>, tool: &str, params: 
             if let Some(why) = operation::wire_sketch_arcs::lead_arc_refusal(w) {
                 return Err(CommandError::Invalid(why));
             }
+            // #4134: what the control's wire offset cannot engage on.
+            if let Some(why) = operation::wire_comp::refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
             let cond = operation::wire_op::condition_of(world, setup, tool, w).map_err(CommandError::Invalid)?;
             // #3991: the arc lead radius against the resolved kerf offset.
             if let Some(why) = operation::wire_sketch_arcs::lead_arc_radius_refusal(w, &cond) {
@@ -162,6 +166,15 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
     if machine == crate::machine::Kind::Plasma {
         return Err(CommandError::Invalid(format!(
             "a {} operation is {} work; the setup's machine is a plasma table, which cuts only plasma operations (a Plasma Profile)",
+            params.kind(),
+            family.work(),
+        )));
+    }
+    // #4081: a laser cutter cuts only laser work; no laser operation
+    // ships before the Laser Profile slice, so each kind is refused here.
+    if machine == crate::machine::Kind::Laser {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a laser cutter, which cuts only laser operations",
             params.kind(),
             family.work(),
         )));

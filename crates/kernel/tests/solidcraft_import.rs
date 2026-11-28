@@ -11,6 +11,11 @@
 
 #[path = "solidcraft_import/blend.rs"]
 mod blend;
+// #3915: the face names beside the final body.
+#[path = "solidcraft_import/names.rs"]
+mod names;
+#[path = "solidcraft_import/names_misfit.rs"]
+mod names_misfit;
 #[path = "solidcraft_import/release_fixture.rs"]
 mod release_fixture;
 mod sc_util;

@@ -24,6 +24,8 @@ pub mod fixture;
 pub mod fixture_profile;
 // #339 slice 6: the user fixture library file.
 pub mod fixture_library;
+// #3645: the user tool component library and its sync status.
+pub mod component_library;
 pub mod step_source;
 pub mod model_source;
 pub mod fixture_carried;
@@ -61,6 +63,8 @@ pub mod model_fidelity;
 pub mod fidelity_note;
 pub mod mesh_open;
 pub mod mesh_solids;
+// #3915: the SolidCraft face names of a model's facets.
+pub mod source_faces;
 pub mod model_vouch;
 pub mod operation;
 pub mod pick;
@@ -76,6 +80,8 @@ mod posting_family;
 pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
+// #3012: pattern folders - linear and grid copies of member operations.
+pub mod pattern_folder;
 pub use camcraft_motion::plasma;
 // #1883: the waterjet profile and the 2D sheet kernel it shares.
 pub use camcraft_motion::{sheet, waterjet};
@@ -202,6 +208,15 @@ pub mod tool_cutter;
 pub use camcraft_tools::holder_library;
 // #368: a tool's modelled body and the reads the judging laws take from it.
 pub mod tool_body;
+// #3644: the document component table and each tool's component stack.
+pub mod tool_assembly;
+// #3644: the records the table holds, for the callers outside this crate.
+pub use camcraft_tools::{component, component_geometry, connection_code};
+// #3898: the fit queries and the records a component is built from, for the
+// tool library window (the UI reaches the tools crate through app only);
+// `milling_cutter` for a row's #3646 cutter facts, `lathe_assembly` for its
+// #4278 lathe body.
+pub use camcraft_tools::{component_fit, frame, insert_iso1832, insert_seat, lathe_assembly, milling_cutter};
 // #371: the editor's placement preview and picks, the sim's posed body.
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
@@ -215,6 +230,10 @@ pub mod tool_body_lathe_view;
 pub mod tool_body_assembly;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
+// #4266: the sim playback's machine-frame view - the math lives in
+// camcraft-sim (pure vectors, no document concern); `app` re-exports it
+// for the UI ("app holds the document, nothing else").
+pub use camcraft_sim::machine_view as sim_machine_view;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.
 pub mod sim_lathe_body;
 pub mod units;

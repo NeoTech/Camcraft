@@ -16,13 +16,13 @@ pub const SLOW_BINARIES: &[&str] = &[
 ];
 /// Crate dirs in dependency order. kernel builds a C chain (truck dev-dep) and its debug suites take
 /// about 3 min: batch runs them since #1702, so the post-merge gate finds a kernel failure before a cut.
-pub const BATCH_CRATES: &[&str] = &["geometry", "kernel", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu"];
+pub const BATCH_CRATES: &[&str] = &["geometry", "kernel", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu", "ui-kit"];
 pub const ALL_CRATES: &[&str] = &[
-    "geometry", "kernel", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu", "ui",
+    "geometry", "kernel", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu", "ui-kit", "ui",
 ];
 /// A touch to a shared crate (or the workspace manifest) makes quick a batch.
 pub const SHARED: &[&str] = &["geometry", "cl"];
-pub const CLIPPY: &[&str] = &["geometry", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu", "ui"];
+pub const CLIPPY: &[&str] = &["geometry", "cl", "gcode", "tools", "post", "sim", "motion", "app", "gpu", "ui-kit", "ui"];
 pub const J: &str = "6";
 pub const T: &str = "--test-threads=6";
 
@@ -36,6 +36,9 @@ pub struct Step {
     /// A known-fail check (`known_fail`): the step is ok only when libtest reports this test as FAILED by
     /// its pinned assert.
     pub expect_fail: Option<crate::known_fail::KnownFail>,
+    /// The site tests (#4133): not a cargo command; `site_step::execute` runs it, and a missing tool
+    /// gives the row that this says.
+    pub site: Option<crate::site_step::Missing>,
 }
 
 impl Step {
@@ -45,6 +48,7 @@ impl Step {
             args: args.iter().map(|a| (*a).to_string()).collect(),
             in_ui: dir == "ui",
             expect_fail: None,
+            site: None,
         }
     }
     pub fn with(mut self, more: &[String]) -> Step {
@@ -173,7 +177,7 @@ pub fn clippy() -> Step {
 pub fn batch(root: &Path) -> Plan {
     let mut plan = Plan::default();
     plan.notes.push(format!(
-        "batch: debug suites (kernel included) minus SLOW_BINARIES ({}), ui, clippy",
+        "batch: debug suites (kernel included) minus SLOW_BINARIES ({}), ui, clippy, site tests (a missing tool is a SKIP row)",
         SLOW_BINARIES.join(", ")
     ));
     plan.notes.push("per-crate prebuilds (--no-run), then one step for each test target in parallel lanes (#1941, #2727)".into());
@@ -183,6 +187,7 @@ pub fn batch(root: &Path) -> Plan {
     plan.steps.extend(run_suites(root, BATCH_CRATES, true));
     plan.steps.extend(run_suites(root, &["ui"], false));
     plan.steps.push(clippy());
+    plan.steps.push(crate::site_step::step(crate::site_step::Missing::Skip));
     plan
 }
 
@@ -283,7 +288,7 @@ pub fn release(root: &Path) -> Plan {
 pub fn release_with(root: &Path, snapshots: bool) -> Plan {
     let mut plan = Plan::default();
     plan.notes.push(
-        "release: prebuild both profiles, then heavy targets before debug suites; each phase runs a longest-first shared queue, then ui, clippy and lanes::ISOLATED targets alone"
+        "release: prebuild both profiles, then heavy targets before debug suites; each phase runs a longest-first shared queue, then ui, clippy and lanes::ISOLATED targets alone; site tests (a missing tool is a FAIL row)"
             .into(),
     );
     if !snapshots {
@@ -302,6 +307,7 @@ pub fn release_with(root: &Path, snapshots: bool) -> Plan {
     plan.steps.extend(run_suites(root, &non_ui, false));
     plan.steps.extend(run_suites(root, &["ui"], false));
     plan.steps.push(clippy());
+    plan.steps.push(crate::site_step::step(crate::site_step::Missing::Fail));
     if !snapshots {
         return plan;
     }

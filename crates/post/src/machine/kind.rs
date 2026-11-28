@@ -44,6 +44,9 @@ pub enum Kind {
     Plasma,
     /// Abrasive waterjet: X/Y cutting, optional Z, no spindle.
     Waterjet,
+    /// A laser cutter (#4081): X and Y cut, an optional Z sets the focus,
+    /// and no spindle turns. Declared only.
+    Laser,
     /// Wire EDM (#530): a wire through lower and upper guides, X/Y plus
     /// U/V for taper. Declared only - no axis inventory infers it.
     WireEdm,
@@ -62,6 +65,7 @@ impl Kind {
             Kind::MillTurn => "mill-turning",
             Kind::Plasma => "plasma cutting",
             Kind::Waterjet => "waterjet cutting",
+            Kind::Laser => "laser cutting",
             Kind::WireEdm => "wire EDM",
             Kind::SinkerEdm => "sinker EDM",
         }
@@ -78,6 +82,7 @@ impl Kind {
             Kind::MillTurn => "mill-turn",
             Kind::Plasma => "plasma",
             Kind::Waterjet => "waterjet",
+            Kind::Laser => "laser",
             Kind::WireEdm => "wire_edm",
             Kind::SinkerEdm => "sinker_edm",
         }
@@ -104,6 +109,7 @@ impl Kind {
             "millturn" | "turnmill" | "millturning" | "turningmill" => Some(Kind::MillTurn),
             "plasma" | "plasmacutting" | "plasmatable" => Some(Kind::Plasma),
             "waterjet" => Some(Kind::Waterjet),
+            "laser" | "lasercutter" | "lasercutting" => Some(Kind::Laser),
             "wireedm" | "wedm" | "wirecut" => Some(Kind::WireEdm),
             "sinkeredm" | "sinker" | "diesinker" | "ramedm" | "diesinkedm" => Some(Kind::SinkerEdm),
             _ => None,
@@ -201,12 +207,13 @@ pub(super) fn declared_kind(v: &Value) -> Result<Option<(Kind, String)>, String>
         Some(Value::String(w)) => {
             let Some(k) = Kind::from_word(w) else {
                 return Err(format!(
-                    "machine file: kind {w:?} is not mill, router, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm"
+                    "machine file: kind {w:?} is not mill, router, lathe, mill-turn, plasma, waterjet, laser, wire_edm or sinker_edm"
                 ));
             };
             let broken = match k {
                 Kind::Plasma => super::plasma::plasma_refusals(v),
                 Kind::Waterjet => super::waterjet::waterjet_refusals(v),
+                Kind::Laser => super::laser::laser_refusals(v),
                 Kind::WireEdm | Kind::SinkerEdm => super::edm::edm_refusals(v),
                 Kind::Mill | Kind::Lathe | Kind::MillTurn => Vec::new(),
             };

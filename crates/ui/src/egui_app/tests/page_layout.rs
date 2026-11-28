@@ -186,7 +186,8 @@ fn layout_page_wcs() {
 fn layout_page_model() {
     let _g = snapshot_guard();
     let h = page(UiTarget::Model("Block".into()));
-    assert_page_layout(&h, "Model", &["Model: Block", "STEP facet budget (next import)", "Turn X+", "Turn Y-", "Apply"]);
+    // #1992: the budget's Set button stands in the leaf, under its label.
+    assert_page_layout(&h, "Model", &["Model: Block", "STEP facet budget (next import)", "Set", "Turn X+", "Turn Y-", "Apply"]);
 }
 
 #[test]
@@ -221,7 +222,8 @@ fn layout_page_operation() {
     assert_page_layout(
         &h,
         "Operation",
-        &["Operation: Contour1", "Geometry", "Lead in / Lead out", "Models", "Edges", "Generate"],
+        // #1992: Delete operation stands in the leaf, under Generate.
+        &["Operation: Contour1", "Geometry", "Lead in / Lead out", "Models", "Edges", "Generate", "Delete operation"],
     );
 }
 

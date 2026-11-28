@@ -30,7 +30,7 @@ pub struct MachineEditor {
     pub machine: Machine,
 }
 
-const KIND_WORDS: [&str; 8] = [
+const KIND_WORDS: [&str; 9] = [
     "auto (axis inventory)",
     "mill",
     "lathe",
@@ -38,6 +38,8 @@ const KIND_WORDS: [&str; 8] = [
     "plasma",
     "wire_edm",
     "sinker_edm", "waterjet",
+    // #4081
+    "laser",
 ];
 
 pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
@@ -137,6 +139,7 @@ fn draw_kind(ui: &mut Ui, m: &mut Machine) {
         Some(Kind::WireEdm) => 5,
         Some(Kind::SinkerEdm) => 6,
         Some(Kind::Waterjet) => 7,
+        Some(Kind::Laser) => 8,
         None => 0,
     };
     let before = idx;

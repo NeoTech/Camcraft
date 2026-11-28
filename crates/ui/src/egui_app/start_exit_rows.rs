@@ -12,7 +12,7 @@
 //! chosen entry and exit position on a closed profile; no vendor
 //! material or text.
 
-use egui::{Align, Label, Layout, Margin, RichText, Ui};
+use egui::{Align, Layout, Margin, RichText, Ui};
 
 use camcraft_app::geo2d::Point2;
 use camcraft_app::operation::{OpParams, OpType, PickCapability};
@@ -22,7 +22,7 @@ use camcraft_app::units::Unit;
 use crate::start_exit_pick::{StartExitAct, StartExitRole, act_id, armed_id};
 
 use super::fields::num;
-use super::layout::{GROUP_GAP, check_row, consequence, group, hint, prop_row, small_button};
+use super::layout::{GROUP_GAP, check_row, checkbox, consequence, group, hint, list_row, note, prop_row, small_button};
 use super::pick_button::pick_button;
 
 /// The two group titles, as the tab's structural tests find them.
@@ -259,7 +259,7 @@ pub(super) fn not_taken_groups(ui: &mut Ui, kind: OpType) {
             _ => "this kind takes a start point only",
         };
         group(ui, title, None, |ui| {
-            ui.add(Label::new(RichText::new(format!("{NOT_TAKEN}{why}")).weak()).wrap());
+            note(ui, format!("{NOT_TAKEN}{why}"));
         });
     }
 }
@@ -280,8 +280,8 @@ fn point_group(ui: &mut Ui, u: Unit, rows: &PointRows, p: &mut Option<Point2>) {
     let id = ui.make_persistent_id(("camcraft.group", rows.title));
     let collapsing = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
     let header = collapsing.show_header(ui, |ui| {
-        ui.checkbox(&mut on, "").on_hover_text(format!("use {}", rows.title));
-        ui.label(RichText::new(rows.title).strong());
+        checkbox(ui, &mut on, "").on_hover_text(format!("use {}", rows.title));
+        list_row(ui, RichText::new(rows.title).strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if pick_button(ui, is_armed, pick_label).on_hover_text(rows.pick_help).clicked() {
                 picked = true;
@@ -298,7 +298,7 @@ fn point_group(ui: &mut Ui, u: Unit, rows: &PointRows, p: &mut Option<Point2>) {
                     prop_row(ui, rows.y, |ui| num(ui, u, &mut q.y));
                     hint(ui, rows.help);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.small_button(rows.clear).on_hover_text(rows.clear_help).clicked() {
+                        if small_button(ui, rows.clear).on_hover_text(rows.clear_help).clicked() {
                             cleared = true;
                         }
                     });

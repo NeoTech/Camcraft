@@ -128,8 +128,9 @@ fn the_dialog_draft_and_the_properties_draft_do_not_mix() {
     assert_eq!(h.state().state.ui_target, UiTarget::Tool(a.clone()), "the rail does not retarget Properties");
 }
 
-/// The Details tab shows the tool's catalog facts (#898), its material
-/// group and its tool number; the Tool tab's rows are not on it.
+/// The Details tab shows the tool's catalog facts (#898) and its material
+/// group; the Tool tab's rows (#4336: the helix angle and the tool number
+/// too) are not on it.
 #[test]
 fn details_tab_shows_the_catalog_facts() {
     let mut h = shell_harness();
@@ -145,8 +146,12 @@ fn details_tab_shows_the_catalog_facts() {
     assert!(library_window(&h).query_all_by_label("Diameter").next().is_some(), "the editor opens on the Tool tab");
     click_window_button(&mut h, "Details");
     let win = library_window(&h);
-    for label in ["Material group", "Part number", "Vendor", "Coating", "Helix angle (deg)", "Notes", "Tool number"] {
+    for label in ["Material group", "Part number", "Vendor", "Coating", "Notes"] {
         assert!(win.query_all_by_label(label).next().is_some(), "the Details tab has the row {label:?}");
+    }
+    // #4336: the helix angle and the tool number stand on the Tool tab.
+    for label in ["Helix angle (deg)", "Helix angle", "Tool number"] {
+        assert!(win.query_all_by_label(label).next().is_none(), "the Details tab has no row {label:?}");
     }
     let values: Vec<String> = win.query_all_by_role(Role::TextInput).filter_map(|n| n.value()).collect();
     for fact in ["Acme", "P-77", "TiAlN"] {

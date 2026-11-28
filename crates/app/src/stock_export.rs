@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::geometry::Triangle;
+use crate::geometry::{repair, Triangle};
 use crate::stock_sim::iso;
 use crate::stock_view::FieldView;
 
@@ -59,14 +59,38 @@ pub fn stl_bytes(tris: &[Triangle]) -> Vec<u8> {
     b
 }
 
-/// Extract and write `fv`'s machined stock to `path`; the facet count.
-pub fn write_stl(fv: &FieldView, path: &Path) -> Result<usize, String> {
-    let tris = machined_mesh(fv)?;
-    if u32::try_from(tris.len()).is_err() {
+/// The binary STL of `tris` as the file will hold it, and its facet
+/// count (#4182). A corner is written as `f32`, so corners closer than one
+/// `f32` step are one corner in the file: when any facet collapses there
+/// or any two distinct corners meet, the corners are welded at their
+/// written values (`repair::weld_at_f32`) and the result is checked again,
+/// so a file that is not a closed solid is refused by name, never written.
+/// Facets whose corners all stay distinct are written byte for byte as
+/// `stl_bytes` writes them.
+pub fn file_bytes(tris: &[Triangle]) -> Result<(Vec<u8>, usize), String> {
+    let welded = repair::weld_at_f32(tris).map_err(|e| format!("the mesh cannot be welded at its written corners: {e}"))?;
+    let written: &[Triangle] = match &welded {
+        None => tris,
+        Some(r) => &r.mesh.facets,
+    };
+    if written.is_empty() {
+        return Err("the mesh collapses to nothing at the corners binary STL writes - nothing to export".into());
+    }
+    let unpaired = iso::unpaired_edges(written);
+    if unpaired > 0 {
+        return Err(format!("as written, the surface has {unpaired} edges not on two facets - refused, not written"));
+    }
+    if u32::try_from(written.len()).is_err() {
         return Err("the mesh has more facets than binary STL can count".into());
     }
-    std::fs::write(path, stl_bytes(&tris)).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    Ok(tris.len())
+    Ok((stl_bytes(written), written.len()))
+}
+
+/// Extract and write `fv`'s machined stock to `path`; the facet count.
+pub fn write_stl(fv: &FieldView, path: &Path) -> Result<usize, String> {
+    let (bytes, n) = file_bytes(&machined_mesh(fv)?)?;
+    std::fs::write(path, bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(n)
 }
 
 /// The mesh cache: one extraction per field view, rebuilt when the view

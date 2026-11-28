@@ -51,3 +51,27 @@ cannot see a clamp you forgot to enter or a wrong tool length.
 
 A green gate is not a guarantee. Run the dry run, single block and
 first-article steps above on any new program.
+
+## Stock simulation in CamCraft
+
+These points describe what the stock simulation does in this release:
+
+- When the Stock row of the active setup is hidden in the Browser, the
+  line under the simulation transport says: "The stock is hidden, so the
+  material removal is not shown. Show the Stock row in the Browser to see
+  it."
+- The field engine cuts long passes and deep plunges of a wide tool in
+  pieces. A short move of a wide tool also cuts. Before, the field engine
+  refused moves that the column engine cut.
+- A stock side a few float steps longer than a whole number of cells gets
+  no extra column, slab or verdict cell.
+- A cut floor that lies on the sample lattice meshes to a valid closed
+  solid by marching tetrahedra, also when its samples read tiny values of
+  both signs.
+- The closed-mesh check refuses an edge on four or more facets, not only
+  an odd count. Such a mesh falls back to marching tetrahedra.
+- Stock export writes a machined stock mesh as a closed solid, also where
+  its corners are closer than the float precision of the STL file. It
+  welds and checks the corners that merge in the file before it writes.
+- A vertical milling rapid that crosses the finished part is blocked.
+  Older finish caches must be generated again.

@@ -30,8 +30,8 @@ pub enum ToolSet {
 /// features, generate, verify, post and undo. Every name is a live tool.
 pub const CORE_TOOLS: &[&str] = &[
     "open_project", "save_project", "import_model", "get_job", "get_selection",
-    "list_operation_types", "list_tool_catalog", "add_tool", "set_stock", "add_setup",
-    "activate_setup", "set_wcs", "add_operation", "edit_operation", "delete_operation",
+    "list_operation_types", "list_tool_catalog", "add_tool", "edit_tool", "set_work_material", "set_stock", "add_setup",
+    "activate_setup", "set_wcs", "add_operation", "edit_operation", "rename_operation", "delete_operation",
     "set_tool", "detect_holes", "detect_pockets", "list_features", "set_operation_geometry",
     "generate", "verify", "post", "undo", "redo",
 ];

@@ -125,7 +125,7 @@ impl WireFinding {
                 match side {
                     CutSide::Die => "slug",
                     CutSide::Punch => "punch",
-                    CutSide::Open => "piece",
+                    CutSide::Open | CutSide::Centre => "piece",
                 },
                 at.x,
                 at.y
@@ -134,7 +134,7 @@ impl WireFinding {
                 "slug: the main cut already frees the piece near X{:.3} Y{:.3} at Z{z:.3} - the tabs do not hold it; place them on the cut that encloses it",
                 at.x, at.y
             ),
-            WireFinding::WrongSlug { z, side: CutSide::Open, at, .. } => format!(
+            WireFinding::WrongSlug { z, side: CutSide::Open | CutSide::Centre, at, .. } => format!(
                 "slug: an open run frees a piece near X{:.3} Y{:.3} at Z{z:.3} - an open run closes no slug",
                 at.x, at.y
             ),

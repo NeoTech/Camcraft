@@ -93,7 +93,7 @@ fn same_program(a: &str, b: &str) -> bool {
 /// The wire laws' verdict on the 4-axis punch golden.
 pub fn wire_4axis_verdict() -> WireVerdict {
     let start = Point2::new(-30.0, 0.0);
-    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, tabs: None, stock: None, clearance: 1.0, sharp_corners: false };
+    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, tabs: None, stock: None, clearance: 1.0, sharp_corners: false, overlap: 0.0 };
     let (lower, upper) = (square(8.0), circle(9.6));
     let (lo, up) = ([ring(&lower)], [ring(&upper)]);
     let r = WireRuled { top_z: H, pairing: WirePairing::ArcLength, tolerance: 0.05, heal_tolerance: 0.0, widening: Default::default(), max_deg: Some(15.0), machine: "Generic ISO Wire EDM fixture".into() };

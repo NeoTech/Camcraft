@@ -16,9 +16,12 @@
 //! action, one undo unit - the viewer, the simulator and every stock-based
 //! operation read a material solid, never a stale shard.
 
+use std::sync::Arc;
+
 use flecs_ecs::prelude::{Entity, World};
 
 use crate::commands::{Command, CommandError};
+use crate::geometry::source_faces::SourceFaces;
 use crate::geometry::{Mesh, revision};
 use crate::model;
 use crate::schema::{Facets, FixtureDef};
@@ -81,6 +84,10 @@ pub struct UpdateModel {
     /// #2463: the linked source of each mesh, traded with the facets.
     source: Option<crate::schema::ModelSource>,
     prev_source: Option<crate::schema::ModelSource>,
+    /// #3915: the SolidCraft face names of each mesh, traded with the
+    /// facets. Unstated, the update drops them.
+    source_faces: Option<Arc<SourceFaces>>,
+    prev_source_faces: Option<Arc<SourceFaces>>,
     /// #826: a fixture plate's marker, when the model is one. Its grid was
     /// measured on the old mesh, so it goes with it and the riders leave
     /// the plate (the safe reading: the user re-detects), in this same
@@ -89,6 +96,9 @@ pub struct UpdateModel {
     /// #1094: a raw-stock-only mark was said of the geometry it replaces,
     /// so a re-import in place drops it, in this same undo step.
     marks: super::stock_source_only::MarkDrops,
+    /// #3915: picks that follow their faces by SolidCraft name, decided in
+    /// `with_source_faces` and traded in this same undo step.
+    follow: super::update_model_follow::Follow,
 }
 
 impl UpdateModel {
@@ -142,10 +152,13 @@ impl UpdateModel {
             prev_step_source: crate::step_source::of(world, &entity),
             source: None,
             prev_source: crate::model_source::of(world, &entity),
+            source_faces: None,
+            prev_source_faces: crate::source_faces::of(world, &entity),
             plate: crate::fixture::def_of(world, &entity)
                 .filter(|d| d.plate.plate.is_some())
                 .map(|d| Box::new((d, crate::plate::mount::Unmounts::of(world, name)))),
             marks: super::stock_source_only::MarkDrops::of(world, name),
+            follow: super::update_model_follow::Follow::snapshot(world, name),
         })
     }
 
@@ -175,7 +188,8 @@ impl UpdateModel {
 
     /// Keep the fidelity the model already carries (#864): for an update
     /// that reshapes the same facets (a repair), which makes them no
-    /// truer to the surface they were imported from.
+    /// truer to the surface they were imported from. The SolidCraft face
+    /// names are not kept (#3915): their ranges described the old facets.
     #[must_use]
     pub fn keeping_fidelity(mut self) -> Self {
         self.coarse_mm = self.prev_coarse_mm;
@@ -210,6 +224,17 @@ impl UpdateModel {
         self
     }
 
+    /// Record SolidCraft's face names over the new mesh (#3915,
+    /// `ImportModel::source_faces`); unstated, the update drops the model's
+    /// names, so a mesh from another file never keeps names of old facets.
+    #[must_use]
+    pub fn with_source_faces(mut self, source_faces: Option<Arc<SourceFaces>>) -> Self {
+        self.source_faces = source_faces;
+        // #3915: the new record is here, so the picks can follow it.
+        self.follow.plan(&self.name, self.prev_facets.as_ref(), &self.mesh.facets, self.source_faces.as_ref());
+        self
+    }
+
     /// Drop the plate snapshot, so apply/invert leave the plate's grid and
     /// its riders' mount markers alone. For `SetPlate`, which edits the
     /// grid and re-seats the riders itself (#826 review).
@@ -229,6 +254,25 @@ impl UpdateModel {
             &model::features_of_local(&self.mesh.facets),
         )
     }
+
+    /// What the update does to the picks that follow SolidCraft names
+    /// (#3915): each followed pick and each pick that could not follow.
+    #[must_use]
+    pub fn follow_report(&self) -> &super::update_model_follow::FollowReport {
+        self.follow.report()
+    }
+
+    /// The re-import phrase for the window: what moved (`changes`), then
+    /// the picks that followed their SolidCraft names and each that could
+    /// not (#3915).
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let moved = self.changes().describe();
+        match self.follow.report().describe() {
+            Some(follow) => format!("{moved}; {follow}"),
+            None => moved,
+        }
+    }
 }
 
 impl Command for UpdateModel {
@@ -246,6 +290,7 @@ impl Command for UpdateModel {
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::step_source::set(world, &entity, self.step_source.as_deref());
         crate::model_source::set(world, &entity, self.source.as_ref());
+        crate::source_faces::set(world, &entity, self.source_faces.as_ref());
         // Propagation (M3.1 B): the derived stock's copy is local-frame
         // facets - the very mesh above (SetStock's copy law) - and the
         // stock's own placement is never touched: re-importing a model
@@ -266,6 +311,7 @@ impl Command for UpdateModel {
             p.1.write(world, true);
         }
         self.marks.write(world, true);
+        self.follow.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -285,6 +331,7 @@ impl Command for UpdateModel {
             crate::mesh_open::set(world, &entity, self.prev_hole.as_deref());
             crate::step_source::set(world, &entity, self.prev_step_source.as_deref());
             crate::model_source::set(world, &entity, self.prev_source.as_ref());
+            crate::source_faces::set(world, &entity, self.prev_source_faces.as_ref());
             if let Some(p) = &self.plate {
                 entity.entity_view(world).set(p.0.clone());
                 p.1.write(world, false);
@@ -301,5 +348,6 @@ impl Command for UpdateModel {
             }
         }
         self.marks.write(world, false);
+        self.follow.write(world, false);
     }
 }

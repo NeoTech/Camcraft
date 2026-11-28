@@ -180,6 +180,12 @@ pub(super) fn get_job(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
     });
+    // #3012: pattern folders, only when the document has one (a document
+    // without folders reads exactly as before).
+    let folders = super::pattern_tools::folders_view(w);
+    if !folders.is_empty() {
+        job["pattern_folders"] = json!(folders);
+    }
     if summary {
         super::compact::summarize_job(&mut job);
     }
@@ -253,7 +259,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("skims", "array", json!([])),
                         ("four_axis", "object", Value::Null),
                         ("sharp_corners", "boolean", json!(false)),
+                        ("overlap", "number", json!(0.0)),
                         ("lead_arc_radius", "number", Value::Null),
+                        ("compensation", "string", json!("computer")),
                     ],
                 );
             }
@@ -356,6 +364,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
         Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
         Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
+        Warning::EngagementExceeded { at, .. } => ("engagement_exceeded", *at),
     };
     json!({
         "op": op,

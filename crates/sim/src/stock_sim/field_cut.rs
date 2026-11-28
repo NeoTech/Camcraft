@@ -63,6 +63,13 @@
 //!   The ceiling bounds what segmenting can bound: a wide tool's own
 //!   footprint can pass the ceiling, and a short move of it cuts (the
 //!   column arm cuts it too); a long chord still refuses.
+//! - **The simulator segments, not its callers (#4179).**
+//!   `subtract_batch_fitted` cuts a chord (or an arc piece) whose
+//!   travel exceeds the ceiling as the fewest equal pieces that each
+//!   fall under it, and the field arms of `Stock` cut through it. The pieces
+//!   sweep the same solid as the whole: a tool swept along the parts
+//!   of a path is its sweep along the path. `subtract_batch` keeps the
+//!   refusal as the bound of one update.
 
 use super::field::SdfField;
 use super::field_arc::arc_sweeps;
@@ -152,6 +159,25 @@ impl SdfField {
         tool: &SdfTool,
         chord_tol: f64,
     ) -> Result<(), StockError> {
+        self.subtract_moves(moves, tool, chord_tol, false)
+    }
+
+    /// `subtract_batch`, with every chord or arc piece whose travel
+    /// exceeds the ceiling cut as the fewest equal pieces that each fall
+    /// under it (#4179, the module law): the segmenting the refusal names,
+    /// applied once here. A piece no longer than one cell that still
+    /// exceeds the ceiling (a footprint too large for one update)
+    /// refuses by name, before any write.
+    pub fn subtract_batch_fitted(
+        &mut self,
+        moves: &[Move],
+        tool: &SdfTool,
+        chord_tol: f64,
+    ) -> Result<(), StockError> {
+        self.subtract_moves(moves, tool, chord_tol, true)
+    }
+
+    fn subtract_moves(&mut self, moves: &[Move], tool: &SdfTool, chord_tol: f64, fit: bool) -> Result<(), StockError> {
         let kind = tool_kind(tool)?;
         if !chord_tol.is_finite() || chord_tol < 0.0 {
             return Err(StockError::Invalid(format!(
@@ -191,37 +217,111 @@ impl SdfField {
                 Some(arc) if arc.plane.is_xy() && ax == [0.0, 0.0, 1.0] => arc_sweeps(m, arc, &kind, chord_tol),
                 _ => None,
             };
-            let built = match arc {
-                Some(v) => v,
+            // A chord keeps its ends, so that it can be cut in pieces.
+            let built: Vec<(Sweep, Option<(Point3, Point3)>)> = match arc {
+                Some(v) => v.into_iter().map(|sw| (sw, None)).collect(),
                 None => chords(m, chord_tol)
                     .into_iter()
-                    .map(|(a, b)| chord_sweep(&kind, ax, a, b))
+                    .map(|(a, b)| chord_sweep(&kind, ax, a, b).map(|sw| (sw, Some((a, b)))))
                     .collect::<Result<Vec<_>, _>>()?,
             };
-            for sw in built {
-                // The ceiling bounds the WORK the travel adds: the
-                // window as clipped to the cut region (the only cells
-                // the walk can visit), beyond the tool's own window at
-                // rest. Segmenting shrinks the first, never the second.
-                let window = self.clipped(sw.window(self.cell, self.cap, ax));
-                let rest = sw.rest_window(self.cell, self.cap, ax).and_then(|w| self.clipped(w));
-                let work = window.map_or(0, window_cells).saturating_sub(rest.map_or(0, window_cells));
-                if work > MAX_CELLS_PER_MOVE {
+            for (sw, ends) in built {
+                let fitted = if self.travel_work(&sw, ax) <= MAX_CELLS_PER_MOVE {
+                    vec![sw]
+                } else if fit {
+                    self.fit(&kind, ax, &sw, ends)?
+                } else {
                     return Err(StockError::Invalid(format!(
                         "field subtract: a chord's swept window spans more than {MAX_CELLS_PER_MOVE} cells beyond the tool at rest at cell size {} - the move is too long for one field update; segment it",
                         self.cell
                     )));
+                };
+                for sw in fitted {
+                    if self.clipped(sw.window(self.cell, self.cap, ax)).is_some() && !sw.spans_above(ax, z_hi) {
+                        bounded = true;
+                    }
+                    sweeps.push((ax, sw));
                 }
-                if window.is_some() && !sw.spans_above(ax, z_hi) {
-                    bounded = true;
-                }
-                sweeps.push((ax, sw));
             }
         }
         // Set only past every gate: a refusal leaves the field as it stood.
         self.bounded_cuts |= bounded;
         self.cut_batch(&sweeps);
         Ok(())
+    }
+}
+
+impl SdfField {
+    /// The WORK a sweep's travel adds, which the ceiling bounds: the
+    /// window as clipped to the cut region (the only cells the walk can
+    /// visit), beyond the tool's own window at rest. Segmenting shrinks
+    /// the first, never the second.
+    fn travel_work(&self, sw: &Sweep, ax: [f64; 3]) -> u64 {
+        let window = self.clipped(sw.window(self.cell, self.cap, ax));
+        let rest = sw.rest_window(self.cell, self.cap, ax).and_then(|w| self.clipped(w));
+        window.map_or(0, window_cells).saturating_sub(rest.map_or(0, window_cells))
+    }
+
+    /// `sw` (a chord from `ends`, or an arc piece) as the fewest equal
+    /// pieces whose travel each falls under the ceiling (#4179). A piece's
+    /// work falls as it shortens, so doubling finds a count that falls under
+    /// and bisection the fewest below it. Pieces shorter than a cell
+    /// shrink no window further: past that count it refuses. A sweep
+    /// that is neither a chord nor an arc piece has no travel to split,
+    /// so it refuses by name rather than be cut as nothing.
+    fn fit(&self, kind: &ToolKind, ax: [f64; 3], sw: &Sweep, ends: Option<(Point3, Point3)>) -> Result<Vec<Sweep>, StockError> {
+        let unsplittable = || {
+            StockError::Invalid(
+                "field subtract: a sweep past the ceiling is neither a chord nor an arc piece, so it cannot be split - segment it".into(),
+            )
+        };
+        let travel = match (sw, ends) {
+            (_, Some((a, b))) => (b.x - a.x).hypot(b.y - a.y).hypot(b.z - a.z),
+            (Sweep::Arc(p), None) => p.travel(),
+            _ => return Err(unsplittable()),
+        };
+        let most = (travel / self.cell).ceil().clamp(1.0, f64::from(u32::MAX)) as usize;
+        let pieces = |k: usize| -> Result<Vec<Sweep>, StockError> {
+            match (sw, ends) {
+                (_, Some((a, b))) => {
+                    let at = |j: usize| {
+                        let t = j as f64 / k as f64;
+                        if j == k { b } else { Point3::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t) }
+                    };
+                    (0..k).map(|j| chord_sweep(kind, ax, at(j), at(j + 1))).collect()
+                }
+                (Sweep::Arc(p), None) => Ok(p.split(k).into_iter().map(Sweep::Arc).collect()),
+                _ => Err(unsplittable()),
+            }
+        };
+        let under = |v: &[Sweep]| v.iter().all(|s| self.travel_work(s, ax) <= MAX_CELLS_PER_MOVE);
+        let (mut lo, mut hi) = (1usize, 2usize);
+        let mut best = loop {
+            let v = pieces(hi.min(most))?;
+            if under(&v) {
+                hi = hi.min(most);
+                break v;
+            }
+            if hi >= most {
+                return Err(StockError::Invalid(format!(
+                    "field subtract: a chord's swept window spans more than {MAX_CELLS_PER_MOVE} cells beyond the tool at rest at cell size {} even in pieces of one cell - the tool's footprint is too large for one field update",
+                    self.cell
+                )));
+            }
+            lo = hi;
+            hi = hi.saturating_mul(2);
+        };
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            let v = pieces(mid)?;
+            if under(&v) {
+                hi = mid;
+                best = v;
+            } else {
+                lo = mid;
+            }
+        }
+        Ok(best)
     }
 }
 

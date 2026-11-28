@@ -67,7 +67,7 @@ fn layout_window_tool_shape() {
         "Tool shape: EM-0600-4FL",
         &["Body", "Holder profile", "Parametric", "Apply profile"],
     );
-    assert!(h.query_by_label("Holder library").is_none(), "the shape window has no holder library");
+    assert!(h.query_by_label("Apply holder").is_none(), "the shape window has no holder library");
     // Close is the window's fixed footer, under the shape.
     let win = h
         .query_all_by_role(egui::accesskit::Role::Window)

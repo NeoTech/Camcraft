@@ -251,7 +251,10 @@ fn judged(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw,
                 }
                 continue;
             }
-            let lifts = stack_only && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
+            // #4211: the envelope's vertical-rapid sweep (#4062) takes the
+            // same rule. Its cut's end pose is judged by the finish law,
+            // which lets the edge touch the model by the finish tolerance.
+            let lifts = (stack_only || ex.vertical_rapids_only) && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
             let from_cut = i.checked_sub(1).and_then(|j| path.moves.get(j)).is_some_and(|c| c.kind != MoveKind::Rapid && c.to == m.from);
             if lifts && from_cut {
                 // Out of the kerf that cut made: the edge's start pose is

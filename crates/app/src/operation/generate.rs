@@ -64,6 +64,17 @@ pub fn entry_not_recommended(path: &Toolpath) -> Option<Warning> {
     Some(Warning::EntryNotRecommended { at, entry, inside })
 }
 
+/// #3849: a trochoidal clean-up pass whose radial engagement remained
+/// above `limit_deg` after peel step-down - one advisory warning on the
+/// operation and status line so an overloaded clean-up cut never passes
+/// silently. `at` is the clean-up feed through the measured peak, not
+/// the path's first cut.
+#[must_use]
+pub fn cleanup_engagement_warning(path: &Toolpath) -> Option<Warning> {
+    let (at, measured_deg, limit_deg) = crate::machining2d::cleanup_engagement_move(path)?;
+    Some(Warning::EngagementExceeded { at, measured_deg, limit_deg })
+}
+
 /// [`run_job`]'s body: every arm, unchanged.
 fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
@@ -90,6 +101,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut slot_bound,
         mut rotary_picks,
         mut prior,
+        prior_staged: _,
         verify_prior,
         mut drills_ahead,
         turned_ahead,
@@ -214,6 +226,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
+            // #4134: the control's wire offset over the judged path.
+            super::wire_comp::apply(op, &cond.0, &mut path)?;
             return Ok((path, Vec::new()));
         }
         let picks = if let Some(sketch) = &wire_sketch {
@@ -227,6 +241,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // #3215: a model's profile has its arcs read back from the facets,
         // bounded by the model's chord; a drawn chain keeps its polygon.
         let arcs = wire_sketch.is_none().then_some(crate::geometry::import::step::CHORD_CAP + material.excess);
+        let comp_cond = cond.0.clone();
         let (path, warnings) = super::wire_op::generate_wire(
             op,
             arcs,
@@ -242,6 +257,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
         }
+        super::wire_comp::apply(op, &comp_cond, &mut path)?;
         return Ok((path, warnings));
     }
     // The program ahead, cut only when a law asks (#89, #96 review).
@@ -1360,7 +1376,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
             // extra here.
+            // #3329: the start / exit picks seat each level's passes; no
+            // pick is the match below, move for move.
+            let seam = machining3d::LevelSeam::of(&params.path_picks());
             let generated = match &avoid_spec {
+                spec if !seam.is_empty() => {
+                    machining3d::pocket3d_picked(&material.facets, &region, air_stock, &pp, *shell, mask, spec.as_ref(), &seam)
+                }
                 spec if troch => {
                     machining3d::pocket3d_trochoidal(&material.facets, &region, &pp, *rest_rough, mask, spec.as_ref())
                 }
@@ -2769,6 +2791,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             width,
             angle_deg,
             minimum_cone_radius,
+            tolerance,
             feed,
             plunge_feed,
             climb,
@@ -2860,7 +2883,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut path = if region.is_empty() {
                         Toolpath::new(Vec::new())
                     } else {
-                        machining2d::chamfer(&region, &cp)?
+                        machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?
                     };
                     if !runs.is_empty() {
                         let cut = |facets: &[Triangle],
@@ -2894,7 +2917,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         m_gen,
                         frame.as_ref(),
                     )?;
-                    let path = machining2d::chamfer(&region, &cp)?;
+                    let path = machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?;
                     (region, path)
                 }
             }
@@ -4367,6 +4390,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #3035: Adaptive areas cut by Offset rings - a warning, not
             // only a note; advisory (the rings are verified above).
             warns.extend(strategy_fallback(&path));
+            // #3849: trochoidal clean-up passes that still exceed the
+            // engagement limit - advisory (verified path, load risk).
+            warns.extend(cleanup_engagement_warning(&path));
             // #3748: a selected entry that is not the recommended Arc on a
             // start-side pass - one advisory warning, the entry kept.
             let advice = entry_not_recommended(&path);
