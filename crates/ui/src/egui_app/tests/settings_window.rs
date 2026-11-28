@@ -54,7 +54,7 @@ fn window_open(h: &H) -> bool {
 }
 
 fn combo_value(h: &H, label: &str) -> Option<String> {
-    h.get_by_role_and_label(Role::ComboBox, label).accesskit_node().value().map(str::to_owned)
+    h.get_by_role_and_label(Role::ComboBox, label).accesskit_node().value()
 }
 
 /// A shell with both per-user files in `dir`, the window open on `section`.

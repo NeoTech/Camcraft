@@ -11,7 +11,7 @@
 //! wording. No vendor material.
 
 use camcraft_app::commands::{color_vision_of, theme_of};
-use camcraft_app::schema::{ColorVision, ThemeRef};
+use camcraft_app::schema::ColorVision;
 use camcraft_app::view::{Antialias, LineWidth};
 use egui::{ComboBox, Ui};
 
@@ -151,11 +151,12 @@ fn appearance(ui: &mut Ui, state: &mut State) {
     let theme = theme_of(&state.world);
     let vision = color_vision_of(&state.world);
     let mut chose: Option<CommandKind> = None;
+    let mut chose_theme: Option<usize> = None;
     let options = state.theme_options();
     let selected = state.theme_selection_text();
     layout::prop_row_hint(ui, THEME, "The colours of the whole application.", |ui| {
         let r = ComboBox::from_id_salt("settings-theme").selected_text(selected).show_ui(ui, |ui| {
-            for (label, cmd) in &options {
+            for (k, (label, cmd)) in options.iter().enumerate() {
                 let current = matches!(cmd, CommandKind::SelectTheme(r) if *r == theme);
                 let why = if state.browser_build { crate::browser_files::refusal(cmd, false) } else { None };
                 let r = ui.add_enabled(why.is_none(), egui::Button::selectable(current, label.as_str()));
@@ -164,7 +165,7 @@ fn appearance(ui: &mut Ui, state: &mut State) {
                     None => r,
                 };
                 if r.clicked() && !current {
-                    chose = Some(cmd.clone());
+                    chose_theme = Some(k);
                 }
             }
         });
@@ -180,6 +181,9 @@ fn appearance(ui: &mut Ui, state: &mut State) {
         });
         layout::name_by_row(ui, r.response);
     });
+    if let Some((_, cmd)) = chose_theme.and_then(|k| options.into_iter().nth(k)) {
+        state.pending.push_back(cmd);
+    }
     if let Some(cmd) = chose {
         state.pending.push_back(cmd);
     }
