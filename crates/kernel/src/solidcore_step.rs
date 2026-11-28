@@ -108,7 +108,21 @@ impl Progress for Watch<'_> {
     fn cancelled(&self) -> bool {
         self.0.is_cancelled()
     }
-    fn progress(&self, _stage: &'static str, _done: usize, _total: usize) {}
+    fn progress(&self, stage: &'static str, done: usize, total: usize) {
+        // #4200: where the parse stands, one line each 10 % of the file.
+        // Logging only; the parse's behaviour is untouched.
+        thread_local! {
+            static LAST: std::cell::Cell<(&'static str, u64)> = const { std::cell::Cell::new(("", u64::MAX)) };
+        }
+        let total = total.max(1);
+        let pct = (done as u64 * 10 / total as u64).min(10);
+        LAST.with(|l| {
+            if l.get() != (stage, pct) {
+                l.set((stage, pct));
+                tracing::debug!(stage = "parse", "STEP parse {stage}: {done}/{total} bytes ({pct}/10)");
+            }
+        });
+    }
 }
 
 fn timed_out(stage: &'static str) -> KernelError {
@@ -200,11 +214,14 @@ fn read_guarded(
     stop: &CancelToken,
     assume_mm: Option<f64>,
 ) -> Result<StepRead, KernelError> {
+    let t_parse = std::time::Instant::now();
     let mut ex = p21::parse_with(text, Some(&Watch(stop))).map_err(|e| match e {
         p21::Error::Cancelled => timed_out("parsing"),
         other => refused_input(other.to_string()),
     })?;
+    tracing::debug!(stage = "parse", ms = t_parse.elapsed().as_millis() as u64, "STEP parse done");
     // Validation and topology must read the same canonical unit records.
+    let t_guards = std::time::Instant::now();
     crate::step_units_guard::expand_short_names(&mut ex);
     crate::step_units_guard::check_angle_units(&ex).map_err(refused_input)?;
     crate::step_curve_guard::check(&ex).map_err(refused_input)?;
@@ -217,6 +234,7 @@ fn read_guarded(
         units = crate::step_length_units::read(&ex).map_err(refused_input)?;
         assumed_mm = Some(mm);
     }
+    tracing::debug!(stage = "topology", ms = t_guards.elapsed().as_millis() as u64, "unit and curve guards done");
     let mut out = StepRead {
         length_units_mm: units.mm.clone(),
         assumed_mm,
@@ -235,16 +253,20 @@ fn read_guarded(
             out.length_units_mm
         ));
     }
+    let t_winding = std::time::Instant::now();
     out.notes.extend(crate::step_face_winding::notes(&ex, stop).map_err(|_| timed_out("checking face winding"))?);
+    tracing::debug!(stage = "topology", ms = t_winding.elapsed().as_millis() as u64, "face winding check done");
     // The pcurves with no closed form (a free-form edge on a spline face)
     // are made by the kernel, each checked by its lift (#917), each edge
     // held to the cap that the file's stated tolerance sets (#2976).
     let cap = EdgeGapCap::read(&ex);
+    let t_read = std::time::Instant::now();
     let (read, measured) = {
         let trims = KernelTrims::with_cap(&mut k.k, cap);
         let read = topology::read_solids_with(&ex, &trims);
         (read, trims.widest_gap_mm())
     };
+    tracing::debug!(stage = "topology", ms = t_read.elapsed().as_millis() as u64, "solids={} failures={}", read.solids.len(), read.failures.len());
     if stop.is_cancelled() {
         return Err(timed_out("reading topology"));
     }
@@ -280,11 +302,13 @@ fn read_guarded(
             reason: unlisted.refusal(f.item).unwrap_or(f.message),
         });
     }
+    let t_build = std::time::Instant::now();
     for s in read.solids {
         if stop.is_cancelled() {
             return Err(timed_out("building solids"));
         }
         let item = s.item;
+        let t_solid = std::time::Instant::now();
         if let Some(reason) = units.unstated(item) {
             out.refused.push(StepRefusal {
                 item,
@@ -298,7 +322,10 @@ fn read_guarded(
             continue;
         }
         match build_record(k, RecordSource::Step(item), s.name, s.brep, s.notes) {
-            Ok(solid) => out.solids.push(solid),
+            Ok(solid) => {
+                tracing::debug!(stage = "build", ms = t_solid.elapsed().as_millis() as u64, "solid #{item} '{}' built, faces={}", solid.name, solid.record.faces.len());
+                out.solids.push(solid)
+            }
             Err(_) if stop.is_cancelled() => return Err(timed_out("building solids")),
             Err((stage, reason)) => out.refused.push(StepRefusal {
                 item,
@@ -307,6 +334,7 @@ fn read_guarded(
             }),
         }
     }
+    tracing::debug!(stage = "build", ms = t_build.elapsed().as_millis() as u64, "solid build loop done");
     out.refused.sort_by_key(|r| r.item);
     Ok(out)
 }

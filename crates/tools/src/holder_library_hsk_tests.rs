@@ -32,7 +32,11 @@ fn the_hsk_tapers_match_the_recorded_table() {
 /// carries, at the recorded default gauge lengths.
 #[test]
 fn the_hsk_entries_are_listed() {
-    let count = |t: &str| hsk().iter().filter(|e| e.taper.is_some_and(|x| x.name == t)).count();
+    // The shrink-fit chucks (#3919, second slice) are counted in
+    // holder_library_shrink_tests.rs.
+    let count = |t: &str| {
+        hsk().iter().filter(|e| e.taper.is_some_and(|x| x.name == t) && !matches!(e.clamp, super::super::Clamp::Shrink { .. })).count()
+    };
     assert_eq!((count("HSK-A63"), count("HSK-F63"), count("HSK-E40"), count("HSK-E32")), (5 + 11, 5 + 11, 4 + 7, 3 + 3));
     for (name, gauge) in [
         ("HSK-A63 ER32", 100.0),

@@ -29,15 +29,15 @@ use flecs_ecs::prelude::World;
 
 use super::cat;
 
-const A: &str = "Fly25";
-const B: &str = "Fly32";
-const INSERT: &str = "insert-cc";
+pub(super) const A: &str = "Fly25";
+pub(super) const B: &str = "Fly32";
+pub(super) const INSERT: &str = "insert-cc";
 
-fn code(text: &str) -> ConnectionCode {
+pub(super) fn code(text: &str) -> ConnectionCode {
     ConnectionCode::parse(text).expect("connection code")
 }
 
-fn holder() -> (ToolComponent, ComponentGeometry) {
+pub(super) fn holder() -> (ToolComponent, ComponentGeometry) {
     let p = SpunPoint::line;
     let body = ComponentBody::new(vec![p(0.0, 0.0), p(0.0, 25.0), p(50.0, 25.0), p(50.0, 0.0)], -50.0).expect("body");
     let kind = ComponentKind::AdaptiveItem { mcs: code("BT40"), csw: code("CYL 20") };
@@ -46,7 +46,7 @@ fn holder() -> (ToolComponent, ComponentGeometry) {
 }
 
 /// A single-seat cutter body with a CC seat `r` off the axis.
-fn fly(id: &str, r: f64) -> (ToolComponent, ComponentGeometry) {
+pub(super) fn fly(id: &str, r: f64) -> (ToolComponent, ComponentGeometry) {
     let seat = HolderDesignation::parse("SCLCR2020K09").expect("holder code").seat;
     let kind = ComponentKind::ToolItem { mcs: code("CYL 20"), seats: vec![InsertSeat { port: "CSW1".into(), spec: seat }] };
     let frame = Frame::new([r, 0.0, -60.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).expect("seat frame");
@@ -54,17 +54,17 @@ fn fly(id: &str, r: f64) -> (ToolComponent, ComponentGeometry) {
     (ToolComponent::new(id, id, kind).expect("cutter body"), g)
 }
 
-fn insert(text: &str) -> (ToolComponent, ComponentGeometry) {
+pub(super) fn insert(text: &str) -> (ToolComponent, ComponentGeometry) {
     let spec = InsertSpec::parse(text).expect("insert code");
     let c = ToolComponent::new(INSERT, text, ComponentKind::CuttingItem(CuttingItem::Insert(spec))).expect("insert");
     (c, ComponentGeometry::default())
 }
 
-fn link(id: &str, mount: Option<Mount>) -> AssemblyLink {
+pub(super) fn link(id: &str, mount: Option<Mount>) -> AssemblyLink {
     AssemblyLink { component: id.into(), mount }
 }
 
-fn on(parent: usize, port: Option<&str>) -> Option<Mount> {
+pub(super) fn on(parent: usize, port: Option<&str>) -> Option<Mount> {
     Some(Mount { parent, port: port.map(str::to_owned), z_rot_deg: 0.0, projection_mm: None })
 }
 
@@ -101,7 +101,7 @@ fn upsert(w: &World, h: &mut History, (c, g): (ToolComponent, ComponentGeometry)
 
 /// Stock, the four components, both tools on their stacks, and a
 /// generated Face operation on each.
-fn shop() -> (World, History) {
+pub(super) fn shop() -> (World, History) {
     let w = camcraft_app::world::new_world();
     let mut h = History::default();
     let stock = camcraft_app::stock::StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 };
@@ -119,9 +119,9 @@ fn shop() -> (World, History) {
     (w, h)
 }
 
-type Snapshot = (Vec<DocumentComponent>, Vec<(Tool, Option<ToolBody>, Option<ToolAssembly>)>);
+pub(super) type Snapshot = (Vec<DocumentComponent>, Vec<(Tool, Option<ToolBody>, Option<ToolAssembly>)>);
 
-fn snapshot(w: &World) -> Snapshot {
+pub(super) fn snapshot(w: &World) -> Snapshot {
     let tool = |n: &str| {
         let e = model::find_by_name(w, n).expect("tool");
         (model::tool_of(w, &e).expect("a tool"), body_of(w, &e), assembly_of(w, &e))
@@ -129,7 +129,7 @@ fn snapshot(w: &World) -> Snapshot {
     (components(w), vec![tool(A), tool(B)])
 }
 
-fn op_status(w: &World, tool: &str) -> OpStatus {
+pub(super) fn op_status(w: &World, tool: &str) -> OpStatus {
     status_of(w, &model::find_by_name(w, &format!("Face{tool}")).expect("op"))
 }
 

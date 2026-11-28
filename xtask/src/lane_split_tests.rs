@@ -55,7 +55,7 @@ fn a_lane_builds_each_crate_that_it_tests_before_the_tests() {
         let first_test = steps.iter().position(|s| !lanes::is_build(s)).expect("a lane has a test step");
         assert!(steps[first_test..].iter().all(|s| !lanes::is_build(s)), "lane {index}: the builds come first");
         let built: Vec<&String> = steps[..first_test].iter().flat_map(|s| s.args.windows(2).filter(|w| w[0] == "-p").map(|w| &w[1])).collect();
-        for s in steps[first_test..].iter().filter(|s| s.args[0] == "test") {
+        for s in steps[first_test..].iter().filter(|s| s.args.first().is_some_and(|a| a == "test")) {
             let pkg = s.args.windows(2).find(|w| w[0] == "-p").map(|w| &w[1]).expect("a suite step names its crate");
             assert!(built.contains(&pkg), "lane {index}: '{}' has the build of {pkg}", s.name);
         }

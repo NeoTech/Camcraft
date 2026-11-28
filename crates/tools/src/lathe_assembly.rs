@@ -57,10 +57,13 @@ pub struct BodyBox {
     pub hi: [f64; 3],
 }
 
-/// A lathe component's body, as facets in its own frame.
+/// A lathe component's body, as facets in its own frame, and how far
+/// (mm) the steel may stand outside them (#3643: a meshed STEP body's
+/// certified chord deviation; 0 for boxes and given facets).
 #[derive(Clone, Debug, PartialEq)]
 pub struct LatheBody {
     tris: Vec<Tri>,
+    pad: f64,
 }
 
 impl LatheBody {
@@ -80,7 +83,7 @@ impl LatheBody {
             }
             tris.extend(box_facets(b));
         }
-        Ok(Self { tris })
+        Ok(Self { tris, pad: 0.0 })
     }
 
     /// Facets as given. Refused by name: none, or a non-finite one.
@@ -91,7 +94,23 @@ impl LatheBody {
         if !tris.iter().flatten().flatten().all(|v| v.is_finite()) {
             return Err(LatheBodyError::NonFinite);
         }
-        Ok(Self { tris })
+        Ok(Self { tris, pad: 0.0 })
+    }
+
+    /// The same facets, with the steel up to `pad` mm outside them: the
+    /// clearance bands grow by the largest pad of the stack
+    /// ([`LatheClearance::padded`]). Refused by name: a non-finite or
+    /// negative pad.
+    pub fn padded(self, pad: f64) -> Result<Self, LatheBodyError> {
+        if !(pad.is_finite() && pad >= 0.0) {
+            return Err(LatheBodyError::NonFinite);
+        }
+        Ok(Self { pad, ..self })
+    }
+
+    #[must_use]
+    pub fn pad(&self) -> f64 {
+        self.pad
     }
 
     #[must_use]
@@ -160,7 +179,13 @@ pub struct ResolvedLathe {
     pub clearance: Option<LatheClearance>,
     /// The facets the bands were read from: every body but the insert's,
     /// placed in the turning frame (empty when no component has one).
+    /// These are the facets as given, not grown: a consumer that reads
+    /// bands from them grows the bands by `pad` (#3643).
     pub placed: Vec<Tri>,
+    /// How far (mm) the steel may stand outside `placed`: the largest
+    /// pad of the stack's bodies (a meshed body's chord deviation; 0 for
+    /// boxes and given facets). `clearance` is already grown by it.
+    pub pad: f64,
 }
 
 /// Resolve `nodes` on `station` (the module's law). `orientation`
@@ -203,6 +228,7 @@ pub fn resolve_lathe(
     let placement = LathePlacement { tip, ..axes };
     placement.basis().map_err(LatheAssemblyError::Station)?;
     let mut all: Vec<Tri> = Vec::new();
+    let mut pad = 0.0_f64;
     for (i, (n, f)) in nodes.iter().zip(&frames).enumerate() {
         if i == cut {
             continue; // the insert plate: judged by its cut model
@@ -212,6 +238,7 @@ pub fn resolve_lathe(
             return Err(LatheAssemblyError::SpunBody { name: named() });
         }
         let Some(body) = &n.body else { continue };
+        pad = pad.max(body.pad);
         let root: Vec<Tri> = body.facets().iter().map(|t| t.map(|p| f.map_point(p))).collect();
         let local = placement.place(&root).map_err(LatheAssemblyError::Station)?;
         for p in local.iter().filter_map(near_tip).flatten() {
@@ -223,8 +250,12 @@ pub fn resolve_lathe(
         }
         all.extend(local);
     }
-    let clearance =
-        if all.is_empty() { None } else { Some(LatheClearance::of(&all).map_err(LatheAssemblyError::Clearance)?) };    let params = LatheParams {
+    let clearance = if all.is_empty() {
+        None
+    } else {
+        Some(LatheClearance::of(&all).map_err(LatheAssemblyError::Clearance)?.padded(pad))
+    };
+    let params = LatheParams {
         nose_radius,
         orientation: q,
         stated,
@@ -234,7 +265,7 @@ pub fn resolve_lathe(
         clearance_deg: spec.clearance.degrees(),
         ic_mm,
     };
-    Ok(ResolvedLathe { params, placement, crp: [r * ox, 0.0, r * oz], clearance, placed: all })
+    Ok(ResolvedLathe { params, placement, crp: [r * ox, 0.0, r * oz], clearance, placed: all, pad })
 }
 
 /// The part of facet `t` within one insert of the nose centre in the

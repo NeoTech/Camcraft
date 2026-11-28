@@ -31,6 +31,8 @@ pub struct DeleteEntity {
     step_source: Option<String>,
     /// #2463: a linked model comes back linked.
     source: Option<crate::schema::ModelSource>,
+    /// #3915: a `.sc` model comes back with its face names.
+    source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
     /// Non-`None` restores the `StockDef` component; `wcs` restores the
     /// `Wcs` tag. Together with the CAM components below they keep every
     /// kind of named entity undoable with its kind intact.
@@ -50,6 +52,10 @@ pub struct DeleteEntity {
     /// A Pause / Home entry of the operation list (#155), with its
     /// position (`operation_meta`).
     entry: Option<ProgramEntry>,
+    /// A pattern folder (#3012), with its position (`operation_meta`).
+    pattern: Option<crate::schema::PatternDef>,
+    /// #3012: a deleted member leaves its folder; undo puts it back.
+    member_drop: Option<super::pattern_folder::MemberDrop>,
     /// A model deleted from the tree keeps its fixture marker (M3.2
     /// stage B) through undo too - the marker is part of the entity's
     /// identity, and an undo that quietly demoted a vise to a raw
@@ -87,6 +93,7 @@ impl DeleteEntity {
             solids: crate::mesh_solids::of(world, &entity),
             step_source: crate::step_source::of(world, &entity),
             source: crate::model_source::of(world, &entity),
+            source_faces: crate::source_faces::of(world, &entity),
             stock: model::stock_def_of(world, &entity),
             sketch: crate::sketch::sketch_of(world, &entity),
             stock_material: crate::stock_material::of_entity(world, &entity),
@@ -97,6 +104,8 @@ impl DeleteEntity {
             operation_meta: crate::program_entry::is_sequenced(world, &entity)
                 .then(|| model::operation_meta_of(world, &entity)),
             entry: crate::program_entry::entry_of(world, &entity),
+            pattern: crate::pattern_folder::pattern_of(world, &entity),
+            member_drop: super::pattern_folder::MemberDrop::of(world, name),
             path: model::toolpath_of(world, &entity),
             fixture: crate::fixture::def_of(world, &entity),
             riders: crate::plate::mount::Unmounts::of(world, name),
@@ -112,10 +121,16 @@ impl Command for DeleteEntity {
         }
         self.riders.write(world, true);
         self.marks.write(world, true);
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, true);
+        }
     }
 
     fn invert(&self, world: &World) {
         self.riders.write(world, false);
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, false);
+        }
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }
@@ -132,6 +147,7 @@ impl Command for DeleteEntity {
         crate::mesh_solids::set(world, &entity, &self.solids);
         crate::step_source::set(world, &entity, self.step_source.as_deref());
         crate::model_source::set(world, &entity, self.source.as_ref());
+        crate::source_faces::set(world, &entity, self.source_faces.as_ref());
         if let Some(shape) = &self.stock {
             entity
                 .entity_view(world)
@@ -153,6 +169,9 @@ impl Command for DeleteEntity {
         }
         if let Some(entry) = &self.entry {
             entity.entity_view(world).set(entry.clone());
+        }
+        if let Some(pattern) = &self.pattern {
+            entity.entity_view(world).set(pattern.clone());
         }
         if let Some(meta) = &self.operation_meta {
             entity.entity_view(world).set(meta.clone());

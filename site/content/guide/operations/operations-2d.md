@@ -192,6 +192,10 @@ Outside or pick a smaller tool"; "cannot cut the gap at (x, y): it is
 narrower than the tool's ... diameter"; "a Contour's open boundary must be
 an open chain".
 
+2D Contour takes **Do not touch** faces and edges (Geometry tab,
+**Boundaries**). The full tool stays clear of them on cuts, leads, links
+and plunges. A cut that cannot stay clear is refused by name.
+
 ## 2D Pocket
 
 <!-- catalog:examples:start -->
@@ -341,6 +345,11 @@ spacing set by the load.
 | Heights | Stepdown | 5 |
 | Lead in / Lead out | Entry | Helix, radius 1 |
 
+The Trochoidal clean-up passes of 2D and 3D Adaptive are checked against
+the engagement limit. If a clean-up pass takes more than the limit, the
+pass steps down by itself and the toolpath shows a named advisory
+warning.
+
 **Method** chooses Spiral or Trochoidal. Trochoidal follows the pocket's
 medial lanes, including parallel branches around islands, then cleans up
 corners. With **Method = Trochoidal**, these additional controls appear:
@@ -426,6 +435,8 @@ This release note applies until a build with the fixes ships.
   full-width slots in the stock.
 - **Inside** starts at the part or island wall and works out. Each ring
   follows the walls, and the outer edge comes last.
+- Where the offset rings of two lobes merge, the rings no longer cut a
+  full-width pass at the merge.
 - Some cuts still take the full tool width. The toolpath then shows a
   **Pass start** warning that names the case:
   - **Outside** on a closed pocket: the first ring runs along the pocket
@@ -757,6 +768,9 @@ chamfer mill"; "a 45-degree chamfer takes a 90-degree cone; 'T5' has ...
 degrees"; "the cone of ... is ... mm of flute, short of the ... mm depth
 this face stands at".
 
+On a closed pass from a model source, 2D Chamfer writes arcs with
+circular interpolation (G2/G3) where the fit stays within the tolerance.
+
 ## Circular
 
 <!-- catalog:examples:start -->
@@ -838,11 +852,18 @@ starts empty and refuses to generate until it has holes.
 |---|---|---|
 | Heights | R plane (feed starts here) | model top + 0 |
 | Heights | Bottom Z | each hole's own floor; **Override the hole floors** to set one |
-| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by depth against diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder) |
+| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by the depth in material against its diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder), Ream, Fine bore, Deep peck (full retract) |
 | Passes | Peck depth | Auto (by the cycle) |
 | Passes | Dwell at bottom | 0 s |
 
 Tools: drill, tap or boring bar.
+
+Auto measures each hole's depth from its mouth, not from the R plane. The
+air between the R plane and the hole does not count. A drill takes the
+Drill cycle (`G81`) to one diameter of material, the chip-break Peck
+(`G73`) to four diameters, and the full-retract peck (`G83`) past that.
+Choose **Deep peck (full retract)** to get `G83` on any hole, for example
+in a gummy material that packs chips.
 
 A cross drill can use a reduced-fidelity model when its mesh error leaves
 a positive verification tolerance. CamCraft increases the required
@@ -899,6 +920,11 @@ For a blind hole, the ring spacing uses the cutter's reach at the floor,
 so a bull-nose does not leave an interior floor ridge. Small holes keep a
 single ring when its floor bands meet. A plan needing more than 4,096
 rings is refused before generation; review the hole and tool sizes.
+
+The Bore page has an **Entry** group: plunge (the default), **Ramp** or
+**Helix**. The approach ramp and helix angles cap each descent. A ramp or
+helix entry works down to a hole 0.025 mm wider than the tool. An Arc
+entry is refused by name.
 
 A Bore **Ramp** entry zig-zags along the first radial sweep. An unset
 entry angle means 3 degrees. A separate link angle does not steepen it.

@@ -43,6 +43,7 @@ fn every_tool_kind() -> Vec<ToolKind> {
         ToolKind::Dovetail,
         ToolKind::Lollipop,
         ToolKind::FormMill,
+        ToolKind::Laser,
     ];
     for k in &all {
         match k {
@@ -68,7 +69,8 @@ fn every_tool_kind() -> Vec<ToolKind> {
             | ToolKind::Keyseat
             | ToolKind::Dovetail
             | ToolKind::Lollipop
-            | ToolKind::FormMill => {}
+            | ToolKind::FormMill
+            | ToolKind::Laser => {}
         }
     }
     all
@@ -103,6 +105,15 @@ fn no_orphan_tool_kinds() {
                     "{:?}: only the Waterjet Profile machines with a waterjet nozzle",
                     row.ty
                 );
+            }
+            continue;
+        }
+        if k == ToolKind::Laser {
+            // #4081 slice 1: the laser head exists before its operation,
+            // so every operation refuses it; the Laser Profile slice makes
+            // it the one operation that cuts with a laser head.
+            for row in KindInfo::ALL {
+                assert!(!row.accepts(k), "{:?} accepts a laser head before the laser operation exists", row.ty);
             }
             continue;
         }

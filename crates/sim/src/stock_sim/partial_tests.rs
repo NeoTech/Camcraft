@@ -101,7 +101,7 @@ fn degenerate_moves_and_fractions_cut_nothing() {
 }
 
 fn seg(from: Point3, to: Point3, secs: f64, dwell: f64) -> Seg {
-    Seg { from, to, arc: None, secs, dwell, feed: Some(500.0), op: 0, abc: ([0.0; 3], [0.0; 3]), pl: secs, rl: 0.0 }
+    Seg { from, to, arc: None, secs, dwell, feed: Some(500.0), op: 0, abc: ([0.0; 3], [0.0; 3]), pl: secs, rl: 0.0, work: None }
 }
 
 #[test]

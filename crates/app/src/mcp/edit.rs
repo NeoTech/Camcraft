@@ -336,12 +336,27 @@ pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Val
 }
 
 pub(super) fn edit_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let key = find_op(env, req_str(a, "name")?)?;
+    let name = req_str(a, "name")?;
+    let key = find_op(env, name)?;
     let patch = a.get("params").ok_or("\"params\" is required")?;
     let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
     let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
     let named_entry = patch.as_object().is_some_and(|p| p.contains_key("entry"));
-    let next = patched(&op.params, patch)?;
+    let next = patched(&op.params, patch).map_err(|error| {
+        // #3476: suggest only a lossless, matching-kind patch that the edit door accepts.
+        // Constructing the command validates it; only history.execute changes the job.
+        let tagged = project::params_to_json(&op.params);
+        let Some(fields) = tagged.as_object().and_then(|t| t.keys().next())
+            .and_then(|kind| patch.as_object().filter(|p| p.len() == 1)?.get(kind))
+            .filter(|fields| fields.is_object()) else { return error; };
+        let Ok(next) = patched(&op.params, fields) else { return error; };
+        let explicit_entry = fields.as_object().is_some_and(|p| p.contains_key("entry"));
+        if EditOperationParams::with_named_entry(&env.world, &key, next, explicit_entry).is_err() {
+            return error;
+        }
+        let call = json!({ "name": name, "params": fields });
+        format!("{error}. Use flat parameter fields without the kind wrapper. Corrected call: edit_operation {call}")
+    })?;
     let cmd = EditOperationParams::with_named_entry(&env.world, &key, next, named_entry).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     let params = model::operation_of(&env.world, &e).map(|o| project::params_to_json(&o.params));

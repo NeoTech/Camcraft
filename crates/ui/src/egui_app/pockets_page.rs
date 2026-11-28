@@ -12,7 +12,7 @@ use egui::Ui;
 use camcraft_app::recognize::{self, Pocket, PocketKind, SlotEnd};
 use camcraft_app::units::{self, Unit};
 
-use super::layout::hint;
+use super::layout::{button, button_enabled, hint, list_row};
 use crate::state::State;
 
 fn end_word(e: SlotEnd) -> &'static str {
@@ -50,7 +50,7 @@ pub(crate) fn row_text(i: usize, p: &Pocket, u: Unit) -> String {
 pub(super) fn section(ui: &mut Ui, state: &mut State, model: &str) {
     let u = state.units();
     ui.add_space(6.0);
-    ui.label("Pockets and slots");
+    list_row(ui, "Pockets and slots");
     let rows: Option<Vec<(String, String, Option<String>)>> = state.pocket_scan_for(model).map(|found| {
         found
             .iter()
@@ -72,17 +72,17 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, model: &str) {
     let mut create = None;
     for (i, (text, label, tool)) in rows.iter().flatten().enumerate() {
         ui.horizontal(|ui| {
-            ui.label(text);
+            list_row(ui, text);
             let tip = match tool {
                 Some(t) => format!("Adds a {label} with {t} over this feature (one undo step)"),
                 None => String::from("Add a tool to the document first"),
             };
-            if ui.add_enabled(tool.is_some(), egui::Button::new(format!("Create {label}"))).on_hover_text(tip).clicked() {
+            if button_enabled(ui, tool.is_some(), format!("Create {label}")).on_hover_text(tip).clicked() {
                 create = Some(i);
             }
         });
     }
-    if ui.button("Detect pockets / slots").clicked() {
+    if button(ui, "Detect pockets / slots").clicked() {
         state.detect_pockets(model);
     }
     if let Some(i) = create {

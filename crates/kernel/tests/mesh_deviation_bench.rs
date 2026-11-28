@@ -17,7 +17,7 @@
 mod step_util;
 
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use camcraft_kernel::P3;
 use camcraft_kernel::machining_mesh::machining_mesh;
@@ -154,4 +154,73 @@ fn machining_mesh_deviation_bench() {
         observed, pinned,
         "machining-mesh verdicts changed - re-triage"
     );
+}
+
+/// The #4200 repro: the reporter's 3.7 MB twisted rotor, read and meshed,
+/// with the kernel's stage timings printed (the bench sets its own
+/// `tracing` filter to `camcraft_kernel=debug`, where the stage events
+/// live). The row is profile only: no verdict is pinned, because the
+/// rotor is not in the repository. The path comes from
+/// `CAMCRAFT_ROTOR_STEP`; without it the row prints that it skipped and
+/// passes, so CI without it stays green.
+#[test]
+#[ignore = "kernel release lane: #4200 profile, the reporter's rotor (set CAMCRAFT_ROTOR_STEP; cargo test --release -p camcraft-kernel -- --ignored)"]
+fn rotor_step_profile_bench() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("camcraft_kernel=debug")),
+        )
+        .with_test_writer()
+        .try_init();
+    let Ok(path) = std::env::var("CAMCRAFT_ROTOR_STEP") else {
+        println!("rotor: skipped (set CAMCRAFT_ROTOR_STEP)");
+        return;
+    };
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(_) => {
+            println!("rotor: skipped (no repro file at {path}; set CAMCRAFT_ROTOR_STEP)");
+            return;
+        }
+    };
+    println!("rotor: {} bytes from {path}", bytes.len());
+    let t = Instant::now();
+    let read = bounded_cancel("rotor read", Duration::from_secs(600), move |stop| {
+        read_step(&mut SolidcoreKernel::default(), &bytes, stop)
+    });
+    println!("rotor: read_step in {t:.1?}");
+    let solids = match read {
+        Ok(r) => {
+            for n in &r.notes {
+                println!("  note: {n}");
+            }
+            r.solids
+        }
+        Err(e) => {
+            println!("rotor: read refused after {t:.1?}: {e}");
+            return;
+        }
+    };
+    for s in &solids {
+        println!(
+            "rotor: solid #{} '{}' read, faces={}",
+            s.item,
+            s.name,
+            s.record.faces.len()
+        );
+        for tol in TOLS {
+            let t0 = Instant::now();
+            match machining_mesh(s, tol, &CancelToken::new()) {
+                Ok(m) => {
+                    let d = &m.report.deviation;
+                    println!(
+                        "rotor: solid #{} @ {tol} mm: tris={} judged={:.2e} parametric={:.2e} analytic={:.2e} ({t0:.1?})",
+                        s.item, m.triangles.len(), d.gated, d.parametric, d.analytic
+                    );
+                }
+                Err(e) => println!("rotor: solid #{} @ {tol} mm: refused after {t0:.1?}: {e}", s.item),
+            }
+        }
+    }
 }

@@ -54,6 +54,11 @@ pub struct ImportReport {
     pub holders: usize,
     /// #889: bodies the file carried that the import left out (holders off).
     pub holders_left_out: usize,
+    /// #3645: tool components the import added to the document (sorted).
+    pub components_added: Vec<String>,
+    /// #3645: tool components the document held already with the same
+    /// content, which the imported stacks name (sorted).
+    pub components_reused: Vec<String>,
 }
 
 fn list(names: &[String]) -> String {
@@ -100,6 +105,14 @@ impl ImportReport {
         if self.holders_left_out > 0 {
             let s = if self.holders_left_out == 1 { "" } else { "s" };
             parts.push(format!("{} holder{s} in the file not imported", self.holders_left_out));
+        }
+        if !self.components_added.is_empty() {
+            let s = if self.components_added.len() == 1 { "" } else { "s" };
+            parts.push(format!(
+                "{} tool component{s} added ({})",
+                self.components_added.len(),
+                list(&self.components_added)
+            ));
         }
         parts.join("; ")
     }

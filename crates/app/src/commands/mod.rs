@@ -43,6 +43,7 @@ pub mod post_script_options;
 pub mod program_info;
 // #155: Pause / Home entries of the operation list.
 pub mod program_entry;
+pub mod pattern_folder;
 // M13.11: mesh repair (weld + fill holes) as one undo unit over UpdateModel.
 pub mod repair_model;
 // Issue #143: ribbon pins are saved with the project, so they are a command.
@@ -82,6 +83,8 @@ pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
 pub mod tool_assembly;
+// #3645: the undoable pull of a user library component.
+pub mod component_sync;
 // #93 slice 2: a milling tool's drawn cutter outline.
 pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
@@ -89,6 +92,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #3915: picks follow their faces by SolidCraft name at a re-import.
+pub mod update_model_follow;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
 // #1339: a person vouches for a mesh of unknown fidelity.
@@ -135,6 +140,10 @@ pub use post_script_options::{
 };
 pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
+pub use pattern_folder::{
+    CreatePatternFolder, DeletePatternFolder, EditPatternFolder, PatternEdit, SetPatternInstanceEnabled,
+    SetPatternMembers,
+};
 pub use model_link::SetModelSource;
 pub use repair_model::RepairModel;
 pub use vouch_fidelity::VouchModelFidelity;
@@ -159,9 +168,10 @@ pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::{BoxPoint, OriginAt, SetWcsOrigin, place_setup_origin};
 pub use wcs_circle::SetWcsAtCircleCentre;
 pub use set_wcs_flip::SetWcsFlip;
-pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
+pub use tool::{AddTool, ChangeTool, DeleteTool, DuplicateTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
+pub use component_sync::SyncDocumentComponent;
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use electrode::ElectrodeFromFaces;

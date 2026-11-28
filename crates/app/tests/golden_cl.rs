@@ -525,6 +525,7 @@ fn drill_plate_matches_golden() {
         },
     ];
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::Tip,
         clearance_z: 5.0,
@@ -563,6 +564,7 @@ fn drill_peck_matches_golden() {
         stepped: false,
     }];
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::Tip,
         clearance_z: 6.0,
@@ -599,6 +601,7 @@ fn tap_plate_matches_golden() {
         stepped: false,
     }];
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::Tip,
         clearance_z: 5.0,
@@ -1102,6 +1105,7 @@ fn waterjet_tabbed_plate_with_holes_matches_golden() {
         clearance_z: 10.0,
         cut_z: 6.0,
         model_excess: 0.0,
+        voice: camcraft_motion::sheet::Voice::WATERJET,
     };
     let path = waterjet_profile(&loops, &[], &part, &p).unwrap();
     assert!(path.notes.iter().any(|n| n.contains("3 hole(s), 2 tab(s)), 5 pierce(s)")), "{:?}", path.notes);

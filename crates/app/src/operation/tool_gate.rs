@@ -147,11 +147,10 @@ pub fn catalog_suggestion(catalog: &[(&str, Tool)], kinds: &[ToolKind]) -> Optio
 /// can run a left-hand cutter on them: the ask would reach a post that
 /// cannot answer it with M4. The posts that state the
 /// `millSpindleReverse` manifest flag (Fanuc, Mazak, Mach4, Siemens
-/// 810M, Haas since #1977) are NOT here, and neither is a post of the user's own
+/// 810M, Haas since #1977, Tormach since #4228) are NOT here, and neither is a post of the user's own
 /// (`PostRef::File`) - the post engine refuses a reverse ask its script
 /// cannot voice, so for those only the REQUEST below is checked.
 const M3_ONLY_POSTS: &[&str] = &[
-    "Tormach PathPilot",
     "Doosan DNM",
     "Grbl 1.1",
     "grblHAL",

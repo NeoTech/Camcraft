@@ -32,7 +32,7 @@ fn checked(h: &Harness<'static, ShellUi>, label: &str) -> Option<Toggled> {
 #[test]
 fn the_display_button_opens_and_closes_the_menu_and_the_labels_exist() {
     let mut h = open_menu();
-    for group in [menu::GROUP_MODE, menu::GROUP_LOOK_AT, menu::GROUP_GRAPHICS] {
+    for group in [menu::GROUP_MODE, menu::GROUP_LOOK_AT, menu::GROUP_VIEW] {
         assert!(h.query_by_label(group).is_some(), "group title {group:?}");
     }
     for label in ["Shaded, with edges", "Shaded", "Wireframe", "Wireframe, see-through", "Shaded, with hidden edges"] {
@@ -40,6 +40,10 @@ fn the_display_button_opens_and_closes_the_menu_and_the_labels_exist() {
     }
     for label in [menu::LOOK_AT_FACE, menu::SHOW_GRID, menu::SHOW_AXES, menu::PERSPECTIVE, menu::ORTHOGRAPHIC] {
         assert!(h.query_by_label(label).is_some(), "entry {label:?}");
+    }
+    // #4493: the line width and the anti-aliasing moved to the Settings window.
+    for gone in ["Graphics", "Line width", "Anti-aliasing"] {
+        assert!(h.query_by_label(gone).is_none(), "{gone:?} left the Display menu");
     }
     // A second press on the button closes the menu, and it stays closed.
     let p = hud(h.state()).nav_rect(viewcube::Nav::Display).center();
@@ -100,6 +104,26 @@ fn the_graphics_entries_set_their_fields() {
     h.run_steps(2);
     assert_eq!(h.state().state.cam.projection, ProjectionMode::Perspective);
     assert!(h.state().state.pending.is_empty(), "graphics switches are view state");
+}
+
+/// #3377: dispatch a pointer click through the actual viewport axes button.
+#[test]
+fn the_viewport_axes_button_leaves_the_ground_grid_visible() {
+    let mut h = shell_harness();
+    h.run();
+    assert!(h.state().state.show_world_axes && h.state().state.show_grid);
+    assert!(!crate::interact::ground_grid_lines(&h.state().state).is_empty());
+
+    let p = hud(h.state()).nav_rect(viewcube::Nav::Axes).center();
+    click_viewport(&mut h, p);
+
+    let st = &h.state().state;
+    assert!(!st.show_world_axes, "the viewport button hides the axes");
+    assert!(st.show_grid, "the viewport button leaves Grid on");
+    assert!(
+        !crate::interact::ground_grid_lines(st).is_empty(),
+        "the grid still draws with the viewport axes off"
+    );
 }
 
 /// The camera's forward direction (into the screen).

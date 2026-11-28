@@ -103,6 +103,28 @@ impl Frame {
         ]
     }
 
+    /// A point given in the parent's coordinates, in this frame: the
+    /// inverse of [`Self::map_point`] (the axes are orthonormal, so the
+    /// inverse rotation is the transpose).
+    #[must_use]
+    pub fn unmap_point(&self, p: [f64; 3]) -> [f64; 3] {
+        let d = [p[0] - self.origin[0], p[1] - self.origin[1], p[2] - self.origin[2]];
+        self.unmap_dir(d)
+    }
+
+    /// A direction given in the parent's coordinates, in this frame.
+    #[must_use]
+    pub fn unmap_dir(&self, v: [f64; 3]) -> [f64; 3] {
+        [dot(v, self.x), dot(v, self.y()), dot(v, self.z)]
+    }
+
+    /// `other`, a frame in the same parent as this one, given in this
+    /// frame: how a file's port sits in its mounting frame (#3643).
+    #[must_use]
+    pub fn relative(&self, other: &Self) -> Self {
+        Self { origin: self.unmap_point(other.origin), z: self.unmap_dir(other.z), x: self.unmap_dir(other.x) }
+    }
+
     /// `local`, given in this frame, in the parent's coordinates: the
     /// one step of a kinematic chain.
     #[must_use]

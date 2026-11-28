@@ -14,8 +14,14 @@ fn close(a: &[(f64, f64)], b: &[(f64, f64)]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9)
 }
 
+/// The taper's ER and Weldon entries (its shrink-fit chucks are pinned
+/// in holder_library_shrink_tests.rs).
 fn names(taper: &str) -> Vec<String> {
-    library().into_iter().filter(|e| e.taper.is_some_and(|t| t.name == taper)).map(|e| e.name()).collect()
+    library()
+        .into_iter()
+        .filter(|e| e.taper.is_some_and(|t| t.name == taper) && !matches!(e.clamp, super::super::Clamp::Shrink { .. }))
+        .map(|e| e.name())
+        .collect()
 }
 
 /// The dimension table, as recorded (mm).
@@ -40,8 +46,8 @@ fn the_din_entries_are_listed() {
     assert_eq!(names("SK30"), thirty("SK30"));
     assert_eq!(names("ISO30"), thirty("ISO30"));
     let sk40 = names("SK40");
-    assert_eq!(sk40.len(), 5 + 11);
-    for want in ["SK40 ER40", "SK40 ER32", "SK40 Weldon 20 mm", "SK40 Weldon 3/4 in"] {
+    assert_eq!(sk40.len(), 6 + 11);
+    for want in ["SK40 ER40", "SK40 ER50", "SK40 ER32", "SK40 Weldon 20 mm", "SK40 Weldon 3/4 in"] {
         assert!(sk40.iter().any(|n| n == want), "{want}");
     }
     assert_eq!(entry("SK40 ER40").gauge_len, 80.0);

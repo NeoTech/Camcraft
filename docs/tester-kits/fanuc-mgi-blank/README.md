@@ -2,7 +2,7 @@
 
 **Machine:** a Fanuc control with Manual Guide i (for example a 31i-A5 Robodrill), in Manual Guide i graphic simulation only.
 **Tests:** issue #2769. The Fanuc post option "Manual Guide i blank (G1902 / G1900)" (`manualGuideBlank`, off by default) writes the setup's stock as one blank block after `G21` and before the first `G90 G54` and tool change.
-**Built by CamCraft:** each file is the Fanuc post's output for the stream that `crates/post/tests/fanuc_mgi_blank.rs` pins (`a_box_posts_g1902_before_the_first_g90_and_tool_change`, `a_z_bar_on_the_origin_posts_g1900`).
+**Built by CamCraft:** each file is the Fanuc post's output for the stream that `crates/post/tests/script_dialects/fanuc_mgi_blank.rs` pins (`a_box_posts_g1902_before_the_first_g90_and_tool_change`, `a_z_bar_on_the_origin_posts_g1900`).
 
 ## Do not cut
 

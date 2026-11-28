@@ -148,7 +148,7 @@ pub(crate) fn max_tool_number(v: &Value) -> Result<Option<u32>, String> {
 }
 
 /// #4088: the highest work offset number the control holds (on a Heidenhain
-/// control, the last row of the preset table). A whole number 1..=255.
+/// control, the last row of the preset table). A whole number from 1 to {bound} (MAX_BOUND).
 pub(crate) fn work_offset_max(v: &Value) -> Result<Option<u32>, String> {
     let Some(value) = v.pointer("/controller/work_offset_max").filter(|v| !v.is_null()) else {
         return Ok(None);

@@ -125,6 +125,30 @@ fn layout_shell() {
     assert_shell_layout(&h);
 }
 
+/// #4483: at the plan's 1366 x 768, both side panes folded: each is a
+/// chip at its own edge, and the viewport takes the room between them.
+#[test]
+fn layout_shell_folded() {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1366.0, 768.0))
+        .build_ui_state(frame, ShellUi::seeded());
+    h.run_steps(3);
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(super::super::layout::fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(4);
+    let leaf = |t: &Tab| super::layout::leaf_rect(&h.state().dock, t).expect("docked");
+    let (b, v, p) = (leaf(&Tab::Browser), leaf(&Tab::Viewport), leaf(&Tab::Properties));
+    assert!(b.right() <= v.left() + 1.0 && v.right() <= p.left() + 1.0, "Browser | Viewport | Properties");
+    let chip = camcraft_ui_kit::fold::CHIP_WIDTH;
+    assert!(v.width() > 1366.0 - 4.0 * chip, "the viewport takes the room: {v:?}");
+    for (title, pane) in [("Browser", b), ("Properties", p)] {
+        let label = camcraft_ui_kit::fold::chip_label(title);
+        let c = h.get_by_role_and_label(egui::accesskit::Role::Button, &label).rect();
+        assert!(pane.contains(c.center()) && c.top() > pane.top(), "{title}: chip {c:?} under its tab bar in {pane:?}");
+    }
+}
+
 #[test]
 fn layout_page_viewport() {
     let mut h = shell_harness();
@@ -186,7 +210,8 @@ fn layout_page_wcs() {
 fn layout_page_model() {
     let _g = snapshot_guard();
     let h = page(UiTarget::Model("Block".into()));
-    assert_page_layout(&h, "Model", &["Model: Block", "STEP facet budget (next import)", "Turn X+", "Turn Y-", "Apply"]);
+    // #1992: the budget's Set button stands in the leaf, under its label.
+    assert_page_layout(&h, "Model", &["Model: Block", "STEP facet budget (next import)", "Set", "Turn X+", "Turn Y-", "Apply"]);
 }
 
 #[test]
@@ -221,7 +246,8 @@ fn layout_page_operation() {
     assert_page_layout(
         &h,
         "Operation",
-        &["Operation: Contour1", "Geometry", "Lead in / Lead out", "Models", "Edges", "Generate"],
+        // #1992: Delete operation stands in the leaf, under Generate.
+        &["Operation: Contour1", "Geometry", "Lead in / Lead out", "Models", "Edges", "Generate", "Delete operation"],
     );
 }
 
