@@ -11,6 +11,8 @@
 //! the top surface.
 //! Provenance: our own fixtures, written from ISO 10303-21/-42.
 //!
+//! #3252: the vertex limit is twice the stated tolerance, from
+//! `HEAL_GAP_LIMIT` to `EDGE_GAP_LIMIT_MM`, and `HEAL_GAP_LIMIT` unstated.
 //! Gate map (#2976): covers camcraft_kernel::step_edge_gap,
 //! camcraft_kernel::solidcore_trims (KernelTrims, the cap) and
 //! camcraft_kernel::solidcore_step (read_step, import_step: the edge gap).
@@ -23,7 +25,8 @@ use camcraft_kernel::KernelError;
 use camcraft_kernel::machining_mesh::{MeshRefusal, machining_mesh};
 use camcraft_kernel::solidcore_impl::SolidcoreKernel;
 use camcraft_kernel::solidcore_step::{StepImport, import_step};
-use camcraft_kernel::step_edge_gap::{EDGE_GAP_LIMIT_MM, MAX_EDGE_GAP_MM};
+use camcraft_kernel::solidcore_import::HEAL_GAP_LIMIT;
+use camcraft_kernel::step_edge_gap::{EDGE_GAP_LIMIT_MM, EdgeGapCap, MAX_EDGE_GAP_MM};
 use step_util::{CASE_TIMEOUT, bounded_cancel};
 
 /// The importer's chord cap (mm), as the app passes it.
@@ -146,4 +149,21 @@ fn the_tracked_fixtures_keep_a_tight_gap_and_no_looser_mesh() {
         assert_eq!(i.edge_gap.loose_chord_mm(CHORD), None, "{file}");
         assert!(!i.notes.iter().any(|n| n.contains("an edge lies")), "{file}: {:?}", i.notes);
     }
+}
+
+/// #3252: the vertex limit follows the stated tolerance by the edge cap's
+/// factor, never under the default limit and never over the edge cap's
+/// ceiling; a file that states none keeps the default.
+#[test]
+fn the_vertex_limit_is_twice_the_stated_tolerance_within_its_bounds() {
+    let limit = |s: Option<f64>| EdgeGapCap::from_stated(s).vertex_limit_mm();
+    assert_eq!(limit(None), HEAL_GAP_LIMIT);
+    assert_eq!(limit(Some(1e-6)), HEAL_GAP_LIMIT);
+    assert_eq!(limit(Some(0.0005)), 0.001);
+    assert!(near(limit(Some(0.003)), 0.006));
+    assert_eq!(limit(Some(0.01)), EDGE_GAP_LIMIT_MM);
+    assert_eq!(limit(Some(5.0)), EDGE_GAP_LIMIT_MM);
+    // A value that is not a finite positive number states nothing.
+    assert_eq!(limit(Some(f64::NAN)), HEAL_GAP_LIMIT);
+    assert_eq!(limit(Some(-0.01)), HEAL_GAP_LIMIT);
 }

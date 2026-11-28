@@ -134,6 +134,16 @@ fn read(data: &[u8], budget: usize, chord_cap: f64, keep_open: bool, assume_mm: 
     };
     let mut chord = chord_cap;
     let mut loosened = false;
+    // #3252: a vertex kept farther off its edges than the chord puts the
+    // mesh that far off there, whatever the faces measure: mesh at the
+    // file's looser tolerance from the start, as reduced fidelity.
+    let vertex_gap = import.solids.iter().map(|s| s.vertex_gap).fold(0.0, f64::max);
+    if vertex_gap > chord {
+        let Some(loose) = import.edge_gap.loose_chord_mm(chord) else {
+            return Err(StepError::Refused(format!("a vertex sits {vertex_gap:.4} mm off its edges, over the {chord} mm chord - {ADVICE}")));
+        };
+        (chord, loosened) = (loose, true);
+    }
     let mut budget_coarsened = false;
     'tries: for _ in 0..=COARSEN_TRIES {
         let mut meshes: Vec<(String, MachiningMesh)> = Vec::new();

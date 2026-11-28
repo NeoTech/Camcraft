@@ -58,7 +58,9 @@ pub struct StepSolid {
     /// Surface area (mm^2), the port's estimate at [`crate::solidcore_impl::VOLUME_ACCURACY`].
     pub area: f64,
     /// Largest vertex-to-edge-end distance left in the solid (mm), always
-    /// at or under [`crate::solidcore_import::HEAL_GAP_LIMIT`].
+    /// at or under [`crate::solidcore_import::HEAL_GAP_LIMIT`], or under the
+    /// file's own vertex limit where its stated tolerance raises it (#3252,
+    /// `EdgeGapCap::vertex_limit_mm`).
     pub vertex_gap: f64,
     /// What the reader repaired or noted on this solid.
     pub notes: Vec<String>,
@@ -321,7 +323,7 @@ fn read_guarded(
             out.sheets.push(StepSheet { item, name: s.name, record: s.brep, notes: s.notes });
             continue;
         }
-        match build_record(k, RecordSource::Step(item), s.name, s.brep, s.notes) {
+        match build_record(k, RecordSource::Step(item), s.name, s.brep, s.notes, cap.vertex_limit_mm()) {
             Ok(solid) => {
                 tracing::debug!(stage = "build", ms = t_solid.elapsed().as_millis() as u64, "solid #{item} '{}' built, faces={}", solid.name, solid.record.faces.len());
                 out.solids.push(solid)
@@ -335,6 +337,10 @@ fn read_guarded(
         }
     }
     tracing::debug!(stage = "build", ms = t_build.elapsed().as_millis() as u64, "solid build loop done");
+    // #3252: a vertex gap kept over the chord must loosen the mesh like an
+    // edge gap does, so it counts in the widest gap the mesher is told of.
+    let vertex_gap = out.solids.iter().map(|s| s.vertex_gap).fold(0.0, f64::max);
+    out.edge_gap.widest_mm = out.edge_gap.widest_mm.max(vertex_gap);
     out.refused.sort_by_key(|r| r.item);
     Ok(out)
 }
