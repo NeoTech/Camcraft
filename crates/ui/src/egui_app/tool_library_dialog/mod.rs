@@ -243,6 +243,7 @@ fn act(state: &mut State, face: &frame::Face, ask: frame::Ask) {
         (Ask::Apply, Face::Component(_)) => component_edit::apply(state),
         (Ask::Apply, Face::UserHolder { .. }) => holder_form::apply(state),
         (Ask::Duplicate, Face::UserHolder { .. }) => holder_form::duplicate(state),
+        (Ask::Duplicate, Face::Tool { name, .. }) => state.pending.push_back(crate::state::CommandKind::DuplicateTool(name.clone())),
         (Ask::Duplicate, _) => {}
         (Ask::Apply, Face::Tool { .. }) => apply_tool(state),
         (Ask::Apply, _) => {}
