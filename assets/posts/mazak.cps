@@ -259,9 +259,9 @@ function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
 }
 
-// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
-// from the preamble's spindle start (S.. M3 / M4) to the next M5 (every
-// section end, and a touch probe's stop). A touch probe's section feeds
+// #1359 (from #1357): a cut needs a turning spindle. spindleStart holds
+// the preamble's M3 or M4 until the next M5 (every section end, and a
+// touch probe's stop). A touch probe's section feeds
 // its stylus with the spindle stopped on purpose: a section is a
 // probe's only when it states 0 rpm (#574) AND its tool is a touch
 // probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
@@ -269,12 +269,12 @@ function msg(s) {  // counted warning where the host offers message()
 // anywhere else is refused by name and not posted: a stream that states
 // no spindle speed would otherwise drag a stopped cutter through the
 // part. Once per program.
-var spindleOn = false;
+var spindleStart = "";
 var probeSection = false;
 var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
 var spindleRefused = false;
 function spindleStopped(what) {  // true: refused, nothing is posted
-  if (spindleOn || probeSection) return false;
+  if (spindleStart || probeSection) return false;
   if (!spindleRefused) {
     spindleRefused = true;
     msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
@@ -622,11 +622,11 @@ function startPreamble() {
   }
   secStarted += 1;
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
-    spindleOn = true;
+    spindleStart = spinRev ? "M4" : "M3";
+    block(["S" + ni(sRpm), spindleStart]);
     spindleWait = false;
   }
-  if (probeStop) { block(["M5"]); spindleOn = false; }
+  if (probeStop) { block(["M5"]); spindleStart = ""; }
   probeSection = probeStop && kindProbe;
   // #995: a touch probe section starts no coolant, whatever its ask -
   // fluid on the stylus and the measured faces spoils the reading.
@@ -685,7 +685,7 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
-  spindleOn = false;
+  spindleStart = "";
   probeSection = false;
   kindProbe = false;         // the next section states its own tool kind
   afterOp();
@@ -953,6 +953,12 @@ function onCycle() {
     // never posted as the G81 default (a rapid out it never asked for).
     msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
     return;
+  }
+  // #4529: MAZATROL MATRIX EIA/ISO MC, H740PB0041E §13-2-17 (MEP154),
+  // shows an M03 restart at the return level. It does not show an M04 restart.
+  // Fail the post so the expanded bore moves cannot reach the output either.
+  if (g === "G86" && spindleStart === "M4") {
+    throw new Error(coolantWho() + "Mazak G86 (bore) does not support a reverse spindle (M4); the Matrix manual shows an M03 restart");
   }
   // #1357: a canned cycle feeds at its own F word. Without one the
   // control drills at whatever feed was last modal (or alarms on a zero

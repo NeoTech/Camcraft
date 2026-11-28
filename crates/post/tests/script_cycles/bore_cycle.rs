@@ -12,6 +12,8 @@
 //! X Y Z R F). Goldens for the five canned posts the issue names sit in
 //! `tests/golden/bore/` - our mapping's regression record, not a reading
 //! taken on a control.
+//! #4529: the Mazak post also refuses reverse-spindle G86. The MAZATROL
+//! MATRIX EIA/ISO MC manual (H740PB0041E, §13-2-17, MEP154) shows an M03 restart.
 //!
 //! Regenerate after an intentional change, then read the diff:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test script_cycles bore_cycle::`
@@ -26,7 +28,7 @@ use crate::recorded;
 use camcraft_post::cl::{Cycle, CycleKind, MoveKind, PathBuilder, Toolpath};
 use camcraft_post::geo2d::Point2;
 use camcraft_post::geometry::Point3;
-use camcraft_post::post::{cnc, dump, engine, Dump};
+use camcraft_post::post::{ask_reverse_spindle, cnc, dump, engine, Dump};
 use std::path::{Path, PathBuf};
 
 /// Posts that write G86 and have no dwell word on it.
@@ -188,6 +190,33 @@ fn canned_posts_write_g86_and_no_other_cycle() {
             }
         }
     }
+}
+
+#[test]
+fn mazak_refuses_g86_with_a_reverse_spindle() {
+    let mut records = cnc::parse(&stream(0.0)).expect("bore records");
+    ask_reverse_spindle(&mut records);
+    let cps = read("assets/posts/mazak.cps");
+    let result = engine::run(&cps, &mch(), &cnc::serialize(&records));
+    let Err(error) = result else {
+        panic!("reverse-spindle Mazak G86 must fail the post");
+    };
+    let diagnostic = error.to_string();
+    assert!(
+        diagnostic.contains("operation Bore: Mazak G86 (bore) does not support a reverse spindle (M4)")
+            && diagnostic.contains("M03 restart"),
+        "{diagnostic}"
+    );
+}
+
+#[test]
+fn mazak_posts_g86_with_a_forward_spindle() {
+    let program = post("mazak", 0.0);
+    let words = words(&program);
+    let start = words.iter().position(|word| word == "M3").expect("forward spindle start");
+    let first_bore = words.iter().position(|word| word == "G86").expect("first bore");
+    assert!(start < first_bore, "{program}");
+    assert_eq!(g86_lines(&program).len(), 2, "{program}");
 }
 
 fn assert_zero_dwell_g86_has_p0(stem: &str) {
