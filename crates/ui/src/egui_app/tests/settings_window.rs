@@ -64,7 +64,8 @@ fn open_on(dir: &std::path::Path, section: Section) -> H {
     h.state_mut().state.view_store = Some(dir.join(view::FILE_NAME));
     h.run();
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     h.get_by_label(section.label()).click();
     h.run_steps(2);
     h
@@ -76,7 +77,8 @@ fn the_settings_button_opens_and_closes_the_window() {
     h.run();
     assert!(!window_open(&h), "closed on a fresh state");
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     assert!(h.state().state.settings_open);
     assert!(window_open(&h), "the button opens the window");
     for s in Section::ALL {
@@ -87,7 +89,8 @@ fn the_settings_button_opens_and_closes_the_window() {
         "the one-row dropdown is gone"
     );
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     assert!(!window_open(&h), "a second press closes the window");
     assert!(h.state().state.pending.is_empty(), "opening the window is view state, never a command");
 }
@@ -206,7 +209,8 @@ fn old_prefs_and_view_files_load_with_the_same_values() {
     assert!(!st.check_for_updates);
     assert_eq!((st.line_width, st.antialias), (LineWidth::Bold, Antialias::Off));
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     assert_eq!(combo_value(&h, settings::COLOR_VISION).as_deref(), Some(ColorVision::Protan.label()));
     h.get_by_label(Section::Graphics.label()).click();
     h.run_steps(2);

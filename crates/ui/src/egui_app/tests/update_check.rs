@@ -169,7 +169,8 @@ fn settings_toggle_persists_check_for_updates_and_hides_notice_without_dirtying_
     let before_ver = h.state().state.doc_version;
 
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     h.get_by_label(Section::Updates.label()).click();
     h.run_steps(2);
     assert_eq!(row_check(&h, CHECK_FOR_UPDATES).accesskit_node().toggled(), Some(Toggled::True));

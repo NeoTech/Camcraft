@@ -253,7 +253,8 @@ fn open_menu_kept(file: &std::path::Path, offered: &[u32]) -> Harness<'static, S
     h.state_mut().state.samples_offered = offered.to_vec();
     h.run();
     h.get_by_role_and_label(egui::accesskit::Role::Button, crate::egui_app::settings_drop::SETTINGS).click();
-    h.run_steps(2);
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
     h.get_by_label(settings::Section::Graphics.label()).click();
     h.run_steps(2);
     assert!(h.state().state.settings_open, "a press on Settings opens the window");
