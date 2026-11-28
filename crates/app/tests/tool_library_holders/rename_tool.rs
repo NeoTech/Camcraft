@@ -132,5 +132,7 @@ fn mcp_rename_tool_runs_the_command_and_undo_restores_it() {
     let (_, job) = call(&mut s, 6, "get_job", json!({}));
     assert_eq!(row(&job, "T6"), before, "one undo restores the old name");
     let (err, why) = call(&mut s, 7, "rename_tool", json!({ "name": "T6", "new_name": "" }));
-    assert!(err && why.as_str().unwrap_or_default().contains("must not be empty"), "{why}");
+    assert!(err && why.as_str().unwrap_or_default().contains("new_name"), "an empty argument is refused by name: {why}");
+    let (err, why) = call(&mut s, 8, "rename_tool", json!({ "name": "T6", "new_name": "  " }));
+    assert!(err && why.as_str().unwrap_or_default().contains("must not be empty"), "a blank name is refused by the command: {why}");
 }

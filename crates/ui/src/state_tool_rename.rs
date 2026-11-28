@@ -119,31 +119,34 @@ impl State {
     /// follows the entity's new name. A deleted tool is not followed: its
     /// view closes as before.
     pub(crate) fn follow_renamed_tools(&mut self, before: ToolViews) {
-        let world = &self.world;
-        let renamed = |e: Option<Entity>, old: &str| -> Option<String> {
-            let e = e?;
+        let renamed = |e: Option<Entity>, old: Option<&str>| -> Option<String> {
+            let (e, old) = (e?, old?);
+            let world = &self.world;
             if !world.is_alive(e) || !model::is_tool(world, &e) {
                 return None;
             }
             model::name_of(world, &e).filter(|now| now != old)
         };
-        let open = self.tool_library.as_ref().and_then(|v| v.open_tool()).map(str::to_owned);
-        if let Some(new) = open.and_then(|old| renamed(before.library, &old)) {
+        let target = match &self.ui_target {
+            UiTarget::Tool(old) => Some(old.as_str()),
+            _ => None,
+        };
+        let library = renamed(before.library, self.tool_library.as_ref().and_then(|v| v.open_tool()));
+        let target = renamed(before.target, target);
+        let properties = renamed(before.properties, Some(self.tool_ui.name.as_str()));
+        let shape = renamed(before.shape, self.tool_shape_editor.as_deref());
+        if let Some(new) = library {
             // The editor keeps its face (tab, preview); the draft reads
             // the tool again under its new name.
             self.open_tool_in_library(&new);
         }
-        if let UiTarget::Tool(old) = &self.ui_target
-            && let Some(new) = renamed(before.target, old)
-        {
+        if let Some(new) = target {
             self.ui_target = UiTarget::Tool(new);
         }
-        if let Some(new) = renamed(before.properties, &self.tool_ui.name) {
+        if let Some(new) = properties {
             self.tool_ui.name = new;
         }
-        if let Some(old) = self.tool_shape_editor.clone()
-            && let Some(new) = renamed(before.shape, &old)
-        {
+        if let Some(new) = shape {
             self.tool_shape_editor = Some(new);
         }
     }
