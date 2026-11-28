@@ -18,6 +18,12 @@ pub(crate) const PASS_START_LABEL: &str = "Pass starts at";
 pub(crate) const TROCH_PASS_START_REFUSED: &str =
     "Inside and Outside are not available with the Trochoidal method (its loops have no ring order): the operation is refused";
 
+/// The note under the row when a Bore is Helical and the row is off
+/// Auto (#3360 x #2830): one helix per hole has no ring order, so the
+/// generator refuses the operation by name.
+pub(crate) const HELICAL_PASS_START_REFUSED: &str =
+    "Inside and Outside are not available with the Helical strategy (one helix per hole has no ring order): the operation is refused";
+
 /// What the three values do: the row's hover text.
 const PASS_START_HINT: &str = "Auto: the order this operation always cut. Inside: start at the part or island wall and work out. Outside: start at the outer edge and work in. Each ring follows the edge it starts from, one stepover at a time. With an Outside containment the outer edge is the stock edge, so each level starts in air. Where the first ring runs along a wall, or the area is narrower than the tool plus one stepover, a cut takes the full tool width and the toolpath shows a warning";
 

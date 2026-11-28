@@ -269,6 +269,17 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 fields.push(json!({ "name": "cavity_outline", "type": "array", "default": Value::Null }));
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
+            // #2830: the Bore strategy flags are skipped when false, so
+            // list them here: `helical` turns the helix on, `spring_pass`
+            // adds the second floor circle.
+            if key == "bore" {
+                for name in ["helical", "spring_pass"] {
+                    if !fields.iter().any(|f| f["name"] == name) {
+                        fields.push(json!({ "name": name, "type": "boolean", "default": false }));
+                    }
+                }
+                fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            }
             // The zero default is omitted by ParamsDto to preserve old
             // project bytes, but it is still an authored operation
             // parameter on the MCP surface (#3153).

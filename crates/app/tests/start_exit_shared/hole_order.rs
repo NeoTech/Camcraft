@@ -88,6 +88,7 @@ fn bore(picks: PathPicks) -> OpParams {
         tolerance: 0.01,
         holes: holes(15.0, 10.0),
         picks,
+        strategy: Default::default(),
     }
 }
 

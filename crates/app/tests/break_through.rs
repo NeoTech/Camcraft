@@ -101,6 +101,7 @@ fn bore(break_through: Option<f64>) -> OpParams {
         tolerance: 0.01,
         holes: vec![hole()],
         break_through,
+        strategy: Default::default(),
         picks: Default::default(),
     }
 }

@@ -204,6 +204,7 @@ fn a_bore_whose_stepdown_spans_the_depth_cuts_one_level() {
         tolerance: 0.01,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
+        strategy: Default::default(),
         links: Links::PLANAR,
     };
     one_level("bore", &bore(&p).expect("bore"));

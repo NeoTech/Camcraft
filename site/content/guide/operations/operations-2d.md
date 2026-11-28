@@ -886,17 +886,21 @@ model"; "tap leaves no thread core".
 {{ <icon name="op-bore" /> }} ![View of circular interpolation inside a hole.](../../../operation-paths.svg#Bore)
 
 **For:** clearing and finishing a hole with an end mill smaller than the
-hole. Wide holes use concentric rings at each level; radial sweeps open
-each ring band and the last ring finishes the wall. Choose it over a
-Drill boring cycle when there is no boring bar of the right size.
+hole. The **Rings** strategy cuts level by level: at each level the tool
+dives at the centre, radial sweeps open each ring band, and the last ring
+finishes the wall. The **Helical** strategy cuts a counterbore or a hole
+up to twice the tool diameter without a plunge (see below). Choose Bore
+over a Drill boring cycle when there is no boring bar of the right size.
 
 **Picks:** holes, found with **Detect holes**.
 
 | Tab | Setting | Default |
 |---|---|---|
-| Heights | Stepdown | 5 |
+| Heights | Stepdown (Helix pitch for Helical) | 5 |
 | Heights | Bottom Z | each hole's own floor |
-| Passes | Pass starts at | Auto |
+| Passes | Strategy | Rings (level by level) |
+| Passes | Spring pass (Helical only) | off |
+| Passes | Pass starts at (Rings only) | Auto |
 | Passes | Stock to leave | 0 |
 | Passes | Tolerance | 0.01 |
 
@@ -924,3 +928,50 @@ entry angle means 3 degrees. A separate link angle does not steepen it.
 If the sweep is too short, the path states that it substitutes a plunge
 at the plunge feed; the return descent to a ring is also named in the
 entry notes.
+
+### Helical strategy
+
+Set **Strategy** to **Helical** on the Passes tab. For each hole, the
+tool moves over the hole at the clearance height and goes down to the
+plunge height above the material. Then it cuts one continuous helix with
+the cutter's edge on the finished wall, from there to the hole floor.
+At the floor it runs one full flat circle to remove the ramp step. Then
+it moves off the wall to the centre and retracts. **Spring pass** adds
+a second floor circle with no extra depth. A through hole's helix
+continues past the floor by the break-through.
+
+The Heights tab calls the stepdown **Helix pitch**: the drop for each
+turn of the helix. **Climb milling** on the Feeds tab sets the
+direction (climb is counter-clockwise, G3). The helix uses the ramp feed
+of the Lead-in tab when you set one, or else the cutting feed. The level
+links of the Lead-in tab do not apply, because the helix has no levels.
+
+One helix clears the floor only when the inner edge of the cutter
+reaches the centre. With a flat end mill, the largest hole is twice the
+tool diameter (plus twice the stock to leave): a Ø6 end mill cuts holes
+up to Ø12. **Detect holes** skips a wider hole and names it. Use the
+Rings strategy or a larger tool for that hole.
+
+A cutter that is not centre-cutting has an uncut core at its axis
+(a quarter of its diameter, the same rule as for a plunge). The helix
+cuts the hole's axis only when the wall circle stays at least that far
+from it, so the smallest hole for such a cutter is its diameter plus half
+its diameter (plus twice the stock to leave): Ø9 with a Ø6 end mill.
+A centre-cutting tool has no such limit.
+
+**Pass starts at** does not apply to the Helical strategy, because one
+helix per hole has no ring order. Keep it at **Auto**.
+
+Example: an M6 counterbore, Ø11 x 7 deep, with a Ø6 flat end mill and a
+helix pitch of 1 mm. The tool starts the helix 2 mm above the material
+(the default plunge height) and makes nine turns to the floor. Then it
+cuts one floor circle.
+
+**Helical refusals:** "the ... mm hole at (...) is too wide for one
+helix with a ... mm cutter: the helix leaves a ... mm core at the floor";
+"the helix in the ... mm hole at (...) descends at ... deg, steeper than
+15 deg: set the stepdown (the helix pitch) to ... mm or less". A helix
+steeper than 15 degrees is close to a plunge. It occurs in a hole only a
+little wider than the tool. "the ... mm hole at (...) is too small for a helix
+with a ... mm cutter that is not centre-cutting"; "Pass starts at ... is
+not available with the Helical strategy".

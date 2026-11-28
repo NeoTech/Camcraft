@@ -1513,12 +1513,15 @@ impl ParamsDto {
                 tolerance,
                 holes,
                 break_through,
+                strategy,
                 pass_start,
                 entry,
                 picks,
             } => ParamsDto::Bore {
                 entry: super::links::entry_dto(*entry),
                 break_through: *break_through,
+                helical: matches!(strategy, crate::machining2d::BoreStrategy::Helical { .. }),
+                spring_pass: matches!(strategy, crate::machining2d::BoreStrategy::Helical { spring_pass: true }),
                 pass_start: (*pass_start).into(),
                 links: links_to_dto(links, &p.default_links()),
                 clearance_z: (*clearance_z).into(),
@@ -2955,12 +2958,19 @@ impl ParamsDto {
                 tolerance,
                 holes,
                 break_through,
+                helical,
+                spring_pass,
                 pass_start,
                 entry,
                 picks,
             } => OpParams::Bore {
                 entry: super::links::entry_of(*entry),
                 break_through: *break_through,
+                strategy: if *helical {
+                    crate::machining2d::BoreStrategy::Helical { spring_pass: *spring_pass }
+                } else {
+                    crate::machining2d::BoreStrategy::Rings
+                },
                 pass_start: (*pass_start).into(),
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
                 clearance_z: (*clearance_z).into(),
