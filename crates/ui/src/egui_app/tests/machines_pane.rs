@@ -331,7 +331,7 @@ fn the_kind_filter_offers_every_machine_kind_and_filters_its_rows() {
     use egui::accesskit::Role;
     let kinds = [
         Kind::Mill, Kind::Lathe, Kind::MillTurn, Kind::Plasma,
-        Kind::Waterjet, Kind::WireEdm, Kind::SinkerEdm,
+        Kind::Waterjet, Kind::Laser, Kind::WireEdm, Kind::SinkerEdm,
     ];
     let mut h = blank_harness();
     h.run();

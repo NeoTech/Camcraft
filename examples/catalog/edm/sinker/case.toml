@@ -1,0 +1,3 @@
+kinds = ["Sinker Burn", "Sinker Side Burn"]
+machine = "Sinker EDM 3-axis (template)"
+expect = "post"

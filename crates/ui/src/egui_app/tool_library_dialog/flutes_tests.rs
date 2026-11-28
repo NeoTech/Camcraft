@@ -124,3 +124,27 @@ fn the_fluted_steel_keeps_to_its_facet_bound() {
         assert!(n > 0 && n <= MAX_TRIS, "{name}: {n} facets, bound {MAX_TRIS}");
     }
 }
+
+/// #4336: the side view's flute lines stay on the cutter (inside its
+/// radius, under the run-out), slant with a helix, stand straight without
+/// one, and are absent when the tool states no flute count.
+#[test]
+fn side_flute_lines_stay_on_the_cutter() {
+    let t = with("EM-1000-4FL", Some(4), Some(30.0));
+    let lines = side_lines(&t, &steel(&t)).unwrap_or_else(|| panic!("a 4-flute end mill shows flutes"));
+    assert!(!lines.is_empty(), "the visible flutes draw lines");
+    let r = t.diameter * 0.5;
+    for p in lines.iter().flatten() {
+        assert!(p.0 >= 0.0 && p.0 <= t.flute_len * (1.0 - RUN_OUT) + 1e-9, "a line point {p:?} leaves the fluted length");
+        assert!(p.1.abs() <= r + 1e-9, "a line point {p:?} leaves the cutter radius {r}");
+    }
+    let slant = lines.iter().any(|l| l.windows(2).any(|w| (w[1].1 - w[0].1).abs() > 1e-6));
+    assert!(slant, "a 30-degree helix slants its lines");
+    let straight = with("EM-1000-4FL", Some(4), None);
+    let lines = side_lines(&straight, &steel(&straight)).unwrap_or_else(|| panic!("a straight flute shows"));
+    assert!(lines.iter().all(|l| l.windows(2).all(|w| (w[1].1 - w[0].1).abs() < 1e-9)), "a straight flute is a vertical line");
+    assert!(side_lines(&with("EM-1000-4FL", None, Some(30.0)), &steel(&t)).is_none(), "no stated count, no lines");
+    let many = with("EM-1000-4FL", Some(MAX_FLUTES), Some(60.0));
+    let n: usize = side_lines(&many, &steel(&many)).unwrap_or_default().iter().map(Vec::len).sum();
+    assert!(n <= MAX_FLUTES as usize * (SIDE_STEPS + 1), "the lines keep their bound: {n} points");
+}

@@ -220,6 +220,24 @@ CamCraft has no automatic watcher: repeat `import_model` with the same
 model name yourself. Absolute paths avoid ambiguity; window-relative links
 resolve against the saved project's folder.
 
+## Face picks follow SolidCraft names
+
+A SolidCraft `.sc` design (model cache format 10) keeps the SolidCraft
+name of each face beside the facets of the model. A format-10 file whose
+names do not fit the facets imports as before, with one note.
+
+At a re-import of the model, a face or patch pick of an operation follows
+its face by the SolidCraft name. A pick follows only when the names leave
+no doubt: exactly one new face of the same kind has the same names. The
+follow is part of the undo step of the update.
+
+An operation with a followed pick gets a review line. The review line
+holds the post until you mark the operation reviewed. Each pick that
+cannot follow is named in the re-import message and in the `picks` key of
+the `import_model` result. Pick those faces again. The project file saves
+the source face record of the model under the optional key
+`source_faces`.
+
 ## Undo, approval and privacy boundaries
 
 - **Two undo stacks:** CamCraft `undo {}` changes only CamCraft's history.

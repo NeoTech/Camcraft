@@ -391,6 +391,10 @@ use weldon::{Bore, INCH_BORES, METRIC_BORES};
 mod reference;
 pub use reference::HolderRef;
 
+#[path = "holder_library_shape.rs"]
+mod shape;
+pub use shape::{tapers, HolderShape, ShapeClamp, ShapeError};
+
 #[cfg(test)]
 #[path = "holder_library_tests.rs"]
 mod tests;

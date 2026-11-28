@@ -67,8 +67,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // The row lays right to left: Left first reads "Right
                 // hand  Left hand" on screen.
                 prop_row(ui, "Hand", |ui| {
-                    ui.radio_value(hand, camcraft_app::cl::ThreadHand::Left, "Left hand");
-                    ui.radio_value(hand, camcraft_app::cl::ThreadHand::Right, "Right hand");
+                    radio_pair(ui, hand, (camcraft_app::cl::ThreadHand::Left, "Left hand"), (camcraft_app::cl::ThreadHand::Right, "Right hand"));
                 });
                 hint(ui, "the way the thread winds - every pass runs toward the chuck; right hand posts under M03, left hand under M04 with the insert mounted for reverse rotation");
             }

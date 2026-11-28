@@ -53,6 +53,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 Some(EntityKind::Setup)
             } else if crate::program_entry::is_entry(world, &entity) {
                 Some(EntityKind::Entry)
+            } else if crate::pattern_folder::is_pattern(world, &entity) {
+                Some(EntityKind::Pattern)
             } else if crate::sketch::is_sketch(world, &entity) {
                 Some(EntityKind::Sketch)
             } else {
@@ -144,7 +146,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 | Some(EntityKind::Operation)
                 | Some(EntityKind::Setup)
                 | Some(EntityKind::Sketch)
-                | Some(EntityKind::Entry) => None,
+                | Some(EntityKind::Entry)
+                | Some(EntityKind::Pattern) => None,
                 Some(EntityKind::Stock)
                     if matches!(
                         stock,
@@ -185,6 +188,7 @@ pub fn collect(world: &World) -> ProjectFile {
                     .then(|| crate::model_source::of(world, &entity))
                     .flatten()
                     .map(|s| super::SourceDto::of(&s)),
+                source_faces: kind.is_none().then(|| super::source_faces_dto::collect(world, &entity)).flatten(),
                 kind,
                 raw_stock_only: mark.is_some(),
                 raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),
@@ -198,6 +202,7 @@ pub fn collect(world: &World) -> ProjectFile {
                 setup,
                 fixture,
                 entry: super::program_entry_dto::collect(world, &entity),
+                pattern: super::pattern_dto::collect(world, &entity),
                 sketch: super::sketch_dto::collect(world, &entity),
                 flip: matches!(kind, Some(EntityKind::Wcs))
                     .then(|| crate::setup_wcs_flip::of_entity(world, &entity))

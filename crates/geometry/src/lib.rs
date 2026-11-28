@@ -29,6 +29,8 @@ pub mod sketch_chains;
 pub mod wire_round_profile;
 pub mod die_opening;
 pub mod solidcraft;
+// #3915: the SolidCraft face names beside an imported mesh.
+pub mod source_faces;
 #[cfg(not(target_arch = "wasm32"))]
 mod kernel_import;
 pub mod step;
@@ -45,3 +47,5 @@ pub mod svg;
 pub mod stroke_text;
 // #3072: typed text in an outline font as closed shapes.
 pub mod outline_text;
+// #3915: picks follow their face by SolidCraft name at a re-import.
+pub mod source_follow;

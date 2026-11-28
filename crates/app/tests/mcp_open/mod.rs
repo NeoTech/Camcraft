@@ -30,7 +30,7 @@ fn post(c: &mut Client, path: &Path) -> String {
     assert_eq!(posted["ops"], json!(1));
     let text = std::fs::read_to_string(path).expect("posted NC");
     // Fanuc's onSection emits this preamble exactly once per section.
-    assert_eq!(text.matches("G90 G54 G40 G49 G80").count(), 1, "{text}");
+    assert_eq!(text.matches("G90 G17 G94 G54 G40 G49 G80").count(), 1, "{text}");
     text
 }
 

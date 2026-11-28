@@ -24,6 +24,9 @@ fn open_new_tool_dialog() -> Harness<'static, ShellUi> {
     h.run_steps(3);
     h.get_by_label("New tool…").click();
     h.run_steps(3);
+    // #4335: the catalog rows name the kinds too; the form is in Properties.
+    h.state_mut().state.close_tool_library();
+    h.run_steps(2);
     h
 }
 

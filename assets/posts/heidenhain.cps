@@ -362,9 +362,45 @@ function onToolChange(number, name) {
 // (the stream then carries PARAM Smoothing / SmoothingMode). Heidenhain ISO G62 (the ISO form of the tolerance cycle): T the path deviation.
 // Written after the preamble, undone at the section's end so no
 // tolerance leaks into the next operation.
+// #4226: P01 is the filter mode (0 finish, 1 rough) and P02 the rotary
+// tolerance; a G62 with T only reads both as 0 (iTNC 530 ISO 533 188-23
+// and TNC 640 ISO 892909-26, cycle G62 TOLERANCE). The profile says if the control takes P01
+// and the largest T (docs/decisions/4226-g62-smoothing.md); a machine
+// with no controller identity is the TNC 640 34059x-07 level: P01, and
+// T 0 to 99999.9999. T 0 means the builder's tolerance, so a T that
+// rounds to 0 on the 1 um grid is refused, as is a T above the range.
+var G62_T_MAX_UM_SPEC = 99999999;  // TNC 640 34059x-07: 0 to 99999.9999
+function smoothRefuse(why) {
+  throw new Error("Heidenhain TNC: smoothing " + why + " - refused, not posted");
+}
 function smoothOn() {
   if (!(smoothTol > 0)) return;
-  block(["G62", "T" + fu(smoothTol)]);
+  var who = dialect ? dialectWho() : "the TNC 640 34059x-07 level of this post";
+  var maxUm = dialect ? Number(dialect.g62TMaxUm) : G62_T_MAX_UM_SPEC;
+  if (!(maxUm > 0)) smoothRefuse("tolerance " + smoothTol + " mm: " + who + " has no tolerance cycle (cycle 32 / G62)");
+  var t = fu(smoothTol);
+  if (!(Number(t) > 0)) {
+    smoothRefuse("tolerance " + smoothTol + " mm writes T0 at 0.001 mm, which " + who +
+      " reads as the machine builder's tolerance - the smallest T is 0.001 mm");
+  }
+  if (Math.round(Number(t) * 1000) > maxUm) {
+    smoothRefuse("tolerance T" + t + " mm is above the largest T of " + who + " (" + fu(maxUm / 1000) + " mm)");
+  }
+  var mode = !dialect ? "yes" : String(dialect.g62Mode);
+  var opt2 = !!(dialect && dialect.options && dialect.options.indexOf(2) >= 0);
+  if (mode === "yes" || (mode === "option2" && opt2)) {
+    if (smoothMode !== "finish" && smoothMode !== "rough") smoothRefuse("mode \"" + smoothMode + "\" is not finish or rough");
+    block(["G62", "T" + t, "P01 " + (smoothMode === "rough" ? "1" : "0"), "P02 0"]);
+  } else {
+    // No P01: the control uses its finish filter (P01 0). A rough ask
+    // is told, not hidden.
+    if (smoothMode === "rough") {
+      msg("smoothing mode rough is not written: " + who + (mode === "option2"
+        ? " takes G62 P01 only with software option 2 (HSC machining), which the machine file does not list"
+        : " has no documented G62 P01") + "; the control uses its finish filter");
+    }
+    block(["G62", "T" + t]);
+  }
   smoothActive = true;
 }
 function smoothOff() {

@@ -13,13 +13,12 @@ use crate::plan::{Plan, Step};
 use crate::scan::re;
 pub use crate::known_fail::expect_fail_note;
 #[path = "gpu_report.rs"]
-mod gpu_report;
+pub(crate) mod gpu_report;
 
 pub struct Run {
     pub root: PathBuf,
     pub label: String,
-    /// Batch and release run their steps in the parallel lanes of `queue` (#2727); a quick gate that falls
-    /// back to the batch plan sets it too. Else the steps run one at a time.
+    /// Batch and release run parallel lanes (`queue`, #2727), as does a quick gate's batch fallback.
     pub lanes: bool,
     pub dry: bool,
     /// The job budget of the whole run (#2057): the release queue's lanes share it, a step alone gets all of it.
@@ -36,6 +35,7 @@ pub struct Run {
     pub(crate) built: Built,
     /// The unit directories under target/ when the run started (#3150); the summary prints what it added.
     units: usize,
+    unit_notes: Vec<String>,
     /// The steps that a failed build stopped (#3601), with their note; the summary lists them as not run.
     pub(crate) not_run: Vec<(String, String)>,
 }
@@ -170,20 +170,17 @@ impl Run {
             void: None,
             built: Built::new(),
             units: crate::unit_env::units(root),
+            unit_notes: Vec::new(),
             not_run: Vec::new(),
         })
     }
-
     pub fn plan(&mut self, plan: &Plan) -> Result<(), String> {
-        for n in &plan.notes {
-            println!("{n}");
-        }
+        plan.notes.iter().for_each(|n| println!("{n}"));
         let lanes = self.lanes;
-        if let Some(n) = &self.budget_note {
-            println!("{n}");
-        }
+        if let Some(n) = &self.budget_note { println!("{n}"); }
         let vars: Vec<(String, String)> = std::env::vars().collect();
-        crate::unit_env::notes(&vars).iter().for_each(|l| println!("{l}"));
+        self.unit_notes = crate::unit_env::plan_notes(&vars, &self.root, plan);
+        self.unit_notes.iter().for_each(|l| println!("{l}"));
         println!("{}", crate::budget::header(self.budget, lanes));
         println!("{}", crate::watchdog::from_env().1);
         if lanes {
@@ -244,6 +241,7 @@ impl Run {
     /// Runs one step with its `-j` and `--test-threads` set to `jobs` (`budget::scale`). A debug suite
     /// step of a crate in `built` starts its test executable; each other step starts cargo (`direct`).
     pub(crate) fn execute(root: &Path, log_dir: &Path, dry: bool, n: usize, s: &Step, jobs: usize, built: &Built) -> Result<Done, String> {
+        if let Some(mode) = s.site { return crate::site_step::execute(root, log_dir, dry, n, s, mode); } // #4133: not cargo
         let args = gpu_report::output_args(&crate::budget::scale(&s.args, jobs));
         let log = log_dir.join(log_name(n, &s.name));
         let dir = if s.in_ui { root.join("crates").join("ui") } else { root.to_path_buf() };
@@ -308,12 +306,9 @@ impl Run {
     /// Prints the summary table; the process exit code (0 all passed, 1 any failed).
     pub fn summary(self) -> i32 {
         println!("\n== gate summary ({}) - logs in {}", self.label, self.log_dir.display());
-        for d in &self.done {
-            println!("  {:<4} {:>5}s  {}  {}", gpu_report::report_row(d.ok, d.stall, &d.note), d.secs, d.name, d.note);
-        }
-        for (name, note) in &self.not_run {
-            println!("  SKIP     -   {name}  {note}");
-        }
+        self.unit_notes.iter().for_each(|l| println!("{l}"));
+        self.done.iter().for_each(|d| println!("  {:<4} {:>5}s  {}  {}", gpu_report::report_row(d.ok, d.stall, &d.note), d.secs, d.name, d.note));
+        self.not_run.iter().for_each(|(name, note)| println!("  SKIP     -   {name}  {note}"));
         let bad = self.done.iter().filter(|d| !d.ok).count();
         let stalled = self.done.iter().filter(|d| d.stall).count();
         let mins = self.clock.elapsed().as_secs_f64() / 60.0;
