@@ -15,7 +15,7 @@ pub fn output_args(args: &[String]) -> Vec<String> {
 
 /// SKIP is a successful process with incomplete GPU coverage, never a tested GPU pass.
 pub fn report_row(ok: bool, stall: bool, note: &str) -> &'static str {
-    if ok && !stall && note.contains("GPU test(s) not exercised") { "SKIP" } else { crate::exec::row(ok, stall) }
+    if ok && !stall && (note.contains("GPU test(s) not exercised") || note.starts_with(crate::site_step::SKIPPED)) { "SKIP" } else { crate::exec::row(ok, stall) }
 }
 
 /// Captured stdout headers retain the test identity even when libtest runs tests in parallel.

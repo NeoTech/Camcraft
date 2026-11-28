@@ -1,5 +1,5 @@
 {
-  "version": 83,
+  "version": 84,
   "units": "in",
   "machine": {
     "path": "built-in: Tormach 770MX + microARC 4",
@@ -144,7 +144,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 10132140172455864613,
+        "stamp": 13466615911213289202,
         "cache": {
           "moves": [
             {
@@ -484,7 +484,7 @@
             }
           }
         },
-        "stamp": 11203706960577164878,
+        "stamp": 833744675938541981,
         "cache": {
           "moves": [
             {
@@ -635,7 +635,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 4063580763892316843,
+        "stamp": 11300886440870021850,
         "cache": {
           "moves": [
             {
@@ -771,7 +771,7 @@
             }
           }
         },
-        "stamp": 6246964895202407568,
+        "stamp": 14162576607801014425,
         "cache": {
           "moves": [
             {
@@ -932,7 +932,7 @@
             }
           }
         },
-        "stamp": 10096448847702385407,
+        "stamp": 10716145349397109378,
         "cache": {
           "moves": [
             {
@@ -60844,7 +60844,7 @@
       ],
       "rev": 1,
       "source": {
-        "path": "C:\\Users\\tbras\\RustProjects\\Camcraft\\.claude\\worktrees\\issue-3704\\crates\\app\\../../examples/models/first-4axis-part.obj",
+        "path": "/home/darek/Claude_stuff/Camcraft_development/.claude/worktrees/issue-2443/crates/app/../../examples/models/first-4axis-part.obj",
         "sha256": "3e9e87c60290a590105b1169dcaedd801a6c5b7ff1c27b78ef5af074860e3103"
       }
     }

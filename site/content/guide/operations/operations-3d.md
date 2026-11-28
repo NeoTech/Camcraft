@@ -51,6 +51,7 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 <!-- catalog:examples:start -->
 **Example cases**
 
+- [3d/rest](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rest)
 - [3d/rough-finish](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/3d/rough-finish)
 <!-- catalog:examples:end -->
 
@@ -129,6 +130,19 @@ also refused. The message names the tool and its shank or holder band:
 raise Bottom of Part Z or use a longer-reaching tool. This conservative
 depth check does not credit lateral room or material removed earlier,
 so a deep job can refuse even where there appears to be side clearance.
+
+3D Pocket takes a start point and an exit point. Each level descends on
+its first ring at the point nearest the start point. Zigzag rows start
+from their nearer end. The operation ends on its last ring at the point
+nearest the exit point. An impossible pick is refused by name. Adaptive
+and Rest roughing refuse the picks by name.
+
+A round level under Adaptive takes the short spiral. Offset rounding noise
+in the outline no longer gives a plan three times too long.
+
+A rest operation (3D Pocket, Multi-Axis Rough, rest 2D Pocket or 2D
+Adaptive) simulates the operations ahead in its background job. The GUI
+and MCP calls stay responsive while the operation is staged.
 
 ![CamCraft 3D pocket roughing waterline levels clearing stock above a curved dome surface](../../../images/guide/op-3d-pocket-roughing.png)
 
@@ -230,6 +244,12 @@ shell"; "flat-area finishing found no floor flatter than one tolerance
 inside the programmed depths"; "pencil reference diameter ... does not
 exceed the op's ball".
 
+3D Finish takes a start point and an exit point. They choose the corner
+of the Parallel raster where the cut starts and where its last pass ends.
+A pick that the raster cannot keep is refused by name. A finish pass that
+ends on a wall can retract: the check no longer reads that retract as a
+rapid in the part.
+
 ## Deburr
 
 <!-- catalog:examples:start -->
@@ -317,6 +337,11 @@ chamfer mill"; "the break reaches ... mm up the cone's flank; '<tool>' has
 ... mm of flute"; "deburr found no exposed edge inside the programmed
 window"; "deburr clearance plane below the window top - the plunge would
 start inside the cut".
+
+Deburr takes a start point and an exit point. The chain nearest the start
+point is cut first, from its nearest end. The chain nearest the exit point
+is cut last. An impossible pick is refused by name. This includes a start
+point and an exit point on one chain while other chains remain.
 
 ## On a reduced-fidelity model
 

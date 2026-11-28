@@ -43,6 +43,7 @@ pub mod post_script_options;
 pub mod program_info;
 // #155: Pause / Home entries of the operation list.
 pub mod program_entry;
+pub mod pattern_folder;
 // M13.11: mesh repair (weld + fill holes) as one undo unit over UpdateModel.
 pub mod repair_model;
 // Issue #143: ribbon pins are saved with the project, so they are a command.
@@ -139,6 +140,10 @@ pub use post_script_options::{
 };
 pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
+pub use pattern_folder::{
+    CreatePatternFolder, DeletePatternFolder, EditPatternFolder, PatternEdit, SetPatternInstanceEnabled,
+    SetPatternMembers,
+};
 pub use model_link::SetModelSource;
 pub use repair_model::RepairModel;
 pub use vouch_fidelity::VouchModelFidelity;
@@ -163,7 +168,7 @@ pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::{BoxPoint, OriginAt, SetWcsOrigin, place_setup_origin};
 pub use wcs_circle::SetWcsAtCircleCentre;
 pub use set_wcs_flip::SetWcsFlip;
-pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
+pub use tool::{AddTool, ChangeTool, DeleteTool, DuplicateTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
 pub use component_sync::SyncDocumentComponent;

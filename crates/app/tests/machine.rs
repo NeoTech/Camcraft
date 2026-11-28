@@ -36,6 +36,9 @@ mod axis_support;
 mod axis_chain;
 #[path = "machine/axis_rows.rs"]
 mod axis_rows;
+// #3071: the hobby router frames on the Grbl 1.1 post.
+#[path = "machine/hobby_routers.rs"]
+mod hobby_routers;
 // #4081: the laser machine kind and the laser head at the app doors.
 #[path = "machine/laser_kind.rs"]
 mod laser_kind;
@@ -776,6 +779,12 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Sienci AltMill 4x4", Kind::Mill),
         ("Sienci AltMill 4x8", Kind::Mill),
         ("Ooznest WorkBee 1000x1500 (Estlcam)", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 4x4", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 4x2", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 2x2", Kind::Mill),
+        ("Inventables X-Carve 2021 1000 mm", Kind::Mill),
+        ("Inventables X-Carve Pro 4x4", Kind::Mill),
+        ("Inventables X-Carve Pro 4x2", Kind::Mill),
         ("Doosan DNM 5700", Kind::Mill),
         ("Doosan DNM 5700 + rotary table", Kind::Mill),
         ("Haas VF-2", Kind::Mill),

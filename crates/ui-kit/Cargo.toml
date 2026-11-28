@@ -1,0 +1,28 @@
+[package]
+name = "camcraft-ui-kit"
+description = "Design system of the camcraft shell: theme tokens, theme files, contrast checks, gallery."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+# #4394: egui and serde_json only - no camcraft crate, no flecs, no engine.
+# The kit cannot see the document; that is the point of the crate.
+[dependencies]
+egui = { workspace = true }
+# The camcraft-theme/1 reader walks serde_json Values directly (M6.1 B).
+serde_json = { workspace = true }
+# The gallery window only (feature `gallery`): `cargo test -p camcraft-ui-kit`
+# builds no windowing stack. eframe is already in the lock (egui_kittest,
+# the wasm shell). winit is named only for its default features (x11 and
+# wayland, as camcraft-ui has them): eframe turns them off, and a Linux
+# window needs one. Both crates are already in the lock - no new crate.
+eframe = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
+
+[features]
+gallery = ["dep:eframe", "dep:winit"]
+
+[[bin]]
+name = "ui-kit-gallery"
+path = "src/bin/ui-kit-gallery.rs"
+required-features = ["gallery"]

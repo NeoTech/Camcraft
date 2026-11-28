@@ -14,8 +14,9 @@
 //! plain numbers (a `[u8; 3]` const, a table of tuples) is not seen; the
 //! #1120 family PRs move those by name.
 //!
-//! The permanent rows are the token tables themselves (the theme columns
-//! and the verdict palettes), the contrast maths and a colour that only
+//! The theme columns and the contrast maths moved to the UI kit crate
+//! with the theme (#4394), so they are no longer rows here. The
+//! permanent rows are the verdict palettes and a colour that only
 //! measures text. Each row is permanent: the draw sites of #1120 all
 //! read tokens, so a new row needs a reason that is not a theme choice.
 //! Provenance: our own test over our own source tree.
@@ -33,8 +34,6 @@ use super::colour_scan::count;
 /// a theme, with the reason.
 #[rustfmt::skip]
 const ALLOWED: &[(&str, usize, &str)] = &[
-    ("egui_app/contrast.rs", 4, "keep: contrast maths (black or white text on a fill)"),
-    ("egui_app/theme/tables.rs", 122, "keep: the token tables themselves"),
     ("egui_app/theme/verdict.rs", 15, "keep: the verdict palette table (#1120: ours, held to the colour-vision gate, no theme key)"),
     ("egui_app/viewport_layout.rs", 1, "keep: the colour only measures text, it is not drawn"),
 ];

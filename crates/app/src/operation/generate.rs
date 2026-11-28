@@ -2791,6 +2791,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             width,
             angle_deg,
             minimum_cone_radius,
+            tolerance,
             feed,
             plunge_feed,
             climb,
@@ -2882,7 +2883,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut path = if region.is_empty() {
                         Toolpath::new(Vec::new())
                     } else {
-                        machining2d::chamfer(&region, &cp)?
+                        machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?
                     };
                     if !runs.is_empty() {
                         let cut = |facets: &[Triangle],
@@ -2916,7 +2917,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         m_gen,
                         frame.as_ref(),
                     )?;
-                    let path = machining2d::chamfer(&region, &cp)?;
+                    let path = machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?;
                     (region, path)
                 }
             }
@@ -3138,7 +3139,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         tip_run,
                     );
                 }
+                // #2443 review: Auto counts uncut stock over a mouth as
+                // depth (the part, the raw stock, the program ahead).
+                let tops = if *cycle == drilling::CycleChoice::Auto {
+                    let stock = stock_facets.as_deref().unwrap_or(&[]);
+                    super::drill_prior::material_tops(holes, &material.facets, stock, 0.5 * d, &mut verify_prior, lathe_axial)
+                } else {
+                    Vec::new()
+                };
                 drilling::drill(&drilling::CycleParams {
+                    material_top: &tops,
                     through_clear: run,
                     break_through_from: tip_from,
                     clearance_z: hl.clearance,

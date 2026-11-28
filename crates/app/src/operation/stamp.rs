@@ -17,7 +17,10 @@ use super::*;
 /// same PR, and every cache a project saved under the old number reads
 /// Stale once and clears on regenerate. A refactor whose output stays
 /// byte-identical does not bump it.
-pub const GENERATOR_OUTPUT_VERSION: u64 = 1;
+/// 2 (#2443): Auto chose a drill cycle from the depth below the R plane,
+/// not the depth in material, so a shallow hole under a tall R plane got
+/// a peck cycle; a cache with the old cycle reads Stale.
+pub const GENERATOR_OUTPUT_VERSION: u64 = 2;
 
 #[must_use]
 /// `setup` is the operation's declared setup (M3.2 A): the stock entity,
@@ -83,6 +86,10 @@ fn stamp_at(
     let kind = params.kind().info();
     if kind.mode == crate::verify::Mode::Envelope && kind.section != Section::Turning {
         h.write(b"vertical-rapid-part-4062");
+    }
+    // Closed model chamfers now verify the arcs that will post.
+    if matches!(params, OpParams::Chamfer2D { .. }) {
+        h.write(b"closed-model-chamfer-arcs-4411");
     }
     // #2965: the multi-axis, rotary and cross-drill kinds answer to the
     // first-traverse law now. Only their caches read Stale once; the

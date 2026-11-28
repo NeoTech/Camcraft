@@ -75,6 +75,9 @@ clamped to the range.
 | `tool_note` | Notes and labels in the tool and holder previews |
 | `tool_dim` | Dimension lines of the holder and side views |
 | `thumb_flute` | Cutting part of a tool library thumbnail |
+| `tool_model_flute` | Cutting part (flutes) of the 3D tool preview, shaded by the light |
+| `tool_model_shank` | Shank of the 3D tool preview, shaded by the light |
+| `tool_model_holder` | Holder of the 3D tool preview, shaded by the light |
 | `bad_ink` | A refused value or a cutter that cannot work: text and outline |
 | `warn_ink` | A warning of the tool assembly |
 | `mount_axis` | Spindle axis of the tool body page, and the lathe along arrow |

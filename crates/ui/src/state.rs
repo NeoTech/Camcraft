@@ -71,11 +71,24 @@ pub use components_ui::{
 #[cfg(test)]
 pub(crate) use components_ui::library_loads;
 pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
+#[path = "state_holder_form.rs"]
+mod holder_form;
+#[cfg(test)]
+pub(crate) use holder_form::shape_reads;
+pub(crate) use holder_form::shape_of;
+#[path = "state_holder_search.rs"]
+mod holder_search;
+pub(crate) use holder_search::{HolderHits, HolderItem, holder_hits};
+#[cfg(test)]
+pub(crate) use holder_search::holder_searches;
 #[path = "state_component_views.rs"]
 mod component_views;
 pub use component_views::{
     ComponentRow, ComponentViews, Derived as ComponentDerived, StackValues, StackView, SwapOffer, ViewBuilds, candidates,
 };
+#[path = "state_tool_list.rs"]
+mod tool_list;
+pub use tool_list::{ListBuilds, ToolHits, ToolListCache, ToolRow};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -373,6 +386,9 @@ pub enum CommandKind {
         number: Option<u32>,
     },
     DeleteTool(String),
+    /// #4340: copy a stored tool with its holder and component stack
+    /// (`DuplicateTool`) and open the copy in the tool library's editor.
+    DuplicateTool(String),
     /// #371: set (`Some`) or clear (`None`) a tool's modelled body - the
     /// tool editor's Apply body / Clear body, one `SetToolBody`.
     SetToolBody {
@@ -1749,9 +1765,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
-    /// Catalog filters are temporary view state, outside the document and history.
-    pub tool_catalog_kind: Option<camcraft_app::tools::ToolKind>,
-    pub tool_catalog_name: String,
+    /// #4335: the tool library's search text - view state, outside the
+    /// document and the history; it holds between two openings.
+    pub tool_search: String,
     /// #899: how the Tool library page's Import treats a name the
     /// document already has. View state - the import itself is the command.
     pub tool_import_mode: camcraft_app::commands::ImportMode,
@@ -2003,8 +2019,10 @@ pub struct State {
     pub last_update_check_utc: Option<u64>,
     /// #2428: strictly newer release discovered by the startup check (or test injection).
     pub update_available: Option<camcraft_app::update_check::ReleaseInfo>,
-    /// #2428: top-band Settings dropdown open flag.
-    pub ribbon_settings_open: bool,
+    /// #4493: the Settings window is open (view state, closed on a fresh State).
+    pub settings_open: bool,
+    /// #4493: the Settings window's shown section.
+    pub settings_section: crate::egui_app::settings_window::Section,
     /// #2428: non-blocking watcher for the one-shot startup update check.
     pub(crate) update_watcher: crate::update_check::UpdateWatcher,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
@@ -2023,6 +2041,9 @@ pub struct State {
     pub setup_name_draft: String,
     /// The window's pending dock ask (see [`PanelSetupAsk`]).
     pub panel_setup_ask: Option<PanelSetupAsk>,
+    /// #4483: each folded side pane, its open share and its split width
+    /// (`layout::fold::PaneFolds`). View state, like the dock it belongs to.
+    pub(crate) pane_folds: Vec<(crate::egui_app::shell::Tab, f32, f32)>,
     /// The browser row whose retype menu stands open (M9.1): the op's
     /// name, anchored to its row and recomputed per frame like the
     /// ribbon's dropdowns - a frame fact, not a document fact; the
@@ -2228,6 +2249,8 @@ pub struct State {
     pub component_lib: ComponentLib,
     /// #3898: the component pages' derived sets, keyed on their inputs.
     pub component_views: ComponentViews,
+    /// #4335: the tool list's rows and the search's hits.
+    pub tool_list: ToolListCache,
     /// #2397: Properties is showing the blank new-tool form. The Tool
     /// target with the empty name is the destination; this says which of
     /// its two faces shows - the pointer to the library, or the draft.
@@ -2414,8 +2437,7 @@ impl State {
             frame_rate: crate::egui_app::frame_rate::FrameRate::default(),
             gpu_line: None,
             spindle_as_vc: false,
-            tool_catalog_kind: None,
-            tool_catalog_name: String::new(),
+            tool_search: String::new(),
             tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
@@ -2495,7 +2517,8 @@ impl State {
             ribbon_mode_open: false,
             ribbon_view_open: false,
             ribbon_theme_open: false,
-            ribbon_settings_open: false,
+            settings_open: false,
+            settings_section: crate::egui_app::settings_window::Section::Appearance,
             home_page: None,
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
@@ -2514,6 +2537,7 @@ impl State {
             panel_setups_open: false,
             setup_name_draft: String::new(),
             panel_setup_ask: None,
+            pane_folds: Vec::new(),
             tree_menu: None,
             retype_confirm: None,
             rename_draft: None,
@@ -2577,6 +2601,7 @@ impl State {
             tool_library: None,
             component_lib: ComponentLib::default(),
             component_views: ComponentViews::default(),
+            tool_list: ToolListCache::default(),
             new_tool_form: false,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
@@ -3850,6 +3875,7 @@ impl State {
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not deleted: {err}")),
             },
+            CommandKind::DuplicateTool(name) => self.run_duplicate_tool(&name),
             CommandKind::CreateOperation {
                 name,
                 tool,

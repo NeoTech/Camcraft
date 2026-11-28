@@ -152,6 +152,14 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #3038: the 1000x1500 frame, the smaller of the owner's and Ooznest's travel; Estlcam control, so no post is
     // named until #3735 (sources in docs/decisions/3038-workbee-estlcam.md).
     ("Ooznest WorkBee 1000x1500 (Estlcam)", AssetFile("ooznest-workbee-1000x1500.mch")),
+    // #3071: hobby router frames from the makers' published figures, on the
+    // "Grbl 1.1" post (sources in docs/decisions/3071-hobby-routers.md).
+    ("Carbide 3D Shapeoko 5 Pro 4x4", AssetFile("carbide3d-shapeoko-5-pro-4x4.mch")),
+    ("Carbide 3D Shapeoko 5 Pro 4x2", AssetFile("carbide3d-shapeoko-5-pro-4x2.mch")),
+    ("Carbide 3D Shapeoko 5 Pro 2x2", AssetFile("carbide3d-shapeoko-5-pro-2x2.mch")),
+    ("Inventables X-Carve 2021 1000 mm", AssetFile("inventables-x-carve-1000.mch")),
+    ("Inventables X-Carve Pro 4x4", AssetFile("inventables-x-carve-pro-4x4.mch")),
+    ("Inventables X-Carve Pro 4x2", AssetFile("inventables-x-carve-pro-4x2.mch")),
     // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF). #1433: the plain 3-axis
     // machine, and the catalog's optional A table as its own entry (no
     // published nose_to_axis, so that one refuses until a setup states it).
@@ -409,6 +417,12 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "grbl-3axis.mch") => Some(include_str!("../../../assets/machines/grbl-3axis.mch")),
         ("machines", "fluidnc-3040.mch") => Some(include_str!("../../../assets/machines/fluidnc-3040.mch")),
         ("machines", "ooznest-workbee-1000x1500.mch") => Some(include_str!("../../../assets/machines/ooznest-workbee-1000x1500.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-4x4.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-4x4.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-4x2.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-4x2.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-2x2.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-2x2.mch")),
+        ("machines", "inventables-x-carve-1000.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-1000.mch")),
+        ("machines", "inventables-x-carve-pro-4x4.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-pro-4x4.mch")),
+        ("machines", "inventables-x-carve-pro-4x2.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-pro-4x2.mch")),
         ("machines", "tormach-24r.mch") => Some(include_str!("../../../assets/machines/tormach-24r.mch")),
         ("machines", "tormach-xstech-pro.mch") => Some(include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
         ("machines", "tormach-xstech.mch") => Some(include_str!("../../../assets/machines/tormach-xstech.mch")),
