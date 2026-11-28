@@ -10,6 +10,7 @@ use crate::geo2d::Point2;
 
 fn back_bore_params<'a>(tool: &'a crate::tools::Tool, holes: &'a [Hole], dwell: f64) -> CycleParams<'a> {
     CycleParams {
+        material_top: &[],
         through_clear: crate::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::default(),
         clearance_z: 15.0,

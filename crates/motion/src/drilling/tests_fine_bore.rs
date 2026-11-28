@@ -24,6 +24,7 @@ fn bar_tool(bar: f64) -> crate::tools::Tool {
 
 fn params<'a>(tool: &'a crate::tools::Tool, holes: &'a [Hole], cycle: CycleChoice) -> CycleParams<'a> {
     CycleParams {
+        material_top: &[],
         through_clear: crate::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::default(),
         clearance_z: 15.0,

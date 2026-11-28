@@ -82,6 +82,25 @@ fn each_side_stands_the_tool_one_radius_off_the_line() {
 }
 
 #[test]
+fn an_offset_stock_run_refuses_unproved_source_start_picks() {
+    for side in [Side::Outside, Side::Inside, Side::Auto] {
+        for climb in [true, false] {
+            let mut p = params();
+            p.climb = climb;
+            let path = contour_open_run_sided(&north(), &p, side, &stock, &part).expect("offset run");
+            let cutter = path.moves.iter().find(|m| m.kind == MoveKind::Plunge).expect("plunge").to;
+            for q in [north()[0], Point2::new(cutter.x, cutter.y)] {
+                p.picks.start = vec![crate::path_picks::PathPick::xy(q)];
+                let e = contour_open_run_sided(&north(), &p, side, &stock, &part)
+                    .expect_err("source mapping is not proved");
+                let msg = e.to_string();
+                assert!(msg.contains("start point") && msg.contains("source endpoint mapping"), "{msg}");
+            }
+        }
+    }
+}
+
+#[test]
 fn stock_to_leave_adds_to_the_radius() {
     let mut p = params();
     p.stock_to_leave = 0.5;

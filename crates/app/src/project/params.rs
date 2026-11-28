@@ -1838,6 +1838,8 @@ pub enum CycleChoiceDto {
     Spot,
     Drill,
     Peck,
+    /// #2443: full-retract pecking (G83). Older files never carry it.
+    Deep,
     Tap,
 
     Bore,

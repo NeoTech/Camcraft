@@ -852,11 +852,18 @@ starts empty and refuses to generate until it has holes.
 |---|---|---|
 | Heights | R plane (feed starts here) | model top + 0 |
 | Heights | Bottom Z | each hole's own floor; **Override the hole floors** to set one |
-| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by depth against diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder) |
+| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by the depth in material against its diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder), Ream, Fine bore, Deep peck (full retract) |
 | Passes | Peck depth | Auto (by the cycle) |
 | Passes | Dwell at bottom | 0 s |
 
 Tools: drill, tap or boring bar.
+
+Auto measures each hole's depth from its mouth, not from the R plane. The
+air between the R plane and the hole does not count. A drill takes the
+Drill cycle (`G81`) to one diameter of material, the chip-break Peck
+(`G73`) to four diameters, and the full-retract peck (`G83`) past that.
+Choose **Deep peck (full retract)** to get `G83` on any hole, for example
+in a gummy material that packs chips.
 
 A cross drill can use a reduced-fidelity model when its mesh error leaves
 a positive verification tolerance. CamCraft increases the required

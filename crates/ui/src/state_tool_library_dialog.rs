@@ -291,6 +291,50 @@ impl State {
         }
     }
 
+    /// #4340: copy the stored tool `name` (with its holder and component
+    /// stack) as one `DuplicateTool`, then open the copy in the editor. A
+    /// refusal (no free tool number) is said by name; nothing changes.
+    pub(crate) fn run_duplicate_tool(&mut self, name: &str) {
+        match camcraft_app::commands::DuplicateTool::new(&self.world, name) {
+            Ok(command) => {
+                let (copy, number) = (command.name().to_owned(), command.number());
+                self.history.execute(&self.world, command);
+                self.doc_version += 1;
+                self.status = format!("tool {copy} added (T{number}) - a copy of {name}");
+                self.open_tool_in_library(&copy);
+            }
+            Err(err) => self.refuse(super::ErrorScope::Tool, format!("tool not duplicated: {err}")),
+        }
+    }
+
+    /// #4340: the editor's draft has edits that are not applied: it was read
+    /// from the document at this `doc_version` and differs from what the
+    /// tool now reads as a draft. Duplicate copies the applied tool, so the
+    /// footer disables it while this holds (no edit is dropped silently).
+    /// A draft not yet read (or read before a command) is not dirty: the
+    /// next draw reads it again.
+    #[must_use]
+    pub(crate) fn library_draft_changed(&self) -> bool {
+        let Some(e) = self.tool_library.as_ref().and_then(|v| v.editor.as_ref()) else {
+            return false;
+        };
+        let name = &e.draft.name;
+        if e.synced != (name.clone(), self.doc_version) {
+            return false;
+        }
+        let Some(entity) = model::find_by_name(&self.world, name) else {
+            return false;
+        };
+        let Some(tool) = model::tool_of(&self.world, &entity) else {
+            return false;
+        };
+        let mut applied = ToolUi::from_tool(name, &tool, true);
+        applied.number = model::tool_number_of(&self.world, &entity).unwrap_or(0);
+        // ToolUi has no PartialEq (its rows hold app types); the Debug form
+        // lists every field, and an f64 prints exactly.
+        format!("{:?}", e.draft) != format!("{applied:?}")
+    }
+
     /// #3893: run `f` with the window's draft in `tool_ui` (and its sync
     /// key in `tool_synced`; #3895: its holder draft in `tool_profile_ui`;
     /// #3930: its body draft in `tool_body_ui`),
