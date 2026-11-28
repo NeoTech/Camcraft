@@ -901,6 +901,7 @@ version = "0.27.0"
 dependencies = [
  "camcraft-app",
  "camcraft-gpu",
+ "camcraft-ui-kit",
  "chrono",
  "eframe",
  "egui",
@@ -921,6 +922,16 @@ dependencies = [
  "wasm-bindgen-futures",
  "winit",
  "winresource",
+]
+
+[[package]]
+name = "camcraft-ui-kit"
+version = "0.27.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "serde_json",
+ "winit",
 ]
 
 [[package]]

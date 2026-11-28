@@ -34,7 +34,8 @@ pub(crate) mod gpu_select;
 // pub: the M6.1 D readability golden reads it beside the two built-in
 // columns, and `theme::visuals` + `theme_files::parse` + `painted`'s
 // glyph tint are the consumers (ratio, on-fill, the follow law, the gate).
-pub mod contrast;
+// #4394: the module lives in the UI kit crate; the old path stays.
+pub use camcraft_ui_kit::contrast;
 mod boundary;
 mod pick_button;
 mod gcode_highlight;

@@ -2793,6 +2793,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             width,
             angle_deg,
             minimum_cone_radius,
+            tolerance,
             feed,
             plunge_feed,
             climb,
@@ -2884,7 +2885,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut path = if region.is_empty() {
                         Toolpath::new(Vec::new())
                     } else {
-                        machining2d::chamfer(&region, &cp)?
+                        machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?
                     };
                     if !runs.is_empty() {
                         let cut = |facets: &[Triangle],
@@ -2918,7 +2919,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         m_gen,
                         frame.as_ref(),
                     )?;
-                    let path = machining2d::chamfer(&region, &cp)?;
+                    let path = machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?;
                     (region, path)
                 }
             }

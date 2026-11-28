@@ -47,9 +47,9 @@ pub(super) fn rows(ui: &mut Ui, u: Unit, plan: &mut ThreadInfeed) {
     }
     prop_row(ui, "Finish allowance", |ui| num(ui, u, &mut plan.finish_allowance));
     hint(ui, "radial stock the finishing pass takes at the root; 0 lets the last roughing pass reach the root");
-    let h = ui.spacing().interact_size.y;
+    // #1122: through the form seam, as the thread milling page's row.
     prop_row(ui, "Spring passes", |ui| {
-        ui.add_sized([CTRL_W, h], DragValue::new(&mut plan.spring_passes).range(0..=camcraft_app::turning::infeed::MAX_SPRING_PASSES));
+        int_range_row(ui, &mut plan.spring_passes, 0..=camcraft_app::turning::infeed::MAX_SPRING_PASSES);
     });
     hint(ui, "extra passes at full depth after the finish - tooling makers advise 0 unless the thread needs them");
     check_row(ui, "Repeat each depth", &mut plan.repeat_each_depth);

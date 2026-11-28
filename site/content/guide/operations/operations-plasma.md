@@ -46,6 +46,11 @@ No catalog case yet.
 
 {{ <icon name="op-plasma-profile" /> }} ![Top view of torch travel from a pierce point along the lead and outer plate profile.](../../../operation-paths.svg#PlasmaProfile)
 
+Plasma Profile takes a start point and an exit point. The pierce is at
+the lead-in that lands on the start point. The lead-out and the torch off
+are at the exit point. A pick that a plasma law cannot hold is refused by
+name.
+
 ### Stored torch recipes
 
 A plasma torch can store cut-data recipes by material and exact plate

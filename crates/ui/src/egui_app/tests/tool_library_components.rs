@@ -329,10 +329,11 @@ fn a_newer_library_copy_syncs_into_the_document_and_its_tools() {
 }
 
 /// A built-in holder copies as a user holder (one undo step), opens in
-/// the editor with its gauge length, and a gauge edit lands as one undo
-/// step that undo takes back.
+/// the holder form (#4338) with its gauge length, and a gauge edit lands
+/// as one undo step that undo takes back.
 #[test]
 fn a_built_in_holder_copies_as_a_user_holder_and_its_gauge_is_edited() {
+    use crate::egui_app::tool_library_dialog::{frame, holder_form};
     let dir = lib_dir("holder");
     let mut h = shell(&dir);
     h.get_by_role_and_label(Role::Button, "Tools").click();
@@ -348,12 +349,12 @@ fn a_built_in_holder_copies_as_a_user_holder_and_its_gauge_is_edited() {
     };
     assert_eq!(done(&h), before + 1, "the copy is one undo step");
     let Some(g0) = gauge(&h) else { panic!("the document holds the user holder {id}") };
-    assert!(shows(&h, component_edit::GAUGE), "the editor opens on the copy with its gauge length");
-    if let Some(d) = h.state_mut().state.tool_library.as_mut().and_then(|v| v.component_edit.as_mut()) {
-        d.gauge = Some(g0 + 10.0);
+    assert!(shows(&h, holder_form::GAUGE), "the form opens on the copy with its gauge length");
+    if let Some(s) = h.state_mut().state.tool_library.as_mut().and_then(|v| v.component_edit.as_mut()).and_then(|d| d.shape.as_mut()) {
+        s.gauge_len = g0 + 10.0;
     }
     h.run_steps(2);
-    click_window_button(&mut h, component_edit::APPLY);
+    click_window_button(&mut h, frame::APPLY);
     assert_eq!(done(&h), before + 2, "the gauge edit is one undo step");
     assert!(gauge(&h).is_some_and(|g| (g - g0 - 10.0).abs() < 1e-9), "the holder's port moves to the new gauge length");
     click_window_button(&mut h, component_edit::BACK);

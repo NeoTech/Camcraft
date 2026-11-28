@@ -6,7 +6,8 @@ use flecs_ecs::prelude::World;
 
 use crate::commands::{Command, CommandError};
 use crate::model;
-use crate::schema::OperationMeta;
+use crate::pattern_folder::{folder_of_member, gather};
+use crate::schema::{OperationMeta, PatternDef};
 use crate::setup;
 
 /// Change the user-facing label while retaining the entity's stable key.
@@ -20,16 +21,17 @@ impl RenameOperation {
     pub fn new(world: &World, key: &str, label: &str) -> Result<Self, CommandError> {
         let entity = model::find_by_name(world, key)
             .ok_or_else(|| CommandError::NotFound(key.to_owned()))?;
-        if !model::is_operation(world, &entity) {
+        // #3012: a pattern folder takes a label like an operation.
+        if !model::is_operation(world, &entity) && !crate::pattern_folder::is_pattern(world, &entity) {
             return Err(CommandError::Invalid(format!("'{key}' is not an operation")));
         }
         let label = label.trim();
         if label.is_empty() || label.len() > 120 || label.chars().any(char::is_control) {
             return Err(CommandError::Invalid("operation name must be 1-120 printable characters".into()));
         }
-        // Labels are unique, and cannot shadow another operation's stable
-        // key: scripts and commands may still address that key.
-        for (other, e) in setup::operation_order(world) {
+        // Labels are unique, and cannot shadow another operation's (or
+        // folder's) stable key: scripts and commands may still address it.
+        for (other, e) in setup::operation_order(world).into_iter().chain(crate::pattern_folder::folder_rows(world)) {
             if other != key && (other == label || model::operation_label(world, &other, &e) == label) {
                 return Err(CommandError::NameConflict(label.to_owned()));
             }
@@ -61,6 +63,8 @@ impl Command for RenameOperation {
 /// Place one operation before or after another in the same setup.
 pub struct ReorderOperation {
     changes: Vec<(String, OperationMeta, OperationMeta)>,
+    /// #3012: a member moved inside its folder changes the folder order.
+    folder: Option<(String, PatternDef, PatternDef)>,
 }
 
 impl ReorderOperation {
@@ -84,16 +88,25 @@ impl ReorderOperation {
             .filter(|(_, e)| effective_setup(world, e) == source_setup)
             .map(|(name, _)| name)
             .collect();
-        let mut reordered = original.clone();
-        let Some(from) = reordered.iter().position(|n| n == key) else {
-            return Err(CommandError::NotFound(key.to_owned()));
+        // #3012: a folder's members stay directly after it, so a member
+        // moves only inside its folder, and a drop lands outside a folder.
+        let folder = folder_move(world, key, target, after)?;
+        let reordered = match &folder {
+            Some((name, _, next)) => gather(world, &original, Some((name, &next.members))),
+            None => {
+                let mut reordered = original.clone();
+                let Some(from) = reordered.iter().position(|n| n == key) else {
+                    return Err(CommandError::NotFound(key.to_owned()));
+                };
+                reordered.remove(from);
+                let Some(to) = reordered.iter().position(|n| n == target) else {
+                    return Err(CommandError::Invalid("drop onto another operation".into()));
+                };
+                reordered.insert(to + usize::from(after), key.to_owned());
+                gather(world, &reordered, None)
+            }
         };
-        reordered.remove(from);
-        let Some(to) = reordered.iter().position(|n| n == target) else {
-            return Err(CommandError::Invalid("drop onto another operation".into()));
-        };
-        reordered.insert(to + usize::from(after), key.to_owned());
-        if reordered == original {
+        if reordered == original && folder.is_none() {
             return Err(CommandError::Invalid("operation is already in that position".into()));
         }
         let mut changes = Vec::with_capacity(reordered.len());
@@ -108,7 +121,42 @@ impl ReorderOperation {
             next.order = Some(order);
             changes.push((name, before, next));
         }
-        Ok(Self { changes })
+        Ok(Self { changes, folder })
+    }
+}
+
+/// The folder change when `key` moves inside its own folder; a refusal
+/// when the move would take a member out or drop a row into a folder.
+fn folder_move(
+    world: &World,
+    key: &str,
+    target: &str,
+    after: bool,
+) -> Result<Option<(String, PatternDef, PatternDef)>, CommandError> {
+    let source = folder_of_member(world, key);
+    let destination = folder_of_member(world, target);
+    match (source, destination) {
+        (Some((a, def)), Some((b, _))) if a == b => {
+            let mut members = def.members.clone();
+            members.retain(|m| m != key);
+            let to = members
+                .iter()
+                .position(|m| m == target)
+                .ok_or_else(|| CommandError::Invalid("drop onto another operation".into()))?;
+            members.insert(to + usize::from(after), key.to_owned());
+            if members == def.members {
+                return Err(CommandError::Invalid("operation is already in that position".into()));
+            }
+            let next = PatternDef { members, ..def.clone() };
+            Ok(Some((a, def, next)))
+        }
+        (Some((a, _)), _) => Err(CommandError::Invalid(format!(
+            "'{key}' is in pattern folder '{a}' - move it inside the folder, or take it out of the folder first"
+        ))),
+        (None, Some((b, _))) => Err(CommandError::Invalid(format!(
+            "'{target}' is in pattern folder '{b}' - drop before or after the folder"
+        ))),
+        (None, None) => Ok(None),
     }
 }
 
@@ -119,6 +167,11 @@ impl Command for ReorderOperation {
                 e.entity_view(world).set(next.clone());
             }
         }
+        if let Some((name, _, next)) = &self.folder
+            && let Some(e) = model::find_by_name(world, name)
+        {
+            e.entity_view(world).set(next.clone());
+        }
     }
 
     fn invert(&self, world: &World) {
@@ -126,6 +179,11 @@ impl Command for ReorderOperation {
             if let Some(e) = model::find_by_name(world, name) {
                 e.entity_view(world).set(prev.clone());
             }
+        }
+        if let Some((name, prev, _)) = &self.folder
+            && let Some(e) = model::find_by_name(world, name)
+        {
+            e.entity_view(world).set(prev.clone());
         }
     }
 }
