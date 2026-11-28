@@ -1,7 +1,7 @@
 //! #4339: standalone tools converted to component stacks in one step.
 //! A document of standalone end mills: two on a BT30 ER20 holder with
 //! 10 mm of shank in the holder, one with a longer gauge length than the
-//! built-in holder, one with the old default stick-out (no shank in the
+//! built-in holder (a narrower stack outline: no match), one with the old default stick-out (no shank in the
 //! holder), one stuck out 5 mm past its shank's end, one with no holder,
 //! and one with a 6.35 mm shank that no whole-millimetre collet takes. Pinned: the preview names each verdict
 //! (same, different with its differences, no match with its reason); the
@@ -129,9 +129,10 @@ fn the_preview_names_each_verdict() {
     let six = rows.iter().find(|r| r.tool == SIX).expect("six");
     assert_eq!(six.verdict, Verdict::Same, "{six:?}");
     assert_eq!(six.names, vec!["BT30 ER20".to_owned(), "ER20 collet 8 mm".to_owned(), SIX.to_owned()]);
-    let Verdict::Different(diffs) = verdict(&w, LONG) else { panic!("Long is different") };
-    assert_eq!(diffs.len(), 1, "{diffs:?}");
-    assert!(diffs[0].starts_with("gauge length"), "{diffs:?}");
+    // A longer gauge length than the built-in holder: the stack's holder
+    // is shorter, so its outline is narrower where the old flange was.
+    let Verdict::NoMatch(why) = verdict(&w, LONG) else { panic!("Long has a narrower holder outline") };
+    assert!(why.contains("narrower than the library holder"), "{why}");
     // The old default stick-out holds no shank: one shank diameter more, the same gauge.
     let Verdict::Different(diffs) = verdict(&w, LEGACY) else { panic!("Legacy is different") };
     let six = cat("EM-0600-4FL");
@@ -176,10 +177,10 @@ fn the_same_rows_convert_in_one_undo_step_and_undo_restores_every_tool() {
 fn a_different_row_converts_only_when_it_is_named() {
     let (w, mut h) = shop();
     h.execute(&w, ConvertToComponents::same_rows(&w).expect("same rows"));
-    assert!(stack_of(&w, LONG).is_none() && stack_of(&w, LEGACY).is_none(), "the default selection leaves the different rows");
-    let cmd = ConvertToComponents::new(&w, &[LONG.to_owned(), LEGACY.to_owned()]).expect("named");
+    assert!(stack_of(&w, DEEP).is_none() && stack_of(&w, LEGACY).is_none(), "the default selection leaves the different rows");
+    let cmd = ConvertToComponents::new(&w, &[DEEP.to_owned(), LEGACY.to_owned()]).expect("named");
     h.execute(&w, cmd);
-    assert!(stack_of(&w, LONG).is_some() && stack_of(&w, LEGACY).is_some(), "named different rows convert");
+    assert!(stack_of(&w, DEEP).is_some() && stack_of(&w, LEGACY).is_some(), "named different rows convert");
     let e = model::find_by_name(&w, LEGACY).expect("tool");
     let six = cat("EM-0600-4FL");
     let shank = model::tool_of(&w, &e).expect("tool").shank_len;

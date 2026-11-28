@@ -68,6 +68,9 @@ fn the_converted_holder_outline_is_the_library_outline_or_a_listed_wider_differe
         let (w, mut h) = shop();
         let (old, now) = (body(&w, name), tool(&w, name));
         let row = plan(&w, &[name.to_owned()]).expect("plan").remove(0);
+        if name == LONG {
+            assert!(matches!(row.verdict, Verdict::NoMatch(_)), "Long: the shorter built-in holder is narrower: {:?}", row.verdict);
+        }
         let diffs = match &row.verdict {
             Verdict::Same => Vec::new(),
             Verdict::Different(d) => d.clone(),

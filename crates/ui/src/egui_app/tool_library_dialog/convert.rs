@@ -26,6 +26,8 @@ pub(crate) const SAME: &str = "Select the same rows";
 pub(crate) const EVERY: &str = "Select every row that converts";
 pub(crate) const REFRESH: &str = "Refresh";
 pub(crate) const CLOSE: &str = "Close preview";
+/// What a converted tool leaves behind: the library holder link.
+pub(crate) const LINK_NOTE: &str = "A converted tool no longer uses its library holder: it leaves the holder's \"used by\" list, and a later change of the built-in holder reaches it only when you sync the holder component from the library.";
 /// The tick of row `tool` (its AccessKit name).
 #[must_use]
 pub(crate) fn tick_label(tool: &str) -> String {
@@ -49,6 +51,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     };
     ui.strong(HEADING);
     ui.weak("Each standalone tool of the document with the component stack that gives it. The ticked rows convert in one undo step; a tool record never changes without your tick.");
+    ui.weak(LINK_NOTE);
     if let Some(e) = &view.error {
         ui.weak(format!("No preview: {e}"));
     }

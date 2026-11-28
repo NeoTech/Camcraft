@@ -3,7 +3,8 @@
 //! stack gives the same tool), one with the old default stick-out (its
 //! stack needs a longer shank: different) and an 8 mm one with no holder
 //! (no match). Pinned: the header button opens the preview with one row
-//! for each tool and its result; only the "same" row starts ticked and the
+//! for each tool and its result and says that a converted tool leaves its
+//! library holder; only the "same" row starts ticked and the
 //! "no match" row cannot be ticked; "Convert selected" is one undo step
 //! that gives the ticked tool its stack; the preview follows the document;
 //! "Select every row that converts" ticks the different row; undo takes
@@ -73,6 +74,7 @@ fn the_preview_converts_the_ticked_rows_in_one_undo_step() {
     assert!(shows(&h, list_header::NEW), "the tool list first");
     click_window_button(&mut h, convert::OPEN);
     assert!(shows(&h, convert::HEADING), "the preview stands in for the list");
+    assert!(shows(&h, convert::LINK_NOTE), "the preview says that a converted tool leaves its library holder");
     assert!(shows(&h, "BT30 ER20 > ER20 collet 8 mm > Six"), "the proposed stack of Six");
     assert!(shows(&h, "same"), "Six derives the same tool");
     assert!(shows(&h, "no match: no holder: the tool names no library holder"), "Bare names its reason");
