@@ -21,6 +21,18 @@ The lift comes after the operation notes and immediately before the
   then the lift. This is the same order as the existing Go home and
   setup-change paths. The upright return after a tilt (#3466) no longer
   writes its own lift, because Z is already up.
+- A setup-change stop (`M0` / `M1`) after a tilted section: the stop
+  lifts Z before it halts, and sets `zUp`. The upright return of the
+  next section then writes no second lift. Before this fix, it lifted
+  again after the stop. Z is already at the reference height, and no
+  move comes between the stop and the return, so the second lift moved
+  nothing. The operator can jog during the stop, but that is true of
+  each stop of the program, and the post does not lift again after the
+  other stops either.
+- Main's #4348 (TCPM cancel before the program-end return) also reads
+  `tcpmLeft`. The two changes share the one flag: the section end sets
+  it, the next preamble or `onClose` reads it. The take-over merge keeps
+  one declaration.
 - Fanuc and Doosan are fixed, not only Mazak. A FANUC-family control can
   move Z on a `G49` block with no axis word (the tool length offset
   cancel vector). The "Done means" of the issue asks to fix the two
