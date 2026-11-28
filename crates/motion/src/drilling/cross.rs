@@ -231,12 +231,16 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
                 h.origin,
             ));
         }
-        let depth = p.r_d - bottom;
+        // #2443: the depth in material - from the raw stock's surface over
+        // the mouth (`stock_r` along the column), never past the R standoff:
+        // the air outside the stock is not depth, the stock over the part is.
+        let depth = start_d(h, p.stock_r).clamp(0.0, p.r_d) - bottom;
         let kind = match p.cycle {
             CycleChoice::Auto => auto_kind(p.tool.kind, depth, d),
             CycleChoice::Spot => CycleKind::Spot,
             CycleChoice::Drill => CycleKind::Drill,
             CycleChoice::Peck => CycleKind::Peck,
+            CycleChoice::Deep => CycleKind::Deep,
             _ => unreachable!("rejected by the v1 cycle door above"),
         };
         if matches!(kind, CycleKind::Tap | CycleKind::FloatingTap | CycleKind::Bore | CycleKind::BackBore | CycleKind::Ream | CycleKind::FineBore) {
@@ -254,7 +258,9 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
             CycleKind::Peck | CycleKind::Deep => {
                 let auto = if kind == CycleKind::Peck { 3.0 * d } else { d };
                 let step = if p.peck > 0.0 { p.peck } else { auto }.max(0.25 * d);
-                if !(step.is_finite() && step > 0.0) || depth / step > 4096.0 {
+                // The pecks run from the R standoff: the budget reads the full travel.
+                let travel = p.r_d - bottom;
+                if !(step.is_finite() && step > 0.0 && travel.is_finite()) || travel / step > 4096.0 {
                     return Err(GenError::Invalid("peck plan unusable".into()));
                 }
                 let mut t = (p.r_d - step).max(bottom);
@@ -269,7 +275,11 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
                         p.r_d
                     };
                     rapid(&mut b, along(h, up));
-                    t = (t - step).max(bottom);
+                    let next = (t - step).max(bottom);
+                    if next >= t {
+                        return Err(GenError::Invalid("peck plan unusable: a peck makes no progress".into()));
+                    }
+                    t = next;
                 }
                 rapid(&mut b, along(h, p.r_d));
             }

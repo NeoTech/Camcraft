@@ -87,7 +87,10 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
             ));
         }
         let kind = match p.cycle {
-            CycleChoice::Auto => auto_kind(p.tool.kind, p.r_z - bottom, d),
+            // #2443: the depth in material - from the higher of the mouth
+            // and the material over it (`material_top`), never above the
+            // R plane: the air between them is not depth, uncut stock is.
+            CycleChoice::Auto => auto_kind(p.tool.kind, material_top(p, i, h) - bottom, d),
             _ => resolve_choice(p),
         };
         refuse_solid_cycle(p.tool, kind, mouth)?;
@@ -257,12 +260,20 @@ pub(super) fn refuse_solid_cycle(tool: &crate::tools::Tool, kind: CycleKind, at:
     ))
 }
 
+/// The top of the material over hole `i` (#2443): the higher of its mouth
+/// and the caller's material top there, clamped to the R plane.
+fn material_top(p: &CycleParams, i: usize, h: &Hole) -> f64 {
+    let over = p.material_top.get(i).copied().filter(|z| z.is_finite());
+    over.map_or(h.entry_z, |z| z.max(h.entry_z)).min(p.r_z)
+}
+
 pub(super) fn resolve_choice(p: &CycleParams) -> CycleKind {
     match p.cycle {
         CycleChoice::Auto => CycleKind::Drill, // never taken: drill() routes Auto through auto_kind
         CycleChoice::Spot => CycleKind::Spot,
         CycleChoice::Drill => CycleKind::Drill,
         CycleChoice::Peck => CycleKind::Peck,
+        CycleChoice::Deep => CycleKind::Deep,
         CycleChoice::Tap => CycleKind::Tap,
         CycleChoice::FloatingTap => CycleKind::FloatingTap,
         CycleChoice::Bore => CycleKind::Bore,

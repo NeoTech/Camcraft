@@ -14,6 +14,12 @@
 //! (PriorPlan), app::posting (the gate).
 //! Lane shape (M4.4): all tests here run in seconds.
 
+mod common;
+// #2443: Auto reads the depth in material over the stock the program
+// ahead leaves.
+#[path = "drill_prior/auto_material.rs"]
+mod auto_material;
+
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::MoveKind;

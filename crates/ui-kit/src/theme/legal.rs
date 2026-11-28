@@ -18,7 +18,7 @@ const fn geom_legal(t: &Tokens) -> bool {
         ribbon_ink: _, handle_shade: _, handle_text: _, pick_rim: _,
         cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
         overlay_panel: _, overlay_edge: _, overlay_text: _, overlay_track: _, drop_veil: _, empty_hint: _, pick_halo: _, plate_hole: _, plate_dowel: _, gcode_line: _,
-        tool_ground: _, tool_axis: _, tool_grid: _, tool_flute: _, tool_shank: _, tool_body: _, tool_edge: _, tool_holder: _, tool_note: _, tool_dim: _, thumb_flute: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
+        tool_ground: _, tool_axis: _, tool_grid: _, tool_flute: _, tool_shank: _, tool_body: _, tool_edge: _, tool_holder: _, tool_note: _, tool_dim: _, thumb_flute: _, tool_model_flute: _, tool_model_shank: _, tool_model_holder: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
         close_hover: _, close_ink: _,
         radius_widget, radius_window, radius_menu,
         item_spacing_x, item_spacing_y, button_padding_x, button_padding_y,

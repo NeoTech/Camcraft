@@ -154,6 +154,7 @@ function tapPitchHolds(feed) {
 }
 var seqNum = 0;
 var seqNextForce = false;
+var usedBlockNumbers = {};
 var secStarted = 0;
 var safeRetractRefused = false;
 function optBool(k, def) {
@@ -166,8 +167,16 @@ function optStr(k, def) {
   return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "string" ? postOptions[k] : def;
 }
 function nextSeq() {
-  if (seqNum <= 0) seqNum = optInt("sequenceNumberStart", 10);
-  else seqNum += optInt("sequenceNumberIncrement", 10);
+  var increment = optInt("sequenceNumberIncrement", 10);
+  if (increment <= 0) throw new Error("sequence number increment must be positive");
+  var next = seqNum;
+  do {
+    var previous = next;
+    next = next <= 0 ? optInt("sequenceNumberStart", 10) : next + increment;
+    if (!isFinite(next) || next <= previous) throw new Error("cannot advance sequence number safely");
+  } while (usedBlockNumbers[next]);
+  seqNum = next;
+  usedBlockNumbers[seqNum] = true;
   return "N" + seqNum;
 }
 function isCommentOnly(a) {
@@ -233,11 +242,16 @@ function retractHome(xyToo) {
       return;
     }
     block(["G53", "G00", w("Z", machine.safeRetractZ)]);
+    zUp = true;
     return;
   }
   block(["G91", "G28", "Z0"]);
   if (xyToo) block(["G28", "X0", "Y0"]);
+  zUp = true;
 }
+// #4341: Z stands at its safe retract height (a Go home or a setup-change
+// lift); the next preamble opens the section and clears it.
+var zUp = false;
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
 function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
@@ -588,6 +602,13 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
+  // #4341: G49 moves Z to remove the length offset (MAZATROL MATRIX
+  // EIA/ISO programming manual, tool length offset cancel), and T M6
+  // follows. A later section first lifts Z by the safeRetract method,
+  // unless a Go home or a setup change already did. The G90 below ends
+  // the G28 retract's G91.
+  if (secStarted > 0 && !zUp) retractHome(false);
+  zUp = false;
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
@@ -1010,10 +1031,11 @@ function travelAxis(p) {  // where the target and the nominal trip differ most
   return d[0] >= d[1] && d[0] >= d[2] ? 0 : (d[1] >= d[2] ? 1 : 2);
 }
 function alarmUnless(cond, n, text) {  // alarm #3000=n unless cond holds
-  probeLabel += 1;
+  do { probeLabel += 1; } while (usedBlockNumbers[probeLabel]);
+  usedBlockNumbers[probeLabel] = true;
   block(["IF[" + cond + "]GOTO" + probeLabel]);
   block(["#3000=" + n + "(" + text + ")"]);
-  block(["N" + probeLabel]);
+  rawBlock(["N" + probeLabel]);
 }
 function minusU(expr, v) {  // expr - v, the sign folded into the operator
   var s = fn(v);  // macro-B text: a constant is not scaled by DPI (#1836)

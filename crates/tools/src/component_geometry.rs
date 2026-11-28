@@ -171,3 +171,7 @@ impl ComponentGeometry {
         self.cip.as_ref()
     }
 }
+
+#[path = "component_geometry_regauge.rs"]
+mod regauge;
+pub use regauge::RegaugeError;

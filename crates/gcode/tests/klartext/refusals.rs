@@ -1,4 +1,4 @@
-//! Refusals: each Klartext function outside the first slice is refused by name, with its line and block number; the program frame is checked.
+//! Refusals: each Klartext function that this reader does not read is refused by name, with its line and block number; the program frame is checked.
 
 use camcraft_gcode::{GcodeError, KlartextOptions};
 
@@ -9,8 +9,8 @@ fn klartext_functions_outside_the_slice_are_refused_by_name_and_block() {
     let cases: [(&str, &str); 17] = [
         ("RND R5", "RND"),
         ("CHF 2", "CHF"),
-        ("LP PR+10 PA+0 R0 F100", "LP"),
-        ("CP IPA+90 DR+", "CP"),
+        ("CTP X+10 Y+0", "CTP"),
+        ("LP PR+10 PA+0 RL F100", "RL"),
         ("L X+5 RL F100", "RL"),
         ("L X+5 RR F100", "RR"),
         ("LBL 1", "LBL"),

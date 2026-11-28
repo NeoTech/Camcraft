@@ -8,7 +8,7 @@ use camcraft_app::drilling::CycleChoice;
 /// A fine bore as the combo picks it: no shift stated.
 const FINE_UNSET: CycleChoice = CycleChoice::FineBore { shift_x_um: 0, shift_y_um: 0 };
 
-const ALL: [CycleChoice; 10] = [
+const ALL: [CycleChoice; 11] = [
     CycleChoice::Auto,
     CycleChoice::Spot,
     CycleChoice::Drill,
@@ -19,6 +19,7 @@ const ALL: [CycleChoice; 10] = [
     CycleChoice::FloatingTap,
     CycleChoice::Ream,
     FINE_UNSET,
+    CycleChoice::Deep,
 ];
 
 #[test]
@@ -49,4 +50,13 @@ fn the_fine_bore_reads_in_plain_english_and_its_pick_states_no_shift() {
     assert_eq!(cycle_index(&FINE_UNSET), i, "the label is the cycle's, whatever its shift");
     // No default shift: the pick is zero, which the command refuses by name.
     assert_eq!(cycle_from_index(i), FINE_UNSET);
+}
+
+/// #2443: full-retract pecking is a cycle the user can pick; its label
+/// says what it does.
+#[test]
+fn the_deep_peck_reads_in_plain_english() {
+    let i = cycle_index(&CycleChoice::Deep);
+    assert_eq!(cycle_names()[i], "Deep peck (full retract)");
+    assert_eq!(cycle_from_index(i), CycleChoice::Deep);
 }

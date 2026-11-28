@@ -323,6 +323,8 @@ pub use head::{progress, settle_frac, Progress};
 
 #[path = "stock_play_cut.rs"]
 mod cut;
+#[path = "stock_play_nc.rs"] // #2218: a seed over an external NC program's plan
+mod nc;
 
 #[path = "stock_play_precalc.rs"]
 mod precalc;

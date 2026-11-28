@@ -62,6 +62,8 @@ mod machine_tools;
 mod order_tools;
 // #3012: pattern folders (linear and grid copies at the post).
 mod pattern_tools;
+// #3195: Drill, Bore and Thread holes from numbers (line, grid, bolt circle).
+mod hole_pattern_tools;
 mod pick;
 // #979: the box pick, the viewport's Ctrl+drag box select headless.
 mod box_pick;
@@ -78,6 +80,7 @@ mod setup_tools;
 // #3915: SolidCraft face names on features and picks.
 mod source_names;
 mod tool_delete;
+mod tool_duplicate;
 mod tool_edit;
 mod tools;
 mod wcs_circle;

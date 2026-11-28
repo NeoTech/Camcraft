@@ -115,8 +115,10 @@ fn layout_donate_top_right() {
             rect.left() > width * 0.75,
             "Donate stays in the right quarter at {width}"
         );
+        // The ribbon's top row, under the menu bar (#4484).
+        let bar = panes::menu_bar_h(&theme::current());
         assert!(
-            rect.top() >= 0.0 && rect.bottom() <= 40.0,
+            rect.top() >= bar && rect.bottom() <= 40.0 + bar,
             "Donate stays in the top row at {width}: {rect:?}"
         );
         assert!(

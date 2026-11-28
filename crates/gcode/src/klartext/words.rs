@@ -1,4 +1,4 @@
-//! Word decoding for Klartext path blocks (`L`, `CC`, `C`, `CR`, `CT`): coordinates, radius compensation, feed, direction, radius and M functions.
+//! Word decoding for Klartext path blocks (`L`, `CC`, `C`, `CR`, `CT`, polar `LP` / `CP`): coordinates, polar coordinates, radius compensation, feed, direction, radius and M functions.
 //! Provenance: HEIDENHAIN iTNC 530 conversational user's manual 533 190-22 (path function words), as summarized in docs/research/heidenhain/differences.md, and the blocks of assets/posts/heidenhain-klartext.cps.
 
 use std::collections::HashMap;
@@ -40,6 +40,12 @@ pub struct Words {
     pub radius: Option<f64>,
     pub m: Vec<u32>,
     pub mb: Option<Mb>,
+    /// Polar radius `PR` (absolute) and `IPR` (incremental); only in polar mode.
+    pub pr: Option<f64>,
+    pub ipr: Option<f64>,
+    /// Polar angle `PA` (absolute) and `IPA` (incremental), in degrees; only in polar mode.
+    pub pa: Option<f64>,
+    pub ipa: Option<f64>,
 }
 
 impl Words {
@@ -68,8 +74,18 @@ pub fn value(b: &Block, what: &str, tok: &str, q: &QTable) -> Result<f64, GcodeE
 
 const AXES: [&str; 3] = ["X", "Y", "Z"];
 
-/// Decode the words after the block keyword.
+/// Decode the words after the block keyword of a Cartesian block.
 pub fn decode(b: &Block, toks: &[String], q: &QTable) -> Result<Words, GcodeError> {
+    decode_mode(b, toks, q, false)
+}
+
+/// Decode the words of a polar block (`LP`, `CP`): `PR`/`IPR` and `PA`/`IPA`
+/// are read, the working-plane axes `X`/`Y` are refused.
+pub fn decode_polar(b: &Block, toks: &[String], q: &QTable) -> Result<Words, GcodeError> {
+    decode_mode(b, toks, q, true)
+}
+
+fn decode_mode(b: &Block, toks: &[String], q: &QTable, polar: bool) -> Result<Words, GcodeError> {
     let mut w = Words::default();
     let mut i = 0;
     while i < toks.len() {
@@ -87,9 +103,51 @@ pub fn decode(b: &Block, toks: &[String], q: &QTable) -> Result<Words, GcodeErro
             set_mb(b, &mut w, arg, q)?;
             continue;
         }
+        if polar && polar_one(b, &mut w, t, q)? {
+            continue;
+        }
         decode_one(b, &mut w, t, q)?;
     }
     Ok(w)
+}
+
+/// A polar word of an `LP` / `CP` block. Returns false for a word that is not polar.
+fn polar_one(b: &Block, w: &mut Words, t: &str, q: &QTable) -> Result<bool, GcodeError> {
+    for (name, slot_inc) in [("IPR", true), ("IPA", true), ("PR", false), ("PA", false)] {
+        let Some(rest) = t.strip_prefix(name) else {
+            continue;
+        };
+        let v = value(b, name, rest, q)?;
+        let radius = name.ends_with('R');
+        let pair = match (radius, slot_inc) {
+            (true, true) => w.pr,
+            (true, false) => w.ipr,
+            (false, true) => w.pa,
+            (false, false) => w.ipa,
+        };
+        if pair.is_some() {
+            return Err(b.syntax(&format!(
+                "{name} and its absolute/incremental pair in one block"
+            )));
+        }
+        let slot = match (radius, slot_inc) {
+            (true, true) => &mut w.ipr,
+            (true, false) => &mut w.pr,
+            (false, true) => &mut w.ipa,
+            (false, false) => &mut w.pa,
+        };
+        set(b, slot, v, name)?;
+        return Ok(true);
+    }
+    let axis = t.strip_prefix('I').unwrap_or(t);
+    if let Some(rest) = axis.strip_prefix(['X', 'Y'])
+        && (literal(rest).is_some() || q_ref(rest).is_some())
+    {
+        return Err(b.syntax(&format!(
+            "{t} in a polar block; LP and CP take PR/PA, and only Z of the Cartesian axes"
+        )));
+    }
+    Ok(false)
 }
 
 fn set_mb(b: &Block, w: &mut Words, arg: &str, q: &QTable) -> Result<(), GcodeError> {
@@ -109,7 +167,7 @@ fn decode_one(b: &Block, w: &mut Words, t: &str, q: &QTable) -> Result<(), Gcode
         "R0" => return once(b, &mut w.r0, t),
         "RL" | "RR" => return Err(b.unsupported(
             t,
-            "radius compensation RL/RR is not read; this reader needs the tool-centre path (R0)",
+            "radius compensation RL/RR is not read: the compensated path needs the tool radius of the tool table and the control's corner rules; this reader reads the tool-centre path (R0)",
         )),
         "FMAX" => return set(b, &mut w.feed, Feed::Max, "F"),
         "FAUTO" | "FU" | "FZ" | "FT" => {
