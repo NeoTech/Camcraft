@@ -41,7 +41,6 @@ pub(super) fn open_pass(base: &Region, ctx: &AreaCtx, cp: &ContourParams) -> Res
     let c = &ctx.controls;
     let (run, d) = open_run(base, ctx, cp.stock_to_leave)?;
     if let Some(q) = cp.picks.start.first().map(|k| k.xy) {
-        cp.validate()?;
         return Err(GenError::Invalid(format!(
             "start point ({:.3}, {:.3}): the offset or extended open boundary has no proved source endpoint mapping; \
              clear the start point",
