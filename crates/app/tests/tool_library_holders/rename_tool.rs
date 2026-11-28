@@ -53,7 +53,7 @@ fn rename_moves_the_tool_and_its_operation_in_one_undo_step() {
 
     let cmd = RenameTool::new(&w, A, &format!("  {NEW} ")).expect("rename");
     assert_eq!((cmd.from(), cmd.to()), (A, NEW), "the new name is trimmed");
-    assert_eq!(cmd.operations(), [face_a.clone()]);
+    assert_eq!(cmd.operations(), std::slice::from_ref(&face_a));
     h.execute(&w, cmd);
     assert_eq!(h.done_len(), done + 1, "one undo step");
     assert!(model::find_by_name(&w, A).is_none(), "the old name is free");

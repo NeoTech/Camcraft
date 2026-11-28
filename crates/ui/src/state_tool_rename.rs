@@ -21,13 +21,13 @@ pub struct RenameDraft {
     pub text: String,
 }
 
-/// The entities of the tools that the views show before a command runs.
-#[derive(Clone, Copy, Debug, Default)]
+/// The tools (entity and name) that the views show before a command runs.
+#[derive(Clone, Debug, Default)]
 pub(crate) struct ToolViews {
-    library: Option<Entity>,
-    target: Option<Entity>,
-    properties: Option<Entity>,
-    shape: Option<Entity>,
+    library: Option<(Entity, String)>,
+    target: Option<(Entity, String)>,
+    properties: Option<(Entity, String)>,
+    shape: Option<(Entity, String)>,
 }
 
 impl State {
@@ -102,6 +102,7 @@ impl State {
                 .then(|| model::find_by_name(&self.world, name))
                 .flatten()
                 .filter(|e| model::is_tool(&self.world, e))
+                .map(|e| (e, name.to_owned()))
         };
         let target = match &self.ui_target {
             UiTarget::Tool(name) => tool(name),
@@ -115,17 +116,21 @@ impl State {
         }
     }
 
-    /// Each view whose tool lost its name while its entity stayed a tool
-    /// follows the entity's new name. A deleted tool is not followed: its
-    /// view closes as before.
+    /// Each view that still shows a tool's old name follows the tool when
+    /// its entity stayed a tool under a new name. A view that moved to
+    /// another tool (Duplicate opens the copy) stays; a deleted tool is not
+    /// followed: its view closes as before.
     pub(crate) fn follow_renamed_tools(&mut self, before: ToolViews) {
-        let renamed = |e: Option<Entity>, old: Option<&str>| -> Option<String> {
-            let (e, old) = (e?, old?);
+        let renamed = |seen: Option<(Entity, String)>, shown: Option<&str>| -> Option<String> {
+            let (e, old) = seen?;
+            if shown != Some(old.as_str()) {
+                return None;
+            }
             let world = &self.world;
             if !world.is_alive(e) || !model::is_tool(world, &e) {
                 return None;
             }
-            model::name_of(world, &e).filter(|now| now != old)
+            model::name_of(world, &e).filter(|now| *now != old)
         };
         let target = match &self.ui_target {
             UiTarget::Tool(old) => Some(old.as_str()),

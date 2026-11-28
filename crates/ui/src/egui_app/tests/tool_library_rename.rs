@@ -48,6 +48,8 @@ fn the_name_row_is_a_text_field_and_typing_is_a_draft() {
     let field = library_window(&h).get_by_role_and_label(Role::TextInput, tool_tab::NAME);
     assert_eq!(field.accesskit_node().value().as_deref(), Some(name.as_str()), "the field shows the name");
     let done = h.state().state.history.done_len();
+    library_window(&h).get_by_role_and_label(Role::TextInput, tool_tab::NAME).click();
+    h.run_steps(2);
     library_window(&h).get_by_role_and_label(Role::TextInput, tool_tab::NAME).type_text("X");
     h.run_steps(2);
     let typed = h.state().state.library_name_text(&name);
