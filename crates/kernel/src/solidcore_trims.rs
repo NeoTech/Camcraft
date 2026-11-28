@@ -11,8 +11,8 @@
 //!
 //! Nothing is accepted unchecked (Prime Directive): an edge farther off its
 //! surface than the file's cap ([`EdgeGapCap`]: [`MAX_EDGE_GAP_MM`], or
-//! twice the tolerance the file states, at most 0.02 mm, #2976), an edge interval the kernel moved past
-//! the edge's tolerance, and a made pcurve whose lift onto the surface
+//! twice the tolerance the file states, at most 0.02 mm, #2976), a pcurve whose knot domain the kernel
+//! ended past the edge's tolerance from the edge's interval (#4542), and a made pcurve whose lift onto the surface
 //! misses its 3D edge by more than the edge's tolerance (never more than
 //! the cap) are each refused by name, and so is a tolerance or a
 //! lift sample that is not a finite number. The reader then refuses the
@@ -148,7 +148,7 @@ fn trims(k: &mut Kernel, face: &TrimFace<'_>, held_to: &Held<'_>) -> Result<Vec<
         let mut pcs = Vec::with_capacity(l.len());
         for u in l {
             let e = edge_of(u.edge)?;
-            let edge = out.edges.get(e).ok_or("an edge the kernel lost")?;
+            out.edges.get(e).ok_or("an edge the kernel lost")?;
             let ours = face.edges.get(u.edge as usize).ok_or("edge reference")?;
             let found = made_uses
                 .iter()
@@ -168,7 +168,7 @@ fn trims(k: &mut Kernel, face: &TrimFace<'_>, held_to: &Held<'_>) -> Result<Vec<
                     .unwrap_or(0.0)
                     .max(held)
             });
-            let pc = on_our_interval(pc, ours, edge.interval, reach)?;
+            let pc = on_our_interval(pc, ours, reach)?;
             // The lift is held to the edge's tolerance, but never looser
             // than the cap on an edge's gap: a loose file tolerance (or one
             // raised by the margin) does not pass a pcurve that misses.

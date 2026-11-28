@@ -15,21 +15,24 @@ use solidcore_record::brep::Curve2;
 /// included (one more than this).
 const LIFT_SAMPLES: usize = 32;
 
-/// A pcurve the kernel made on its edge's interval `theirs`, on ours. The
-/// kernel may end an edge at a parameter of its own (a knot its vertex lies
-/// at, the end of the part on the face): where each end it chose is within
-/// `reach` of ours on the edge's curve (that end's vertex tolerance, or the
-/// edge's tolerance as the kernel held it where larger), the pcurve is mapped
-/// onto our interval by the affine change of parameter (exact for a
-/// B-spline: its knots move). Farther is the kernel trimming the edge,
+/// A pcurve the kernel made, on our interval. The kernel may end an edge at
+/// a parameter of its own (a knot its vertex lies at, the end of the part on
+/// the face), and its pcurve's knot domain may differ by a rounding from the
+/// edge interval it reports (#4542: `[0, 0.5]` on an edge of `[0,
+/// 0.5000000000001025]`). So the pcurve's own domain is read from its knots,
+/// never from the kernel's edge interval: where each end of that domain is
+/// within `reach` of ours on the edge's curve (that end's vertex tolerance,
+/// or the edge's tolerance as the kernel held it where larger), the pcurve
+/// is mapped onto our interval by the affine change of parameter (exact for
+/// a B-spline: its knots move). Farther is the kernel trimming the edge,
 /// refused with how far.
 pub(super) fn on_our_interval(
     pc: Curve2,
     ours: &TrimEdge<'_>,
-    theirs: [f64; 2],
     reach: [f64; 2],
 ) -> Result<Curve2, String> {
     let [a, bb] = ours.interval;
+    let theirs = domain(&pc)?;
     let [c, d] = theirs;
     if a == c && bb == d {
         return Ok(pc);
@@ -46,7 +49,7 @@ pub(super) fn on_our_interval(
         || !above(d, c)
     {
         return Err(format!(
-            "the kernel moved an edge's interval from {:?} to {theirs:?}, its ends {shift:?} mm along its curve (tolerance {reach:?} mm)",
+            "the kernel's pcurve spans {theirs:?} of the edge's interval {:?}, its ends {shift:?} mm along its curve (tolerance {reach:?} mm)",
             ours.interval
         ));
     }
@@ -69,6 +72,34 @@ pub(super) fn on_our_interval(
             homogeneous,
         },
     })
+}
+
+/// The knot domain of pcurve `pc`: `[knots[p], knots[n]]` for degree `p`
+/// and `n` control points. A record whose knot count does not fit its
+/// points, or whose domain is not finite and increasing, is refused by name.
+fn domain(pc: &Curve2) -> Result<[f64; 2], String> {
+    let (knots, n) = match pc {
+        Curve2::Spline { knots, points } => (knots, points.len()),
+        Curve2::RationalSpline { knots, homogeneous } => (knots, homogeneous.len()),
+    };
+    let bad = || {
+        format!(
+            "a made pcurve of {} knots and {n} points has no knot domain",
+            knots.len()
+        )
+    };
+    let p = knots
+        .len()
+        .checked_sub(n + 1)
+        .filter(|&p| p > 0 && n > p)
+        .ok_or_else(bad)?;
+    let (Some(&lo), Some(&hi)) = (knots.get(p), knots.get(n)) else {
+        return Err(bad());
+    };
+    if !(lo.is_finite() && hi.is_finite() && above(hi, lo)) {
+        return Err(bad());
+    }
+    Ok([lo, hi])
 }
 
 /// The lift check: `pc` taken onto the face's surface lies within
@@ -180,6 +211,83 @@ mod tests {
         }
         assert_eq!(finite_max(1e-6, 2e-6, 0.5), Ok(2e-6));
         assert_eq!(finite_max(3e-6, 2e-6, 0.5), Ok(3e-6));
+    }
+
+    use solidcore_record::brep::Curve;
+
+    /// The unit line along X as an edge on `interval`, ends at vertices
+    /// 0 and 1, tolerance 1e-3 mm.
+    fn line_edge(line: &Curve, interval: [f64; 2]) -> TrimEdge<'_> {
+        TrimEdge {
+            curve: line,
+            nurbs: None,
+            interval,
+            vertices: [0, 1],
+            tolerance: 1e-3,
+        }
+    }
+
+    /// The degree 1 pcurve from (0, 0) to (`hi`, 0) on the knot domain
+    /// `[0, hi]`.
+    fn straight_pcurve(hi: f64) -> Curve2 {
+        Curve2::Spline {
+            knots: vec![0.0, 0.0, hi, hi],
+            points: vec![[0.0, 0.0], [hi, 0.0]],
+        }
+    }
+
+    /// #4542: the kernel reports the edge's interval unchanged, but its
+    /// pcurve's knots end 1e-13 short of it. The pcurve is mapped onto our
+    /// interval, so the lift check's last sample (the interval's end) has
+    /// a point.
+    #[test]
+    fn a_pcurve_domain_a_rounding_short_of_the_edge_is_mapped_onto_it() {
+        let line = Curve::Line {
+            start: [0.0; 3],
+            end: [1.0, 0.0, 0.0],
+        };
+        let end = 0.500_000_000_000_102_5;
+        let ours = line_edge(&line, [0.0, end]);
+        let pc = straight_pcurve(0.5);
+        assert!(
+            solidcore_ops::pcurve::eval(&pc, end).is_none(),
+            "the made pcurve must have no point at the edge's end before the map"
+        );
+        let mapped = on_our_interval(pc, &ours, [1e-3, 1e-3]).expect("a rounding is in reach");
+        assert_eq!(domain(&mapped), Ok([0.0, end]));
+        assert!(solidcore_ops::pcurve::eval(&mapped, 0.0).is_some());
+        assert!(solidcore_ops::pcurve::eval(&mapped, end).is_some());
+    }
+
+    /// A pcurve domain that ends farther from our interval than the reach
+    /// is the kernel trimming the edge: still refused, with how far.
+    #[test]
+    fn a_pcurve_domain_past_the_reach_is_refused_by_name() {
+        let line = Curve::Line {
+            start: [0.0; 3],
+            end: [1.0, 0.0, 0.0],
+        };
+        let ours = line_edge(&line, [0.0, 0.5]);
+        let err = on_our_interval(straight_pcurve(0.4), &ours, [1e-3, 1e-3])
+            .expect_err("a 0.1 mm short pcurve is past a 1e-3 mm reach");
+        assert!(
+            err.starts_with("the kernel's pcurve spans [0.0, 0.4] of the edge's interval [0.0, 0.5]"),
+            "{err}"
+        );
+    }
+
+    /// A pcurve whose knot count does not fit its points has no domain,
+    /// refused by name.
+    #[test]
+    fn a_pcurve_without_a_knot_domain_is_refused_by_name() {
+        let pc = Curve2::Spline {
+            knots: vec![0.0, 1.0],
+            points: vec![[0.0, 0.0], [1.0, 0.0]],
+        };
+        assert_eq!(
+            domain(&pc),
+            Err("a made pcurve of 2 knots and 2 points has no knot domain".to_string())
+        );
     }
 
     /// A tolerance that is NaN, infinite or below zero is refused by name.
