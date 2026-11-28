@@ -5,14 +5,13 @@
 //! tests of our own stream and the FluidNC post contract (#3192).
 //!
 //! Regenerate after an intentional change, then read the diff:
-//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test script_fluidnc`
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test script_goldens script_fluidnc::`
 //!
 //! Gate map (M4.4): covers assets/posts/fluidnc.cps,
 //! assets/machines/fluidnc-3040.mch, camcraft_post::post::engine,
 //! camcraft_post::post::cnc, the post binary.
 
-#[macro_use]
-mod recorded;
+use crate::recorded;
 
 post_suite!("fluidnc.cps");
 

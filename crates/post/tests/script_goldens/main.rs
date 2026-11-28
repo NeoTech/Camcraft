@@ -12,6 +12,7 @@ mod script_carvera;
 mod script_doosan_dnm;
 mod script_fanuc;
 mod script_fanuc_lathe;
+mod script_fluidnc;
 mod script_g_edm;
 mod script_grbl;
 mod script_grblhal;
