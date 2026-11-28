@@ -17,10 +17,11 @@ use super::gates::{disabled_reason, enabled};
 use super::run::run_direct;
 use super::table::{self, Menu, TABLE};
 
-/// The menu bar's height: one control row and its margin, from the theme.
+/// The menu bar's height: one control row and its margin, from the theme,
+/// in whole points so the ribbon under it keeps its pixel grid.
 #[must_use]
 pub fn menu_bar_h(t: &Tokens) -> f32 {
-    (t.control_height + 4.0).max(t.font_row * 1.3 + 6.0)
+    (t.control_height + 4.0).max(t.font_row * 1.3 + 6.0).round()
 }
 
 /// The menu bar over the ribbon. Each row runs `run_direct`, the

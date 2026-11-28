@@ -97,7 +97,7 @@ fn title_bar_shows_update_notice_when_newer_release_is_injected_and_opens_notes_
     // The ribbon's top band, under the menu bar (#4484).
     let bar = super::panes::menu_bar_h(&super::theme::current());
     assert!(
-        notice_rect.top() >= bar && notice_rect.bottom() <= 30.0 + bar,
+        notice_rect.top() >= bar && notice_rect.bottom() <= 31.0 + bar,
         "notice sits in top band: {notice_rect:?}"
     );
     assert!(
