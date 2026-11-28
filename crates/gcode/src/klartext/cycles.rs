@@ -1,4 +1,4 @@
-//! Klartext cycles: `CYCL DEF 247` (preset), the drilling cycles `CYCL DEF 200` / `203` / `205` and their call (`CYCL CALL`, `M99`).
+//! Klartext cycles: `CYCL DEF 247` (preset), the drilling cycles `CYCL DEF 200` / `203` / `205`, the tapping cycles `206` / `207` (in `taps`) and their call (`CYCL CALL`, `M99`).
 //! Provenance: HEIDENHAIN TNC cycle programming manuals (cycle 200 DRILLING, 203 UNIVERSAL DRILLING, 205 UNIVERSAL PECKING, 247 DATUM SETTING; Q lists in docs/research/heidenhain/differences.md section B3 and cycles.md), general machining knowledge for the Q meanings; expansion follows the hole chain of `crate::cycle_expand`.
 
 use camcraft_cl::cl::{Cycle, CycleKind, MoveKind, lattice};
@@ -12,9 +12,24 @@ use crate::cycle_expand::peck_count;
 use crate::domain::{check_dwell, check_feed, check_len};
 use crate::types::{GcodeError, WorkOffset};
 
-/// A defined drilling cycle, all levels in mm in the work frame.
+/// What a defined cycle does at its call.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HoleShape {
+    /// 200 / 203 / 205: infeeds of `peck` from the surface, rapid out.
+    Drill,
+    /// 206: feed in at Q206, dwell Q211, feed out to the set-up clearance
+    /// (floating tap holder).
+    FloatingTap,
+    /// 207: feed in and out at S x `pitch` (Q239), no dwell (rigid tapping).
+    RigidTap { pitch: f64 },
+}
+
+/// A defined drilling or tapping cycle, all levels in mm in the work frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DrillDef {
+    /// The cycle number (200, 203, 205, 206, 207), for the messages.
+    pub cycle: u32,
+    pub shape: HoleShape,
     /// Set-up clearance level: surface + Q200.
     pub r_z: f64,
     /// Hole bottom: surface + Q201 (Q201 < 0).
@@ -23,9 +38,9 @@ pub struct DrillDef {
     pub surface_z: f64,
     /// End level: the higher of the set-up clearance and surface + Q204.
     pub clear_z: f64,
-    /// Plunging depth Q202 (> 0).
+    /// Plunging depth Q202 (> 0); 0 for a tapping cycle (one infeed).
     pub peck: f64,
-    /// Plunge feed Q206 (mm/min).
+    /// Plunge feed Q206 (mm/min); not used by cycle 207 (S x pitch).
     pub feed: f64,
     /// Dwell at depth Q211 (s).
     pub dwell: f64,
@@ -81,10 +96,7 @@ impl Machine<'_> {
             return Err(b.syntax("CYCL DEF needs a cycle number"));
         };
         if num.contains('.') {
-            return Err(b.unsupported(
-                &format!("CYCL DEF {num}"),
-                "old-style cycles (n.0 / n.1 blocks) are not read",
-            ));
+            return self.old_cycle_def(b, num, &toks[1..]);
         }
         let cycle: u32 = num
             .parse()
@@ -96,9 +108,13 @@ impl Machine<'_> {
                 self.cycle = Some(drill_def(b, cycle, &params)?);
                 Ok(())
             }
+            206 | 207 => {
+                self.cycle = Some(super::taps::tap_def(b, cycle, &params)?);
+                Ok(())
+            }
             _ => Err(b.unsupported(
                 &format!("CYCL DEF {cycle}"),
-                "this cycle is not read (read: 200, 203, 205, 247)",
+                "this cycle is not read (read: 9, 32, 200, 203, 205, 206, 207, 247)",
             )),
         }
     }
@@ -151,11 +167,16 @@ impl Machine<'_> {
         Ok(())
     }
 
-    /// Run the defined drilling cycle at the current XY position.
+    /// Run the defined drilling or tapping cycle at the current XY position.
     pub fn cycle_call(&mut self, b: &Block) -> Result<(), GcodeError> {
         let d = self.cycle.clone().ok_or_else(|| {
-            b.invalid_cycle("cycle call without a drilling cycle definition (CYCL DEF 200/203/205)")
+            b.invalid_cycle(
+                "cycle call without a drilling or tapping cycle definition (CYCL DEF 200/203/205/206/207)",
+            )
         })?;
+        if d.shape != HoleShape::Drill {
+            return self.tap_call(b, &d);
+        }
         let pecks = peck_count(d.surface_z, d.bottom_z, d.peck).ok_or_else(|| {
             b.invalid_cycle(&format!(
                 "plunging depth Q202 ({}) needs too many pecks",
@@ -199,7 +220,7 @@ impl Machine<'_> {
             xy: Point2::new(lattice(hx), lattice(hy)),
             r_z: lattice(d.r_z),
             bottom_z: lattice(d.bottom_z),
-            entry_z: lattice(d.r_z),
+            entry_z: lattice(d.surface_z),
             peck: lattice(d.peck),
             dwell: d.dwell,
             first_move,
@@ -208,15 +229,56 @@ impl Machine<'_> {
     }
 }
 
-fn drill_def(b: &Block, cycle: u32, params: &[(u32, f64)]) -> Result<DrillDef, GcodeError> {
-    let (required, allowed) = q_set(cycle);
+/// The value of `Q<q>` in a cycle definition, if it is written.
+pub fn q_get(params: &[(u32, f64)], q: u32) -> Option<f64> {
+    params.iter().find(|(n, _)| *n == q).map(|(_, v)| *v)
+}
+
+/// Refuse a Q parameter that the cycle does not have, and a missing required one.
+pub fn check_q_list(
+    b: &Block,
+    cycle: u32,
+    params: &[(u32, f64)],
+    required: &[u32],
+    allowed: &[u32],
+) -> Result<(), GcodeError> {
     if let Some((q, _)) = params.iter().find(|(q, _)| !allowed.contains(q)) {
         return Err(b.invalid_cycle(&format!("CYCL DEF {cycle} has no parameter Q{q}")));
     }
-    let get = |q: u32| params.iter().find(|(n, _)| *n == q).map(|(_, v)| *v);
-    if let Some(q) = required.iter().find(|q| get(**q).is_none()) {
+    if let Some(q) = required.iter().find(|q| q_get(params, **q).is_none()) {
         return Err(b.invalid_cycle(&format!("CYCL DEF {cycle} needs Q{q}")));
     }
+    Ok(())
+}
+
+/// The set-up clearance, hole bottom, surface and end levels of a hole cycle:
+/// `(r_z, bottom_z, surface_z, clear_z)` from Q200, Q201, Q203 and Q204.
+pub fn hole_levels(
+    b: &Block,
+    setup: f64,
+    depth: f64,
+    surface: f64,
+    second: f64,
+) -> Result<(f64, f64, f64, f64), GcodeError> {
+    if setup < 0.0 || second < 0.0 {
+        return Err(b.invalid_cycle("set-up clearances Q200 and Q204 must not be negative"));
+    }
+    if depth >= 0.0 {
+        return Err(b.invalid_cycle(&format!(
+            "depth Q201 ({depth}) must be negative (into the material)"
+        )));
+    }
+    let surface_z = check_len(b.line, "Q203", surface)?;
+    let r_z = check_len(b.line, "set-up clearance", surface + setup)?;
+    let bottom_z = check_len(b.line, "hole bottom", surface + depth)?;
+    let clear_z = check_len(b.line, "2nd set-up clearance", surface + second)?.max(r_z);
+    Ok((r_z, bottom_z, surface_z, clear_z))
+}
+
+fn drill_def(b: &Block, cycle: u32, params: &[(u32, f64)]) -> Result<DrillDef, GcodeError> {
+    let (required, allowed) = q_set(cycle);
+    check_q_list(b, cycle, params, required, allowed)?;
+    let get = |q: u32| q_get(params, q);
     // Options that change the motion and that this reader does not model.
     for (q, what) in [
         (210, "dwell at the top"),
@@ -234,26 +296,18 @@ fn drill_def(b: &Block, cycle: u32, params: &[(u32, f64)]) -> Result<DrillDef, G
         }
     }
     let v = |q: u32| get(q).unwrap_or(0.0);
-    let (setup, depth, feed, peck, surface, second) =
-        (v(200), v(201), v(206), v(202), v(203), v(204));
-    if setup < 0.0 || second < 0.0 {
-        return Err(b.invalid_cycle("set-up clearances Q200 and Q204 must not be negative"));
-    }
-    if depth >= 0.0 {
-        return Err(b.invalid_cycle(&format!(
-            "depth Q201 ({depth}) must be negative (into the material)"
-        )));
-    }
+    let (r_z, bottom_z, surface_z, clear_z) = hole_levels(b, v(200), v(201), v(203), v(204))?;
+    let (feed, peck) = (v(206), v(202));
     if peck <= 0.0 {
         return Err(b.invalid_cycle(&format!("plunging depth Q202 ({peck}) must be positive")));
     }
-    let surface_z = check_len(b.line, "Q203", surface)?;
-    let r_z = check_len(b.line, "set-up clearance", surface + setup)?;
     Ok(DrillDef {
+        cycle,
+        shape: HoleShape::Drill,
         r_z,
-        bottom_z: check_len(b.line, "hole bottom", surface + depth)?,
+        bottom_z,
         surface_z,
-        clear_z: check_len(b.line, "2nd set-up clearance", surface + second)?.max(r_z),
+        clear_z,
         peck: check_len(b.line, "Q202", peck)?,
         feed: check_feed(b.line, feed)?,
         dwell: check_dwell(b.line, v(211))?,

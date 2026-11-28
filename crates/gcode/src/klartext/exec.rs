@@ -7,6 +7,7 @@ use camcraft_geometry::geometry::units::Unit;
 
 use super::KlartextOptions;
 use super::cycles::DrillDef;
+use super::old_cycles::OldCycle;
 use super::source::Block;
 use super::words::QTable;
 use crate::section::SectionBuilder;
@@ -24,6 +25,8 @@ pub struct Machine<'a> {
     /// Unit XY direction at the end of the last move, for `CT`.
     pub tangent: Option<Point2>,
     pub cycle: Option<DrillDef>,
+    /// A sub-block cycle (`CYCL DEF 9.0`, `32.1`) that waits for its next block.
+    pub old: Option<OldCycle>,
     pub q: QTable,
     pub tool_name: Option<String>,
     section_tool_name: Option<String>,
@@ -50,6 +53,7 @@ impl<'a> Machine<'a> {
             cc: None,
             tangent: None,
             cycle: None,
+            old: None,
             q: QTable::new(),
             tool_name: None,
             section_tool_name: None,
@@ -75,6 +79,7 @@ impl<'a> Machine<'a> {
         if self.pgm.is_none() {
             return Err(b.syntax("the program must start with BEGIN PGM"));
         }
+        self.old_cycle_gate(b)?;
         if w.first() == Some(&"END") {
             return self.end(b, &w);
         }

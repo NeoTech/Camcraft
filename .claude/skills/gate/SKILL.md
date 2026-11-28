@@ -19,11 +19,23 @@ wrappers `scripts/gate.ps1` (`-Tier quick`, `-Test <name>`) and
 
 | Tier | Command | Runs |
 |---|---|---|
-| quick | `cargo xtask gate quick [--base main]` | Only the test binaries that the diff touches, from the gate maps and the touched crates. One build for each crate, then one step for each binary. Debug. No heavy lanes. Target: 5 minutes. |
-| batch | `cargo xtask gate batch` | One debug build (`--no-run`) for each crate, then one step for each test target (`<crate> suites: lib`, `<crate> suites: <binary>`) that is not in `SLOW_BINARIES`, the `camcraft-kernel` suites (#1702), the ui suites from `crates/ui`, clippy. The steps run in the parallel lanes of `lanes.rs` (#2727). No release-mode heavy lanes. Target: 20 minutes. |
+| quick | `cargo xtask gate quick [--base main]` | Only the test binaries that the diff touches, from the gate maps and the touched crates. One build for each crate, then one step for each binary. Debug. No heavy lanes. The site tests step when the diff touches a path of `site_step::INPUTS` (`site/`, `assets/ui/`, and the source files that the site tests open, #4133). Target: 5 minutes. |
+| batch | `cargo xtask gate batch` | One debug build (`--no-run`) for each crate, then one step for each test target (`<crate> suites: lib`, `<crate> suites: <binary>`) that is not in `SLOW_BINARIES`, the `camcraft-kernel` suites (#1702), the ui suites from `crates/ui`, clippy, and the site tests step (#4133). The steps run in the parallel lanes of `lanes.rs` (#2727). No release-mode heavy lanes. Target: 20 minutes. |
 | heavy | `cargo xtask gate heavy [--base main]` | The release `--ignored` heavy lanes that the diff reaches, also through the crate dependencies (#2568). One release build of the reached crates, then one step for each reached target. A tool, not a merge condition (#3556): a PR never runs the full reach. Only a `P1` PR under the safety floor runs one targeted step with `--only "<crate> heavy: <target>"`. The wave form `--covers <PR>:<head sha>` (#3460) stays as an option. |
-| release | `cargo xtask gate release` | One step for each debug test target (`lib`, `bins`, each binary, `doc`) and the `--ignored` heavy lanes in release. Only at a cut. On the cut runner: `cargo xtask gate release --no-snapshots`. |
+| release | `cargo xtask gate release` | One step for each debug test target (`lib`, `bins`, each binary, `doc`) and the `--ignored` heavy lanes in release, and the site tests step (#4133). Only at a cut. On the cut runner: `cargo xtask gate release --no-snapshots`. |
 | test | `cargo xtask gate test <name> [--crate c] [--binary b] [--exact]` | One test by name. The plain form is `cargo test -p <crate> --test <binary> -- <name> --exact`. |
+
+**The site tests step** (#4133). The step `site tests (python unittest, zola, node)` is not a cargo
+command. It runs `python3 -m unittest discover -s site/tests` (else `python`) at the root, with
+`ZOLA` (else `zola` on PATH), `PYTHONUTF8=1` and `node` on PATH, as the `site` job of `release.yml`
+does. Run it alone with `cargo xtask gate batch --only "site tests"`.
+- A missing tool (python 3, zola, node) is a `SKIP` row in quick and batch, with the note
+  `SKIPPED (tool missing: <tool>)` and the install step. It is never an `ok` row.
+- In the release tier a missing tool is a `FAIL` row: the cut gate is the last check before the tag.
+- `release.yml` pins zola 0.23.6 (download and sha256 in its step "Install pinned Zola"). Another
+  zola version adds a note to the row.
+- A new path that a site test opens goes into `site_step::INPUTS` (`xtask/src/site_step.rs`). The
+  pin `each_path_that_a_site_test_names_is_an_input` fails until it is there.
 
 Flags:
 
