@@ -49,6 +49,8 @@ use {cross::*, cycle::*, hole::*, recognize::*};
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_recognize;
+#[cfg(test)]
 mod tests_cross;
 #[cfg(test)]
 mod tests_backbore;

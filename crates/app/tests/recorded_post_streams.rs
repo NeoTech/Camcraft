@@ -83,11 +83,9 @@ fn probe() -> String {
     cnc::serialize(&recs)
 }
 
-/// Two pecked holes with a retract change: the cycle's R plane is 1 mm
-/// over the part, the hop between holes 3 mm, the final retract the
-/// 10 mm clearance plane.
-fn drill_retract() -> String {
-    let tool = Tool {
+/// The 6 mm 118 deg drill both drill streams cut with.
+fn drill6() -> Tool {
+    Tool {
         kind: ToolKind::Drill,
         diameter: 6.0,
         corner_r: 0.0,
@@ -117,7 +115,14 @@ fn drill_retract() -> String {
         tip_form: Default::default(),
         tip_diameter: 0.0,
         form: None,
-    };
+    }
+}
+
+/// Two pecked holes with a retract change: the cycle's R plane is 1 mm
+/// over the part, the hop between holes 3 mm, the final retract the
+/// 10 mm clearance plane.
+fn drill_retract() -> String {
+    let tool = drill6();
     let hole = |x: f64, floor_z: f64| Hole {
         xy: Point2::new(x, 10.0),
         radius: 3.0,
@@ -168,6 +173,54 @@ fn probe_stream_is_current() {
 #[test]
 fn drill_retract_stream_is_current() {
     guard("drill_retract", &drill_retract());
+}
+
+/// #2528: one 10 mm through hole, Break-through measured from the full
+/// diameter (the default, #2441): the tip runs the 1 mm Break-through
+/// plus the 6 mm 118 deg drill's 1.803 mm point, to Z-12.803. Every post
+/// suite posts it (`recorded::CASES`), so each post has a recorded program
+/// of a full-diameter hole.
+fn drill_full_diameter() -> String {
+    let tool = drill6();
+    let holes = [Hole { xy: Point2::new(20.0, 10.0), radius: 3.0, entry_z: 0.0, floor_z: -10.0, through: true, stepped: false }];
+    let p = CycleParams {
+        material_top: &[],
+        through_clear: camcraft_app::drilling::THROUGH_CLEAR,
+        break_through_from: camcraft_app::drilling::BreakThroughFrom::FullDiameter,
+        clearance_z: 10.0,
+        r_z: 1.0,
+        hop_z: Some(3.0),
+        bottom_z: None,
+        cycle: CycleChoice::Peck,
+        peck: 4.0,
+        dwell: 0.0,
+        feed: 200.0,
+        plunge_feed: 60.0,
+        tool: &tool,
+        holes: &holes,
+    };
+    let t = drill(&p).expect("drill cycle");
+    let point = 3.0 / 59.0_f64.to_radians().tan();
+    assert_eq!(t.cycles.len(), 1, "one cycle record");
+    assert!((t.cycles[0].bottom_z + 11.0 + point).abs() < 1e-9, "the tip at Z-12.803: {}", t.cycles[0].bottom_z);
+    let d = Dump {
+        op_name: "Through",
+        tool_number: 3,
+        tool_name: "DRILL-6",
+        tool_diameter: 6.0,
+        rpm: 1500.0,
+        clearance_z: 10.0,
+        retract_z: 3.0,
+        top_z: 0.0,
+        wcs: 1,
+        ..Dump::default()
+    };
+    cnc::serialize(&post::dump(&t, &d))
+}
+
+#[test]
+fn drill_full_diameter_stream_is_current() {
+    guard("drill_full_diameter", &drill_full_diameter());
 }
 
 // ------------------------------------------------------------ #926 slice 2

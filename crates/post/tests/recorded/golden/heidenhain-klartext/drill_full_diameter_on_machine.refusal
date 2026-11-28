@@ -1,0 +1,6 @@
+; heidenhain-klartext.cps refused drill_full_diameter: the post stopped, nothing written
+post: post script: Error: Heidenhain Klartext: unsupported milling tool kind (unstated) (user.cps:31:9)
+    at refuse (user.cps:31:9)
+    at checkToolDefinition (user.cps:183:11)
+    at onSection (user.cps:250:22)
+    at <main> (unknown at :1:10)

@@ -24,11 +24,14 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The recorded cases every post suite runs, in file-stem form.
-pub const CASES: [&str; 11] = [
+pub const CASES: [&str; 12] = [
     "arcs",
     "full_circle",
     "full_circle_raw",
     "drill_retract",
+    // #2528: a through hole drilled to its full diameter (motion-built,
+    // app's `recorded_post_streams.rs`).
+    "drill_full_diameter",
     "tool_change",
     "rotary",
     "probe",
@@ -199,6 +202,45 @@ pub fn check(script: &str, case: &str) {
     compare(script, case, ext, &text);
 }
 
+/// #2528: post `case` through `script` on the vendor machine file
+/// `machine` (as the binary reads it) and compare with the golden
+/// `<case>_on_machine.<ext>`. A post that refuses the machine-less form
+/// for a machine setting alone (a safe retract, a controller profile)
+/// still records its program here. Returns the verdict text.
+pub fn check_on_machine(script: &str, case: &str, machine: &Path) -> String {
+    // Its own name keeps its temp files apart from the plain case's run.
+    let named = format!("{case}_on_machine");
+    let (ext, text) = verdict_on(script, &named, &stream_path(case), Some(machine));
+    compare(script, &named, ext, &text);
+    text
+}
+
+/// #2528: the posts whose `drill_full_diameter` golden is a refusal
+/// because they post no drilling cycle at all (EDM, wire, plasma,
+/// waterjet, and a lathe that refuses the off-axis hole). Each other
+/// post records the cycle's depth in an NC golden, plain or
+/// `_on_machine`.
+pub const NO_MILL_DRILL_CYCLE: [&str; 10] = [
+    "agie-native",
+    "fanuc-lathe",
+    "g-edm",
+    "sinker-iso",
+    "sodick-ln2w",
+    "sodick-wire",
+    "tormach-lathe",
+    "tormach-plasma",
+    "waterjet-iso",
+    "wire-iso",
+];
+
+/// #2528: posts with a drilling cycle that cannot post the recorded
+/// `drill_full_diameter` stream on any machine, with the reason. Each
+/// entry is a coverage gap that the guard names, not a pass.
+pub const DRILL_DEPTH_GAP: [(&str, &str); 1] = [(
+    "heidenhain-klartext",
+    "the post refuses a tool with no stated kind, and the recorded stream states none",
+)];
+
 /// Compare one verdict with its golden under `recorded/golden/<post>/`
 /// (or, with WRITE_GOLDEN set, write it and drop the other form).
 pub fn compare(script: &str, case: &str, ext: &str, text: &str) {
@@ -250,6 +292,10 @@ macro_rules! post_suite {
         #[test]
         fn drill_retract() {
             recorded::check($script, "drill_retract");
+        }
+        #[test]
+        fn drill_full_diameter() {
+            recorded::check($script, "drill_full_diameter");
         }
         #[test]
         fn tool_change() {
