@@ -6,6 +6,7 @@
 #[path = "../recorded/mod.rs"]
 mod recorded;
 
+mod mazak_sequence_labels;
 mod probe_dialects;
 mod probe_guard;
 mod probe_report;

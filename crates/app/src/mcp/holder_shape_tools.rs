@@ -1,7 +1,9 @@
 //! #4391: the MCP door to the holder form (#4338) - edit a user holder of
 //! the document's component table by its shape fields (taper, clamp, bore,
 //! gauge length, nose and largest diameter). The outline is built with
-//! `HolderShape::geometry`, as the form builds it, and the edit lands as
+//! `HolderShape::component`, as the form builds it: a shape whose outline
+//! does not read back as the stated values is refused (#4455), so no edit
+//! writes a body that the outline hides. The edit lands as
 //! the very undoable `EditDocumentComponent` the form queues: one History
 //! step, and every tool built from the holder is derived again in it. A
 //! value that cannot be steel is refused with the `ShapeError` text; an
@@ -23,7 +25,7 @@ use camcraft_tools::holder_library::{ER_SIZES, HolderShape, ShapeClamp, tapers};
 
 pub(super) const TOOLS: &[Tool] = &[Tool {
     name: "edit_user_holder",
-    description: "Edit a holder of the document's component table by its shape, as the holder form does: taper, clamp, bore, gauge_len, nose_d, largest_d and name. A field the call does not state keeps the holder's value (an ER or Weldon clamp without largest_d takes nose_d: it has one body diameter). The outline is the holder library's outline of the shape, never smaller than the stated steel. Every tool whose assembly uses the holder is derived again in the same undo step. One undo step. Refused by name: an id the document does not hold, a holder whose outline is not a shape outline (use upsert_tool_component), an unknown taper or clamp, a value that cannot describe steel, an empty name, an edit that changes nothing, and an edit that a tool built from the holder cannot take (the tool is named; nothing changes).",
+    description: "Edit a holder of the document's component table by its shape, as the holder form does: taper, clamp, bore, gauge_len, nose_d, largest_d and name. A field the call does not state keeps the holder's value (an ER or Weldon clamp without largest_d takes nose_d: it has one body diameter). The outline is the holder library's outline of the shape, never smaller than the stated steel. Every tool whose assembly uses the holder is derived again in the same undo step. One undo step. Refused by name: an id the document does not hold, a holder whose outline is not a shape outline (use upsert_tool_component), an unknown taper or clamp, a value that cannot describe steel, a shrink-fit body that the flange envelope covers at that gauge length (the outline cannot keep it: give a longer gauge length), an empty name, an edit that changes nothing, and an edit that a tool built from the holder cannot take (the tool is named; nothing changes).",
     schema: s_edit,
     run: edit_user_holder,
 }];
@@ -122,11 +124,9 @@ fn edit_user_holder(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Stri
     if name.is_empty() {
         return Err("holder not changed: the holder needs a name".to_owned());
     }
-    // The same build as the holder form's Apply.
-    let (kind, geometry) = shape
-        .kind()
-        .and_then(|kind| Ok((kind, shape.geometry(ADAPTIVE_PORT)?)))
-        .map_err(|e| format!("holder not changed: {e}"))?;
+    // The same build as the holder form's Apply: refuses `NotKept` with
+    // the form's text (#4455).
+    let (kind, geometry) = shape.component(ADAPTIVE_PORT).map_err(|e| format!("holder not changed: {e}"))?;
     let component = ToolComponent::new(id, &name, kind).map_err(|e| format!("holder not changed: {e}"))?;
     let cmd = EditDocumentComponent::new(&env.world, component, geometry).map_err(cmd_err)?;
     let updated = cmd.updated_tools();

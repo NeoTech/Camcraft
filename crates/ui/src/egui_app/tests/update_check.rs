@@ -1,5 +1,6 @@
-//! #2428 Part B: startup update check UI, top-band `"Settings"` dropdown,
-//! and `"Update available: vX.Y.Z"` title-bar notice.
+//! #2428 Part B: startup update check UI, the top-band `"Settings"` button
+//! (since #4493 it opens the Settings window, whose Updates section holds
+//! the toggle), and `"Update available: vX.Y.Z"` title-bar notice.
 //!
 //! Provenance: our own structural and behaviour tests over `ShellUi` and
 //! temp `prefs.json` stores; never contacts GitHub or touches user files.
@@ -14,7 +15,9 @@ use egui::accesskit::{Role, Toggled};
 use egui_kittest::kittest::NodeT;
 
 use super::super::home::HOME;
-use super::super::settings_drop::{CHECK_FOR_UPDATES, SETTINGS};
+use super::super::settings_drop::SETTINGS;
+use super::super::settings_window::{CHECK_FOR_UPDATES, Section};
+use super::settings_window::row_check;
 use super::super::update_notice;
 use super::*;
 use crate::update_check::CheckOutcome;
@@ -94,8 +97,10 @@ fn title_bar_shows_update_notice_when_newer_release_is_injected_and_opens_notes_
     let settings = h.get_by_role_and_label(Role::Button, SETTINGS).rect();
     let home = h.get_by_role_and_label(Role::Button, HOME).rect();
     let donate = h.get_by_role_and_label(Role::Button, "Donate").rect();
+    // The ribbon's top band, under the menu bar (#4484).
+    let bar = super::panes::menu_bar_h(&super::theme::current());
     assert!(
-        notice_rect.top() >= 0.0 && notice_rect.bottom() <= 30.0,
+        notice_rect.top() >= bar && notice_rect.bottom() <= 31.0 + bar,
         "notice sits in top band: {notice_rect:?}"
     );
     assert!(
@@ -164,14 +169,16 @@ fn settings_toggle_persists_check_for_updates_and_hides_notice_without_dirtying_
     let before_ver = h.state().state.doc_version;
 
     h.get_by_role_and_label(Role::Button, SETTINGS).click();
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
+    h.get_by_label(Section::Updates.label()).click();
     h.run_steps(2);
-    let item = h.get_by_role_and_label(Role::MenuItem, CHECK_FOR_UPDATES);
-    assert_eq!(item.accesskit_node().toggled(), Some(Toggled::True));
-    item.click();
+    assert_eq!(row_check(&h, CHECK_FOR_UPDATES).accesskit_node().toggled(), Some(Toggled::True));
+    h.get_by_label(CHECK_FOR_UPDATES).click();
     h.run_steps(2);
 
     assert!(!h.state().state.check_for_updates);
-    assert!(!h.state().state.ribbon_settings_open);
+    assert!(h.state().state.settings_open, "a setting applies at once; the window stays open");
     assert!(
         h.query_by_role_and_label(Role::Button, "Update available: v99.1.0").is_none(),
         "turning off update checks hides the title-bar notice"
@@ -188,11 +195,8 @@ fn settings_toggle_persists_check_for_updates_and_hides_notice_without_dirtying_
     restarted.load_prefs_from(store.clone());
     assert!(!restarted.check_for_updates, "disabled setting survives restart");
 
-    h.get_by_role_and_label(Role::Button, SETTINGS).click();
-    h.run_steps(2);
-    let item = h.get_by_role_and_label(Role::MenuItem, CHECK_FOR_UPDATES);
-    assert_eq!(item.accesskit_node().toggled(), Some(Toggled::False));
-    item.click();
+    assert_eq!(row_check(&h, CHECK_FOR_UPDATES).accesskit_node().toggled(), Some(Toggled::False));
+    h.get_by_label(CHECK_FOR_UPDATES).click();
     h.run_steps(2);
     assert!(h.state().state.check_for_updates);
     assert!(prefs::load(&store).0.check_for_updates);

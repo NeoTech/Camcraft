@@ -42,8 +42,7 @@ pub fn ribbon(
     let tabs_right = ribbon_tabs(ui, state, pal, rect, band);
     let donate_left = crate::egui_app::donate::draw(ui, state, pal, icons, band);
     let home_left = crate::egui_app::home::button(ui, state, pal, icons, band, donate_left - pal.item_spacing_x);
-    let (settings_left, settings_rect) =
-        crate::egui_app::settings_drop::button(ui, state, pal, band, home_left - pal.item_spacing_x);
+    let settings_left = crate::egui_app::settings_drop::button(ui, state, pal, band, home_left - pal.item_spacing_x);
     crate::egui_app::update_notice::draw(
         ui,
         state,
@@ -152,10 +151,6 @@ pub fn ribbon(
     }
     // The recent-files lists under Open and Model (#662): recent_drop.rs.
     crate::egui_app::recent_drop::draw(ui, state, pal, base.with("recent-drop"), &cells, body);
-    // #2428: top-band Settings dropdown for per-user prefs.json toggles.
-    if state.ribbon_settings_open {
-        crate::egui_app::settings_drop::show(ui, state, pal, base.with("settings-drop"), settings_rect, rect);
-    }
     // The source/build label is the rightmost toolbar item. At small window
     // widths it contracts to version plus source, then version alone; the
     // full text remains available on hover.

@@ -16,6 +16,8 @@
 //! motion::machining2d (contour_chain, lead_ext).
 
 mod area_support;
+#[path = "area_open/start_point.rs"]
+mod start_point;
 
 use area_support::*;
 

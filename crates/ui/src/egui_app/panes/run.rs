@@ -56,7 +56,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
             state.ribbon_mode_open = false;
             state.ribbon_view_open = false;
             state.ribbon_theme_open = false;
-            state.ribbon_settings_open = false;
         }
         Cmd::Machine => {
             state.ribbon_mode_open = !state.ribbon_mode_open;
@@ -65,7 +64,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_view_open = false;
                 state.ribbon_theme_open = false;
-                state.ribbon_settings_open = false;
             }
         }
         // Same door law; the dock itself is the shell's (layout.rs).
@@ -76,7 +74,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_mode_open = false;
                 state.ribbon_theme_open = false;
-                state.ribbon_settings_open = false;
             }
         }
         Cmd::Theme => {
@@ -86,9 +83,32 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_mode_open = false;
                 state.ribbon_view_open = false;
-                state.ribbon_settings_open = false;
             }
         }
+        Cmd::Copy => {
+            if let Some(name) = state.selected_operation() {
+                actions::copy_operation(state, &name);
+            }
+        }
+        Cmd::Paste => actions::paste_operation(state),
+        // The window close button's keyboard and menu siblings (M-g):
+        // Quit -> request_quit -> exit_requested -> el.exit().
+        Cmd::Quit => actions::quit(state),
+        Cmd::Projection => actions::toggle_projection(state),
+        // #4493: the per-user Settings window; view state, no command.
+        Cmd::Settings => crate::egui_app::settings_window::open(state),
+    }
+}
+
+/// The menu bar's and the keyboard's path (#4484): the ribbon's
+/// `run_cmd`, except that Model and Open go straight to their file
+/// dialogs. The ribbon's recent-files list hangs under its own cell, so
+/// a menu row or a key press opens the dialog, as the keys always did.
+pub(super) fn run_direct(c: Cmd, state: &mut State) {
+    match c {
+        Cmd::Model => actions::open_model_dialog(state),
+        Cmd::Project => actions::open_project(state),
+        other => run_cmd(other, state),
     }
 }
 

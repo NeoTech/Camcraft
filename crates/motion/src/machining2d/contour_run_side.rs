@@ -49,6 +49,13 @@ pub(super) fn open_run_ride(
 ) -> Result<(Vec<Point2>, String), GenError> {
     p.validate()?;
     let run = simple(pts)?;
+    if let Some(q) = p.picks.start.first().map(|k| k.xy) {
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): the part open run has no proved source endpoint mapping; \
+             clear the start point",
+            q.x, q.y
+        )));
+    }
     let zs = p.levels()?;
     let mut levels: Vec<(f64, Region)> = Vec::with_capacity(zs.len());
     for &z in &zs {
