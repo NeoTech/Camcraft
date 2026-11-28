@@ -153,6 +153,8 @@ mod tool_library_holders_ui;
 mod tool_library_holder_form;
 // #4455: the holder form's largest diameter and an Apply with no edit.
 mod tool_library_holder_largest;
+// #4496: a gauge length edit in the generic component editor.
+mod tool_library_generic_gauge;
 // #3898 (U7 of #3663): My library, the component editor and the stack.
 mod tool_library_components;
 mod tool_library_stack;
