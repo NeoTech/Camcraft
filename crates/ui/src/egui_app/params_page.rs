@@ -33,6 +33,9 @@ pub(super) struct Cx<'a> {
     pub slot_fit: &'a Option<Result<String, String>>,
     /// #1815: diameter of the currently selected tool for seeding rest params.
     pub tool_diameter: Option<f64>,
+    /// #2528: the selected tool itself - Drill's Break-through from asks
+    /// the generator's rule (`drilling::through_tip_run`) if it adds a point.
+    pub tool: Option<&'a camcraft_app::tools::Tool>,
     /// #1864: current operation source for per-chain sketch overrides.
     pub op_src: &'a SrcRef,
     /// #1888: the op's picked features - the Deburr page moves its
@@ -232,10 +235,10 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
     } else {
         None
     };
-    let tool_diameter = model::find_by_name(&state.world, &state.op_ui.tool)
+    let tool = model::find_by_name(&state.world, &state.op_ui.tool)
         .as_ref()
-        .and_then(|t| model::tool_of(&state.world, t))
-        .map(|t| t.diameter);
+        .and_then(|t| model::tool_of(&state.world, t));
+    let tool_diameter = tool.as_ref().map(|t| t.diameter);
     let draft_src = state.op_ui.src();
     let picks = if matches!(state.op_ui.params, OpParams::Deburr { .. } | OpParams::MultiAxisDeburr { .. }) { state.op_ui.geo.clone() } else { Vec::new() };
     let mut cx = Cx {
@@ -252,6 +255,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
         circle_fit: &circle_fit,
         slot_fit: &slot_fit,
         tool_diameter,
+        tool: tool.as_ref(),
         op_src: &draft_src,
         picks: &picks,
     };

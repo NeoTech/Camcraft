@@ -8,6 +8,8 @@
 //! kind's own module names its sources); no vendor material or text.
 
 use super::fields::*;
+use camcraft_app::machine::Kind;
+use camcraft_app::setup_mount;
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
@@ -81,7 +83,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                     retract_hop(ui, world, op_ctx.as_deref(), retract_z, top_z, clearance_z, "drill.retract");
                     hole_floor(ui, world, op_ctx.as_deref(), bottom_z, top_z, "drill.bottom");
                     break_through_row(ui, u, break_through, &drill_default(u));
-                    break_through_from_row(ui, break_through_from);
+                    let lathe = setup_mount::kind_of_setup(world, op_ctx.as_deref()) == Kind::Lathe && cross.is_empty();
+                    let idle = break_through_from_idle(lathe, bottom_z.is_some(), holes, cycle, cx.tool);
+                    break_through_from_row(ui, break_through_from, idle);
                 });
             }
             if tab == SEC_PASSES {
@@ -295,20 +299,66 @@ fn fine_bore_shift_rows(ui: &mut Ui, u: Unit, cycle: &mut camcraft_app::drilling
     hint(ui, "give the direction that takes the tip away from the wall at the spindle's oriented stop; there is no default");
 }
 
+/// #2528: why the Break-through from choice changes nothing for this
+/// draft, or `None` when it does. The order follows the generator: a
+/// lathe's axial drill always measures to the tip; a stated Bottom sets
+/// every depth; only a through hole breaks through; and the point is the
+/// generator's own answer for this tool and cycle
+/// (`drilling::through_tip_run` from the full diameter, with no
+/// allowance). A zero point - a spot, tap or ream cycle, or a tool with
+/// no point cone (a tap, a boring bar, a flat-bottom drill, also on
+/// Auto) - leaves the choice idle. An unknown tool or a refused tip
+/// angle keeps it live: there the choice can still change the result.
+pub(super) fn break_through_from_idle(
+    lathe: bool,
+    bottom_set: bool,
+    holes: &[camcraft_app::drilling::Hole],
+    cycle: &camcraft_app::drilling::CycleChoice,
+    tool: Option<&camcraft_app::tools::Tool>,
+) -> Option<&'static str> {
+    use camcraft_app::drilling::{self as d, CycleChoice as C};
+    let no_point = tool.is_some_and(|t| {
+        d::through_tip_run(t, *cycle, 0.0, d::BreakThroughFrom::FullDiameter).is_ok_and(|p| p <= 0.0)
+    });
+    if lathe {
+        Some("no effect on a lathe: the axial drill always measures to the tip")
+    } else if bottom_set {
+        Some("no effect: the stated Bottom sets the depth of every hole")
+    } else if !holes.iter().any(|h| h.through) {
+        Some("no effect: no hole in the list is through")
+    } else if matches!(cycle, C::Spot | C::Tap | C::FloatingTap | C::Ream) {
+        Some("no effect: a spot, tap or ream cycle measures to the tip")
+    } else if no_point {
+        Some("no effect: this tool has no point cone, so its tip run is the same")
+    } else {
+        None
+    }
+}
+
 /// #2441: whether Drill's break-through is measured from the full cutting
-/// diameter (adds the point cone) or from the tip.
-fn break_through_from_row(ui: &mut Ui, from: &mut camcraft_app::drilling::BreakThroughFrom) {
+/// diameter (adds the point cone) or from the tip. #2528: disabled, with
+/// the reason, where it changes nothing (`break_through_from_idle`).
+fn break_through_from_row(ui: &mut Ui, from: &mut camcraft_app::drilling::BreakThroughFrom, idle: Option<&str>) {
     use camcraft_app::drilling::BreakThroughFrom;
     let mut idx = match from {
         BreakThroughFrom::FullDiameter => 0,
         BreakThroughFrom::Tip => 1,
     };
     let before = idx;
-    prop_row(ui, "Break-through from", |ui| combo(ui, "d_bt_from", &mut idx, &["Full diameter", "Tip"]));
+    let row = ui.add_enabled_ui(idle.is_none(), |ui| {
+        prop_row(ui, "Break-through from", |ui| combo(ui, "d_bt_from", &mut idx, &["Full diameter", "Tip"]));
+    });
     if idx != before {
         *from = if idx == 1 { BreakThroughFrom::Tip } else { BreakThroughFrom::FullDiameter };
     }
-    hint(ui, "Full diameter adds the drill point cone so the full diameter breaks through; Tip measures to the point tip");
+    match idle {
+        // A disabled row shows no plain hover text: the reason rides the
+        // disabled hover of the whole row.
+        Some(why) => {
+            row.response.on_disabled_hover_text(why);
+        }
+        None => hint(ui, "Full diameter adds the drill point cone so the full diameter breaks through; Tip measures to the point tip"),
+    }
 }
 
 /// The hole kinds' depth override, inside the Levels group: off, every
