@@ -189,6 +189,13 @@ write (the gate), so the released program never carries one.
   OUTPUT only when `rtcp === true`; a tilted record on a non-RTCP
   machine is a `message()` refusal — never a reinterpretation), and
   the rate ceilings for anything you pace.
+- **Z goes up before a later tool change's G49 (#4341).** A
+  Fanuc-family control can move Z on a `G49` block with no axis word.
+  A preamble of a section after the first that writes `G49` and `T M6`
+  lifts Z first, by the post's own retract method, unless a Go home or
+  a setup-change stop already lifted it. A `G43.4` that is still armed
+  is cancelled before that lift. Mazak, Fanuc and Doosan DNM do this
+  (`crates/post/tests/script_wcs/setup_change/tool_change_retract.rs`).
 - **Up is the machine's word.** A retract in machine coordinates
   (`G53 G0 Z..`) reads `machine.safeRetractZ` (#495); machine Z0 is the
   top of travel only by convention (Tormach's), and a machine homed

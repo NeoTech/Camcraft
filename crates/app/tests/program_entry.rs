@@ -190,9 +190,11 @@ fn pause_and_home_entries_post_goldens_and_tormach_refuses_by_name() {
 
 /// The Z reference returns a program writes (`G28 Z0`, `G53 Z0`, the
 /// lathe's `G28 ... W0`): one per trip home, the program end's included.
+/// The Z lift just before a later preamble's G49 (#4341) is no trip home.
 fn z_homes(program: &str) -> usize {
-    let z = |l: &&str| has_word(l, "Z0") || has_word(l, "W0");
-    program.lines().filter(|l| (has_word(l, "G28") || has_word(l, "G53")) && z(l)).count()
+    let (l, z) = (program.lines().collect::<Vec<_>>(), |l: &str| has_word(l, "Z0") || has_word(l, "W0"));
+    let lift = |i: usize| l.get(i + 1).is_some_and(|n| has_word(n, "G49") && has_word(n, "G80"));
+    (0..l.len()).filter(|&i| (has_word(l[i], "G28") || has_word(l[i], "G53")) && z(l[i]) && !lift(i)).count()
 }
 
 /// Every built-in post that homes at program end and reads a trip home.
