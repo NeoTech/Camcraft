@@ -213,6 +213,26 @@ fn tilted_moves_and_control_comp_are_refused_by_name() {
 }
 
 #[test]
+fn mikron_wf3_dcm_states_no_rigid_tap_and_is_refused_for_its_manual_tool_change() {
+    let text = builtin_machine_text("Mikron WF3 DCM (LinuxCNC)").expect("shipped Mikron machine");
+    // #3982 review: the published HAL of this retrofit does not connect the
+    // spindle index to the encoder's index-enable pin, so G33.1 is not safe.
+    // The mirror states no rigid tapping: rigidTapOk() refuses G33.1 by name.
+    let m = machine::mirror(&parse_mch(text).expect("Mikron parses"));
+    assert_eq!(m.pointer("/kinematics/static/head/rigidTapping"), Some(&json!(false)), "{m}");
+
+    // The manual tool change law (#4085): the machine changes tools by hand,
+    // and this post does not declare manualToolChange, so each program is
+    // refused by name before any hook runs - never a T M6 with no stop.
+    for stream in [STREAM.to_owned(), tap_stream("TAP"), tap_stream("FLOATINGTAP")] {
+        let err = engine::run_with(&cps(), &m, &stream, &json!({ "retractMode": "g28" }))
+            .expect_err("a manual tool change machine is refused by this post");
+        let why = err.to_string();
+        assert!(why.contains("changes tools by hand") && why.contains("manualToolChange"), "{why}");
+    }
+}
+
+#[test]
 fn blend_tolerance_never_writes_g64_p0() {
     // #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
     // When a tolerance rounds to zero under fu() resolution (0.001 mm or 0.0001 in),
