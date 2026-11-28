@@ -21,18 +21,22 @@ use crate::machining2d::GenError;
 
 pub use nest::Contour;
 
-/// Who speaks in a refusal: the operation's name (`plasma profile`)
-/// and the cutting tool's (`torch`).
+/// Who speaks in a refusal: the operation's name (`plasma profile`),
+/// the cutting tool's (`torch`) and the short word its notes start
+/// with (`plasma`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Voice {
     pub who: &'static str,
     pub tool: &'static str,
+    pub short: &'static str,
 }
 
 impl Voice {
-    pub const PLASMA: Voice = Voice { who: "plasma profile", tool: "torch" };
-    pub const WIRE: Voice = Voice { who: "wire contour", tool: "wire" };
-    pub const WATERJET: Voice = Voice { who: "waterjet profile", tool: "jet" };
+    pub const PLASMA: Voice = Voice { who: "plasma profile", tool: "torch", short: "plasma" };
+    pub const WIRE: Voice = Voice { who: "wire contour", tool: "wire", short: "wire" };
+    pub const WATERJET: Voice = Voice { who: "waterjet profile", tool: "jet", short: "waterjet" };
+    /// #4081: the laser profile cut rides the waterjet generator.
+    pub const LASER: Voice = Voice { who: "laser profile", tool: "beam", short: "laser" };
 
     /// A refusal by name, prefixed with the operation's name.
     #[must_use]

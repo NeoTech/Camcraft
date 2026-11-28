@@ -22,6 +22,9 @@
 //! changes - the draft tool value, the document's tool, the landed cutter
 //! and the landed body (its mesh by identity) - never on `doc_version`.
 //! A still frame reads the inputs and builds nothing (`builds`).
+//! #4336: the side view's flute lines and the holder's name are built
+//! with the rest.
+//! #4451: a thread mill's steel carries its teeth (`thread_form`).
 //! Provenance: our own display model over `app::tool_body` and
 //! `app::spun`; the revolve follows `app::tool_body_view::revolve`
 //! (general surface-of-revolution practice). No vendor material consulted.
@@ -91,6 +94,12 @@ pub(crate) struct ToolModel {
     /// What the same checks say of the unapplied draft numbers, when that
     /// differs from `holder_err` - a draft note, not the command's verdict.
     pub draft_err: Option<String>,
+    /// #4336: the library holder the drawing shows (the draft pick or the
+    /// landed reference), for its label.
+    pub holder_name: Option<String>,
+    /// #4336: the side view's flute lines `(z, x)` (`flutes::side_lines`);
+    /// empty when the tool shows no flutes. Display only.
+    pub flute_lines: Vec<Vec<(f64, f64)>>,
 }
 
 /// What the model is built from. The body compares by its mesh identity
@@ -228,6 +237,8 @@ fn build(k: &Key) -> ToolModel {
         cutter_profile::check(t, points).ok().map(|s| s.outline())
     });
     let steel = drawn.unwrap_or_else(|| Tool { holder_len: 0.0, ..t.clone() }.profile());
+    // #4451: a thread mill shows its teeth on the cutting length.
+    let steel = super::thread_form::toothed(t, &steel).unwrap_or(steel);
     let profile = body.as_ref().and_then(|b| b.profile());
     let bands = match &body {
         Some(b) => tool_body::checked_bands(t, b).unwrap_or_default(),
@@ -243,6 +254,7 @@ fn build(k: &Key) -> ToolModel {
     let bare_bounds = crate::egui_app::tool_model_view::bounds(&mesh);
     let bare: Arc<[Triangle]> = Arc::from(mesh.clone());
     let fluted_steel = super::flutes::fluted(t, &prof);
+    let flute_lines = super::flutes::side_lines(t, &prof).unwrap_or_default();
     let mut holder_tris = Vec::new();
     let holder = match (&body, profile) {
         (Some(b), p) => {
@@ -294,6 +306,8 @@ fn build(k: &Key) -> ToolModel {
         dims,
         holder_err,
         draft_err,
+        holder_name: body.as_ref().and_then(|b| b.library.as_ref()).map(|r| r.entry.clone()),
+        flute_lines,
     }
 }
 

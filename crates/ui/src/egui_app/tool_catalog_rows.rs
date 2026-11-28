@@ -12,12 +12,15 @@ use crate::state::ToolUi;
 
 use super::layout::{CTRL_W, prop_row, row_label_id, text_row};
 
-/// The rows, in the Catalog group of the settings grid.
-pub(super) fn catalog_rows(ui: &mut Ui, t: &mut ToolUi) {
+/// The rows, in the Catalog group of the settings grid. #4336: without
+/// the helix angle (`helix` false) where the caller draws [`helix_row`].
+pub(super) fn catalog_rows(ui: &mut Ui, t: &mut ToolUi, helix: bool) {
     text_row(ui, "Part number", &mut t.part_number, "tool_part_number", CTRL_W * 1.3);
     text_row(ui, "Vendor", &mut t.vendor, "tool_vendor", CTRL_W * 1.3);
     text_row(ui, "Coating", &mut t.coating, "tool_coating", CTRL_W * 1.3);
-    text_row(ui, "Helix angle (deg)", &mut t.helix_deg, "tool_helix", CTRL_W);
+    if helix {
+        text_row(ui, "Helix angle (deg)", &mut t.helix_deg, "tool_helix", CTRL_W);
+    }
     prop_row(ui, "Notes", |ui| {
         let mut r = ui
             .add(TextEdit::multiline(&mut t.notes).id_salt("tool_notes").desired_width(CTRL_W * 1.3).desired_rows(2));
@@ -27,6 +30,23 @@ pub(super) fn catalog_rows(ui: &mut Ui, t: &mut ToolUi) {
         r
     });
 }
+
+/// #4336: the helix angle as the tool library window's CUTTER group shows
+/// it - "Helix angle", the unit after the field. Still text: a half-typed
+/// number is refused by name at Apply, never dropped.
+pub(super) fn helix_row(ui: &mut Ui, t: &mut ToolUi) {
+    prop_row(ui, HELIX, |ui| {
+        ui.weak("deg");
+        let mut r = ui.add(TextEdit::singleline(&mut t.helix_deg).id_salt("tool_helix").desired_width(CTRL_W - 30.0));
+        if let Some(l) = row_label_id(ui) {
+            r = r.labelled_by(l);
+        }
+        r
+    });
+}
+
+/// The helix row's label on the Tool tab.
+pub(crate) const HELIX: &str = "Helix angle";
 
 #[cfg(test)]
 mod tests {

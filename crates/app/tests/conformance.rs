@@ -431,21 +431,36 @@ fn the_dialects_actually_differ() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let stream = as_program("drill_peck", &read("crates/app/tests/golden/drill_peck.cl"));
-    let texts: Vec<(&str, String)> = mill_posts()
+    let texts: Vec<(&str, &str, String)> = mill_posts()
         .into_iter()
         .map(|(name, stem, _)| {
             let cps = read(&format!("assets/posts/{stem}.cps"));
             (
                 name,
+                stem,
                 engine::run(&cps, &mch, &stream)
                     .unwrap_or_else(|e| panic!("{name} on drill_peck: {e}"))
                     .program,
             )
         })
         .collect();
-    for (i, (a, x)) in texts.iter().enumerate() {
-        for (b, y) in &texts[i + 1..] {
-            assert_ne!(x, y, "posts {a} and {b} emit identical programs");
+    // #4346: Doosan DNM is the Fanuc dialect plus opt-in machine words
+    // (brake, conveyor, AICC); with its defaults it writes Fanuc's drill
+    // program. A pair that matches there must differ on a rotary index
+    // with the brake option, on the DNM machine file.
+    let dnm = machine::mirror(&parse_mch(&read("assets/machines/doosan-dnm.mch")).expect("dnm machine"));
+    let index = "PARAM ClearancePlane 50\nTOOL 1 10MM END MILL\nPARAM SpindleSpeed 5000\nSECTION\n\
+        Rapid 0 0 10000 A90000\nFeed 50000 0 -1000 F400000\nSECTION END\n";
+    let brake = json!({ "rotaryBrake": true });
+    let on_dnm = |stem: &str| {
+        engine::run_with(&read(&format!("assets/posts/{stem}.cps")), &dnm, index, &brake).ok().map(|o| o.program)
+    };
+    for (i, (a, sa, x)) in texts.iter().enumerate() {
+        for (b, sb, y) in &texts[i + 1..] {
+            if x == y {
+                let (p, q) = (on_dnm(sa), on_dnm(sb));
+                assert!((p.is_some() || q.is_some()) && p != q, "posts {a} and {b} emit identical programs");
+            }
         }
     }
 }

@@ -56,6 +56,20 @@ pub enum Dwell {
     Unknown,
 }
 
+/// The finish/rough word of the tolerance cycle (#4226): ISO `G62 .. P01`,
+/// Klartext `CYCL DEF 32.2 HSC-MODE`. Sources are in
+/// `docs/decisions/4226-g62-smoothing.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HscMode {
+    /// No mode word is documented (or the control has no cycle 32).
+    No,
+    /// The control takes the word.
+    Yes,
+    /// Only with software option 2 (HSC machining) installed.
+    Option2,
+}
+
 /// The capability flags of one profile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,6 +93,12 @@ pub struct Flags {
     pub cycle247: Cycle247,
     /// The Klartext dwell form.
     pub dwell: Dwell,
+    /// The finish/rough word of cycle 32 / G62 (#4226).
+    pub g62_mode: HscMode,
+    /// The largest tolerance T of cycle 32 / G62 in µm, on the 1 µm grid
+    /// that the posts write (#4226). 0: the control has no cycle 32.
+    #[serde(rename = "g62TMaxUm")]
+    pub g62_t_max_um: u32,
 }
 
 /// The NC software identifiers of one row.
@@ -109,6 +129,14 @@ pub(super) struct Row {
 pub(super) const PARAXIAL: &[&str] = &["TNC 124", "TNC 128"];
 
 use C200::{Base, Q211, Q395};
+
+/// #4226: the documented T ranges of cycle 32 / G62. `T_WIDE` is "0 to
+/// 99999.9999" (on the 1 µm grid of the posts); `T_10` is "0.0000 to
+/// 10.0000", and also the bound where a manual states no range (the
+/// narrowest documented range). `T_NONE`: no cycle 32.
+const T_WIDE: u32 = 99_999_999;
+const T_10: u32 = 10_000;
+const T_NONE: u32 = 0;
 use Tri::{No, Unknown, Yes};
 
 const TNC310: Flags = Flags {
@@ -121,6 +149,8 @@ const TNC310: Flags = Flags {
     drill_c200: Base,
     cycle247: Cycle247::None,
     dwell: Dwell::Unknown,
+    g62_mode: HscMode::No,
+    g62_t_max_um: T_NONE,
 };
 const TNC410: Flags = Flags { language_iso: Yes, m136_m137: No, dwell: Dwell::Cycle9, ..TNC310 };
 const TNC426A: Flags = Flags {
@@ -133,8 +163,10 @@ const TNC426A: Flags = Flags {
     drill_c200: Base,
     cycle247: Cycle247::Unknown,
     dwell: Dwell::Unknown,
+    g62_mode: HscMode::No,
+    g62_t_max_um: T_NONE,
 };
-const TNC426_472: Flags = Flags { language_iso: Yes, dwell: Dwell::Cycle9, ..TNC426A };
+const TNC426_472: Flags = Flags { language_iso: Yes, dwell: Dwell::Cycle9, g62_t_max_um: T_10, ..TNC426A };
 const TNC426_474: Flags = Flags { drill_c200: Q211, ..TNC426_472 };
 const TNC426_476: Flags = Flags { m140: Yes, cycle247: Cycle247::Datum, ..TNC426_474 };
 const ITNC_420: Flags = Flags {
@@ -147,9 +179,13 @@ const ITNC_420: Flags = Flags {
     drill_c200: Q211,
     cycle247: Cycle247::Datum,
     dwell: Dwell::Cycle9,
+    g62_mode: HscMode::Yes,
+    g62_t_max_um: T_10,
 };
 const ITNC_422: Flags = Flags { cycle247: Cycle247::PresetTable, ..ITNC_420 };
-const ITNC_604: Flags = Flags { drill_c200: Q395, ..ITNC_422 };
+const ITNC_49X: Flags = Flags { g62_mode: HscMode::Option2, ..ITNC_422 };
+const ITNC_49X_05: Flags = Flags { g62_t_max_um: T_WIDE, ..ITNC_49X };
+const ITNC_604: Flags = Flags { drill_c200: Q395, ..ITNC_49X_05 };
 const TNC320_EARLY: Flags = Flags {
     language_iso: Unknown,
     decimals: 4,
@@ -160,19 +196,26 @@ const TNC320_EARLY: Flags = Flags {
     drill_c200: Q211,
     cycle247: Cycle247::Unknown,
     dwell: Dwell::Cycle9,
+    g62_mode: HscMode::No,
+    g62_t_max_um: T_NONE,
 };
-const TNC320_03: Flags = Flags { cycle247: Cycle247::PresetTable, ..TNC320_EARLY };
-const TNC320_04: Flags = Flags { language_iso: Yes, ..TNC320_03 };
+const TNC320_03: Flags =
+    Flags { cycle247: Cycle247::PresetTable, g62_mode: HscMode::Yes, g62_t_max_um: T_10, ..TNC320_EARLY };
+const TNC320_04: Flags = Flags { language_iso: Yes, g62_t_max_um: T_WIDE, ..TNC320_03 };
 const TNC320_77_OLD: Flags = Flags { drill_c200: Q395, ..TNC320_04 };
-const TNC320_77: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC320_77_OLD };
-const TNC620_EARLY: Flags = Flags { cycle247: Cycle247::PresetTable, ..TNC320_EARLY };
-const TNC620_MID: Flags = Flags { language_iso: Yes, ..TNC620_EARLY };
+const TNC320_77_04: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC320_77_OLD };
+const TNC320_77: Flags = Flags { g62_t_max_um: T_10, ..TNC320_77_04 };
+const TNC620_EARLY: Flags =
+    Flags { cycle247: Cycle247::PresetTable, g62_mode: HscMode::Yes, g62_t_max_um: T_10, ..TNC320_EARLY };
+const TNC620_MID: Flags = Flags { language_iso: Yes, g62_t_max_um: T_WIDE, ..TNC620_EARLY };
 const TNC620_817_OLD: Flags = Flags { drill_c200: Q395, ..TNC620_MID };
-const TNC620_817: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC620_817_OLD };
+const TNC620_817_04: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC620_817_OLD };
+const TNC620_817: Flags = Flags { g62_t_max_um: T_10, ..TNC620_817_04 };
 const TNC640_01: Flags = TNC620_MID;
 const TNC640_02: Flags = Flags { tool_name_max: 32, ..TNC640_01 };
 const TNC640_B: Flags = Flags { drill_c200: Q395, ..TNC640_02 };
-const TNC640_C: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC640_B };
+const TNC640_C07: Flags = Flags { dwell: Dwell::FunctionDwell, ..TNC640_B };
+const TNC640_C: Flags = Flags { g62_t_max_um: T_10, ..TNC640_C07 };
 const TNC7_16: Flags = Flags { language_iso: No, ..TNC640_C };
 const TNC7: Flags = Flags { language_iso: Yes, ..TNC640_C };
 
@@ -196,23 +239,27 @@ pub(super) const ROWS: &[Row] = &[
     row("tnc426-476", TNC426, Ids::Exact(&[280476, 280477]), Rels::Any, TNC426_476),
     row("itnc-340420", ITNC, Ids::Exact(&[340420]), Rels::Any, ITNC_420),
     row("itnc-340422", ITNC, Ids::Exact(&[340422]), Rels::Any, ITNC_422),
-    row("itnc-49x", ITNC, fam(34049, 0, 4), Rels::Range(1, 8), ITNC_422),
-    row("itnc-49x", ITNC, fam(60642, 0, 5), Rels::Range(1, 3), ITNC_422),
+    row("itnc-49x", ITNC, fam(34049, 0, 4), Rels::Range(1, 4), ITNC_49X),
+    row("itnc-49x", ITNC, fam(34049, 0, 4), Rels::Range(5, 8), ITNC_49X_05),
+    row("itnc-49x", ITNC, fam(60642, 0, 5), Rels::Range(1, 3), ITNC_49X_05),
     row("itnc-60642x-04", ITNC, fam(60642, 0, 5), Rels::List(&[4]), ITNC_604),
     row("tnc320-early", &["TNC 320"], fam(34055, 0, 5), Rels::Range(1, 2), TNC320_EARLY),
     row("tnc320-34055x", &["TNC 320"], fam(34055, 0, 5), Rels::List(&[3]), TNC320_03),
     row("tnc320-34055x", &["TNC 320"], fam(34055, 0, 5), Rels::Range(4, 6), TNC320_04),
     row("tnc320-77185x", &["TNC 320"], fam(77185, 0, 5), Rels::Range(1, 2), TNC320_77_OLD),
-    row("tnc320-77185x", &["TNC 320"], fam(77185, 0, 5), Rels::List(&[4, 5, 6, 18]), TNC320_77),
+    row("tnc320-77185x", &["TNC 320"], fam(77185, 0, 5), Rels::List(&[4]), TNC320_77_04),
+    row("tnc320-77185x", &["TNC 320"], fam(77185, 0, 5), Rels::List(&[5, 6, 18]), TNC320_77),
     row("tnc620-early", &["TNC 620"], fam(34056, 0, 5), Rels::List(&[1]), TNC620_EARLY),
     row("tnc620-mid", &["TNC 620"], fam(34056, 0, 5), Rels::Range(2, 4), TNC620_MID),
     row("tnc620-mid", &["TNC 620"], fam(73498, 0, 5), Rels::Range(1, 2), TNC620_MID),
     row("tnc620-81760x", &["TNC 620"], fam(81760, 0, 5), Rels::Range(1, 3), TNC620_817_OLD),
-    row("tnc620-81760x", &["TNC 620"], fam(81760, 0, 5), Rels::List(&[4, 5, 6, 7, 8, 16, 17, 18]), TNC620_817),
+    row("tnc620-81760x", &["TNC 620"], fam(81760, 0, 5), Rels::List(&[4]), TNC620_817_04),
+    row("tnc620-81760x", &["TNC 620"], fam(81760, 0, 5), Rels::List(&[5, 6, 7, 8, 16, 17, 18]), TNC620_817),
     row("tnc640-a", &["TNC 640"], fam(34059, 0, 5), Rels::List(&[1]), TNC640_01),
     row("tnc640-a", &["TNC 640"], fam(34059, 0, 5), Rels::List(&[2]), TNC640_02),
     row("tnc640-b", &["TNC 640"], fam(34059, 0, 5), Rels::Range(4, 6), TNC640_B),
-    row("tnc640-c", &["TNC 640"], fam(34059, 0, 5), Rels::Range(7, 9), TNC640_C),
+    row("tnc640-c", &["TNC 640"], fam(34059, 0, 5), Rels::List(&[7]), TNC640_C07),
+    row("tnc640-c", &["TNC 640"], fam(34059, 0, 5), Rels::Range(8, 9), TNC640_C),
     row("tnc640-d", &["TNC 640"], fam(34059, 0, 5), Rels::List(&[10, 11, 16, 17, 18]), TNC640_C),
     row("tnc7", &["TNC7", "TNC7 basic"], fam(81762, 0, 5), Rels::List(&[16]), TNC7_16),
     row("tnc7", &["TNC7", "TNC7 basic"], fam(81762, 0, 5), Rels::Range(17, 20), TNC7),

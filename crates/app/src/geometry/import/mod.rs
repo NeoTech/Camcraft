@@ -118,6 +118,10 @@ pub struct Graded {
     pub open: Option<String>,
     /// Raw STEP text preserved for library/project persistence (#744).
     pub step_source: Option<String>,
+    /// SolidCraft's name of each face of a `.sc` design's body over the
+    /// facets it became (#3915); `None` for every other format, and for a
+    /// design whose cache holds no names that fit.
+    pub source_faces: Option<std::sync::Arc<crate::geometry::source_faces::SourceFaces>>,
 }
 
 impl Graded {
@@ -168,7 +172,7 @@ pub fn load_model_open_in(path: &Path, budget: usize, units: Option<Unit>) -> Re
     if format == Format::Stl {
         let mut mesh = gate(stl::parse_file(path)?)?;
         let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-        return Ok(Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None });
+        return Ok(Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None, source_faces: None });
     }
     let data = std::fs::read(path)?;
     parse_model_open_in(&data, format, budget, units)
@@ -195,14 +199,17 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
 /// file that states none (#1874). A STEP file that states no unit, with no
 /// unit from the caller, is [`ImportError::StepUnitsMissing`].
 pub fn parse_model_open_in(data: &[u8], format: Format, budget: usize, units: Option<Unit>) -> Result<Graded, ImportError> {
+    let mut source_faces = None;
     let (mesh, coarse_mm, notes, open, file_tolerance) = match format {
         // #1456: the machining mesh is watertight and outward, at the chord cap.
         Format::Solidcraft => {
-            let (mesh, notes) = camcraft_geometry::solidcraft::parse(data, budget, step::CHORD_CAP)
+            let (mesh, notes, faces) = camcraft_geometry::solidcraft::parse(data, budget, step::CHORD_CAP)
                 .map_err(|error| match error {
                     camcraft_geometry::solidcraft::SolidcraftError::TooLarge => ImportError::TooLarge,
                     camcraft_geometry::solidcraft::SolidcraftError::Refused(reason) => ImportError::Solidcraft(reason),
                 })?;
+            // #3915: the facets land as parsed, so the record stays theirs.
+            source_faces = faces.map(std::sync::Arc::new);
             (mesh, None, notes, None, false)
         }
         Format::Stl | Format::Obj => {
@@ -223,7 +230,7 @@ pub fn parse_model_open_in(data: &[u8], format: Format, budget: usize, units: Op
     let step_source = (format == Format::Step)
         .then(|| std::str::from_utf8(data).ok().map(str::to_owned))
         .flatten();
-    Ok(Graded { mesh: gate(mesh)?, coarse_mm, file_tolerance, notes, open, step_source })
+    Ok(Graded { mesh: gate(mesh)?, coarse_mm, file_tolerance, notes, open, step_source, source_faces })
 }
 
 /// Belt-and-gate: each importer checks finiteness at the parse site, and

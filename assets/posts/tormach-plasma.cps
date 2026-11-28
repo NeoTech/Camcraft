@@ -86,7 +86,13 @@ function clean(s) {
   t = t.replace(/[()%;]/g, " ").replace(/[^\x20-\x7E]/g, "?").replace(/\s+/g, " ").trim();
   return t.length > 40 ? t.substring(0, 40).trim() : t;
 }
-function note(s) { block(["(" + s + ")"]); }
+// LinuxCNC reads some comments as commands - (MSG,..) (DEBUG,..)
+// (PRINT,..) (LOG..) (PROBEOPEN ..) (ABORT,..) and AXIS's (AXIS,..), the
+// keyword in any case (LinuxCNC G-code manual, "Comments", "Messages",
+// "Probe Logging", "Logging", "Debug Messages"). A comment whose text
+// would open with one is led by "- ", so user text stays inert.
+var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
+function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
 // Program notes use this dialect without truncating the stated bound.
 function onComment(s) { note(commentText(s)); }
 

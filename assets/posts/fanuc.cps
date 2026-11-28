@@ -100,6 +100,7 @@ var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none 
 var smoothMode = "";        // #616: "finish" or "rough"
 var smoothActive = false;   // #616: this section wrote its smoothing words
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
+var tcpmLeft = false;      // #4348: the last section ended with G43.4 still active (no G49 written since)
 var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
 var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a G49 turns nothing
@@ -261,10 +262,30 @@ function retractHome(xyToo) {
       return;
     }
     block(["G53", "G00", w("Z", machine.safeRetractZ)]);
+    zUp = true;
     return;
   }
   block(["G91", "G28", "Z0"]);
   if (xyToo) block(["G28", "X0", "Y0"]);
+  zUp = true;
+}
+// #4341: Z stands at its safe retract height (a Go home or a setup-change
+// lift); the next preamble opens the section and clears it. tcpmLeft
+// (declared with the TCPM state, #4348) also tells the next preamble
+// that the section that ended left G43.4 armed (its G49 cancels it).
+var zUp = false;
+// #4341: a later section's preamble cancels the length offset (G49) and
+// changes the tool. A FANUC G49 block with no axis word can move Z by the
+// offset, so Z goes up by the safeRetract method first, unless a Go home
+// or a setup change already lifted it. A reference return under TCPM is
+// one many controls alarm on, so a G43.4 left armed is cancelled first,
+// as Go home does.
+function retractBeforeChange() {
+  if (secStarted > 0 && !zUp) {
+    if (tcpmLeft) block(["G49"]);
+    retractHome(false);
+  }
+  tcpmLeft = false;
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
@@ -760,8 +781,10 @@ function aiccOff() {
 // the tool change and the first X/Y traverse, which states its height again.
 function uprightAfterTilt() {
   if (!heldRotaries().length) return;
-  retractHome(false);
-  if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
+  if (!zUp) {                // #4341: the preamble's retract already lifted Z
+    retractHome(false);
+    if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
+  }
   rotariesToZero();
   xyUnknown = true;
 }
@@ -808,8 +831,13 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
-  block(["G90", wcsWord, "G40", "G49", "G80"]);
+  retractBeforeChange();     // #4341: the G90 below ends a G28 retract's G91
+  // #4346: the control can keep G18 / G19 or G95 from an earlier program
+  // or MDI (B-64604EN-2, the power-on plane and feed mode) - state both.
+  block(["G90", "G17", "G94", wcsWord, "G40", "G49", "G80"]);
+  planeG = 17;
   uprightAfterTilt();
+  zUp = false;
   if (toolWait) {
     if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
     toolNote();
@@ -898,7 +926,9 @@ function endPreamble() {
   afterOp();
   // The next preamble carries G49, which cancels TCPM too - so the
   // arm and the angle memory reset here, and a later tilt re-arms by
-  // commanding all three words (stage D).
+  // commanding all three words (stage D). At the program end there is
+  // no next preamble: onClose reads tcpmLeft (#4348).
+  tcpmLeft = tcpmOn;         // #4341: still armed on the control until that G49
   tcpmOn = false;
   lastA = 0; lastB = 0; lastC = 0;
 }
@@ -1389,6 +1419,9 @@ function onClose() {
   // #504: a trip home with nothing written after it (a trailing Go
   // home) already is the program-end home - written once, not twice.
   if (!uprightAtEnd() && linesWritten() !== homedAt) {
+    // #4348: a reference return is not permitted in G43.4 mode (FANUC
+    // 30i B-63944EN/02): a section that tilted back to zero left TCPM on.
+    if (tcpmLeft) block(["G49"]);
     retractHome(true);
   }
   var u = endUnitsWord();

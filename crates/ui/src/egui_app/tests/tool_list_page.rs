@@ -63,3 +63,33 @@ fn the_tool_list_page_keeps_its_empty_messages_with_no_tools() {
     assert!(none_r < top(&harness, "Export tool list…"), "exports last");
     assert!(harness.query_by_label("Est (min)").is_none(), "no table header with no rows");
 }
+
+/// #1992: at 1280 x 720 the tools table can be wider than the Properties
+/// leaf. The user scrolls it across with the wheel, then a click on the
+/// centre of a row's Edit button opens that tool - the table's own
+/// scroll bar must not cover the last row.
+#[test]
+fn a_centre_click_on_edit_opens_the_tool_after_a_scroll_across() {
+    let mut harness = shell_harness();
+    open_tools(&mut harness);
+    let leaf = super::layout::leaf_rect(&harness.state().dock, &Tab::Properties).unwrap_or_else(|| panic!("the Properties leaf is laid out"));
+    let edit = |h: &Harness<'static, ShellUi>| h.get_by_role_and_label(egui::accesskit::Role::Pane, "Properties").get_by_label("Edit").rect();
+    // Scroll the table across until the button is inside the leaf.
+    let table = harness.get_by_label("Size").rect();
+    for _ in 0..20 {
+        if leaf.contains_rect(edit(&harness)) {
+            break;
+        }
+        harness.hover_at(table.center());
+        harness.event(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(-40.0, 0.0), phase: egui::TouchPhase::Move, modifiers: egui::Modifiers::NONE });
+        harness.run_steps(2);
+    }
+    let r = edit(&harness);
+    assert!(leaf.contains_rect(r), "Edit {r:?} is in reach inside the leaf {leaf:?}");
+    harness.hover_at(r.center());
+    harness.run_steps(1);
+    harness.event(egui::Event::PointerButton { pos: r.center(), button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    harness.event(egui::Event::PointerButton { pos: r.center(), button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    harness.run_steps(3);
+    assert_eq!(harness.state().state.ui_target, UiTarget::Tool("EM-0600-4FL".into()), "the centre click opens the tool");
+}

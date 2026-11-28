@@ -135,16 +135,18 @@ fn holder_picker_uses_label_left_rows() {
     open_in_window(&mut h, TOOL);
     let win = library_window(&h);
     let texts = super::structural::painted(&h);
-    let lib_l = super::structural::at(&texts, "Library holder");
     let lib_c = win
         .query_all_by_role(egui::accesskit::Role::ComboBox)
         .find(|n| n.value().as_deref() == Some("BT30 ER20"))
-        .expect("Library holder combo")
+        .expect("Holder combo")
         .rect();
+    // #4336: the pick's row is "Holder" (the preview's Holder toggle is
+    // another "Holder", on another row).
+    let lib_l = super::structural::at_where(&texts, "Holder", |p| (p.y - lib_c.center().y).abs() < 15.0);
     assert!(lib_l.x < lib_c.center().x, "Library holder label sits left of combo: {lib_l:?} vs {lib_c:?}");
     assert!((lib_l.y - lib_c.center().y).abs() < 15.0, "Library holder shares a row: {lib_l:?} vs {lib_c:?}");
 
-    for (label, value) in [("Gauge length", "60.0 mm"), ("Projection", "55.0 mm")] {
+    for (label, value) in [("Holder gauge length", "60.0 mm"), ("Stick-out", "55.0 mm")] {
         let l = super::structural::at(&texts, label);
         let input = win
             .query_all_by_role(egui::accesskit::Role::SpinButton)

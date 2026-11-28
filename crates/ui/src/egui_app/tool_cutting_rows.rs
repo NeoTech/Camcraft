@@ -58,13 +58,12 @@ pub(super) fn cutting_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool) {
     cutting_rows_with(ui, t, u, torch, None);
 }
 
-/// #3896 (U5): read-only cells that the tool library window's Recipes tab
-/// adds after the own fields of each speed-and-feed row (surface speed,
-/// feed per tooth, the document material's mark): the column heads, then
-/// one call for each drawn row.
+/// #3896 (U5), #4337 (U11): the tool library window's Recipes tab adds a
+/// `lead` cell before the material of each speed-and-feed row (the stock
+/// material's star). With `Extra` the tab draws its own add button, so
+/// the table's "Add material row" stays away.
 pub(super) struct Extra<'a> {
-    pub heads: Vec<String>,
-    pub cells: &'a dyn Fn(&mut Ui, &CuttingRow),
+    pub lead: &'a dyn Fn(&mut Ui, &CuttingRow),
 }
 
 /// [`cutting_rows`], with the `extra` cells on each speed-and-feed row.
@@ -90,6 +89,9 @@ pub(super) fn cutting_rows_with(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: boo
         && i < t.cutting.len()
     {
         t.cutting.remove(i);
+    }
+    if extra.is_some() {
+        return;
     }
     let full = !waterjet
         && WorkMaterial::ALL
@@ -125,16 +127,16 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool, extra: Option<&
     let keys = row_keys();
     let labels: Vec<&str> = keys.iter().skip(1).map(|m| material_label(*m)).collect();
     let mut remove = None;
-    let columns = 6 + extra.map_or(0, |x| x.heads.len());
+    let columns = 6 + usize::from(extra.is_some());
     egui::Grid::new("tool_cutting_table").num_columns(columns).striped(true).show(ui, |ui| {
+        if extra.is_some() {
+            ui.label("");
+        }
         ui.label("Material");
         ui.label(if torch { "" } else { "Spindle rpm" });
         ui.label(format!("Feed ({})", u.feed_suffix()));
         ui.label("Stepdown");
         ui.label("Stepover");
-        for head in extra.iter().flat_map(|x| x.heads.iter()) {
-            ui.label(head);
-        }
         ui.label("");
         ui.end_row();
         for (i, row) in t.cutting.iter_mut().enumerate() {
@@ -142,6 +144,9 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool, extra: Option<&
             // row. It rides the draft untouched until it has an editor.
             if row.is_recipe() {
                 continue;
+            }
+            if let Some(x) = extra {
+                (x.lead)(ui, row);
             }
             ui.push_id(("tool_cutting_row", i), |ui| {
                 ui.horizontal(|ui| match row.material {
@@ -166,9 +171,6 @@ fn table_rows(ui: &mut Ui, t: &mut ToolUi, u: Unit, torch: bool, extra: Option<&
             num_feed_named(ui, u, &mut row.feed, "Feed");
             step_field(ui, u, &mut row.stepdown, "Stepdown");
             step_field(ui, u, &mut row.stepover, "Stepover");
-            if let Some(x) = extra {
-                (x.cells)(ui, row);
-            }
             if row.material.is_some() {
                 if ui.small_button("Remove").on_hover_text("drop this material's row").clicked() {
                     remove = Some(i);

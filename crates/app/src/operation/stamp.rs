@@ -87,6 +87,10 @@ fn stamp_at(
     if kind.mode == crate::verify::Mode::Envelope && kind.section != Section::Turning {
         h.write(b"vertical-rapid-part-4062");
     }
+    // Closed model chamfers now verify the arcs that will post.
+    if matches!(params, OpParams::Chamfer2D { .. }) {
+        h.write(b"closed-model-chamfer-arcs-4411");
+    }
     // #2965: the multi-axis, rotary and cross-drill kinds answer to the
     // first-traverse law now. Only their caches read Stale once; the
     // salt above stays, so no other kind's stamp moves.

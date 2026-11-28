@@ -62,6 +62,7 @@ mod tool_library_dialog;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
+pub use tool_library_dialog::{DerivedKey, RecipesView};
 #[path = "state_components.rs"]
 mod components_ui;
 pub use components_ui::{
@@ -70,11 +71,24 @@ pub use components_ui::{
 #[cfg(test)]
 pub(crate) use components_ui::library_loads;
 pub(crate) use components_ui::{draft_of, gauge_of, group_of, holder_entry};
+#[path = "state_holder_form.rs"]
+mod holder_form;
+#[cfg(test)]
+pub(crate) use holder_form::shape_reads;
+pub(crate) use holder_form::shape_of;
+#[path = "state_holder_search.rs"]
+mod holder_search;
+pub(crate) use holder_search::{HolderHits, HolderItem, holder_hits};
+#[cfg(test)]
+pub(crate) use holder_search::holder_searches;
 #[path = "state_component_views.rs"]
 mod component_views;
 pub use component_views::{
     ComponentRow, ComponentViews, Derived as ComponentDerived, StackValues, StackView, SwapOffer, ViewBuilds, candidates,
 };
+#[path = "state_tool_list.rs"]
+mod tool_list;
+pub use tool_list::{ListBuilds, ToolHits, ToolListCache, ToolRow};
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 #[path = "state_pockets.rs"]
@@ -1326,6 +1340,7 @@ impl ToolUi {
                 ToolKind::Dovetail => 20,
                 ToolKind::Lollipop => 21,
                 ToolKind::FormMill => 22,
+                ToolKind::Laser => 23,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1389,6 +1404,7 @@ impl ToolUi {
             20 => ToolKind::Dovetail,
             21 => ToolKind::Lollipop,
             22 => ToolKind::FormMill,
+            23 => ToolKind::Laser,
             _ => ToolKind::EndMill,
         }
     }
@@ -1746,9 +1762,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
-    /// Catalog filters are temporary view state, outside the document and history.
-    pub tool_catalog_kind: Option<camcraft_app::tools::ToolKind>,
-    pub tool_catalog_name: String,
+    /// #4335: the tool library's search text - view state, outside the
+    /// document and the history; it holds between two openings.
+    pub tool_search: String,
     /// #899: how the Tool library page's Import treats a name the
     /// document already has. View state - the import itself is the command.
     pub tool_import_mode: camcraft_app::commands::ImportMode,
@@ -2225,6 +2241,8 @@ pub struct State {
     pub component_lib: ComponentLib,
     /// #3898: the component pages' derived sets, keyed on their inputs.
     pub component_views: ComponentViews,
+    /// #4335: the tool list's rows and the search's hits.
+    pub tool_list: ToolListCache,
     /// #2397: Properties is showing the blank new-tool form. The Tool
     /// target with the empty name is the destination; this says which of
     /// its two faces shows - the pointer to the library, or the draft.
@@ -2411,8 +2429,7 @@ impl State {
             frame_rate: crate::egui_app::frame_rate::FrameRate::default(),
             gpu_line: None,
             spindle_as_vc: false,
-            tool_catalog_kind: None,
-            tool_catalog_name: String::new(),
+            tool_search: String::new(),
             tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
@@ -2574,6 +2591,7 @@ impl State {
             tool_library: None,
             component_lib: ComponentLib::default(),
             component_views: ComponentViews::default(),
+            tool_list: ToolListCache::default(),
             new_tool_form: false,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
@@ -4607,9 +4625,10 @@ impl State {
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
                     let (coarse, budget, hole) = (command.coarse_mm, command.facet_budget, command.hole);
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source).with_source_faces(command.source_faces)) {
                         Ok(upd) => {
-                            let summary = upd.changes().describe();
+                            // #3915: with the picks that followed SolidCraft names.
+                            let summary = upd.summary();
                             self.history.execute(&self.world, upd);
                             self.doc_version += 1;
                             self.note_recent_model(file.as_deref());

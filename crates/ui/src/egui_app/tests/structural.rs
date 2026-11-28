@@ -225,7 +225,7 @@ fn tool_editor_structure() {
     for label in ["Body", "Profile", "Close"] {
         assert!(win.query_by_label(label).is_some(), "the shape window shows {label:?}");
     }
-    for label in ["Holder library", "Library holder"] {
+    for label in ["Apply holder", "Holder gauge length"] {
         assert!(win.query_by_label(label).is_none(), "the shape window has no {label:?}");
     }
     assert!(
