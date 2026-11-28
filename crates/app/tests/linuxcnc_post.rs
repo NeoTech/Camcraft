@@ -213,20 +213,23 @@ fn tilted_moves_and_control_comp_are_refused_by_name() {
 }
 
 #[test]
-fn mikron_wf3_dcm_posts_g33_1_rigid_tapping_and_refuses_mist_coolant() {
+fn mikron_wf3_dcm_states_no_rigid_tap_and_is_refused_for_its_manual_tool_change() {
     let text = builtin_machine_text("Mikron WF3 DCM (LinuxCNC)").expect("shipped Mikron machine");
+    // #3982 review: the published HAL of this retrofit does not connect the
+    // spindle index to the encoder's index-enable pin, so G33.1 is not safe.
+    // The mirror states no rigid tapping: rigidTapOk() refuses G33.1 by name.
     let m = machine::mirror(&parse_mch(text).expect("Mikron parses"));
-    let nc = post(&m, &tap_stream("TAP"), &json!({ "retractMode": "g28" }));
-    assert!(nc.contains("S500 M3"), "{nc}");
-    assert!(nc.contains("M8"), "{nc}");
-    assert!(nc.contains("G0 X30 Y10 Z2\nG33.1 Z-12 K1.5\nG80\nG0 X30 Y10 Z5"), "{nc}");
+    assert_eq!(m.pointer("/kinematics/static/head/rigidTapping"), Some(&json!(false)), "{m}");
 
-    let mist_stream = "PARAM ClearancePlane 15\nPARAM SpindleSpeed 2500\nPARAM Coolant mist\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n";
-    let (_, warnings) = run(&m, mist_stream, &json!({ "retractMode": "g28" }));
-    assert!(
-        warnings.iter().any(|w| w.contains("no mist coolant code")),
-        "{warnings:?}"
-    );
+    // The manual tool change law (#4085): the machine changes tools by hand,
+    // and this post does not declare manualToolChange, so each program is
+    // refused by name before any hook runs - never a T M6 with no stop.
+    for stream in [STREAM.to_owned(), tap_stream("TAP"), tap_stream("FLOATINGTAP")] {
+        let err = engine::run_with(&cps(), &m, &stream, &json!({ "retractMode": "g28" }))
+            .expect_err("a manual tool change machine is refused by this post");
+        let why = err.to_string();
+        assert!(why.contains("changes tools by hand") && why.contains("manualToolChange"), "{why}");
+    }
 }
 
 #[test]

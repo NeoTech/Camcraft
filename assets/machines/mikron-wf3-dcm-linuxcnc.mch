@@ -3,7 +3,7 @@
     "model": "Mikron WF3 DCM (LinuxCNC)",
     "vendor": "Camcraft",
     "kind": "mill",
-    "description": "Mikron WF3 DCM 3-axis mill retrofitted with LinuxCNC and Delta ASDA-A3 EtherCAT servos (XYZ 500x500x350 mm, X/Z 3000 mm/min, Y 2100 mm/min), ISO 40 (SK 40) manual tool-change spindle with encoder feedback (0-3000 rpm, rigid tapping), 800x450 mm table, flood coolant (M8). Provenance: paulsvc/linuxcnc-mill2-config (mill2.ini, README)."
+    "description": "Mikron WF3 DCM 3-axis mill retrofitted with LinuxCNC and Delta ASDA-A3 EtherCAT servos (XYZ 500x500x350 mm, X/Z 3000 mm/min, Y 2100 mm/min), ISO 40 (SK 40) manual tool-change spindle with encoder feedback (0-3000 rpm), 800x450 mm table, flood coolant (M8). No rigid tapping (G33.1): the published mill2.hal does not connect the spindle index to the encoder's index-enable pin, so tap with a floating holder (G84) or thread milling; state rigid_tapping true only after that connection is made. Provenance: paulsvc/linuxcnc-mill2-config (mill2.ini, mill2.hal, custom.hal, README)."
   },
   "kinematics": {
     "default": {
@@ -16,7 +16,7 @@
             ] }
           ] },
           { "id": "head", "name": "head", "type": "head",
-            "spindle": { "max_speed": 3000.0, "rigid_tapping": true },
+            "spindle": { "max_speed": 3000.0, "rigid_tapping": false },
             "tool_station": {
               "coolants": [
                 { "name": "Flood", "mCode": "M8" }

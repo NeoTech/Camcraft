@@ -254,8 +254,10 @@ unstated capability into existence.
     program gate refuse every tap cycle by name, whatever the post; the
     Tormach mills, routers and lathes state it - the lathes from their
     G33.1 rigid-tap pages, #795; `mikron-wf3-dcm-linuxcnc.mch` states
-    `rigid_tapping: true`, manual tool change and flood-only coolant for
-    the LinuxCNC post, #3244); and
+    `rigid_tapping: false` - its published HAL does not connect the
+    spindle index to the encoder's index-enable pin, which G33.1 needs -
+    with manual tool change and flood-only coolant for the LinuxCNC
+    post, #3244); and
     `tool_station { max_tool_length, max_tool_diameter, coolants }`.
     Separately from first-match, the checker also COUNTS (M5.3 C):
     `Machine.spindles` is how many head parts anywhere in the tree

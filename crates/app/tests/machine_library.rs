@@ -152,11 +152,14 @@ fn ooznest_workbee_states_the_smaller_envelope_and_feed() {
 
 /// #3244: Mikron WF3 DCM (LinuxCNC EtherCAT retrofit) machine file pins
 /// its X/Y/Z travels (500/500/350 mm), feeds (3000/2100/3000 mm/min),
-/// 3000 rpm spindle ceiling with rigid tapping, flood-only coolant,
-/// manual tool change, and LinuxCNC post, and refuses a 3500 rpm op.
+/// 3000 rpm spindle ceiling, no rigid tapping (the published HAL does not
+/// connect the spindle index for G33.1, #3982 review), flood-only coolant,
+/// manual tool change, and LinuxCNC post; the program gate refuses a
+/// 3500 rpm op and a rigid tap cycle by name.
 #[test]
 fn mikron_wf3_dcm_linuxcnc_pins_envelope_spindle_and_refuses_3500_rpm() {
-    use camcraft_app::cl::{Move, MoveKind, Toolpath as ClPath};
+    use camcraft_app::cl::{Cycle, CycleKind, Move, MoveKind, Toolpath as ClPath};
+    use camcraft_app::geo2d::Point2;
     use camcraft_app::geometry::Point3;
     use camcraft_app::machine::{self, ToolChangeMode};
     use camcraft_app::operation::{Height, OpParams, SrcRef};
@@ -178,7 +181,7 @@ fn mikron_wf3_dcm_linuxcnc_pins_envelope_spindle_and_refuses_3500_rpm() {
     assert_eq!(m.post.as_deref(), Some("LinuxCNC"));
     assert_eq!(m.spindle_min, None);
     assert_eq!(m.spindle_max, Some(3000.0));
-    assert_eq!(m.rigid_tapping, Some(true));
+    assert_eq!(m.rigid_tapping, Some(false));
     assert_eq!(m.tool_count, None);
     assert_eq!(m.tool_change, Some(ToolChangeMode::Manual));
     assert_eq!(
@@ -192,7 +195,7 @@ fn mikron_wf3_dcm_linuxcnc_pins_envelope_spindle_and_refuses_3500_rpm() {
         ("Z", Some((-350.0, 350.0)), Some(3000.0), Some(3000.0)),
     ]);
 
-    let judge = |rpm: f64| {
+    let judge = |rpm: f64, tap: Option<CycleKind>| {
         let world = camcraft_app::world::new_world();
         let mut tool = camcraft_app::tools::catalog()
             .into_iter()
@@ -230,19 +233,41 @@ fn mikron_wf3_dcm_linuxcnc_pins_envelope_spindle_and_refuses_3500_rpm() {
                 },
             })
             .set(Toolpath::new(
-                ClPath::new(vec![Move::new(
-                    MoveKind::Feed,
-                    Point3::new(0.0, 0.0, 0.0),
-                    Point3::new(10.0, 0.0, 0.0),
-                    Some(1200.0),
-                )]),
+                {
+                    let mut path = ClPath::new(vec![Move::new(
+                        MoveKind::Feed,
+                        Point3::new(0.0, 0.0, 0.0),
+                        Point3::new(10.0, 0.0, 0.0),
+                        Some(1200.0),
+                    )]);
+                    path.cycles.extend(tap.map(|kind| Cycle {
+                        kind,
+                        xy: Point2::new(0.0, 0.0),
+                        r_z: 2.0,
+                        bottom_z: -12.0,
+                        entry_z: 0.0,
+                        peck: 0.0,
+                        dwell: 0.0,
+                        first_move: 0,
+                    }));
+                    path
+                },
                 vec![],
             ));
         machine::check_ops(&world, &m, &[("Op1".into(), op.id())]).expect("machine check")
     };
 
-    assert!(judge(2500.0).is_ok(), "2500 rpm inside 3000 rpm ceiling");
-    let over = judge(3500.0);
+    assert!(judge(2500.0, None).is_ok(), "2500 rpm inside 3000 rpm ceiling");
+    // #3982 review: the program gate refuses a rigid tap by name (the HAL
+    // does not connect the spindle index for G33.1); a floating tap passes.
+    let rigid = judge(2500.0, Some(CycleKind::Tap));
+    assert!(
+        rigid.problems.iter().any(|p| p.contains("tap cycle(s) need rigid tapping")),
+        "{:?}",
+        rigid.problems
+    );
+    assert!(judge(2500.0, Some(CycleKind::FloatingTap)).is_ok(), "a floating tap needs no encoder");
+    let over = judge(3500.0, None);
     assert!(
         over.problems.iter().any(|p| p.contains("3500") && p.contains("above the machine's 3000")),
         "expected 3500 rpm refusal against 3000 rpm ceiling, got {:?}",
