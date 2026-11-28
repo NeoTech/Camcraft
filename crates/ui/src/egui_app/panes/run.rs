@@ -56,7 +56,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
             state.ribbon_mode_open = false;
             state.ribbon_view_open = false;
             state.ribbon_theme_open = false;
-            state.ribbon_settings_open = false;
         }
         Cmd::Machine => {
             state.ribbon_mode_open = !state.ribbon_mode_open;
@@ -65,7 +64,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_view_open = false;
                 state.ribbon_theme_open = false;
-                state.ribbon_settings_open = false;
             }
         }
         // Same door law; the dock itself is the shell's (layout.rs).
@@ -76,7 +74,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_mode_open = false;
                 state.ribbon_theme_open = false;
-                state.ribbon_settings_open = false;
             }
         }
         Cmd::Theme => {
@@ -86,7 +83,6 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
                 state.ribbon_more = None;
                 state.ribbon_mode_open = false;
                 state.ribbon_view_open = false;
-                state.ribbon_settings_open = false;
             }
         }
         Cmd::Copy => {
@@ -99,6 +95,8 @@ pub(super) fn run_cmd(c: Cmd, state: &mut State) {
         // Quit -> request_quit -> exit_requested -> el.exit().
         Cmd::Quit => actions::quit(state),
         Cmd::Projection => actions::toggle_projection(state),
+        // #4493: the per-user Settings window; view state, no command.
+        Cmd::Settings => crate::egui_app::settings_window::open(state),
     }
 }
 

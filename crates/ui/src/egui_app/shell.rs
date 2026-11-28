@@ -191,6 +191,8 @@ pub(crate) fn shell_layout(
     pages::tool_shape_editor_window(ui.ctx(), state);
     // #3892: the tool library - same window law, closed on a fresh State.
     super::tool_library_dialog::tool_library_window(ui.ctx(), state);
+    // #4493: the per-user Settings window - same window law, closed on a fresh State.
+    super::settings_window::window(ui.ctx(), state);
     // M1.7d: the G-code viewer - same window law as the tool editor (an
     // in-app egui::Window over the dock; the single-OS-window law
     // stands). None on a fresh State, closed by ✖, reopened by the next

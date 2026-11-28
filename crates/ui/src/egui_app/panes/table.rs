@@ -144,6 +144,8 @@ pub(in crate::egui_app) const TABLE: &[Row] = &[
     row(Cmd::Save, "file.save", "Save", Some(FILE), Some(Menu::File), ctrl(Key::S, Some(false), "S")),
     row(Cmd::SaveAs, "file.save_as", "Save As", Some(FILE), Some(Menu::File), ctrl(Key::S, Some(true), "Shift+S")),
     row(Cmd::Post, "file.post", "Post", Some(FILE), Some(Menu::File), ctrl(Key::P, None, "P")),
+    // #4493: the top band's Settings button is its ribbon entry.
+    row(Cmd::Settings, "file.settings", "Settings…", None, Some(Menu::File), None),
     row(Cmd::Quit, "file.quit", "Quit", None, Some(Menu::File), ctrl(Key::Q, None, "Q")),
     row(Cmd::Setups, "setup.setups", "Setups", Some(SETUP), Some(Menu::Setup), None),
     row(Cmd::Stock, "setup.stock", "Stock", Some(SETUP), Some(Menu::Setup), None),

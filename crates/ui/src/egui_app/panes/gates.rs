@@ -322,6 +322,6 @@ pub(in crate::egui_app) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
         // its own word (no fitting glyph in the bundled set).
         Cmd::View | Cmd::Theme => None,
         // Menu and keyboard only (#4484): no ribbon cell, no glyph.
-        Cmd::Copy | Cmd::Paste | Cmd::Quit | Cmd::Projection => None,
+        Cmd::Copy | Cmd::Paste | Cmd::Quit | Cmd::Projection | Cmd::Settings => None,
     }
 }

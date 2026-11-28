@@ -64,6 +64,9 @@ pub(in crate::egui_app) enum Cmd {
     Quit,
     /// Menu and keyboard only: flip perspective and orthographic (#434).
     Projection,
+    /// #4493: open the per-user Settings window. The ribbon's top band
+    /// has its own Settings button (settings_drop.rs), so no ribbon cell.
+    Settings,
 }
 
 /// The bar's whole op-shortcut budget (the ribbon law): at most this
@@ -315,6 +318,7 @@ pub(in crate::egui_app) fn tip_of(c: Cmd, state: &State) -> String {
         Cmd::Paste => with_key("Paste the copied operation", c),
         Cmd::Quit => with_key("Quit the application", c),
         Cmd::Projection => with_key("Switch between perspective and orthographic projection", c),
+        Cmd::Settings => "Open the Settings window: appearance, graphics, graphics device and updates".into(),
     }
 }
 
