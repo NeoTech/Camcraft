@@ -6,7 +6,10 @@ use camcraft_geometry::geometry::Point3;
 use camcraft_geometry::geometry::units::Unit;
 
 use super::KlartextOptions;
+use super::corner::{Corner, PendingLine};
 use super::cycles::DrillDef;
+use super::old_cycles::OldCycle;
+use super::polar::PolarRef;
 use super::source::Block;
 use super::words::QTable;
 use crate::section::SectionBuilder;
@@ -21,9 +24,19 @@ pub struct Machine<'a> {
     pub pos: Point3,
     /// Circle centre of the last `CC` block (modal).
     pub cc: Option<Point2>,
+    /// Polar coordinates last programmed about `cc`, where known.
+    pub polar: PolarRef,
     /// Unit XY direction at the end of the last move, for `CT`.
     pub tangent: Option<Point2>,
+    /// A straight line that waits for the `RND` / `CHF` block after it.
+    pub pending: Option<PendingLine>,
+    /// An `RND` / `CHF` block that waits for the straight line after it.
+    pub corner: Option<Corner>,
+    /// The first word of the next block (look-ahead for `RND` / `CHF`).
+    pub next_word: Option<String>,
     pub cycle: Option<DrillDef>,
+    /// A sub-block cycle (`CYCL DEF 9.0`, `32.1`) that waits for its next block.
+    pub old: Option<OldCycle>,
     pub q: QTable,
     pub tool_name: Option<String>,
     section_tool_name: Option<String>,
@@ -48,8 +61,13 @@ impl<'a> Machine<'a> {
             modal,
             pos,
             cc: None,
+            polar: PolarRef::default(),
             tangent: None,
+            pending: None,
+            corner: None,
+            next_word: None,
             cycle: None,
+            old: None,
             q: QTable::new(),
             tool_name: None,
             section_tool_name: None,
@@ -64,7 +82,10 @@ impl<'a> Machine<'a> {
         }
     }
 
-    pub fn step(&mut self, b: &Block) -> Result<(), GcodeError> {
+    /// Execute one block; `next` is the block after it (look-ahead for the
+    /// rounding and chamfer blocks, which change the element before them).
+    pub fn step(&mut self, b: &Block, next: Option<&Block>) -> Result<(), GcodeError> {
+        self.next_word = next.and_then(|n| n.words.first().cloned());
         let w: Vec<&str> = b.words.iter().map(String::as_str).collect();
         if self.pgm_ended {
             return Err(b.syntax("block after END PGM"));
@@ -75,13 +96,20 @@ impl<'a> Machine<'a> {
         if self.pgm.is_none() {
             return Err(b.syntax("the program must start with BEGIN PGM"));
         }
+        self.old_cycle_gate(b)?;
         if w.first() == Some(&"END") {
             return self.end(b, &w);
         }
         if self.ended.is_some() {
             return Err(b.syntax("executable block after program end (M2/M30)"));
         }
-        self.dispatch(b, &w)
+        let (x, y, cc) = (self.pos.x, self.pos.y, self.cc);
+        self.dispatch(b, &w)?;
+        let moved = self.pos.x != x || self.pos.y != y || self.cc != cc;
+        if moved && !matches!(w[0], "LP" | "CP") {
+            self.polar = PolarRef::default();
+        }
+        Ok(())
     }
 
     fn begin(&mut self, b: &Block, w: &[&str]) -> Result<(), GcodeError> {
@@ -122,6 +150,9 @@ impl<'a> Machine<'a> {
             "C" => self.arc_block(b, rest),
             "CR" => self.radius_arc_block(b, rest),
             "CT" => self.tangent_arc_block(b, rest),
+            "LP" => self.polar_line_block(b, rest),
+            "CP" => self.polar_arc_block(b, rest),
+            "RND" | "CHF" => self.corner_block(b, rest),
             "BLK" => self.blk_form(b, rest),
             "TOOL" => self.tool_block(b, rest),
             "CYCL" => self.cycle_block(b, rest),
@@ -137,11 +168,11 @@ impl<'a> Machine<'a> {
                 self.pre_m(b, &words.m)?;
                 self.post_m(b, &words.m, words.mb)
             }
-            "RND" | "CHF" => Err(b.unsupported(
-                w[0],
-                "rounding and chamfer blocks change the neighbour elements; this reader version refuses them",
+            "CTP" => Err(b.unsupported(
+                "CTP",
+                "the tangential polar arc is not read in this reader version",
             )),
-            "LP" | "CP" | "CTP" | "PA" => Err(b.unsupported(w[0], "polar coordinates are not read")),
+            "PA" => Err(b.unsupported("PA", "polar coordinates are read only in LP and CP")),
             "APPR" | "DEP" => Err(b.unsupported(w[0], "approach and departure functions are not read")),
             "LBL" | "CALL" => Err(b.unsupported(
                 w[0],
@@ -241,6 +272,13 @@ impl<'a> Machine<'a> {
 
     /// Start a new section when the tool, offset, spindle or coolant changed after a move.
     pub fn sync_section(&mut self) {
+        // A line that waits for its RND / CHF is not in the builder yet: the
+        // builder start must stay at that line's start. No modal state can
+        // change while it waits (the transition and the line after it take
+        // no M function).
+        if self.pending.is_some() {
+            return;
+        }
         if !self.current.has_moves() {
             self.current = SectionBuilder::new(self.current.index, self.pos, &self.modal);
             self.section_tool_name = self.tool_name.clone();

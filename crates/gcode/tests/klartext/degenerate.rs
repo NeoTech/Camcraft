@@ -6,21 +6,61 @@ use super::{in_time, opts, pgm, refusal};
 
 const GOLDEN: &str =
     include_str!("../../../post/tests/recorded/golden/heidenhain-klartext/picomax.nc");
+/// The cycle golden: cycles 200, 206, 207, the cycle 9 dwell and continuation lines.
+const CYCLES: &str =
+    include_str!("../../../post/tests/recorded/golden/heidenhain-klartext/picomax_cycles.nc");
+/// A hand-written contour with every contour element of the third slice:
+/// RND and CHF between L and LP lines, LP, CP arcs and a CP helix.
+const CONTOUR: &str = "0 BEGIN PGM CONTOUR MM
+1 BLK FORM 0.1 Z X-50 Y-50 Z-20
+2 BLK FORM 0.2 X+50 Y+50 Z+0
+3 TOOL CALL 1 Z S4000
+4 CC X+0 Y+0
+5 L X+30 Y+0 Z+5 R0 FMAX M3
+6 L Z-2 F300
+7 L X+30 Y+30
+8 RND R5 F150
+9 L X-30 Y+30
+10 CHF 4
+11 L X-30 Y-30
+12 RND R3
+13 LP PR+30 PA-45
+14 CP IPA+45 DR+
+15 CP PA+90 DR+ F200
+16 CT X-20 Y+20
+17 L X+0 Y+0
+18 CC X+0 Y+0
+19 L X+10 Y+0 Z-2 R0 F300
+20 CP IPA+360 IZ-1 DR+
+21 LP PR+5 PA+180
+22 L Z+50 FMAX M5
+23 M30
+24 END PGM CONTOUR MM
+";
 
 #[test]
 fn klartext_every_truncation_of_the_golden_is_refused_without_a_panic() {
-    let n = in_time(20, "truncations", || {
-        let o = opts();
-        let mut refused = 0usize;
-        let end = GOLDEN.rfind("END PGM").expect("END PGM in the golden");
-        for cut in (0..end).filter(|i| GOLDEN.is_char_boundary(*i)) {
-            if parse_klartext_with(&GOLDEN[..cut], &o).is_err() {
-                refused += 1;
+    for (name, golden) in [
+        ("picomax", GOLDEN),
+        ("picomax_cycles", CYCLES),
+        ("contour", CONTOUR),
+    ] {
+        let n = in_time(30, name, move || {
+            let o = opts();
+            let mut refused = 0usize;
+            let end = golden.rfind("END PGM").expect("END PGM in the golden");
+            for cut in (0..end).filter(|i| golden.is_char_boundary(*i)) {
+                if parse_klartext_with(&golden[..cut], &o).is_err() {
+                    refused += 1;
+                }
             }
-        }
-        (refused, end)
-    });
-    assert_eq!(n.0, n.1, "a program cut before END PGM must be refused");
+            (refused, end)
+        });
+        assert_eq!(
+            n.0, n.1,
+            "{name}: a program cut before END PGM must be refused"
+        );
+    }
 }
 
 #[test]
@@ -47,6 +87,10 @@ fn klartext_bad_numbers_are_refused() {
         "TOOL CALL 99999999999 Z",
         "CYCL DEF 200 X Q200=2 Q200=3",
         "CYCL DEF 99999999999",
+        "CYCL DEF 9.99999 DWELL TIME",
+        "CYCL DEF 99999.0 X",
+        "CYCL DEF 9.1 DWELL 1E5",
+        "CYCL DEF 32.1 T+INF",
     ];
     let long = format!("L X+1{} FMAX", "0".repeat(400));
     for line in lines.iter().copied().chain(std::iter::once(long.as_str())) {
@@ -92,10 +136,40 @@ fn klartext_huge_programs_parse_or_refuse_in_time() {
 
 #[test]
 fn klartext_seeded_mutations_of_the_golden_never_panic() {
-    in_time(60, "mutations", || {
+    mutate("picomax", GOLDEN, 0x2227_4b4c_4152_0001);
+}
+
+#[test]
+fn klartext_seeded_mutations_of_the_cycle_golden_never_panic() {
+    mutate("picomax_cycles", CYCLES, 0x2227_4b4c_4152_0002);
+}
+
+#[test]
+fn klartext_contour_with_every_slice_3_element_parses() {
+    let p = in_time(5, "contour", || parse_klartext_with(CONTOUR, &opts()));
+    let p = p.unwrap_or_else(|e| panic!("the contour program parses: {e}"));
+    let arcs = p
+        .sections
+        .iter()
+        .flat_map(|s| s.toolpath.moves.iter())
+        .filter(|m| m.arc.is_some())
+        .count();
+    // RND 8, RND 12, CP 14, CP 15, CT 16, and the helix of CP 20 in four quarters.
+    assert_eq!(arcs, 9, "arc moves");
+}
+
+#[test]
+fn klartext_seeded_mutations_of_the_contour_never_panic() {
+    mutate("contour", CONTOUR, 0x2227_4b4c_4152_0003);
+}
+
+/// 3000 seeded mutations (replace, delete a run, insert) of `golden`: each
+/// gives a result or a refusal, never a panic or a hang.
+fn mutate(name: &'static str, golden: &'static str, seed: u64) {
+    in_time(90, name, move || {
         let o = opts();
-        let alphabet: &[u8] = b"0123456789+-.~;\"QXYZFMRCLDB =\n \t";
-        let mut seed: u64 = 0x2227_4b4c_4152_0001;
+        let alphabet: &[u8] = b"0123456789+-.~;\"QXYZFMRCLDBTSHAPEIN: =\n \t";
+        let mut seed = seed;
         let mut next = move || {
             seed = seed
                 .wrapping_mul(6_364_136_223_846_793_005)
@@ -103,7 +177,7 @@ fn klartext_seeded_mutations_of_the_golden_never_panic() {
             (seed >> 33) as usize
         };
         for _ in 0..3000 {
-            let mut bytes = GOLDEN.as_bytes().to_vec();
+            let mut bytes = golden.as_bytes().to_vec();
             for _ in 0..(1 + next() % 4) {
                 let at = next() % bytes.len();
                 match next() % 3 {
