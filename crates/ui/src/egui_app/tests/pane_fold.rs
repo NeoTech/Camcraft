@@ -277,10 +277,12 @@ fn a_stale_operation_shows_on_the_folded_browser_chip() {
     assert!(fold::fold(&mut h.state_mut().dock, &Tab::Browser));
     h.run_steps(3);
     let texts = chip_texts(&h, &Tab::Browser);
-    assert!(texts.iter().any(|t| t == "\u{2714} Up to date"), "a current job says so: {texts:?}");
+    // The seed's toolpath has warnings, which the chip counts (#4503), so
+    // it is not "Up to date" and it is not stale either.
+    assert!(texts.iter().any(|t| t.contains(" warnings") && !t.contains("stale")), "a current job: {texts:?}");
     make_stale(&mut h);
     let texts = chip_texts(&h, &Tab::Browser);
-    assert!(texts.iter().any(|t| t == "\u{26A0} 1 stale"), "the stale count stays on screen: {texts:?}");
+    assert!(texts.iter().any(|t| t.contains("1 stale")), "the stale count stays on screen: {texts:?}");
 }
 
 #[test]
@@ -315,36 +317,36 @@ fn a_fold_does_not_move_the_camera() {
     }
 }
 
-/// Add an operation through the command queue (`tool` may be a name that
-/// is not in the document, which blocks the operation).
-fn add_op(h: &mut H, name: &str, tool: &str) {
+/// Add a Bore operation through the command queue, with Contour1's tool.
+fn add_op(h: &mut H, name: &str) {
     let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
+    let tool = contour_tool(h);
     h.state_mut().state.pending.push_back(CommandKind::CreateOperation {
         name: name.into(),
-        tool: tool.into(),
+        tool,
         src: SrcRef::Stock,
         params: crate::operations::quick_params(index),
     });
     h.run_steps(3);
 }
 
+fn contour_tool(h: &H) -> String {
+    let w = &h.state().state.world;
+    let e = model::find_by_name(w, "Contour1").expect("the seed's op");
+    model::operation_of(w, &e).expect("op").tool
+}
+
 #[test]
 fn a_never_generated_operation_shows_on_both_folded_chips() {
     let mut h = seeded();
-    let tool = model::operation_of(
-        &h.state().state.world,
-        &model::find_by_name(&h.state().state.world, "Contour1").expect("the seed's op"),
-    )
-    .expect("op")
-    .tool;
-    add_op(&mut h, "Bore9", &tool);
+    add_op(&mut h, "Bore9");
     crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
     for tab in [Tab::Browser, Tab::Properties] {
         assert!(fold::fold(&mut h.state_mut().dock, &tab));
     }
     h.run_steps(3);
     let browser = chip_texts(&h, &Tab::Browser);
-    assert!(browser.iter().any(|t| t == "\u{26A0} 1 not generated"), "Browser: {browser:?}");
+    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 not generated")), "Browser: {browser:?}");
     let props = chip_texts(&h, &Tab::Properties);
     assert!(props.iter().any(|t| t == "\u{26A0} Not generated"), "Properties: {props:?}");
 }
@@ -352,14 +354,20 @@ fn a_never_generated_operation_shows_on_both_folded_chips() {
 #[test]
 fn a_blocked_operation_shows_on_both_folded_chips() {
     let mut h = seeded();
-    add_op(&mut h, "Bore9", "NoSuchTool");
-    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    // A tap is no tool for a contour: the operation is blocked.
+    let name = contour_tool(&h);
+    let w = &h.state().state.world;
+    let mut tool = model::tool_of(w, &model::find_by_name(w, &name).expect("tool")).expect("a tool");
+    tool.kind = camcraft_app::ToolKind::Tap;
+    h.state_mut().state.pending.push_back(CommandKind::ChangeTool { name, tool });
+    h.run_steps(3);
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
     for tab in [Tab::Browser, Tab::Properties] {
         assert!(fold::fold(&mut h.state_mut().dock, &tab));
     }
     h.run_steps(3);
     let browser = chip_texts(&h, &Tab::Browser);
-    assert!(browser.iter().any(|t| t == "\u{26A0} 1 blocked"), "Browser: {browser:?}");
+    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 blocked")), "Browser: {browser:?}");
     let props = chip_texts(&h, &Tab::Properties);
     assert!(props.iter().any(|t| t == "\u{26A0} Blocked"), "Properties: {props:?}");
 }
