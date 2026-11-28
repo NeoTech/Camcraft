@@ -18,16 +18,18 @@ fn chip(tone: ChipTone, text: impl Into<String>, detail: impl Into<String>) -> C
 }
 
 /// The Browser chip: the counts of blocked, stale and never-generated
-/// operations, or "Up to date" when none needs work. `None` with no
+/// operations and the warnings of the toolpaths (#4503), or "Up to date" when none needs work. `None` with no
 /// operation in the document.
 pub(crate) fn browser_state(state: &State) -> Option<ChipState> {
     let w = &state.world;
-    let (mut blocked, mut stale, mut never, mut total) = (0_usize, 0_usize, 0_usize, 0_usize);
+    let (mut blocked, mut stale, mut never, mut warned, mut total) = (0_usize, 0_usize, 0_usize, 0_usize, 0_usize);
     for (_, e) in model::named_entities(w) {
         if !model::is_operation(w, &e) {
             continue;
         }
         total += 1;
+        // The tree row's own count: the warnings of the cached toolpath.
+        warned += model::with_toolpath(w, &e, |tp| tp.warnings.len()).unwrap_or(0);
         if operation::tool_gate::tool_problem_of(w, &e).is_some() {
             blocked += 1;
             continue;
@@ -41,7 +43,8 @@ pub(crate) fn browser_state(state: &State) -> Option<ChipState> {
     if total == 0 {
         return None;
     }
-    let parts: Vec<String> = [(blocked, "blocked"), (stale, "stale"), (never, "not generated")]
+    let warn_word = if warned == 1 { "warning" } else { "warnings" };
+    let parts: Vec<String> = [(blocked, "blocked"), (stale, "stale"), (never, "not generated"), (warned, warn_word)]
         .iter()
         .filter(|(n, _)| *n > 0)
         .map(|(n, word)| format!("{n} {word}"))

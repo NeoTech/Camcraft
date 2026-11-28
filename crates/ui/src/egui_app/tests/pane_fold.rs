@@ -314,3 +314,52 @@ fn a_fold_does_not_move_the_camera() {
         assert_eq!((cam.yaw, cam.pitch, cam.dist), (before.yaw, before.pitch, before.dist), "the view stays");
     }
 }
+
+/// Add an operation through the command queue (`tool` may be a name that
+/// is not in the document, which blocks the operation).
+fn add_op(h: &mut H, name: &str, tool: &str) {
+    let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
+    h.state_mut().state.pending.push_back(CommandKind::CreateOperation {
+        name: name.into(),
+        tool: tool.into(),
+        src: SrcRef::Stock,
+        params: crate::operations::quick_params(index),
+    });
+    h.run_steps(3);
+}
+
+#[test]
+fn a_never_generated_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    let tool = model::operation_of(
+        &h.state().state.world,
+        &model::find_by_name(&h.state().state.world, "Contour1").expect("the seed's op"),
+    )
+    .expect("op")
+    .tool;
+    add_op(&mut h, "Bore9", &tool);
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let browser = chip_texts(&h, &Tab::Browser);
+    assert!(browser.iter().any(|t| t == "\u{26A0} 1 not generated"), "Browser: {browser:?}");
+    let props = chip_texts(&h, &Tab::Properties);
+    assert!(props.iter().any(|t| t == "\u{26A0} Not generated"), "Properties: {props:?}");
+}
+
+#[test]
+fn a_blocked_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    add_op(&mut h, "Bore9", "NoSuchTool");
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let browser = chip_texts(&h, &Tab::Browser);
+    assert!(browser.iter().any(|t| t == "\u{26A0} 1 blocked"), "Browser: {browser:?}");
+    let props = chip_texts(&h, &Tab::Properties);
+    assert!(props.iter().any(|t| t == "\u{26A0} Blocked"), "Properties: {props:?}");
+}

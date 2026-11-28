@@ -128,6 +128,37 @@ fn job(sections: &[(&str, egui::Color32)], size: f32) -> egui::text::LayoutJob {
     job
 }
 
+/// How much of a chip's state line fitted (#4503).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateFit {
+    /// Glyph and text.
+    Full,
+    /// The pane was too short for the text: the glyph alone.
+    GlyphOnly,
+    /// Not even the glyph fitted.
+    Nothing,
+}
+
+/// Paint the state line from `top`. When the text does not fit, paint the
+/// glyph alone, so that a chip never looks clean by accident (the text is
+/// still in the tooltip).
+pub fn paint_state(painter: &egui::Painter, rect: Rect, top: f32, st: &ChipState, pal: &Tokens) -> StateFit {
+    let glyph_ink = match st.tone {
+        ChipTone::Ok => pal.text_dim,
+        ChipTone::Attention => pal.warn_ink,
+    };
+    let sections = [(st.glyph(), glyph_ink), (" ", pal.text), (st.text.as_str(), pal.text)];
+    if turned(painter, rect, top, job(&sections, pal.font_row), pal.text).is_some() {
+        return StateFit::Full;
+    }
+    let glyph = [(st.glyph(), glyph_ink)];
+    if turned(painter, rect, top, job(&glyph, pal.font_row), pal.text).is_some() {
+        StateFit::GlyphOnly
+    } else {
+        StateFit::Nothing
+    }
+}
+
 /// Draw one fold chip in `rect`: a full-height button with the pane's
 /// title turned to read top to bottom and, under it, the pane's safety
 /// state. The returned response is clicked when the user asks to unfold
@@ -152,12 +183,7 @@ pub fn fold_chip(
     let title_bottom = turned(&painter, rect, rect.top() + TITLE_PAD, job(&[(title, ink)], pal.font_row), ink);
     match (title_bottom, state) {
         (Some(bottom), Some(st)) => {
-            let glyph_ink = match st.tone {
-                ChipTone::Ok => pal.text_dim,
-                ChipTone::Attention => pal.warn_ink,
-            };
-            let sections = [(st.glyph(), glyph_ink), (" ", pal.text), (st.text.as_str(), pal.text)];
-            let _ = turned(&painter, rect, bottom + 2.0 * TITLE_PAD, job(&sections, pal.font_row), pal.text);
+            paint_state(&painter, rect, bottom + 2.0 * TITLE_PAD, st, pal);
         }
         (Some(_), None) => {}
         (None, _) => {
@@ -267,6 +293,23 @@ mod tests {
             let title = crate::contrast::ratio(chip_title_ink(&pal, true), pal.ink_alt);
             assert!(title >= 4.5, "{name}: the hovered title is readable ({title:.2}:1)");
         }
+    }
+
+    #[test]
+    fn a_short_pane_paints_the_glyph_alone_not_nothing() {
+        let ctx = egui::Context::default();
+        let st = ChipState { tone: ChipTone::Attention, text: "1 blocked \u{b7} 3 stale \u{b7} 2 not generated".into(), detail: String::new() };
+        let mut seen = Vec::new();
+        for height in [600.0, 90.0, 20.0] {
+            let rect = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(CHIP_WIDTH, height));
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                seen.push(paint_state(&ui.painter_at(rect), rect, 4.0, &st, &Tokens::DARK));
+            });
+            out.textures_delta.clear();
+        }
+        assert_eq!(seen[0], StateFit::Full, "a tall pane has room for the words");
+        assert_eq!(seen[1], StateFit::GlyphOnly, "a short pane keeps the glyph");
+        assert_eq!(seen[2], StateFit::Nothing, "a tiny pane has the folded mark only");
     }
 
     #[test]
