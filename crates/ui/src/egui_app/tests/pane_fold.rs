@@ -358,10 +358,11 @@ fn a_never_generated_operation_shows_on_both_folded_chips() {
 #[test]
 fn a_blocked_operation_shows_on_both_folded_chips() {
     let mut h = seeded();
-    // The command layer refuses a tool that the operation cannot use, so
-    // name a tool that is not in the document.
-    add_op_with(&mut h, "Bore9", "NoSuchTool");
-    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    // Deleting a tool entity by name leaves its operations without it.
+    let tool = contour_tool(&h);
+    h.state_mut().state.pending.push_back(CommandKind::DeleteByName(tool));
+    h.run_steps(3);
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
     for tab in [Tab::Browser, Tab::Properties] {
         assert!(fold::fold(&mut h.state_mut().dock, &tab));
     }
