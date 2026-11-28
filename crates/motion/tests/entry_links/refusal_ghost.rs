@@ -160,6 +160,7 @@ fn bore_over(holes: Vec<camcraft_motion::machining2d::BoreHole>) -> Result<Toolp
         tolerance: 0.01,
         entry: Entry3D::Plunge,
         helix_radius: 1.5,
+        strategy: Default::default(),
         links: Links::PLANAR,
     })
 }

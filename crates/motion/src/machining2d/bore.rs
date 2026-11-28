@@ -36,6 +36,7 @@ use crate::geometry::Point3;
 use crate::links::Links;
 
 use super::bore_core::{CORE_TOL, MAX_BORE_RINGS, bore_ring_count, max_bore_diameter};
+use super::bore_helix::{self, BoreStrategy};
 use super::face::GenError;
 use super::levels::{Cert, Motion, run_levels};
 use super::pass_start::{PassStart, StartSide};
@@ -94,6 +95,10 @@ pub struct BoreParams {
     pub tolerance: f64,
     pub entry: Entry3D,
     pub helix_radius: f64,
+    /// Rings (the ladder) or one helix per hole (#2830). A helical bore
+    /// reads `stepdown` as its pitch (Z per turn) and ignores `entry`,
+    /// `helix_radius` and the level links: it has one level.
+    pub strategy: BoreStrategy,
     /// Level transitions and links (M11.2 C/D) within each hole's
     /// ladder; [`Links::PLANAR`] is every earlier bore.
     pub links: Links,
@@ -200,6 +205,12 @@ impl BoreParams {
                     mouth,
                 ));
             }
+            // #2830: a helix has its own floor and slope doors; the ring
+            // plan's budget does not apply to it.
+            if self.strategy != BoreStrategy::Rings {
+                bore_helix::check(self, h, mouth)?;
+                continue;
+            }
             let through = h.through.then_some(self.through_allowance);
             if bore_ring_count(h.radius, self.tool_diameter, self.corner_radius, self.stock_to_leave, through).is_none() {
                 return Err(GenError::invalid_at(
@@ -256,6 +267,15 @@ pub fn bore(p: &BoreParams) -> Result<Toolpath, GenError> {
 /// `Inside` is the centre-out order (the disk has no inner wall).
 pub fn bore_started(p: &BoreParams, pass_start: PassStart) -> Result<Toolpath, GenError> {
     p.validate()?;
+    if let Some(why) = bore_helix::helical_pass_start_refusal(p.strategy, pass_start) {
+        return Err(GenError::Invalid(why));
+    }
+    if let Some(why) = bore_helix::helical_entry_refusal(p.strategy, p.entry) {
+        return Err(GenError::Invalid(why));
+    }
+    if let BoreStrategy::Helical { spring_pass } = p.strategy {
+        return finished(bore_helix::ride(p, spring_pass)?);
+    }
     let r = p.tool_diameter * 0.5;
     let mut motion = Motion::new(p.clearance_z, p.retract_z, p.feed, p.plunge_feed);
     if p.entry != Entry3D::Plunge {
@@ -353,7 +373,12 @@ pub fn bore_started(p: &BoreParams, pass_start: PassStart) -> Result<Toolpath, G
         b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
     }
 
-    let path = b.finish();
+    finished(b.finish())
+}
+
+/// The doors every finished bore passes, either strategy: the approach
+/// law and the finite horizon.
+fn finished(path: Toolpath) -> Result<Toolpath, GenError> {
     if let Some(why) = crate::approach::refusal(&path) {
         // #261 part 3: the moves built so far ride the refusal, display-only.
         return Err(GenError::Invalid(why).with_ghost(&path));

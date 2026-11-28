@@ -318,6 +318,7 @@ fn bore_params(links: Links) -> BoreParams {
         tolerance: 0.01,
         entry: Entry3D::Plunge,
         helix_radius: 1.5,
+        strategy: Default::default(),
         links,
     }
 }

@@ -87,6 +87,7 @@ fn bore(x: f64, radius: f64) -> OpParams {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
+        strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(30.0),
         retract_z: None,

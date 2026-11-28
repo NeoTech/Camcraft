@@ -158,6 +158,7 @@ fn bore_state(cells: &[Cell]) -> State {
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         break_through: None,
+        strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(25.0),
         retract_z: None,

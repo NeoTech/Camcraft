@@ -31,6 +31,7 @@ mod blend;
 mod blend_cross;
 mod bore;
 mod bore_core;
+mod bore_helix;
 mod chamfer;
 mod chamfer_ride;
 mod chamfer_side;
@@ -167,6 +168,10 @@ mod thread_pass_tests;
 pub use arcs::{fit_arcs, fit_arcs_sided, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
 pub use bore::{bore, bore_started, BoreHole, BoreParams};
+pub use bore_helix::{
+    helical_entry_refusal, helical_pass_start_refusal, helix_leaves_core, max_helix_bore_diameter, min_helix_bore_diameter_no_center_cut, BoreStrategy,
+    MAX_HELIX_ANGLE_DEG,
+};
 pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};
 pub use chamfer::{chamfer, chamfer_open_runs, chamfer_with_tolerance, ChamferParams};
 pub use chamfer_ride::{ride_loops as chamfer_ride_loops, wall_lean as chamfer_wall_lean};

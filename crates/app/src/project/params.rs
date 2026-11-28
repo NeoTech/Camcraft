@@ -1363,6 +1363,15 @@ pub enum ParamsDto {
         /// older file - is the kind's own default; written only when stated.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         break_through: Option<f64>,
+        /// #2830, additive (no version step): one helix per hole in place
+        /// of the ring ladder. Absent (every older file) is the ladder;
+        /// written only when set.
+        #[serde(default, skip_serializing_if = "is_false")]
+        helical: bool,
+        /// #2830, additive: a second floor circle after the helix. Read
+        /// only with `helical`; written only when set.
+        #[serde(default, skip_serializing_if = "is_false")]
+        spring_pass: bool,
         /// #3360 where each level's rings start: absent is `auto`, the
         /// centre-out order every earlier file cut - no version step.
         #[serde(default, skip_serializing_if = "PassStartDto::is_auto")]

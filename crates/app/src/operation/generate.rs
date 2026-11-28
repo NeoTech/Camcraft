@@ -3205,6 +3205,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             tolerance,
             holes,
             break_through,
+            strategy,
             pass_start,
             entry: bore_entry,
             ..
@@ -3259,6 +3260,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 tolerance: *tolerance,
                 entry: *bore_entry,
                 helix_radius: 1.0,
+                // #2830: rings or one helix per hole.
+                strategy: *strategy,
             }, *pass_start)?;
             (region, path)
         }

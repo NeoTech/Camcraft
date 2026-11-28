@@ -11,7 +11,7 @@ use camcraft_app::operation::{KindInfo, OpType};
 use egui::accesskit::Role;
 
 use super::super::pass_start_row::{
-    FACE_NO_PASS_ORDER, PASS_START_LABEL, TROCH_PASS_START_REFUSED, pass_start_names,
+    FACE_NO_PASS_ORDER, HELICAL_PASS_START_REFUSED, PASS_START_LABEL, TROCH_PASS_START_REFUSED, pass_start_names,
 };
 
 fn kind(ty: OpType) -> usize {
@@ -163,6 +163,25 @@ fn the_adaptive_twin_offers_pass_start_and_says_the_trochoidal_refusal() {
     }
     harness.run();
     assert_eq!(harness.query_all_by_label(TROCH_PASS_START_REFUSED).count(), 1, "Trochoidal says the refusal");
+}
+
+/// #3360 x #2830: a Helical Bore has no ring order; a forced order is
+/// said refused by name under the row.
+#[test]
+fn a_helical_bore_says_the_pass_start_refusal() {
+    let mut harness = passes_of(OpType::Bore);
+    if let OpParams::Bore { pass_start, .. } = &mut harness.state_mut().state.op_ui.params {
+        *pass_start = PassStart::Outside;
+    } else {
+        panic!("the draft is not a Bore");
+    }
+    harness.run();
+    assert_eq!(harness.query_all_by_label(HELICAL_PASS_START_REFUSED).count(), 0, "Rings take the order");
+    if let OpParams::Bore { strategy, .. } = &mut harness.state_mut().state.op_ui.params {
+        *strategy = camcraft_app::machining2d::BoreStrategy::Helical { spring_pass: false };
+    }
+    harness.run();
+    assert_eq!(harness.query_all_by_label(HELICAL_PASS_START_REFUSED).count(), 1, "Helical says the refusal");
 }
 
 /// #3745: the Lead in / Lead out tab of each 2D kind with a pass order

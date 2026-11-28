@@ -41,6 +41,7 @@ fn params() -> BoreParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         links: Links::PLANAR,
+        strategy: Default::default(),
     }
 }
 

@@ -97,7 +97,6 @@ impl OpParams {
             OpParams::Finish3D { direction_angle, .. } => {
                 crate::finishing3d::parallel_angle_refusal(*direction_angle).map(str::to_owned)
             }
-            OpParams::Bore { entry, .. } => Self::bore_entry_refusal(*entry),
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),
             OpParams::SlotUndercut(p) => p.refusal(),
@@ -114,6 +113,11 @@ impl OpParams {
                     corner_relief.validate().err().map(|e| e.to_string())
                 }
             }),
+            // #3828: the entry word; #3360 x #2830: one helix per hole has
+            // no ring order; #3828 x #2830: the helix is the hole's entry.
+            OpParams::Bore { strategy, pass_start, entry, .. } => Self::bore_entry_refusal(*entry)
+                .or_else(|| crate::machining2d::helical_pass_start_refusal(*strategy, *pass_start))
+                .or_else(|| crate::machining2d::helical_entry_refusal(*strategy, *entry)),
             OpParams::Chamfer2D {
                 minimum_cone_radius,
                 ..
