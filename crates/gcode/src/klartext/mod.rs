@@ -2,10 +2,12 @@
 //! Provenance: HEIDENHAIN iTNC 530 conversational user's manual 533 190-22 and the TNC cycle manuals, as summarized in docs/research/heidenhain/; CamCraft's own Klartext post output (assets/posts/heidenhain-klartext.cps). Decisions: docs/decisions/2227-klartext-reader.md.
 
 mod blocks;
+mod corner;
 mod cycles;
 mod exec;
 mod old_cycles;
 mod path;
+mod polar;
 mod source;
 mod taps;
 mod words;
@@ -58,8 +60,8 @@ pub fn parse_klartext_with(
     check_options(options)?;
     let (blocks, lines) = source::split_blocks(program)?;
     let mut m = exec::Machine::new(options);
-    for b in &blocks {
-        m.step(b)?;
+    for (i, b) in blocks.iter().enumerate() {
+        m.step(b, blocks.get(i + 1))?;
     }
     m.finish(lines)
 }

@@ -2,9 +2,11 @@
 //! Provenance: HEIDENHAIN iTNC 530 conversational manual 533 190-22 and the TNC cycle manuals (behaviour only, via docs/research/heidenhain/), and CamCraft's recorded Klartext post golden.
 //! Gate map: covers camcraft_gcode::{klartext, types, section, arc, cycle_expand, domain, error}.
 
+mod contours;
 mod cycles;
 mod degenerate;
 mod paths;
+mod polar;
 mod refusals;
 mod round_trip;
 mod round_trip_cycles;
