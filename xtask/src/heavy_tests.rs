@@ -28,6 +28,7 @@ fn release_plan_runs_heavy_targets_before_debug_suites() {
         expected.extend(heavy);
         expected.extend(plan::run_suites(&root, plan::ALL_CRATES, false));
         expected.push(plan::clippy());
+        expected.push(crate::site_step::step(crate::site_step::Missing::Fail)); // #4133
         if snapshots {
             // Existing snapshot coverage stays in the plan; the exact commands are pinned elsewhere.
             expected.extend(release.steps.iter().filter(|s| s.name.contains("snapshot lane")).cloned());

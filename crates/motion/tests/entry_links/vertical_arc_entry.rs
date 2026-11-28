@@ -12,7 +12,7 @@
 //! recording (`crates/post/tests/recorded/inputs/vertical_arc_*.cl`), so a
 //! generator change cannot leave the post suite posting a stale path.
 //! Regenerate after an intentional change, then re-run the post suite:
-//! `WRITE_GOLDEN=1 cargo test -p camcraft-motion --test vertical_arc_entry`
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-motion --test entry_links vertical_arc_entry::`
 //!
 //! Provenance: RS-274/NGC and ISO 6983 G17/G18/G19 plane selection and
 //! G2/G3 sense (public standards); our own generators.

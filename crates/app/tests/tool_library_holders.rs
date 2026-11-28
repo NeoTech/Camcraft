@@ -56,6 +56,8 @@ mod component_files;
 mod component_sync;
 #[path = "tool_library_holders/component_mcp.rs"]
 mod component_mcp;
+#[path = "tool_library_holders/holder_shape_mcp.rs"]
+mod holder_shape_mcp;
 #[path = "tool_library_holders/builtin_collets.rs"]
 mod builtin_collets;
 #[path = "tool_library_holders/camtools_v8.rs"]

@@ -1,7 +1,7 @@
 //! Integration and unit tests for the 2D toolpath shape-mask verifier (#1768).
 //! Gate map: covers camcraft_motion::machining2d (adaptive, pocket, pocket_hsm, slots, slot_ends, trochoid_slot).
 
-mod common;
+use crate::common;
 
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};

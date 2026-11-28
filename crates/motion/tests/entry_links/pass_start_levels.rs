@@ -12,7 +12,7 @@
 //! Provenance: our own regression of the second read on PR #3353; no
 //! vendor material consulted.
 
-mod common;
+use crate::common;
 #[path = "pass_start_levels/one_ring_set.rs"]
 mod one_ring_set;
 #[path = "pass_start_levels/ring_links.rs"]
