@@ -9,6 +9,7 @@
 //! maintainer's direction (#4245); no HSMWorks material.
 
 pub mod contrast;
+pub mod fold;
 pub mod gallery;
 pub mod theme;
 pub mod theme_files;

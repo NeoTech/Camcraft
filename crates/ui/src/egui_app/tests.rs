@@ -100,6 +100,7 @@ mod op_page_names;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
+mod pane_fold;
 mod panel_setups;
 mod machines_pane;
 mod machines_edit;
