@@ -115,6 +115,10 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
         .collapsible(false)
         .resizable(true)
         .default_size([520.0, 300.0])
+        // First shown in the middle of the screen, clear of the menu bar
+        // and the ribbon; the user can move it from there.
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center())
         .show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
