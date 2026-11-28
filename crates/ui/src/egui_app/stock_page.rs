@@ -37,6 +37,8 @@ pub(super) fn stock_page(ui: &mut Ui, state: &mut State) {
     // #1863: DXF profiles placed on this stock's top, under the stock's
     // own actions (those act on the stock, not on its profiles).
     group(ui, "DXF profiles", None, |ui| super::stock_profiles::profiles_group(ui, state));
+    // #3196: face this block to height from numbers, one undo step.
+    group(ui, super::stock_face_to_size::GROUP, None, |ui| super::stock_face_to_size::group_body(ui, state));
 }
 
 /// Units, the shape choice and the models' size it is sized against.
