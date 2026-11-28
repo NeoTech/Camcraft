@@ -32,6 +32,7 @@ mod linuxcnc_post;
 mod mach3_post;
 mod mach4_feed_decimals;
 mod mach4_post;
+mod mazak_feed_mode;
 mod mazak_spindle_words;
 mod sinumerik_810m_post;
 mod tormach_coolant;
