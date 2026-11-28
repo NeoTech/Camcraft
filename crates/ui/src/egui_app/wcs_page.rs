@@ -174,9 +174,11 @@ fn flip_row(ui: &mut Ui, state: &mut State, size: Vec2) {
         }
         state.pending.push_back(CommandKind::SetWcsFlip { flip: next });
     }
-    // #1649: the post mirrors X and Y; a flipped Z and probing are refused.
-    let note = if flip.get(2).copied().unwrap_or(false) {
-        Some("A flipped Z does not post yet: clear Flip Z before you post.")
+    // #2497: name the same refusal as the status, without loading a post
+    // again on an unchanged frame. This cache is display-only.
+    let note = if let Some(why) = state.wcs_flip_refusal() {
+        ui.label(RichText::new(format!("The post refuses this flip: {why}")).small().color(ui.visuals().warn_fg_color));
+        None
     } else if flip.iter().any(|f| *f) {
         Some(
             "The posted program is mirrored: the machine control must run the flipped axis reversed. \

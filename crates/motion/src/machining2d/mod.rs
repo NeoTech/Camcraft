@@ -45,6 +45,12 @@ mod trochoid_level;
 mod trochoid_loops;
 mod trochoid_slot;
 mod contour;
+mod contour_avoid;
+mod contour_avoid_clip;
+mod contour_avoid_emit;
+mod contour_avoid_open;
+mod contour_avoid_piece;
+mod contour_avoid_whole;
 mod contour_region;
 mod contour_auto;
 mod contour_bore;
@@ -108,6 +114,7 @@ mod adaptive;
 mod adaptive_method;
 mod adaptive_troch;
 mod adaptive_avoid;
+mod adaptive_troch_check;
 mod adaptive_troch_clean;
 mod adaptive_troch_lanes;
 mod adaptive_troch_level;
@@ -161,10 +168,13 @@ pub use arcs::{fit_arcs, fit_arcs_sided, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
 pub use bore::{bore, bore_started, BoreHole, BoreParams};
 pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};
-pub use chamfer::{chamfer, chamfer_open_runs, ChamferParams};
+pub use chamfer::{chamfer, chamfer_open_runs, chamfer_with_tolerance, ChamferParams};
 pub use chamfer_ride::{ride_loops as chamfer_ride_loops, wall_lean as chamfer_wall_lean};
 pub use circular::{circular, CircularParams};
 pub use contour::{contour, contour_on_bodies, contour_on_part, contour_on_picked, ContourParams, Lead, Side};
+pub use contour_avoid::{contour_avoid, contour_on_bodies_avoid, contour_on_part_avoid, contour_on_picked_avoid};
+pub use contour_avoid_open::{contour_along_chain_avoid, contour_open_run_avoid, contour_open_run_sided_avoid};
+pub use contour_avoid_whole::contour_whole_bodies_with_avoid;
 pub use contour_whole::{contour_whole_bodies, contour_whole_bodies_with};
 pub use contour_auto::{auto_side, AutoSide, AUTO_BAND, AUTO_PROBE_DZ};
 pub use contour_chain::contour_along_chain;
@@ -224,6 +234,9 @@ pub use adaptive::{rest_adaptive, rest_levels, RestStock, StockFloor, REST_STOCK
 pub use adaptive_method::AdaptiveMethod;
 pub use pocket_hsm_start::trochoidal_pass_start_refusal;
 pub use adaptive_troch::{AdaptiveTrochParams, adaptive_trochoidal, adaptive_trochoidal_with};
+pub use adaptive_troch_check::{
+    CLEANUP_ENGAGEMENT_NOTE_PREFIX, cleanup_engagement_exceeded, cleanup_engagement_move, cleanup_engagement_note,
+};
 pub use adaptive_avoid::{adaptive_spiral_avoid, adaptive_spiral_avoid_on, adaptive_trochoidal_avoid};
 pub use trochoid_air::lifted_cut;
 pub use trochoid_slot::{

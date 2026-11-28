@@ -59,6 +59,15 @@ the drawing's intended units. **Cancel** places nothing; CamCraft never
 guesses the units. Automation refuses the import until units are stated.
 Read the import summary for skipped DXF items.
 
+DXF import expands blocks. Each INSERT places the lines, arcs, circles,
+splines and ellipses of its block. The placement can move, turn, scale and
+mirror the block, and can repeat it in rows and columns. Nested blocks
+are read to 8 levels. Unequal scales, and splines and ellipses at each
+placed size, become tangent arcs within 1 µm. A block that contains
+itself, a missing block and too many copies are refused by name. A
+damaged file that hides an MPOLYGON or a 3D surface record in a section
+without geometry is refused, not read without that record.
+
 **Current limit:** a 2D operation can name a profile, but generation from
 the chains is not available yet. Generate refuses by name and writes no
 toolpath. A 3D operation needs a solid model. Model-top and model-bottom
@@ -158,6 +167,11 @@ choose **Apply cylinder**. **Place origin** can use a stock box, model box
 or picked vertex while retaining the WCS rotation. These changes are
 undoable. MCP exposes the same cylinder and origin commands.
 
+When an axis of the work offset is flipped, the WCS page shows the post
+refusal for that flip if the post refuses it. The page says that the
+program is mirrored only when the post permits the flip. With no flipped
+axis, the page shows no flip note.
+
 Face, Contour, Pocket and 2D Adaptive can generate picked features in an
 aligned milling setup. **3D Pocket**, **3D Adaptive** and **3D Finish**
 also work there, including area controls and picked boundaries in the
@@ -208,8 +222,8 @@ that machine can run. Mill-turning is a lathe with live tooling, not
 turning on a mill: see [Mill-turn](@/guide/check-and-post/machines.md#mill-turn). CamCraft also ships machine files for several
 Tormach mills, and **View > Panels > Machines** browses, validates and
 edits `.mch` machine files. The pane's kind filter offers **All** and every
-machine kind: Mill, Lathe, Mill-turn, Plasma, Waterjet, Wire EDM and Sinker
-EDM. New blank takes its kind from the same list, and is off under **All**. See [Machine types](@/guide/check-and-post/machines.md) for what each kind allows.
+machine kind: Mill, Lathe, Mill-turn, Plasma, Waterjet, Laser, Wire EDM and
+Sinker EDM. New blank takes its kind from the same list, and is off under **All**. See [Machine types](@/guide/check-and-post/machines.md) for what each kind allows.
 
 A machine file states facts such as axis travel, spindle speed range and
 rigid-tapping support. CamCraft checks a program against the facts the

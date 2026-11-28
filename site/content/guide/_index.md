@@ -7,6 +7,10 @@ weight = 1
 
 Start here: [Install](@/guide/getting-started/install.md) → [First run](@/guide/getting-started/first-run.md) → [Setups](@/guide/set-up/setups.md) → [Operations](@/guide/operations/_index.md) → [Check](@/guide/check-and-post/_index.md) → [Post](@/guide/check-and-post/posting.md).
 
+New to CNC, or not sure which file or post you need? Read
+[Model to Machine](@/guide/model-to-machine.md) first. It shows the five
+steps from CAD to the machine and how the machine file and the post differ.
+
 The sections below follow a job from the first model to the NC program.
 Use the guide navigation to find a stage of the job or a reference page.
 

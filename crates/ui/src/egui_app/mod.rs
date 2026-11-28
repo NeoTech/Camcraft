@@ -34,7 +34,8 @@ pub(crate) mod gpu_select;
 // pub: the M6.1 D readability golden reads it beside the two built-in
 // columns, and `theme::visuals` + `theme_files::parse` + `painted`'s
 // glyph tint are the consumers (ratio, on-fill, the follow law, the gate).
-pub mod contrast;
+// #4394: the module lives in the UI kit crate; the old path stays.
+pub use camcraft_ui_kit::contrast;
 mod boundary;
 mod pick_button;
 mod gcode_highlight;
@@ -100,6 +101,7 @@ pub(crate) mod machines_pane;
 // pub(crate) for `State::ai_chat` and its `WakeFn` (#1946).
 pub(crate) mod ai_chat;
 // pub(crate): `MachinesPane::editor` names its type (#383).
+pub(crate) mod machine_axis_chain;
 pub(crate) mod machine_file_editor;
 mod feeds_page;
 mod spindle_row;
@@ -457,6 +459,14 @@ pub fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
+    let idle_env = std::env::var("CAMCRAFT_MCP_IDLE_TIMEOUT").ok();
+    let mcp_idle = match camcraft_app::mcp::idle_timeout_from(args, idle_env.as_deref()) {
+        Ok(idle) => idle,
+        Err(err) => {
+            diag_warn!("mcp: {err}");
+            return 2;
+        }
+    };
     if args.iter().any(|a| a == "--headless") {
         if pick != gpu::GpuPick::Auto || want.is_some() {
             diag_info!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
@@ -473,7 +483,7 @@ pub fn run(args: &[String]) -> i32 {
     } else {
         // #2462: the file named on the command line opens in the window;
         // #3609: read-only with `--read-only`.
-        run_windowed(pick, want, mcp_port, &crate::cli_options::files(args), crate::cli_options::start_mode(args), crate::cli_options::read_only(args))
+        run_windowed(pick, want, mcp_port, mcp_idle, &crate::cli_options::files(args), crate::cli_options::start_mode(args), crate::cli_options::read_only(args))
     }
 }
 
@@ -500,15 +510,15 @@ fn run_headless(_open: Option<crate::state::CommandKind>) -> i32 {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
-    shell_window::run_windowed(pick, want, mcp_port, files, start, read_only)
+fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>, mcp_idle: std::time::Duration, files: &[String], start: crate::cli_options::StartMode, read_only: bool) -> i32 {
+    shell_window::run_windowed(pick, want, mcp_port, mcp_idle, files, start, read_only)
 }
 
 /// #31: the browser build has no winit window to open - its shell is the
 /// web runner still owed on that issue - so the windowed entry refuses by
 /// name instead of pretending.
 #[cfg(target_arch = "wasm32")]
-fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _files: &[String], _start: crate::cli_options::StartMode, _read_only: bool) -> i32 {
+fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>, _mcp_idle: std::time::Duration, _files: &[String], _start: crate::cli_options::StartMode, _read_only: bool) -> i32 {
     diag_warn!("{WASM_NO_WINDOW}");
     2
 }

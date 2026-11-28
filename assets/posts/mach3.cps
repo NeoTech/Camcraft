@@ -19,7 +19,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 axisInversion = true; // verified on the engine's mirrored stream for a flipped WCS X/Y and an inverted machine X/Y (#2475): trace equivalence test + golden
 workOffsetIndex = true; // reads the 1-based WorkOffset number (#1385)
-workOffsetMax = 6;      // G54..G59 (the post writes no G59 P extension)
+workOffsetMax = 254;    // G54..G59 (1-6), G59 P7..P254 (#4149, Using Mach3Mill 10.7.18)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
@@ -39,7 +39,7 @@ declaredOptions = {
     ],
     default: "off",
   },
-  sequenceNumberStart: { type: "integer", title: "First sequence number", group: "Format", description: "Starting N number", min: 1, max: 999999, default: 10 },
+  sequenceNumberStart: { type: "integer", title: "First sequence number", group: "Format", description: "Starting N number", min: 1, max: 99999, default: 10 },
   sequenceNumberIncrement: { type: "integer", title: "Sequence number increment", group: "Format", description: "Step between sequence numbers", min: 1, max: 10000, default: 10 },
   separateWordsWithSpace: { type: "boolean", title: "Separate words with space", group: "Format", description: "Insert a space between G-code words on a block", default: true },
   writeMachine: { type: "boolean", title: "Write machine header", group: "Header & comments", description: "Emit a comment naming the machine in the header", default: false },
@@ -99,6 +99,7 @@ function fw(v) { return has(v) ? "F" + ff(v) : ""; }
 var seqNum = 0;
 var seqNextForce = false;
 var secStarted = 0;
+var nRefused = false;
 function optBool(k, def) {
   return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "boolean" ? postOptions[k] : def;
 }
@@ -111,6 +112,13 @@ function optStr(k, def) {
 function nextSeq() {
   if (seqNum <= 0) seqNum = optInt("sequenceNumberStart", 10);
   else seqNum += optInt("sequenceNumberIncrement", 10);
+  if (seqNum < 1 || seqNum > 99999) {
+    if (!nRefused) {
+      nRefused = true;
+      msg("sequence number N" + seqNum + " exceeds Mach3 5-digit N99999 limit; disable block numbers or lower start/increment");
+    }
+    return "";
+  }
   return "N" + seqNum;
 }
 function isCommentOnly(a) {
@@ -129,7 +137,8 @@ function block(words) {  // join the non-empty words onto one line
     if (!commentOnly) {
       var mode = optStr("showSequenceNumbers", "off");
       if (mode === "every-block" || ((mode === "tool-change" || mode === "op-start") && seqNextForce)) {
-        prefix = nextSeq() + " ";
+        var n = nextSeq();
+        if (n) prefix = n + " ";
         seqNextForce = false;
       }
     }
@@ -322,7 +331,7 @@ function onOpen() {
   note(clean(nm) || "CAMCRAFT");
   invertedNotes();
   writeHeaderExtras();
-  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
+  block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80", "G64"]);
 }
 // The machine's inverted linear axes (#375): the engine has mirrored the
 // stream into the controller's frame, and the header says so, one note
@@ -383,8 +392,22 @@ function onRadiusCompensation() {
   msg("control cutter compensation (G41/G42) is not supported by the Mach3 post - choose In computer");
 }
 
-// #1385: the engine validates the offset index before this script receives it.
-function workOffsetName(n) { return "G" + (53 + n); }
+// #1385, #4149: the engine validates the offset index before this script receives it.
+// Mach3 supports G54..G59 for offsets 1..6, and extended offsets G59 P7..P254 (Using Mach3Mill 10.7.18).
+function workOffsetName(n) {
+  if (n !== Math.floor(n) || n < 1 || n > workOffsetMax) return "";
+  if (n <= 6) return "G" + (53 + n);
+  return "G59 P" + n;
+}
+
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) {
+    msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only");
+    return wcsWord;
+  }
+  return w;
+}
 
 function onParameter(name, value) {
   commentParam(name, value);
@@ -394,7 +417,7 @@ function onParameter(name, value) {
   if (name === "SetupChange") { setupNext = clean(value); return; }
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = workOffsetName(Number(value));
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);

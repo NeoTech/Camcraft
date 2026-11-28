@@ -24,4 +24,4 @@ for (const [i, center] of centers.entries()) {
   });
 }
 cam.generate();
-cam.post({to: "TRIO20", cps: "Native wire EDM job files", options: {separationLengthMm: 1.0}});
+cam.post({to: "TRIO20", cps: "Agie Wire EDM (AgieVision)", options: {separationLengthMm: 1.0}});

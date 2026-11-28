@@ -196,7 +196,21 @@ use super::*;
 /// ladder). An old reader must refuse a v82 file rather than drop the
 /// op it cannot read: the post would re-open a document whose flow
 /// band op vanished without a word.
-pub const PROJECT_VERSION: u32 = 82;
+/// v83 (#4031): a tool may state its cutter hand (`cutter_hand`, right
+/// M3 / left M4); absent is right-hand, what every v82 file cut. This
+/// step is a compatibility break: every file this build writes says
+/// v83, and a v82 reader refuses the new files (see the `BREAKING
+/// CHANGE` footer of the commit that stepped the ladder). An old
+/// reader must refuse a v83 file rather than drop a left hand and post
+/// M3 for a cutter that must reverse.
+/// v84 (#3645): the document's tool component table (`components`) and
+/// each tool's component stack (`assembly`). Absent is none, what every
+/// v83 file held. This step is a compatibility break: every file this
+/// build writes says v84, and a v83 reader refuses the new files (see
+/// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
+/// A v83 reader would drop the table and the stacks, and the next
+/// component edit could not update the tools built from them.
+pub const PROJECT_VERSION: u32 = 84;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older
@@ -343,6 +357,10 @@ pub struct ProjectFile {
     /// absent key is off - no explanatory comments.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub explain: bool,
+    /// #3645 (v84): the document's tool component table, one row for
+    /// each id (`component_wire`). Absent is no table - every older file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<super::component_wire::ComponentDto>,
     pub entities: Vec<EntityDto>,
 }
 
@@ -420,6 +438,8 @@ pub enum EntityKind {
     Setup,
     /// A Pause / Home entry of the operation list (#155).
     Entry,
+    /// A pattern folder of the operation list (#3012).
+    Pattern,
     /// A DXF profile placed on a setup's stock (#1862).
     Sketch,
 }
@@ -493,6 +513,10 @@ pub struct ToolDto {
     /// Tap thread hand; older tools default to right-hand.
     #[serde(default, skip_serializing_if = "camcraft_tools::thread_hand::ThreadHand::is_right")]
     pub thread_hand: camcraft_tools::thread_hand::ThreadHand,
+    /// #4031 (v83): the cutter's hand (right M3, left M4); older tools
+    /// default to right-hand. Written only when left.
+    #[serde(default, skip_serializing_if = "camcraft_tools::cutter_hand::CutterHand::is_right")]
+    pub cutter_hand: camcraft_tools::cutter_hand::CutterHand,
     /// M5.2 addition (v33): absent from any older file, serde-defaults
     /// to the inert 0.0 every mill kind already meant - the `tip_angle`
     /// / `pitch` law restated.
@@ -603,6 +627,12 @@ pub struct ToolDto {
     /// so no version step is needed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form: Option<camcraft_tools::form_mill::FormSpec>,
+    /// #3645 (v84): the tool's component stack (`assembly_wire`), whose
+    /// ids name rows of the file's `components` table. Absent is no
+    /// stack - every older tool. The derived record and body are the
+    /// keys above, saved as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assembly: Option<Vec<super::assembly_wire::LinkDto>>,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -667,6 +697,8 @@ pub enum ToolKindDto {
     /// file names it.
     Torch,
     Waterjet,
+    /// #4081: a laser head; its `diameter` is the beam kerf.
+    Laser,
     /// The sinker electrode (#541): additive in the same way.
     Electrode,
     /// The thread mills (#894): additive words - no older file names
@@ -708,6 +740,7 @@ impl ToolDto {
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
                 ToolKind::Waterjet => ToolKindDto::Waterjet,
+                ToolKind::Laser => ToolKindDto::Laser,
                 ToolKind::Electrode => ToolKindDto::Electrode,
                 ToolKind::ThreadMill => ToolKindDto::ThreadMill,
                 ToolKind::ThreadMillSingle => ToolKindDto::ThreadMillSingle,
@@ -725,6 +758,7 @@ impl ToolDto {
             // Written only when set, as before #3662 (0 is absent).
             pitch_min: (t.pitch_min != 0.0).then_some(t.pitch_min),
             thread_hand: t.thread_hand,
+            cutter_hand: t.cutter_hand,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -757,6 +791,7 @@ impl ToolDto {
             tip_form: t.tip_form,
             tip_diameter: t.tip_diameter,
             form: t.form.clone(),
+            assembly: None,
         }
     }
 
@@ -794,6 +829,7 @@ impl ToolDto {
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
                 ToolKindDto::Waterjet => ToolKind::Waterjet,
+                ToolKindDto::Laser => ToolKind::Laser,
                 ToolKindDto::Electrode => ToolKind::Electrode,
                 ToolKindDto::ThreadMill => ToolKind::ThreadMill,
                 ToolKindDto::ThreadMillSingle => ToolKind::ThreadMillSingle,
@@ -810,6 +846,7 @@ impl ToolDto {
             pitch: self.pitch,
             pitch_min: self.pitch_min.unwrap_or(0.0),
             thread_hand: self.thread_hand,
+            cutter_hand: self.cutter_hand,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,

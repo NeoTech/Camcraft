@@ -90,8 +90,8 @@ pub(super) fn wire_ring(profile: &Region, side: WireSide, k: f64) -> Result<Vec<
     let off = profile.offset_sharp(match side {
         WireSide::Die => -k,
         WireSide::Punch => k,
-        WireSide::Left | WireSide::Right => {
-            return Err(invalid("a closed profile states its die or punch side, not left or right".into()));
+        WireSide::Left | WireSide::Right | WireSide::Centre => {
+            return Err(invalid("a closed profile states its die or punch side, not left, right or centre".into()));
         }
     })?;
     let kerf = 2.0 * k;
@@ -107,7 +107,7 @@ pub(super) fn wire_ring(profile: &Region, side: WireSide, k: f64) -> Result<Vec<
                 "the profile narrows to a neck under the kerf width ({kerf:.4} mm) - the wire cannot pass it without burning the die"
             )));
         }
-        (_, WireSide::Punch | WireSide::Left | WireSide::Right) => {
+        (_, WireSide::Punch | WireSide::Left | WireSide::Right | WireSide::Centre) => {
             return Err(invalid(format!(
                 "the profile has a slot or notch narrower than the kerf width ({kerf:.4} mm) - the wire cannot enter it; widen it or use a thinner wire"
             )));
@@ -158,4 +158,47 @@ pub(super) fn walk_from(ring: &[Point2], seg: usize, s: Point2) -> Vec<Point2> {
     }
     push(s, &mut out);
     out
+}
+
+/// The closing overlap's points (#3216): from the seam point `s` on
+/// edge `seg`, the ring's vertices past the seam in the direction the
+/// walk arrived, then the seam edge's own remainder back to `s`, until
+/// `overlap` mm of arc is ridden - the last point cut to the exact
+/// remainder. One full lap (back onto `s`) is the limit: riding past
+/// it would burn over the start of the overlap's own ride, so a longer
+/// overlap is refused by name.
+///
+/// # Errors
+/// An overlap longer than the ring's one full lap.
+pub(super) fn past_seam(ring: &[Point2], seg: usize, s: Point2, overlap: f64, reverse: bool) -> Result<Vec<Point2>, GenError> {
+    let n = ring.len();
+    // The walk arrives at `s` along edge `seg`; continuing in that
+    // direction meets ring[seg + 1] first - or, reversed, ring[seg].
+    let idx = |k: usize| if reverse { (seg + n - (k - 1) % n) % n } else { (seg + k) % n };
+    let mut out: Vec<Point2> = Vec::new();
+    let mut acc = 0.0;
+    let mut prev = s;
+    // The (n + 1)-th vertex is the seam point itself: the lap closes on
+    // it along the seam edge's remainder - the leg the walk's own last
+    // step rode, without which a long overlap stops short of its arc.
+    for k in 1..=(n + 1) {
+        let q = if k == n + 1 { s } else { ring[idx(k)] };
+        let d = dist(prev, q);
+        if d > 0.0 && acc + d >= overlap {
+            let f = (overlap - acc) / d;
+            let end = Point2::new(prev.x + (q.x - prev.x) * f, prev.y + (q.y - prev.y) * f);
+            if out.last().is_none_or(|l| dist(*l, end) > 1e-9) {
+                out.push(end);
+            }
+            return Ok(out);
+        }
+        acc += d;
+        prev = q;
+        if out.last().is_none_or(|l| dist(*l, q) > 1e-9) {
+            out.push(q);
+        }
+    }
+    Err(invalid(format!(
+        "the closing overlap {overlap:.3} mm rides past one full lap of the wire path ({acc:.3} mm) - the ride would burn over its own start; state a shorter overlap"
+    )))
 }

@@ -20,11 +20,15 @@ use crate::shade_pass::Shade;
 use crate::state::State;
 use crate::viewport::GpuPart;
 
-/// One drawn model body: its facets, its shown pose and the world vertices
-/// that the scene uploads for it.
+/// One drawn model body: its facets, its shown pose, the work turn it
+/// rides (#4266 - the shadow is drawn from the turned vertices, so a
+/// body's key carries the turn's bits), and the world vertices that the
+/// scene uploads for it.
 pub(crate) struct ModelSrc {
     pub(crate) facets: Arc<[Triangle]>,
     pub(crate) pose: [u64; 7],
+    /// The playhead work turn's bits (`NO_TURN` for fixed steel).
+    pub(crate) view: crate::frame_cache::TurnBits,
     pub(crate) verts: Arc<Vec<[f32; 3]>>,
 }
 
@@ -48,7 +52,7 @@ impl FacetKey {
 }
 
 struct ShadowEntry {
-    bodies: Vec<(FacetKey, [u64; 7])>,
+    bodies: Vec<(FacetKey, [u64; 7], crate::frame_cache::TurnBits)>,
     floor: u32,
     mesh: Arc<Vec<ShadowVertex>>,
 }
@@ -87,7 +91,10 @@ impl ShadeCache {
         if let Some(e) = &inner.shadow
             && e.floor == floor.to_bits()
             && e.bodies.len() == bodies.len()
-            && e.bodies.iter().zip(bodies).all(|((key, pose), b)| key.is(&b.facets) && *pose == b.pose)
+            && e.bodies
+                .iter()
+                .zip(bodies)
+                .all(|((key, pose, view), b)| key.is(&b.facets) && *pose == b.pose && *view == b.view)
         {
             return Arc::clone(&e.mesh);
         }
@@ -95,7 +102,7 @@ impl ShadeCache {
         let mesh = Arc::new(crate::ground_shadow::mesh(&soups, floor));
         inner.shadow_builds = inner.shadow_builds.saturating_add(1);
         inner.shadow = Some(ShadowEntry {
-            bodies: bodies.iter().map(|b| (FacetKey::of(&b.facets), b.pose)).collect(),
+            bodies: bodies.iter().map(|b| (FacetKey::of(&b.facets), b.pose, b.view)).collect(),
             floor: floor.to_bits(),
             mesh: Arc::clone(&mesh),
         });

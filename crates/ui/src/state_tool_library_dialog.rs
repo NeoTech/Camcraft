@@ -2,8 +2,8 @@
 //! is open while `State::tool_library` is `Some`. Like the tool shape
 //! window, it is ephemeral view state: never a command, never saved,
 //! never undoable. The edits it starts ("Add", Import, Apply) are commands.
-//! The Tool type and Name filters stay in `State::tool_catalog_kind` and
-//! `State::tool_catalog_name`, so they hold between two openings.
+//! The search text (#4335) stays in `State::tool_search`, so it holds
+//! between two openings.
 //! #3893 (U2): a tool open in the window has its OWN draft
 //! ([`ToolEditorView`]). Properties keeps `State::tool_ui`, so the two can
 //! show different tools and never write into each other's draft.
@@ -23,10 +23,13 @@
 //! holder list's view ([`HoldersView`]) and the preview's two display
 //! toggles (dimension lines and holder, [`EditorFace`]). All of it is
 //! view state: never a command, never saved.
+//! #3898 (U7): the "My library" source ([`ToolSource::Library`]), the
+//! component editor's draft and the open tool's stack draft
+//! (`state_components`).
 //! Provenance: our own view state, after the tool shape window's
 //! `Option` pattern; no HSMWorks material involved.
 
-use super::{Orbit, State, ToolBodyUi, ToolProfileUi, ToolUi, UiTarget};
+use super::{ComponentDraft, ComponentsView, Orbit, StackDraft, State, ToolBodyUi, ToolProfileUi, ToolUi, UiTarget};
 use camcraft_app::model;
 
 /// Which tools the list shows.
@@ -37,6 +40,9 @@ pub enum ToolSource {
     /// The built-in catalog; each row can be added to the document.
     #[default]
     Catalog,
+    /// #3898: the component library - the built-in components and the
+    /// user's own file - and the document's component table.
+    Library,
 }
 
 /// The tabs of the tool editor in the window.
@@ -56,9 +62,9 @@ pub enum ToolEditorTab {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreviewMode {
     /// The orbitable 3D model: the imported body, or the revolved profile.
-    #[default]
     Model,
-    /// The to-scale side view with dimension lines.
+    /// The to-scale side view with dimension lines (#4336: the default).
+    #[default]
     Side,
 }
 
@@ -169,6 +175,36 @@ pub struct ToolLibraryView {
     /// #3893: the tool open in the editor. `None` shows the full list;
     /// `Some` folds the list into a rail beside the editor.
     pub editor: Option<ToolEditorView>,
+    /// #3898: the "My library" list's view.
+    pub components: ComponentsView,
+    /// #3898: the document component open in the component editor.
+    pub component_edit: Option<ComponentDraft>,
+    /// #3898: the component stack draft of the tool open in the editor.
+    pub stack: Option<StackDraft>,
+    /// #4337: the Recipes tab's derived lines.
+    pub recipes: RecipesView,
+}
+
+/// #4337: the Recipes tab's derived lines (surface speed and chip load of
+/// each row), kept with their input: a still frame computes nothing (the
+/// frame-cost rule, #2238); `computes` counts the misses.
+#[derive(Clone, Debug, Default)]
+pub struct RecipesView {
+    pub derived: Option<(Vec<DerivedKey>, Vec<String>)>,
+    pub computes: u64,
+}
+
+/// #4337: the input of the Recipes tab's derived line: the row (by its
+/// material), the tool's diameter and flute count, the row's rpm and
+/// feed, the display unit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedKey {
+    pub material: Option<camcraft_app::tools::WorkMaterial>,
+    pub diameter: f64,
+    pub rpm: f64,
+    pub feed: f64,
+    pub flutes: Option<u32>,
+    pub unit: camcraft_app::units::Unit,
 }
 
 impl ToolLibraryView {
@@ -194,6 +230,8 @@ impl State {
             ToolSource::Document
         };
         self.tool_library = Some(ToolLibraryView { source, ..ToolLibraryView::default() });
+        // #3898: a new window reads the user library file again.
+        self.reload_component_library();
         if let UiTarget::Tool(name) = &self.ui_target
             && !name.is_empty()
             && model::find_by_name(&self.world, name).is_some_and(|e| model::is_tool(&self.world, &e))

@@ -104,9 +104,9 @@ fn the_mirror_reverses_each_piece_and_swaps_the_ends_of_the_order() {
         Piece { level: 5, pts: vec![Point2::new(9.0, 9.0), Point2::new(8.0, 9.0)], closed: true, core: true },
     ];
     mirror(&mut ps);
-    // The highest level 3 rounds up to the ring level 4: l -> 8 - l.
+    // The highest level 3 rounds up to the ring level RING: l -> 2 * RING - l.
     let levels: Vec<u32> = ps.iter().map(|p| p.level).collect();
-    assert_eq!(levels, vec![WALL, 6, 5, 0, 5]);
+    assert_eq!(levels, vec![WALL, 2 * RING - 2, 2 * RING - 3, 0, 5]);
     assert_eq!(ps[0].pts.first().map(|p| p.x), Some(1.0), "reversed");
     assert_eq!(ps[4].pts.first().map(|p| p.x), Some(9.0), "a core piece keeps its walk");
 }

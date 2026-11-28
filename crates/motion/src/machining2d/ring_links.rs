@@ -142,7 +142,9 @@ pub(super) fn link(
         Ok(()) => vec![at, e],
         Err(why) => {
             let walks: Vec<&[Point2]> = cuts.iter().flat_map(|c| c.iter().map(Vec::as_slice)).collect();
-            let ok = |p: Point2, q: Point2| chord_proof(b, rl, cen, cuts, p, q, z, r).is_ok();
+            let ok = |p: Point2, q: Point2| {
+                chord_proof(b, rl, cen, cuts, p, q, z, r).is_ok() && !chord_full_width(b, rl, p, q, z, r)
+            };
             let Some(via) = edge_route(at, e, cen.room(), SWATH * r, &walks, ok) else {
                 return Err(why);
             };
@@ -199,6 +201,28 @@ fn chord_proof(
         return Err(UNCUT_STOCK);
     }
     Ok(())
+}
+
+/// Does an in-plane edge-route chord `a -> s` leave both flanks (`0.9 r`
+/// either side) uncut in stock, so walking it would cut full width?
+fn chord_full_width(b: &PathBuilder, rl: &RingLinks, a: Point2, s: Point2, z: f64, r: f64) -> bool {
+    let r_full = r / (1.0 - plunge_law::CORE);
+    let f = SWATH * r;
+    let cleared = |q: Point2| rl.in_air(q) || plunge_law::column_cleared(b.moves(), q, z, r_full);
+    let pts = samples(&[a, s], 0.25 * r);
+    for w in pts.windows(2) {
+        let len = dist(w[0], w[1]);
+        if len <= 1e-9 {
+            continue;
+        }
+        let (tx, ty) = ((w[1].x - w[0].x) / len, (w[1].y - w[0].y) / len);
+        let fl = Point2::new(w[1].x - ty * f, w[1].y + tx * f);
+        let fr = Point2::new(w[1].x + ty * f, w[1].y - tx * f);
+        if !cleared(fl) && !cleared(fr) {
+            return true;
+        }
+    }
+    false
 }
 
 /// The walk from `e` to `s` along a loop of `center` that both stand on

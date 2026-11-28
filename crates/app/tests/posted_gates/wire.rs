@@ -43,7 +43,7 @@ fn outline() -> Loop {
 /// The wire laws' verdict on the punch golden.
 pub fn wire_verdict() -> WireVerdict {
     let start = Point2::new(-30.0, 0.0);
-    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, stock: None, clearance: 1.0, tabs: None, sharp_corners: false };
+    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, stock: None, clearance: 1.0, tabs: None, sharp_corners: false, overlap: 0.0 };
     let t = wire_contour(&[outline()], &[], &p).expect("the punch generates");
     assert_eq!(gen_to_cltext(&t), golden("wire_contour_punch.cl"), "wire_contour_punch.cl: the regenerated program is the golden");
     let part = Region::new(vec![outline()]).expect("the profile region");
@@ -60,7 +60,7 @@ pub fn wire_findings() -> Vec<WireFinding> {
 /// The wire laws' verdict on the tapered punch golden (#536).
 pub fn wire_taper_verdict() -> WireVerdict {
     let start = Point2::new(-30.0, 0.0);
-    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, stock: None, clearance: 1.0, tabs: None, sharp_corners: false };
+    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, stock: None, clearance: 1.0, tabs: None, sharp_corners: false, overlap: 0.0 };
     let part = region(&[rect(-20.0, -10.0, 20.0, 10.0)]);
     let taper = WireTaper { angle_deg: 3.0, top_z: 12.0, max_deg: Some(15.0), machine: "Generic ISO Wire EDM fixture".into(), corner: WireCorner::Mitre };
     let t = wire_contour_tapered(part.loops(), &[], &p, &taper).expect("the tapered punch generates");

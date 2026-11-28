@@ -6,7 +6,7 @@
 use super::backend::{Backend, Stock};
 use super::dexel::Dexel;
 use super::field::SdfField;
-use super::kernel::{MAX_CELLS_PER_AXIS, StockError};
+use super::kernel::{cells_across, MAX_CELLS_PER_AXIS, StockError};
 use crate::geometry::{Point3, Triangle};
 use crate::stock::{stock_mesh, StockShape};
 
@@ -54,7 +54,9 @@ impl Stock {
                         if !cell.is_finite() || cell <= 0.0 {
                             return Err(StockError::Invalid("stock box and cell must be finite, box non-empty, cell positive".into()));
                         }
-                        let n = (*diameter / cell).ceil() as usize;
+                        // The same count as the column arm's block
+                        // over the circumscribed square (#4012).
+                        let n = cells_across(*diameter, cell);
                         if n == 0 || n > MAX_CELLS_PER_AXIS {
                             return Err(StockError::Invalid(format!(
                                 "grid would be {n}x{n} cells; at most {MAX_CELLS_PER_AXIS} per axis"
@@ -101,8 +103,9 @@ impl Stock {
                         "stock mesh is empty or flat in XY: nothing to simulate against".into(),
                     ));
                 }
-                let nx = (((bx1 - bx0) / cell).ceil() as usize + 2).max(1);
-                let ny = (((by1 - by0) / cell).ceil() as usize + 2).max(1);
+                // The column arm's count (`Dexel::from_facets`, #4012).
+                let nx = cells_across(bx1 - bx0, cell) + 2;
+                let ny = cells_across(by1 - by0, cell) + 2;
                 if nx > MAX_CELLS_PER_AXIS || ny > MAX_CELLS_PER_AXIS {
                     return Err(StockError::Invalid(format!(
                         "grid would be {nx}x{ny} cells; at most {MAX_CELLS_PER_AXIS} per axis"
@@ -135,8 +138,7 @@ fn block_field(
     {
         return Err(StockError::Invalid("stock box and cell must be finite, box non-empty, cell positive".into()));
     }
-    let nx = ((x1 - x0) / cell).ceil() as usize;
-    let ny = ((y1 - y0) / cell).ceil() as usize;
+    let (nx, ny) = (cells_across(x1 - x0, cell), cells_across(y1 - y0, cell));
     if nx == 0 || ny == 0 || nx > MAX_CELLS_PER_AXIS || ny > MAX_CELLS_PER_AXIS {
         return Err(StockError::Invalid(format!(
             "grid would be {nx}x{ny} cells; at most {MAX_CELLS_PER_AXIS} per axis"

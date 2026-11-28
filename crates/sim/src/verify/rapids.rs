@@ -109,8 +109,9 @@ pub(super) fn rapids_in_stock(
             // #904: the footprint gives a coarse model's excess back.
             let d = cx.tool.radius - cx.tightened(cx.gouge_tol);
             if dx * dx + dy * dy <= cx.z_tol * cx.z_tol {
-                // Issue #96: a vertical retract rides the tool's own
-                // kerf, but a vertical rapid DOWN is judged by its
+                // Issue #96: do not judge an upward retract by a stock
+                // column. The finished-part sweep judges modeled
+                // vertical rapids separately (#4062). A rapid DOWN is judged by its
                 // column - below the surface the cuts before it left
                 // (a drill's R plane under unfaced stock) it is a
                 // rapid in stock. A peck's re-entry stays above its

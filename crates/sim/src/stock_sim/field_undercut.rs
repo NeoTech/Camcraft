@@ -73,7 +73,7 @@ impl Stock {
                 })
                 .collect();
             for chunk in lifted.chunks(super::field_batch::BATCH_MOVES) {
-                f.subtract_batch(chunk, &tool, chord_tol)?;
+                f.subtract_batch_fitted(chunk, &tool, chord_tol)?;
             }
         }
         Ok(())

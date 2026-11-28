@@ -25,8 +25,8 @@ pub(super) use crate::state::State;
 pub(super) use super::heights_page::{HEIGHT_SRC_ID, LEVELS, corner_note, height_editor, retract_hop, retract_radius_hop, retract_note};
 pub(super) use super::kind_editors::*;
 pub(super) use super::layout::{
-    CTRL_W, auto_opt, auto_value, button, check_row, consequence, group, hint, list_row, prop_row,
-    radio_pair, small_button,
+    CTRL_W, auto_opt, auto_value, button, button_enabled, check_row, consequence, drag_row, drag_sized_row, group,
+    hint, list_row, list_row_truncated, prop_row, radio_pair, small_button, small_button_enabled, text_row,
 };
 pub(super) use super::lead_page;
 pub(super) use super::op_tabs::{SEC_FEEDS, SEC_GEO, SEC_HEIGHTS, SEC_LEADS, SEC_MACHINE, SEC_PASSES};
@@ -94,7 +94,7 @@ const NARROW_W: f32 = 62.0;
 
 fn num_sized(ui: &mut Ui, u: Unit, v: &mut f64, prec: usize, suffix: &str, width: f32) -> egui::Response {
     let r = num_lens(ui, u, v, prec, suffix, width);
-    ring(ui, r)
+    super::layout::name_by_row(ui, ring(ui, r))
 }
 
 /// #2516: a value field joins the pane's Tab / Enter ring.
@@ -146,7 +146,7 @@ pub(crate) fn num_feed(ui: &mut Ui, u: Unit, v: &mut f64) {
 fn plain_drag(ui: &mut Ui, v: &mut f64) -> egui::Response {
     let h = ui.spacing().interact_size.y;
     let r = ui.add_sized([CTRL_W, h], DragValue::new(v).speed(0.1));
-    ring(ui, r)
+    super::layout::name_by_row(ui, ring(ui, r))
 }
 
 /// Rpm, counts, ratios: no lens - these were never millimeters.
@@ -170,28 +170,20 @@ pub(crate) fn num_plain_named(ui: &mut Ui, v: &mut f64, name: &str) {
     named(plain_drag(ui, v), name);
 }
 
-/// [`num`] inside a `prop_row`, named by that row's label (#1119).
+/// [`num`] inside a `prop_row`. Since #1119 slice 3 [`num`] itself takes
+/// the open row's name, so this is the same field.
 pub(crate) fn num_row(ui: &mut Ui, u: Unit, v: &mut f64) {
-    let r = num_sized(ui, u, v, 4, &format!(" {}", u.suffix()), CTRL_W);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    num(ui, u, v);
 }
 
-/// [`num_feed`] inside a `prop_row`, named by that row's label (#1119).
+/// [`num_feed`] inside a `prop_row` (the same field, see [`num_row`]).
 pub(crate) fn num_feed_row(ui: &mut Ui, u: Unit, v: &mut f64) {
-    let r = num_sized(ui, u, v, 2, &format!(" {}", u.feed_suffix()), CTRL_W);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    num_feed(ui, u, v);
 }
 
-/// [`num_plain`] inside a `prop_row`, named by that row's label (#1119).
+/// [`num_plain`] inside a `prop_row` (the same field, see [`num_row`]).
 pub(crate) fn num_plain_row(ui: &mut Ui, v: &mut f64) {
-    let r = plain_drag(ui, v);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    plain_drag(ui, v);
 }
 
 /// Give an input with no visible label a plain-English accessible name
@@ -213,11 +205,7 @@ pub(crate) fn int_range_row<N: egui::emath::Numeric>(
     v: &mut N,
     range: std::ops::RangeInclusive<N>,
 ) {
-    let r = ui.add(DragValue::new(v).range(range));
-    let r = ring(ui, r);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    super::layout::drag_row(ui, DragValue::new(v).range(range));
 }
 
 /// A lens-free number with its unit as the suffix ("°", "s", "%").
@@ -225,12 +213,10 @@ pub(crate) fn num_unit(ui: &mut Ui, v: &mut f64, unit: &str) {
     unit_drag(ui, v, unit);
 }
 
-/// [`num_unit`] inside a `prop_row`, named by that row's label.
+/// [`num_unit`] inside a `prop_row` (the same field: `value_with_unit`
+/// takes the open row's name).
 pub(crate) fn num_unit_row(ui: &mut Ui, v: &mut f64, unit: &str) {
-    let r = unit_drag(ui, v, unit);
-    if let Some(l) = super::layout::row_label_id(ui) {
-        r.labelled_by(l);
-    }
+    unit_drag(ui, v, unit);
 }
 
 fn unit_drag(ui: &mut Ui, v: &mut f64, unit: &str) -> egui::Response {
@@ -264,21 +250,23 @@ pub(super) fn orientation_editor(ui: &mut Ui, u: Unit, tilt: &mut Option<Tilt>) 
 /// Combo over `&[&str]` with a usize model (imgui's combo idiom).
 pub(crate) fn combo(ui: &mut Ui, id: &str, idx: &mut usize, names: &[&str]) {
     let cur = names.get((*idx).min(names.len().saturating_sub(1))).copied().unwrap_or("");
-    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
+    let r = ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
             ui.selectable_value(idx, i, *n);
         }
     });
+    super::layout::name_by_row(ui, r.response);
 }
 
 /// Same, for owned name lists (tool/source lists built per frame).
 pub(crate) fn combo_owned(ui: &mut Ui, id: &str, idx: &mut usize, names: &[String]) {
     let cur: String = names.get((*idx).min(names.len().saturating_sub(1))).cloned().unwrap_or_default();
-    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
+    let r = ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
             ui.selectable_value(idx, i, n.as_str());
         }
     });
+    super::layout::name_by_row(ui, r.response);
 }
 
 /// #1864: Per-chain side and direction overrides for DXF sketch contours.

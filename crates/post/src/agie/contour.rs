@@ -24,7 +24,7 @@ fn between(a: Point, b: Point, p: Point) -> bool {
     (0..2).all(|d| (a[d].min(b[d])..=a[d].max(b[d])).contains(&p[d]))
 }
 
-fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
+pub(super) fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
     let (u, v, w, z) = (
         cross(a, b, c),
         cross(a, b, d),
@@ -64,6 +64,8 @@ pub(super) fn punch_setup<'a>(
     let (profile, recipe) = match quality {
         Quality::Ccb030 => ("The Berco Fine Ra0.30 profile", "The QN2 recipe"),
         Quality::Ccb035 => ("The Berco Fine+ Ra0.35 profile", "The CCB035 quality"),
+        Quality::Ccd030 => ("The Cobra Cut D Ra0.30 profile", "The CCD030 quality"),
+        Quality::Ccd070 => ("The Cobra Cut D Ra0.70 profile", "The CCD070 quality"),
     };
     if job.stock_max[2] != 0.0 {
         return Err(format!("{profile} requires stock top Z0"));

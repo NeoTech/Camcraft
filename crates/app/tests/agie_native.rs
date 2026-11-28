@@ -16,6 +16,8 @@ use camcraft_app::stock::StockShape;
 use flecs_ecs::prelude::World;
 use std::{collections::BTreeMap, fs};
 
+#[path = "agie_native/cobra.rs"]
+mod cobra;
 #[path = "agie_native/cutoff.rs"]
 mod cutoff;
 #[path = "agie_native/die.rs"]
@@ -24,6 +26,10 @@ mod die;
 mod dxf;
 #[path = "agie_native/group.rs"]
 mod group;
+#[path = "agie_native/legacy_name.rs"]
+mod legacy_name;
+#[path = "agie_native/opening.rs"]
+mod opening;
 #[path = "agie_native/quality.rs"]
 mod quality;
 #[path = "agie_native/reentrant.rs"]
@@ -98,6 +104,7 @@ fn punch_setup(
     );
     let wire = WireContourOp {
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(height),
         bottom_z: Height::fixed(0.0),
         condition: "AGIE_QN2".into(),
@@ -116,6 +123,7 @@ fn punch_setup(
         skims: Vec::new(),
         four_axis: None,
         sharp_corners: false,
+        overlap: 0.0,
     };
     h.execute(
         &world,
@@ -315,7 +323,7 @@ fn smoothing_blocks_the_native_agie_job_before_publication() {
     let temp = tempfile::tempdir().unwrap();
     let dest = temp.path().join("SMOOTH");
     let error = posting::post_mounts_with_script_options(&world, &dest, Some(&separation(1.0))).unwrap_err();
-    assert_eq!(error, "Native wire EDM jobs require default post options and One program output");
+    assert_eq!(error, "Agie Wire EDM jobs require default post options and One program output");
     assert!(!dest.exists());
 }
 

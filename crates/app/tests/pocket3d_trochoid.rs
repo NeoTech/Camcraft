@@ -237,3 +237,38 @@ fn mcp_sets_the_method_generates_verifies_and_refuses_an_unknown_word() {
     assert!(ops.contains("trochoidal"), "undo restores the method: {ops}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #3849 end to end in 3D: a 20 x 14 pocket with a 7 mm notch in its +Y
+/// wall, 6 mm deep, roughed by trochoidal levels at the 90 deg default.
+/// The 6 mm tool's clean-up into the notch still exceeds the limit after
+/// step-down, so the cached warnings carry `EngagementExceeded` on a
+/// clean-up feed in the notch - advisory, the post is not held.
+#[test]
+fn an_over_limit_cleanup_level_warns_on_its_own_move() {
+    use camcraft_app::verify::Warning;
+
+    let ring = [(-10.0, -7.0), (10.0, -7.0), (10.0, 7.0), (3.5, 7.0), (3.5, 14.0), (-3.5, 14.0), (-3.5, 7.0), (-10.0, 7.0)];
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("part", block_with_pocket(20.0, 20.0, &ring, 14.0, 20.0)));
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: 20.0 }, Default::default()).expect("stock"));
+    let t = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
+    h.execute(&world, AddTool::new(&world, TOOL, t).expect("tool"));
+    let op = adaptive(AdaptiveMethod::Trochoidal);
+    h.execute(&world, CreateOperation::new(&world, "R1", TOOL, SrcRef::Entity("part".into()), op).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "R1").expect("generates"));
+    let e = model::find_by_name(&world, "R1").expect("op");
+    let c = model::toolpath_of(&world, &e).expect("cached path");
+    let Some(&Warning::EngagementExceeded { at, measured_deg, limit_deg }) =
+        c.warnings.iter().find(|w| matches!(w, Warning::EngagementExceeded { .. }))
+    else {
+        panic!("no EngagementExceeded: warnings={:?} notes={:?}", c.warnings, c.path.notes);
+    };
+    assert!(measured_deg > limit_deg && (limit_deg - 90.0).abs() < 1e-9, "{measured_deg} / {limit_deg}");
+    assert!(c.warnings.iter().all(|w| !w.blocks_post()), "advisory only: {:?}", c.warnings);
+    let first_cut = c.path.moves.iter().position(|m| m.kind != MoveKind::Rapid).expect("a cut");
+    let m = &c.path.moves[at];
+    assert!(at > first_cut, "the warning names the first lane cut {first_cut}, not the clean-up");
+    assert_eq!(m.kind, MoveKind::Feed, "move {at}: {m:?}");
+    assert!(m.from.y.max(m.to.y) > 7.0, "move {at} is not a clean-up feed in the notch: {m:?}");
+}

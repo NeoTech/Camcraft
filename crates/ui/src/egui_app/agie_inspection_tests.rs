@@ -202,6 +202,7 @@ fn plain_dxf_wire_page() -> State {
     let (mut st, id) = drawing_state(WIRE_ISO_MCH);
     let params = OpParams::WireContour(WireContourOp {
         condition: "C110".into(),
+        overlap: 0.0,
         top_z: Height::of(HeightReference::TopOfStock, 0.0),
         bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),
         side: WireSide::Die,
@@ -220,6 +221,7 @@ fn plain_dxf_wire_page() -> State {
         four_axis: None,
         sharp_corners: false,
         lead_arc_radius: None,
+        compensation: Default::default(),
     });
     let src = SrcRef::Selection(vec![GeoSel { entity: "shape".into(), feature: FeatureSel::SketchChain(id) }]);
     let cmd = camcraft_app::commands::CreateOperation::new(&st.world, "Die", "Wire", src, params).expect("die cut");

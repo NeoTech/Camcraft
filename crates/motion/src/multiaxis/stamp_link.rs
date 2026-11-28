@@ -199,7 +199,7 @@ pub fn link_swings(
 /// nearest surface point (the stamp's own read), and the distance to
 /// it. A centre with no surface to read (no facets, or ON a facet)
 /// takes world up, the only direction left that is away from nothing.
-fn contact_normal(c: Point3, facets: &[Triangle], boxes: &[[f64; 6]]) -> ([f64; 3], f64) {
+pub(super) fn contact_normal(c: Point3, facets: &[Triangle], boxes: &[[f64; 6]]) -> ([f64; 3], f64) {
     let mut best: Option<(f64, Point3)> = None;
     for (f, bx) in facets.iter().zip(boxes) {
         if best.is_some_and(|(bd, _)| box_gap(c, bx) > bd) {

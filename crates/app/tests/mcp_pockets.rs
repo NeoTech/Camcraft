@@ -158,3 +158,24 @@ fn detect_pockets_refuses_bad_arguments_by_name() {
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&dir2);
 }
+
+/// #3545: a parameter that fails the door is named with its rule and its
+/// value, so the caller can correct the call; the operation is unchanged.
+#[test]
+fn a_bad_pocket_parameter_is_refused_by_field_name() {
+    let mesh = block_with_pocket(30.0, 20.0, &rounded_rect(15.0, 8.0, 4.0, 6), 8.0, 20.0);
+    let (mut c, dir) = job("field-name", &mesh);
+    c.ok("add_operation", json!({ "kind": "2D Pocket", "tool": "EM-0600-4FL", "name": "P1", "source": "part" }));
+    let before = c.ok("get_job", json!({}))["operations"][0]["params"].clone();
+    let msg = c.refused("edit_operation", json!({ "name": "P1", "params": { "stepdown": -3.0 } }));
+    assert!(msg.contains("not usable for a 2D Pocket operation"), "{msg}");
+    assert!(msg.contains("stepdown must be greater than 0 (got -3)"), "{msg}");
+    assert_eq!(c.ok("get_job", json!({}))["operations"][0]["params"], before, "a refused edit changes nothing");
+    let msg = c.refused("edit_operation", json!({ "name": "P1", "params": { "stock_to_leave": -0.5 } }));
+    assert!(msg.contains("stock_to_leave must be 0 or more (got -0.5)"), "{msg}");
+    let msg = c.refused("add_operation", json!({ "kind": "2D Pocket", "tool": "EM-0600-4FL", "name": "P2", "source": "part",
+        "params": { "feed": 0.0 } }));
+    assert!(msg.contains("feed must be greater than 0 (got 0)"), "{msg}");
+    assert_eq!(ops(&mut c), 1, "the refused add creates nothing");
+    let _ = std::fs::remove_dir_all(&dir);
+}

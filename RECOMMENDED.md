@@ -22580,7 +22580,7 @@ contract (`headless_gpu::REQUIRE_GPU_ENV`).
 
 ## #616 - per-operation smoothing, opt-in, per dialect
 
-Requested by @spikeypineapple (#616): smoothing modes differ per control, and the "auto" behaviour is maximum accuracy on finishing and aggressiveness following the stock left on roughing.
+Requested by a machine owner (#616): smoothing modes differ per control, and the "auto" behaviour is maximum accuracy on finishing and aggressiveness following the stock left on roughing.
 
 - **Opt-in, document-wide:** `PostOptions.smoothing`, default **off**.
   - **Off:** the stream carries no smoothing PARAM, so every program posts byte-identical to before.
@@ -25225,7 +25225,7 @@ threading program.
      * **DN Solutions Co., Ltd.** (formerly Doosan Machine Tools): *Operation Manual: Introduction / Precaution / Basic Operation (Vertical Machining Center)*, Document No.: `MV0009OPE241_v0` (Revision v0, Published 2024-06-11, Build `MMYP0003`). Covers DNM 4000/4500/5700/6700 series on Fanuc 0i-MF / 31i-B controls.
      * **FANUC Corporation:** *FANUC Series 0i-MODEL F Operator's Manual*, Publication No. `B-64604EN-2/01` (Section 3.3, 3.3.2, 14.1).
      * **Renishaw plc:** *MP700 Probe System Installation and User's Guide*, Publication No. `H-2000-5142-02-A` (Chapters 4 and 5).
-     * **Production Machine Evidence:** In-tree sample program [`docs/evidence/614-dnm5700-sample.nc`](file:///G:/My%20Drive/Z_Temp_Trash/tangency-labs/Camcraft/docs/evidence/614-dnm5700-sample.nc) provided by community user `@spikeypineapple` on Issue #614 comment [6764944619](https://github.com/NeoTech/Camcraft/issues/614#issuecomment-6764944619) confirming real-world DNM 5700 (Fanuc 0i-MF) syntax.
+     * **Production Machine Evidence:** In-tree sample program [`docs/evidence/614-dnm5700-sample.nc`](file:///G:/My%20Drive/Z_Temp_Trash/tangency-labs/Camcraft/docs/evidence/614-dnm5700-sample.nc) provided by a machine owner on Issue #614 comment [6764944619](https://github.com/NeoTech/Camcraft/issues/614#issuecomment-6764944619) confirming real-world DNM 5700 (Fanuc 0i-MF) syntax.
      * Clean-room protocol: original implementation specced from documentation and verified machine output; no vendor script text or proprietary templates consulted.
    - Manifest declares `capabilities = 1` (milling), `coolantModes = true`, `afterModes = true`.
    - Unverified manifest flags (`axisInversion` and `probeAxisInversion`) were removed until corresponding mirrored-stream equivalence tests are developed.

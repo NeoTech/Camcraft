@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use egui::{Align2, Color32, FontId, Rect, Stroke, Ui};
+use egui::{Align2, FontId, Rect, Stroke, Ui};
 
 use crate::state::{CommandKind, State};
 
@@ -147,14 +147,14 @@ pub(super) fn paint_hint(ui: &Ui, rect: Rect, pal: &super::theme::Tokens) {
     let radius = f32::from(pal.radius_window);
     let stroke_w = (pal.font_label / 5.5).clamp(1.0, 6.0);
     let font_px = (pal.font_label * 2.0).max(12.0);
-    painter.rect_filled(rect, 0.0, Color32::from_black_alpha(140));
+    painter.rect_filled(rect, 0.0, pal.drop_veil);
     painter.rect_stroke(
         rect.shrink(inset),
         radius,
-        Stroke::new(stroke_w, Color32::WHITE),
+        Stroke::new(stroke_w, pal.overlay_text),
         egui::StrokeKind::Inside,
     );
-    painter.text(rect.center(), Align2::CENTER_CENTER, HINT, FontId::proportional(font_px), Color32::WHITE);
+    painter.text(rect.center(), Align2::CENTER_CENTER, HINT, FontId::proportional(font_px), pal.overlay_text);
 }
 
 #[cfg(test)]

@@ -49,6 +49,39 @@ pub(super) fn full_width_at(
     tool_r: f64,
     cut_near: impl Fn(Point2, f64) -> bool,
 ) -> Option<Point2> {
+    let mut first = None;
+    visit_full_width(samples, material, tool_r, tool_r, &cut_near, |hit| {
+        first = Some(hit[0]);
+        false
+    });
+    first
+}
+
+/// Every `[at, left_flank, right_flank]` along `samples` that cuts the
+/// full tool width when earlier cuts reach `r_cut` around their walks.
+pub(super) fn full_width_flanks(
+    samples: &[Point2],
+    material: &Material<'_>,
+    tool_r: f64,
+    r_cut: f64,
+    cut_near: impl Fn(Point2, f64) -> bool,
+) -> Vec<[Point2; 3]> {
+    let mut out = Vec::new();
+    visit_full_width(samples, material, tool_r, r_cut, &cut_near, |hit| {
+        out.push(hit);
+        true
+    });
+    out
+}
+
+fn visit_full_width(
+    samples: &[Point2],
+    material: &Material<'_>,
+    tool_r: f64,
+    r_cut: f64,
+    cut_near: &impl Fn(Point2, f64) -> bool,
+    mut on_hit: impl FnMut([Point2; 3]) -> bool,
+) {
     let mut travel = Vec::with_capacity(samples.len());
     let mut s = 0.0;
     for (i, &p) in samples.iter().enumerate() {
@@ -68,12 +101,11 @@ pub(super) fn full_width_at(
         let flanks = [Point2::new(b.x - ty * f, b.y + tx * f), Point2::new(b.x + ty * f, b.y - tx * f)];
         let before = travel[i] - OWN_LAG * tool_r;
         let own = |q: Point2| samples.iter().zip(&travel).take_while(|(_, t)| **t < before).any(|(&o, _)| dist(o, q) <= tool_r);
-        let uncut = |q: Point2| material.holds(q) && !cut_near(q, tool_r) && !own(q);
-        if flanks.iter().all(|&q| uncut(q)) {
-            return Some(b);
+        let uncut = |q: Point2| material.holds(q) && !cut_near(q, r_cut) && !own(q);
+        if flanks.iter().all(|&q| uncut(q)) && !on_hit([b, flanks[0], flanks[1]]) {
+            break;
         }
     }
-    None
 }
 
 #[cfg(test)]

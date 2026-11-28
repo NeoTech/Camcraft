@@ -5,12 +5,14 @@ use std::path::{Path, PathBuf};
 mod contour;
 mod cutoff;
 mod group;
+mod opening;
 mod round_profile;
 mod spacing;
 mod tangent_profile;
 pub use crate::agie_setup::{MAX_PUNCH_WORKS, Quality};
 pub use crate::agie_setup::valid_stem as valid_name;
 pub use group::export_group_with_review;
+pub use opening::export_opening_with_review;
 pub use round_profile::export_round_with_review;
 
 /// The retained side of a closed contour, or the kerf side of a directed open
@@ -115,8 +117,10 @@ pub fn export_with_review(
 
 /// Publish one closed punch with the requested work quality (#2966).
 /// [`Quality::Ccb030`] writes the bytes of [`export_with_review`].
-/// [`Quality::Ccb035`] is qualified for one polygon punch on a 20 mm plate only:
-/// a die, an open cut, a group and a DXF arc punch keep CCB030.
+/// [`Quality::Ccb035`] is qualified for one polygon punch on a 20 mm plate only,
+/// and the Cobra Cut D qualities [`Quality::Ccd030`] and [`Quality::Ccd070`] for
+/// one polygon punch on a 40 mm plate only (#2986): a die, an open cut, a group
+/// and a DXF arc punch keep CCB030.
 ///
 /// # Errors
 /// The errors of [`export_with_review`], a side other than a punch, and a
@@ -279,6 +283,8 @@ fn publish(_: &Path, _: &[(String, String)]) -> Result<Vec<PathBuf>, String> {
 }
 
 #[cfg(test)]
+mod cobra_tests;
+#[cfg(test)]
 mod cutoff_tests;
 #[cfg(test)]
 mod die_group_tests;
@@ -288,6 +294,8 @@ mod die_tests;
 mod group_count_tests;
 #[cfg(test)]
 mod group_tests;
+#[cfg(test)]
+mod opening_tests;
 #[cfg(test)]
 mod quality_tests;
 #[cfg(test)]

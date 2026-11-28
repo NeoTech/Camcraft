@@ -45,7 +45,11 @@ fn opening_words(program: &str) -> Vec<String> {
     program
         .lines()
         .filter(|l| l.contains(" G17 G710 G90 "))
-        .filter_map(|l| l.split_whitespace().skip_while(|w| *w != "G90").nth(1).map(str::to_string))
+        .filter_map(|l| {
+            l.split_whitespace()
+                .find(|w| w.starts_with("G54") || w.starts_with("G55") || w.starts_with("G56") || w.starts_with("G57") || w.starts_with("G505") || w.starts_with("G506"))
+                .map(str::to_string)
+        })
         .collect()
 }
 

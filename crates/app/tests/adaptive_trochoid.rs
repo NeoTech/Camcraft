@@ -437,3 +437,103 @@ fn merged_arc_and_trochoidal_parameters_round_trip_and_keep_the_arc_refusal() {
     let err = operation::generate(&world, &op, "A1").map(|_| ()).expect_err("generation refuses arc turns").to_string();
     assert!(err.contains("arc turns") && err.contains("Trochoidal"), "{err}");
 }
+
+/// #3849: an over-limit clean-up note is promoted to an advisory
+/// `Warning::EngagementExceeded` on the feed through the noted peak - at
+/// the noted level's Z, the last of equal ones - not on the first cut.
+#[test]
+fn cleanup_engagement_warning_names_the_feed_through_the_peak() {
+    use camcraft_app::cl::{Move, Toolpath};
+    use camcraft_app::geometry::Point3;
+    use camcraft_app::machining2d::cleanup_engagement_note;
+    use camcraft_app::verify::Warning;
+
+    let feed = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+        Move::new(MoveKind::Feed, Point3::new(a.0, a.1, a.2), Point3::new(b.0, b.1, b.2), Some(800.0))
+    };
+    let synth = Toolpath {
+        moves: vec![
+            Move::new(MoveKind::Rapid, Point3::new(0.0, 0.0, 10.0), Point3::new(0.0, 0.0, 2.0), None),
+            // The first cut (a lane), far from the peak.
+            feed((0.0, 0.0, 0.0), (10.0, 0.0, 0.0)),
+            // A cut through the peak at another level.
+            feed((0.0, 5.0, -3.0), (10.0, 5.0, -3.0)),
+            // Two cuts through the peak at its level: the later one is named.
+            feed((0.0, 5.0, 0.0), (10.0, 5.0, 0.0)),
+            feed((5.0, 0.0, 0.0), (5.0, 10.0, 0.0)),
+            feed((20.0, 20.0, 0.0), (30.0, 20.0, 0.0)),
+        ],
+        notes: vec![cleanup_engagement_note(102.5, Point3::new(5.0, 5.0, 0.0), 90.0)],
+        ..Default::default()
+    };
+    let w = operation::cleanup_engagement_warning(&synth).expect("warning promoted from note");
+    assert_eq!(w, Warning::EngagementExceeded { at: 4, measured_deg: 102.5, limit_deg: 90.0 });
+    assert!(!w.blocks_post(), "tool-load warning must remain advisory");
+    let text = w.to_string();
+    assert!(text.contains("102.5 deg") && text.contains("90.0 deg") && text.contains("move 4"), "{text}");
+}
+
+/// A 20 x 14 pocket with a 7 mm notch in its +Y wall, centred on the
+/// origin (#3849): the 6 mm tool's clean-up into the notch reads about
+/// 97.5 deg at the 90 deg default even at the smallest peel step.
+fn notch_ring() -> Vec<(f64, f64)> {
+    vec![(-10.0, -7.0), (10.0, -7.0), (10.0, 7.0), (3.5, 7.0), (3.5, 14.0), (-3.5, 14.0), (-3.5, 7.0), (-10.0, 7.0)]
+}
+
+/// #3849 end to end: the real generator cuts the notch pocket at the
+/// default 90 deg limit, the clean-up still exceeds it after step-down,
+/// and the cached warnings carry `EngagementExceeded` on a clean-up feed
+/// in the notch - advisory, the post is not held. On `upstream/main` the
+/// clean-up was never measured at 90 deg: no note, no warning.
+#[test]
+fn an_over_limit_cleanup_warns_on_its_own_move_through_the_real_generator() {
+    use camcraft_app::verify::Warning;
+
+    let (world, mut h) = job_mesh(block_with_pocket(20.0, 20.0, &notch_ring(), 17.0, 20.0), 40.0, 40.0, AdaptiveMethod::Trochoidal);
+    h.execute(&world, GenerateOperation::new(&world, "A1").expect("generates at the 90 deg default"));
+    let e = model::find_by_name(&world, "A1").expect("op");
+    let c = model::toolpath_of(&world, &e).expect("cached");
+    let Some(&Warning::EngagementExceeded { at, measured_deg, limit_deg }) =
+        c.warnings.iter().find(|w| matches!(w, Warning::EngagementExceeded { .. }))
+    else {
+        panic!("no EngagementExceeded: warnings={:?} notes={:?}", c.warnings, c.path.notes);
+    };
+    assert!(measured_deg > limit_deg && (limit_deg - 90.0).abs() < 1e-9, "{measured_deg} / {limit_deg}");
+    assert!(c.warnings.iter().all(|w| !w.blocks_post()), "advisory only: {:?}", c.warnings);
+    let first_cut = c.path.moves.iter().position(|m| m.kind != MoveKind::Rapid).expect("a cut");
+    let m = &c.path.moves[at];
+    assert!(at > first_cut, "the warning names the first lane cut {first_cut}, not the clean-up");
+    assert_eq!(m.kind, MoveKind::Feed, "move {at}: {m:?}");
+    assert!((m.to.z - 17.0).abs() < 1e-6 && m.from.y.max(m.to.y) > 7.0, "move {at} is not a clean-up feed in the notch: {m:?}");
+}
+
+/// #3849 step-down: the 30 x 24 pocket under a 60 deg limit reads about
+/// 64 deg in its clean-up at the full peel step (main refused it). The
+/// peel steps down, the path holds the limit and posts, with the "peel
+/// step was reduced" note and no `EngagementExceeded`.
+#[test]
+fn a_custom_limit_cleanup_steps_down_and_posts_without_a_warning() {
+    use camcraft_app::verify::Warning;
+
+    let (world, mut h) = job_mesh(
+        block_with_pocket(40.0, 30.0, &rounded_rect(15.0, 12.0, 0.0, 1), 17.0, 20.0),
+        90.0,
+        70.0,
+        AdaptiveMethod::Trochoidal,
+    );
+    let mut custom = adaptive(AdaptiveMethod::Trochoidal);
+    if let OpParams::Adaptive2D { troch, .. } = &mut custom {
+        troch.max_engagement = 60.0;
+    }
+    h.execute(&world, EditOperationParams::new(&world, "A1", custom).expect("edit 60 deg"));
+    h.execute(&world, GenerateOperation::new(&world, "A1").expect("generates with 60 deg limit"));
+    let e = model::find_by_name(&world, "A1").expect("op");
+    let c = model::toolpath_of(&world, &e).expect("cached: the stepped-down path is not refused");
+    assert!(
+        c.path.notes.iter().any(|n| n.contains("clean-up peel step was reduced to hold the 60.0 deg engagement limit")),
+        "no step-down note: {:?}",
+        c.path.notes
+    );
+    assert!(!c.warnings.iter().any(|w| matches!(w, Warning::EngagementExceeded { .. })), "{:?}", c.warnings);
+    assert!(c.warnings.iter().all(|w| !w.blocks_post()), "advisory only: {:?}", c.warnings);
+}

@@ -34,26 +34,233 @@ process and talks to it.
 
 The attached mode is off unless you ask for it. The app listens on the
 loopback address (127.0.0.1) only, serves one client at a time, and
-disconnects a client that sends nothing for five minutes so the next one
-can connect. Port `0` picks a free port.
+disconnects a client that sends no complete line for 300 seconds by default.
+Port `0` picks a free port.
+
+Set `camcraft-ui --mcp-port 7777 --mcp-idle-timeout 1800` for a longer
+idle window. `CAMCRAFT_MCP_IDLE_TIMEOUT` supplies the same value; the option
+wins. Use non-negative whole seconds that fit a 64-bit unsigned integer.
+`0` disables idle expiry, including after authentication on the UI link.
+A blank environment variable uses the default. An invalid value stops startup
+with a named error. The UI link still requires a valid hello within five
+seconds. Line limits, one-client ownership and shutdown remain unchanged.
+Set this option on the app, not on the stdio bridge. The bridge does not
+reconnect automatically when the app closes a connection.
 
 ### Setting up an MCP client
 
-Most MCP clients take a server entry made of a command and its arguments.
-In generic terms:
+Use a **local stdio** server in your client. The client starts
+`camcraft-cli`; do not enter the app's TCP address as an HTTP or SSE URL.
+Attached mode still uses the CLI as a stdio bridge.
+
+These instructions were checked against CamCraft source after v0.26.0
+and the linked client documentation. Client menus can change.
+
+#### Find the installed executable
+
+Use the full path, not a bare command that depends on the client's PATH.
+Keep the complete installation, including its assets.
+
+| OS and installation | CLI path | App path for attached mode |
+|---|---|---|
+| macOS, app moved to `/Applications` | `/Applications/CamCraft.app/Contents/MacOS/camcraft-cli` | `/Applications/CamCraft.app/Contents/MacOS/camcraft-ui` |
+| Windows installer, default per-user folder | `%LOCALAPPDATA%\Programs\camcraft\camcraft-cli.exe` | `%LOCALAPPDATA%\Programs\camcraft\camcraft-ui.exe` |
+| Windows portable zip | `<extracted folder>\camcraft-cli.exe` | `<extracted folder>\camcraft-ui.exe` |
+| Linux DEB or RPM | `/usr/lib/camcraft/camcraft-cli` (also wrapped by `/usr/bin/camcraft-cli`) | `/usr/lib/camcraft/camcraft-ui` (also wrapped by `/usr/bin/camcraft`) |
+| Linux tarball | `<extracted folder>/camcraft-cli` | `<extracted folder>/camcraft-ui` |
+
+On macOS, a different app location changes the prefix. The Windows
+installer defaults to a per-user install. Its **all users** mode proposes
+`%ProgramFiles%\camcraft` instead. Either folder can be changed. Use the
+actual folder from the shortcut's target. Expand `%LOCALAPPDATA%` or
+`%ProgramFiles%` to the full path before putting it in a client entry;
+these table abbreviations are not portable client variables.
+A portable archive can be extracted anywhere. For AppImage, Flatpak or Snap,
+use that package's launch mechanism; do not assume its internal executable
+has the tarball path.
+
+The Windows and Linux folders need `assets/posts` and `assets/machines`
+beside the executable. The macOS bundle keeps them under
+`Contents/Resources/assets`. Symbolic links to the installed executable
+are supported since v0.25.0. A **copy** of the binary alone is not an
+installation: it cannot find those assets. Do not move it out of its folder.
+
+The examples below use the macOS path. Replace it with your installed
+path before use. In JSON, escape Windows backslashes, for example
+`"C:\\CAM Tools\\CamCraft\\camcraft-cli.exe"`. In TOML, a literal string such
+as `'C:\CAM Tools\CamCraft\camcraft-cli.exe'` needs no doubled backslashes.
+Do not put shell quotes inside a JSON or TOML command value.
+
+#### Choose headless or attached
+
+| Client | Headless configuration | Attached configuration |
+|---|---|---|
+| Claude Code | `claude mcp add` with final argument `mcp`, shown below | Same command with `mcp --connect 127.0.0.1:7777` |
+| Claude Desktop | `mcpServers.camcraft` JSON, `args: ["mcp"]` | Same entry with `args: ["mcp", "--connect", "127.0.0.1:7777"]` |
+| Codex | `[mcp_servers.camcraft]` TOML, `args = ["mcp"]` | Same table with `args = ["mcp", "--connect", "127.0.0.1:7777"]` |
+| Cursor | `mcpServers.camcraft` stdio JSON, `args: ["mcp"]` | Same entry with `args: ["mcp", "--connect", "127.0.0.1:7777"]` |
+
+For **attached** mode, start the installed app first. In a macOS Terminal:
+
+```sh
+"/Applications/CamCraft.app/Contents/MacOS/camcraft-ui" --mcp-port 7777
+```
+
+On Linux, quote the full installed app path in the same way. In Windows
+PowerShell, use the call operator and your actual path, for example:
+
+```powershell
+& 'C:\CAM Tools\CamCraft\camcraft-ui.exe' --mcp-port 7777
+```
+
+Keep this app open. Use the same port in the client configuration.
+Disconnect other attached clients: the app serves one at a time. For port
+`0`, read the selected port from the app's log and replace `7777` below.
+Headless mode needs no app and does not share the open window's document
+or undo history. Each headless process owns its document in memory. Save
+the project explicitly if you need to keep later edits after it exits.
+
+#### Claude Code
+
+Run **one** of these commands in your shell. The options before `--`
+belong to Claude Code; the command and arguments after it belong to CamCraft.
+User scope stores the entry in `~/.claude.json`, across projects.
+
+Headless:
+
+```sh
+claude mcp add --transport stdio --scope user camcraft -- "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli" mcp
+```
+
+Attached:
+
+```sh
+claude mcp add --transport stdio --scope user camcraft -- "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli" mcp --connect 127.0.0.1:7777
+```
+
+On Windows, use the same command with a quoted Windows executable path.
+Do not prefix that path with `&`: Claude Code, not PowerShell, launches it.
+To switch modes, remove the old entry with
+`claude mcp remove --scope user camcraft`, then add the other form.
+Start a new Claude Code session. Use `claude mcp get camcraft` or `/mcp`
+to inspect connection status and tool permissions.
+See the [Claude Code MCP reference](https://code.claude.com/docs/en/mcp).
+
+#### Claude Desktop
+
+Open **Settings > Developer > Edit Config**. Merge the `camcraft` entry
+into the existing `mcpServers` object; keep your other servers.
+
+| OS | Configuration file |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+Headless:
 
 ```json
 {
-  "name": "camcraft",
-  "command": "camcraft-cli",
-  "args": ["mcp"]
+  "mcpServers": {
+    "camcraft": {
+      "command": "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli",
+      "args": ["mcp"]
+    }
+  }
 }
 ```
 
-For the attached mode, use `"args": ["mcp", "--connect", "127.0.0.1:7777"]`
-after starting the app with `--mcp-port 7777`. The exact file and key
-names depend on your client; see its documentation. If `camcraft-cli` is
-not on your `PATH`, give its full path as the command.
+Attached, after starting the app listener:
+
+```json
+{
+  "mcpServers": {
+    "camcraft": {
+      "command": "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli",
+      "args": ["mcp", "--connect", "127.0.0.1:7777"]
+    }
+  }
+}
+```
+
+Save, fully quit Claude Desktop, then reopen it. Inspect **Connectors**
+for the CamCraft tools. CamCraft itself needs no Node.js or `npx` wrapper.
+See the official [local-server setup guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+
+#### Codex
+
+Merge **one** table into `~/.codex/config.toml` (or the configuration under
+your custom `CODEX_HOME`). Do not declare the same table twice.
+A trusted project's `.codex/config.toml` can also hold this entry.
+
+Headless:
+
+```toml
+[mcp_servers.camcraft]
+command = "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli"
+args = ["mcp"]
+```
+
+Attached:
+
+```toml
+[mcp_servers.camcraft]
+command = "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli"
+args = ["mcp", "--connect", "127.0.0.1:7777"]
+```
+
+Start a new Codex session. `codex mcp list` shows registered servers;
+use `/mcp` in the terminal client to inspect available tools.
+See the [Codex MCP reference](https://developers.openai.com/codex/mcp).
+
+#### Cursor
+
+Use `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for all
+projects on this computer. Merge the server into the existing object.
+These are local editor/CLI settings, not a hosted Cloud Agent setup.
+
+Headless:
+
+```json
+{
+  "mcpServers": {
+    "camcraft": {
+      "type": "stdio",
+      "command": "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Attached:
+
+```json
+{
+  "mcpServers": {
+    "camcraft": {
+      "type": "stdio",
+      "command": "/Applications/CamCraft.app/Contents/MacOS/camcraft-cli",
+      "args": ["mcp", "--connect", "127.0.0.1:7777"]
+    }
+  }
+}
+```
+
+Save the file. Inspect the server in Cursor's MCP settings, enable it and
+reconnect it if needed. Keep tool approval enabled during the first check.
+See the [Cursor MCP reference](https://cursor.com/docs/context/mcp).
+
+#### Connection diagnostics
+
+| Symptom | Check and action |
+|---|---|
+| Executable not found, `ENOENT`, or process fails to start | Check the full path from the client's environment. Keep spaces inside one command string. Use `camcraft-cli.exe` on Windows. A terminal's PATH can differ from a desktop client's PATH. |
+| `no posts folder found` or `no machines folder found` | Restore the complete package. Use its installed executable or a symbolic link, not a copied binary. A successful tool list alone does not prove that post assets are present. |
+| `camcraft-cli: mcp --connect ...` reports connection refused | Start the app with `--mcp-port 7777` first. Match the port. Do not configure HTTP/SSE. |
+| Attached client waits or disconnects | Disconnect the other client. Reconnect after the five-minute idle timeout. Check the app log and the client's MCP log. |
+| No tools after a configuration edit | Check JSON/TOML syntax, restart or reconnect the client, and inspect its server status and permissions. |
+| A tool refuses a file path | Read the named reason. Use an absolute path on the computer running the server. Check access and the tool's restrictions. Live `open_project` refuses replacing the open document; use File > Open in the app. Do not weaken a refusal to make a test pass. |
 
 ## What an agent can do
 
@@ -76,7 +283,9 @@ time. The current, authoritative tool list is whatever the client's
 | Tools and holders | `list_tool_catalog`, `add_tool`, `set_tool`, `import_tool_library`, `export_tool_library`, `list_holder_library`, `set_tool_holder`, `get_tool_cutter_profile`, `set_tool_cutter_profile`, `set_tool_cutter_params`, `edit_tool`, `delete_tool`, `import_tool_holder_dxf`, `export_tool_holder_dxf`, `convert_tool_step_to_profile` |
 | Materials and cutting data | `set_work_material`, `set_stock_material`, `suggest_cutting_data`, `apply_cutting_data` |
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
+| Tool components and assemblies | `list_tool_components`, `get_tool_assembly`, `set_tool_assembly`, `upsert_tool_component`, `delete_tool_component`, `sync_tool_component`, `save_library_component`, `delete_library_component`, `edit_user_holder` |
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
+| Pattern folders | `create_pattern_folder`, `edit_pattern_folder`, `set_pattern_members`, `set_pattern_instance_enabled`, `delete_pattern_folder` |
 | Picking geometry | `list_features`, `get_operation_geometry`, `set_operation_geometry`, `set_operation_area`, `get_operation_do_not_touch`, `set_operation_do_not_touch`, `detect_holes`, `detect_pockets`, `pick_in_box` |
 | Generate, verify, post | `generate`, `verify`, `render_stock`, `get_post_options`, `set_post_options`, `post` |
 | Agie nominal inspection | `create_agie_inspection`, `export_agie_inspection` |
@@ -144,6 +353,26 @@ Hurco WinMax `.TCM` libraries. Pass optional `format` (`"auto"`,
 `"inch"`, defaulting to document units for controller tables). See
 [Tools and tool libraries](@/guide/set-up/tools.md#machine-tool-tables-tormach-pathpilot-and-hurco-winmax)
 for field mapping and refusals.
+
+### Tool components and assemblies
+
+An indexable tool can be built from components: a holder or adapter, a
+cutter body with insert seats, and an insert. `list_tool_components`
+lists the built-in components, your component library and the
+components of the document. With `compatible_with` it keeps only the
+components that fit a given one, for example the cutter bodies that
+take an insert. `set_tool_assembly` stacks document components on a
+tool, and the tool's diameter, corner radius and holder body follow
+from the stack. `get_tool_assembly` reads the stack back.
+`upsert_tool_component` edits a shared component, and every tool built
+from it changes in the same undo step. `edit_user_holder` edits a
+holder by its shape (taper, clamp, bore, gauge length, nose and largest
+diameter), as the holder form does, in one undo step.
+`sync_tool_component` takes the
+library copy of a component into the document.
+`save_library_component` and `delete_library_component` change your
+component library file. They are file edits and have no undo. Built-in
+components are read only.
 
 ## Example session
 
@@ -234,3 +463,21 @@ to skip these checks. A posted program is still proved the usual way: look
 it over in the G-code viewer, and prove it on the machine (air cut, single
 block, feed override down) before cutting material. See
 [Posting](@/guide/check-and-post/posting.md).
+
+## First check
+
+Inspect the client's CamCraft server status and tool list first. Tool
+listing (`tools/list`) needs no model request or paid provider call.
+If you use an agent prompt, its provider can bill that conversation:
+
+> Use only the CamCraft server. List its tools, then call
+> `list_operation_types` with `{}`. Report the available operation kinds.
+> Do not import, edit, generate, save or post anything.
+
+Success means a nonempty tool list and a result with operation kinds,
+parameters and defaults, not just the model saying it connected.
+In attached mode, also call `get_job` and compare its setup with the open
+window. This is read-only. In headless mode, an empty independent job is
+normal. Neither check proves that a machining program is safe.
+If it fails, read [Connection diagnostics](#connection-diagnostics) before
+asking for any edit.

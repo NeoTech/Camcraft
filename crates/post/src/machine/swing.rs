@@ -24,6 +24,33 @@ pub(super) fn turns_part(part: &serde_json::Value, rotary: bool) -> bool {
     rotary && !carries_head(part)
 }
 
+/// Whether the rotary `part` turns the work (#804): the machine editor
+/// offers the work lengths only on such a rotary.
+#[must_use]
+pub fn turns_work(part: &serde_json::Value) -> bool {
+    turns_part(part, true)
+}
+
+/// The work lengths a rotary that turns the work may state.
+pub const WORK_LENGTHS: [&str; 2] = ["nose_to_axis", "axis_to_table"];
+
+/// The work-length refusals (#804, #1107) of each axis part, keyed by
+/// axis and key (`A nose_to_axis`), so the machine editor shows each at
+/// its row. The rule is [`work_length`]'s; the length factor does not
+/// change whether a figure is positive.
+#[must_use]
+pub fn work_length_refusals(axes: &[(String, &serde_json::Value, bool)]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (name, part, rotary) in axes {
+        for key in WORK_LENGTHS {
+            if let Err(e) = work_length(key, name, part, *rotary, 1.0) {
+                out.push((format!("{name} {key}"), e.trim_start_matches("machine file: ").to_owned()));
+            }
+        }
+    }
+    out
+}
+
 /// A part's `"nose_to_axis"` (#804), in mm (`f` is the file's length
 /// factor) - see [`work_length`].
 pub(super) fn nose_to_axis(name: &str, part: &serde_json::Value, rotary: bool, f: f64) -> Result<Option<f64>, String> {

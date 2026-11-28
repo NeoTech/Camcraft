@@ -66,7 +66,9 @@ fn punch_doc(m: Machine) -> World {
     h.execute(&world, AddTool::new(&world, "EDM-W025", camcraft_app::wire_tools::wire_tool(0.25)).expect("wire tool"));
     h.execute(&world, ImportModel::from_mesh("slug", slug()));
     let op = WireContourOp {
+        overlap: 0.0,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),

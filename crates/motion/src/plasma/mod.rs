@@ -29,13 +29,16 @@
 //! - each is refused by name, never trimmed.
 
 mod emit;
+mod picks;
 
 use crate::cl::{PlasmaCut, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};
 use crate::machining2d::GenError;
+use crate::path_picks::PathPicks;
 use crate::sheet::{nest, Voice};
 
 pub use crate::sheet::Contour;
+pub use picks::{EXIT_WITH_CONTROL_COMP, PICK_REACH_KERFS};
 
 /// The small-hole threshold when the op states none: 32 mm (the
 /// Primer's lower bound of the band where hole quality falls off).
@@ -176,13 +179,31 @@ pub fn plasma_profile(
     part: &Region,
     p: &PlasmaParams,
 ) -> Result<Toolpath, GenError> {
+    plasma_profile_picked(loops, chains, part, p, &PathPicks::default())
+}
+
+/// [`plasma_profile`] under the user's start and exit picks (#3334). The
+/// closed contour whose profile is nearest a pick takes it: its lead-in
+/// lands on the projection of the start pick (the pierce is where that
+/// lead-in starts, in the scrap), and its cut runs all the way round,
+/// then on to the projection of the exit pick, where the lead-out leaves
+/// and the torch goes off. Each other contour keeps its automatic seam.
+/// A pick that a law cannot hold is refused by name, never moved. Empty
+/// picks give the path of [`plasma_profile`], move for move.
+pub fn plasma_profile_picked(
+    loops: &[Loop],
+    chains: &[Vec<Point2>],
+    part: &Region,
+    p: &PlasmaParams,
+    picks: &PathPicks,
+) -> Result<Toolpath, GenError> {
     p.door()?;
     if loops.is_empty() && chains.is_empty() {
         return Err(GenError::Empty("plasma profile: no contour to cut".into()));
     }
     let contours = nest::contours(loops, chains, part, Voice::PLASMA)?;
     let order = nest::cut_order(&contours);
-    emit::cut(&contours, &order, part, p)
+    emit::cut(&contours, &order, part, p, picks)
 }
 
 /// The record a generated path carries (shared by the emitter and the
@@ -201,5 +222,7 @@ pub fn header(p: &PlasmaParams) -> PlasmaCut {
     }
 }
 
+#[cfg(test)]
+mod picks_tests;
 #[cfg(test)]
 mod tests;

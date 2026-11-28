@@ -30,7 +30,7 @@ pub fn refusal(action: &CommandKind, per_op: bool) -> Option<&'static str> {
     match action {
         // Open model and Open project run the browser's async picker (#31);
         // Load machine, Load post and Load folder run it too (#2950).
-        CommandKind::ImportAgieDrawing | CommandKind::ImportFixtureDialog | CommandKind::SelectThemeDialog => Some(NEEDS_PICKER),
+        CommandKind::ImportInspectionDrawing | CommandKind::ImportFixtureDialog | CommandKind::SelectThemeDialog => Some(NEEDS_PICKER),
         CommandKind::OpenRecent(..) => Some(NO_RECENT),
         CommandKind::FixtureLibrarySaveDialog(_) | CommandKind::FixtureLibraryInsertDialog(_) => Some(NO_LIBRARY),
         CommandKind::ExportAgieInspection(_) | CommandKind::SetupSheetDialog | CommandKind::ExportStockDialog | CommandKind::ToolListExportDialog(_) => {

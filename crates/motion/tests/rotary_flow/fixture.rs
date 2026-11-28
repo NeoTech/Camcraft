@@ -141,6 +141,12 @@ pub fn prism(n: usize, r: f64, z0: f64, z1: f64) -> Vec<Triangle> {
     t
 }
 
+/// A closed ring of `n` corners at radius `r` and axial station `v`,
+/// its first point repeated at the end (a picked closed edge loop).
+pub fn ring(n: usize, r: f64, v: f64) -> Vec<Point3> {
+    (0..=n).map(|k| gp(r, TAU * (k % n) as f64 / n as f64, v)).collect()
+}
+
 pub fn ball(d: f64) -> Tool {
     Tool {
         kind: ToolKind::BallNose,
@@ -150,6 +156,7 @@ pub fn ball(d: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 30.0,

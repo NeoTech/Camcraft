@@ -14,6 +14,7 @@ mod clear;
 mod create;
 mod do_not_touch;
 mod edit;
+mod field_refusal;
 mod gates;
 mod generate;
 mod geometry;

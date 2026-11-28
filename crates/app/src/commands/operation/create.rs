@@ -120,7 +120,9 @@ impl CreateOperation {
             skims: Vec::new(),
             four_axis: None,
             sharp_corners: false,
+            overlap: 0.0,
             lead_arc_radius: None,
+            compensation: Default::default(),
         });
         Self::build(world, name, tool, src, params, true, false)
     }
@@ -166,10 +168,7 @@ impl CreateOperation {
         }
         sinker_gate(world, setup.as_deref(), &params)?;
         if !params.is_sane() {
-            return Err(CommandError::Invalid(format!(
-                "operation parameters are not usable for a {} operation",
-                params.kind()
-            )));
+            return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         // Ordering needs resolved heights, and the world is in hand right
         // here: an operation that would cut upward is refused at creation
@@ -316,6 +315,8 @@ pub struct DeleteOperation {
     cache: Option<(ClPath, Vec<Warning>)>,
     location: Location,
     meta: OperationMeta,
+    /// #3012: the operation leaves its pattern folder; undo puts it back.
+    member_drop: Option<crate::commands::pattern_folder::MemberDrop>,
 }
 
 impl DeleteOperation {
@@ -332,6 +333,7 @@ impl DeleteOperation {
             cache,
             location: model::transform_of(world, &entity).unwrap_or_default(),
             meta: model::operation_meta_of(world, &entity),
+            member_drop: crate::commands::pattern_folder::MemberDrop::of(world, name),
         })
     }
 }
@@ -341,9 +343,15 @@ impl Command for DeleteOperation {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             model::remove(world, &entity);
         }
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, true);
+        }
     }
 
     fn invert(&self, world: &World) {
+        if let Some(drop) = &self.member_drop {
+            drop.write(world, false);
+        }
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }

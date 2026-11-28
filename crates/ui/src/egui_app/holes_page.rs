@@ -124,12 +124,15 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             tolerance,
             holes,
             break_through,
-            pass_start, picks: _,
+            pass_start,
+            entry,
+            picks: _,
         } => {
             if tab == SEC_LEADS {
-                // Each hole opens with the dive at its centre; the
-                // descents between levels and the links are the user's.
-                hint(ui, "each hole opens with a plunge at its centre");
+                // Each hole opens with the entry the user chose (plunge by
+                // default); the descents between levels and the links are
+                // the user's. Ramp and helix angles cap the descent.
+                lead_page::bore_entry_group(ui, u, entry, links);
                 lead_page::leads_tab(ui, u, "bore", None, links);
             }
             if tab == SEC_GEO {

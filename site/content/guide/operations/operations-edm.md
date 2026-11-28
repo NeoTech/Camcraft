@@ -118,6 +118,17 @@ off the profile, on the side you state. The side is never guessed from the
 geometry. The generated path's notes give the side, the offset and its
 two terms, the kerf width (twice the offset) and the start hole.
 
+**Compensation.** Wire Contour has a compensation mode: computer,
+control or wear. With computer compensation, the post writes the
+wire-centre path. With control compensation, a post that supports it (the Sodick
+LN2W post) writes the part contour and lets the control apply the wire
+offset under G41 / G42. The wire laws still judge the wire-centre path in
+each mode. A post that cannot write the control offset refuses it by name.
+
+**Guide reach.** A part whose origin is at the part bottom posts when
+the lower guide is at Z0. The guide-reach check does not read float
+round-off as a gap, and its messages never print "-0.000".
+
 **Start hole.** Type its X and Y; it is not picked in the viewport. For a
 die it is a hole in the slug, inside the profile; for a punch it is a
 hole or the stock's edge outside it. Either way it must stand more than
@@ -140,6 +151,15 @@ catcher, magnet or machine retention catches the freed piece. Alternatively,
 **Tab cut-off condition**. **Burn out the pocket (no core)** removes the
 interior with offset rings; **Wall clearance** must be at least the kerf
 offset. An incomplete release plan is refused.
+
+**Closing overlap** (closed profiles) rides the cut past its seam by the
+stated length before the lead-out, so no witness mark is left at the
+start. A skim takes the same overlap. It is refused with tabs, on an open
+run, and at a negative length. For an open run, the side **Centre** cuts
+a slit along the run's line: the kerf burns both sides and no side is
+kept. Skims also work on open runs. Each skim enters again from the air
+at the start end of the run. A reversed skim on an open run is refused by
+name.
 
 **Taper.** Positive **Taper angle** widens the profile downward from the
 top plane; negative narrows it. The machine must state a maximum taper.
@@ -192,7 +212,7 @@ saying "even with sharp inside corners stated" means the leftover
 exceeds that wire radius + gap. Open the corner to at least 60 degrees,
 round it in the model, or choose a thinner-wire condition.
 
-## Native wire EDM job files
+## Agie Wire EDM (AgieVision)
 
 Mount the **AGIECUT Classic 2S (template)** and configure it for the
 installed machine. In the machine's **EDM** settings, add the rough
@@ -202,8 +222,8 @@ within the 350 × 250 mm XY span, with the first, unrotated work origin
 on the stock top. The preview gap places the wire in CamCraft. The
 control uses its own technology to offset the nominal contour.
 
-Generate a vertical **Wire Contour** and select **Native wire EDM job
-files** in **Post**. Choose **One program** and a new job directory.
+Generate a vertical **Wire Contour** and select **Agie Wire EDM
+(AgieVision)** in **Post**. Choose **One program** and a new job directory.
 Set **Separation cut length (mm)** to 1.0 for closed cuts and 0 for an
 open cutoff. The job opens with zero erosion steps. Keep its ISO, SBR
 and SBL files together. Review the effective quality and assign the
@@ -298,7 +318,7 @@ with at least 3 mm of straight wall on each side of the entry.
 The post requires centres, radii and endpoints on the five-decimal ISO
 grid. It checks that the rough cut clears the rest of the drawing and
 stays within the stock. The preview uses a polygon around the arcs. The
-native ISO object writes nominal counter-clockwise `G03` arcs with
+AgieVision ISO object writes nominal counter-clockwise `G03` arcs with
 incremental `I` and `J` centres.
 
 ### Request CCB035 for one punch
@@ -316,6 +336,17 @@ preselects `estbca25nsn060b035020`. Check the five offsets in order:
 for its rough clearance checks. Stop if the technology or offsets differ.
 Ra 0.35 µm is a requested surface finish.
 
+### Request Cobra Cut D 0.25 mm for one 40 mm punch
+
+For one closed polygon punch on 40 mm steel with Cobra Cut D 0.25 mm
+wire, add the rough condition `AGIE_COBRA_RA030` (quality **CCD030**,
+Ra 0.30 µm, 4 passes) or `AGIE_COBRA_RA070` (quality **CCD070**,
+Ra 0.70 µm, 3 passes) with the same 0.005 mm preview gap. The piece and
+the work both set the Cobra wire. Check the offsets in order: 0.250,
+0.170, 0.145 and 0.135 mm for CCD030; 0.245, 0.165 and 0.140 mm for
+CCD070. Other thicknesses, die openings, open cutoffs, punch groups and
+DXF arc punches are refused with these conditions.
+
 ### Classic Cut 2S nominal inspection
 
 Use **Setup → Post → Agie nominal inspection** to create an inspection
@@ -324,7 +355,7 @@ Z zero at its top and a 0.25 mm wire tool. Specify the centre of a 3 mm
 threading hole that fits entirely inside the opening. Select the saved
 operation and use **Export Agie inspection setup**.
 
-The native export carries the nominal geometry and zero working steps.
+The AgieVision export carries the nominal geometry and zero working steps.
 Use it to inspect the geometry on the control. See the
 [inspection export procedure](@/guide/automate/mcp.md#agie-nominal-inspection)
 for the CLI and MCP commands and the control's check messages.
@@ -456,7 +487,7 @@ atom) judges the burn".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-burn" /> }} ![Side view of an electrode plunging into a cavity and retracting.](../../../operation-paths.svg#SinkerBurn)
@@ -527,7 +558,7 @@ electrode-length checks.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [edm/sinker](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/edm/sinker)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-sinker-side-burn" /> }} ![Side view of an electrode plunging, moving toward one wall and returning.](../../../operation-paths.svg#SinkerSideBurn)

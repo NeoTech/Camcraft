@@ -308,3 +308,91 @@ fn mcp_sets_the_stock_material_as_one_undo_step() {
     let e = call("set_stock_material", json!({ "material": null })).expect_err("already none after undo");
     assert!(e.contains("already"), "{e}");
 }
+
+#[test]
+fn copper_round_trips_save_reopen_and_mcp_while_existing_materials_still_load() {
+    // Existing project material words keep loading alongside copper.
+    let (base_w, _h) = doc(base());
+    let base_path = tmp("copper-existing.camproj");
+    project::save(&base_w, &base_path).expect("save");
+    let base_text = std::fs::read_to_string(&base_path).expect("read");
+    let _ = std::fs::remove_file(&base_path);
+    for (word, want) in [
+        ("aluminium_6061", WorkMaterial::Aluminium6061),
+        ("mild_steel", WorkMaterial::MildSteel),
+        ("brass", WorkMaterial::Brass),
+        ("hdpe", WorkMaterial::Hdpe),
+    ] {
+        let with_mat = base_text.replacen("\"entities\"", &format!("\"material\": \"{word}\", \"entities\""), 1);
+        let loaded = new_world();
+        project::open(&loaded, &with_mat).expect("existing material loads");
+        assert_eq!(camcraft_app::cutting::material_of(&loaded), Some(want), "{word}");
+    }
+
+    // MCP sets copper on document and stock, reads it back, saves and reopens.
+    let mut server = Server::new();
+    let mut id = 0;
+    let mut call = |name: &str, args: Value| {
+        id += 1;
+        let msg = json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": name, "arguments": args } });
+        let reply = server.handle(&msg).expect("a response");
+        let r = reply["result"].clone();
+        if r["isError"] == json!(true) { Err(r["content"][0]["text"].as_str().unwrap_or_default().to_owned()) } else { Ok(r["structuredContent"].clone()) }
+    };
+    let copper_row = CuttingRow {
+        material: Some(WorkMaterial::Copper),
+        rpm: 9200.0,
+        feed: 1100.0,
+        stepdown: Some(1.2),
+        stepover: Some(2.4),
+        waterjet: None,
+        plasma: None,
+    };
+    let mut tool_with_copper = tabled();
+    tool_with_copper.cutting.push(copper_row);
+    call("add_tool", json!({ "name": "T", "definition": project::tool_to_json(&tool_with_copper), "holder": "none" })).expect("add T");
+    call("add_tool", json!({ "name": "Plain", "definition": project::tool_to_json(&base()), "holder": "none" })).expect("add Plain");
+    call("add_tool", json!({ "name": "DR", "catalog": "DR-0600", "holder": "none" })).expect("add drill");
+    call("set_stock", json!({ "box": { "dx": 50.0, "dy": 50.0, "dz": 20.0 } })).expect("stock");
+    call("add_operation", json!({ "kind": "pocket", "tool": "T", "name": "Pocket1" })).expect("pocket");
+    call("add_operation", json!({ "kind": "pocket", "tool": "Plain", "name": "PocketPlain" })).expect("plain pocket");
+    call("add_operation", json!({ "kind": "drill", "tool": "DR", "name": "Drill1" })).expect("drill");
+
+    let stock_res = call("set_stock_material", json!({ "material": "copper" })).expect("set stock copper");
+    assert_eq!(stock_res["stock_material"], json!("copper"));
+    assert_eq!(stock_res["operations_seeded"], json!(1), "only the tool with a copper row seeds");
+
+    let doc_res = call("set_work_material", json!({ "material": "copper" })).expect("set doc copper");
+    assert_eq!(doc_res["work_material"], json!("copper"));
+    let job = call("get_job", json!({})).expect("get_job");
+    assert_eq!(job["work_material"], json!("copper"));
+
+    let sug = call("suggest_cutting_data", json!({ "operation": "Pocket1" })).expect("copper suggestion");
+    assert_eq!(sug["material"], json!("copper"));
+    let drill_err = call("suggest_cutting_data", json!({ "operation": "Drill1" })).expect_err("drill limitation");
+    assert!(drill_err.contains("does not speak for a drill"), "{drill_err}");
+
+    let save_path = tmp("copper-roundtrip.camproj");
+    call("save_project", json!({ "path": save_path.display().to_string(), "overwrite": true })).expect("save_project");
+
+    let mut server2 = Server::new();
+    let mut call2 = |name: &str, args: Value| {
+        id += 1;
+        let msg = json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": name, "arguments": args } });
+        let reply = server2.handle(&msg).expect("a response");
+        let r = reply["result"].clone();
+        if r["isError"] == json!(true) { Err(r["content"][0]["text"].as_str().unwrap_or_default().to_owned()) } else { Ok(r["structuredContent"].clone()) }
+    };
+    call2("open_project", json!({ "path": save_path.display().to_string() })).expect("open_project");
+    let job2 = call2("get_job", json!({})).expect("get_job after reopen");
+    assert_eq!(job2["work_material"], json!("copper"));
+    let same_err = call2("set_stock_material", json!({ "material": "copper" })).expect_err("copper still selected on stock");
+    assert!(same_err.contains("already"), "{same_err}");
+
+    let reloaded = new_world();
+    project::load(&reloaded, &save_path).expect("load");
+    let _ = std::fs::remove_file(&save_path);
+    assert_eq!(camcraft_app::cutting::material_of(&reloaded), Some(WorkMaterial::Copper));
+    assert_eq!(stock_material::of_setup(&reloaded, None), Some(WorkMaterial::Copper));
+    assert_eq!(numbers(&reloaded, "Pocket1"), (1100.0, 1.2, 2.4));
+}

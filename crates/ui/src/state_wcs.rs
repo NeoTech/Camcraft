@@ -14,6 +14,17 @@ use camcraft_app::units;
 
 use super::{ErrorScope, State};
 
+/// #2497: a display cache, never an input to validation or posting.
+/// All document writers (including undo, redo, New and Open) bump the
+/// revision; the active setup is also part of the input identity.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FlipNote {
+    key: Option<(u64, Option<String>)>,
+    refusal: Option<String>,
+    #[cfg(test)]
+    pub(crate) refreshes: usize,
+}
+
 /// Roll, pitch, yaw degrees as the world's quaternion; `None` when any
 /// angle is not finite (the axis-angle builders would quietly substitute
 /// identity - refused instead, Prime Directive).
@@ -24,6 +35,30 @@ fn rotation(rpy_deg: [f64; 3]) -> Option<[f64; 4]> {
 }
 
 impl State {
+    /// Read the existing post refusal once per document/setup change.
+    /// The state owns the cache; neither a widget nor the post gate does.
+    pub(crate) fn wcs_flip_refusal(&mut self) -> Option<&str> {
+        let active = camcraft_app::setup::active(&self.world);
+        let key = (self.doc_version, active);
+        if self.wcs_ui.flip_note.key.as_ref() != Some(&key) {
+            let _span = crate::frame_cost::span("display/wcs.flip_refusal");
+            let active = key.1.as_deref();
+            self.wcs_ui.flip_note.refusal = camcraft_app::setup_wcs_flip::of_setup(&self.world, active)
+                .iter().any(|f| *f).then(|| {
+                    camcraft_app::setup_wcs_flip::setup_problem(&self.world, active).or_else(|| {
+                        let ops = camcraft_app::setup_wcs_flip::setup_post_problems(&self.world, active);
+                        (!ops.is_empty()).then(|| ops.join("; "))
+                    })
+                }).flatten();
+            self.wcs_ui.flip_note.key = Some(key);
+            #[cfg(test)]
+            {
+                self.wcs_ui.flip_note.refreshes += 1;
+            }
+        }
+        self.wcs_ui.flip_note.refusal.as_deref()
+    }
+
     fn wcs_placed_status(&mut self) {
         self.doc_version += 1;
         let active = camcraft_app::setup::active(&self.world);
@@ -87,16 +122,8 @@ impl State {
                 let active = camcraft_app::setup::active(&self.world);
                 let label = camcraft_app::setup::wcs_label(&self.world, active.as_deref());
                 let axes = camcraft_app::setup_wcs_flip::axes_text(flip);
-                // #1649 review: say "mirrored" only when the post carries
-                // it; else name the refusal (once per click, not per frame).
-                let refused = (!axes.is_empty())
-                    .then(|| {
-                        camcraft_app::setup_wcs_flip::setup_problem(&self.world, active.as_deref()).or_else(|| {
-                            let ops = camcraft_app::setup_wcs_flip::setup_post_problems(&self.world, active.as_deref());
-                            (!ops.is_empty()).then(|| ops.join("; "))
-                        })
-                    })
-                    .flatten();
+                // Share the existing refusal with the page, not its post gate.
+                let refused = self.wcs_flip_refusal();
                 self.status = if axes.is_empty() {
                     format!("{label}: no axis flipped")
                 } else if let Some(why) = refused {

@@ -44,6 +44,27 @@ fn the_names_checkbox_flips_view_state_not_a_command_and_persists() {
     assert!(view::load(&file).0.show_gizmo_names, "and the file follows");
 }
 
+/// #3377: the Browser axes box must not hide the ground grid (#3322).
+#[test]
+fn the_browser_axes_checkbox_leaves_the_ground_grid_visible() {
+    let mut h = shell_harness();
+    h.run();
+    assert!(h.state().state.show_world_axes && h.state().state.show_grid);
+    assert!(!crate::interact::ground_grid_lines(&h.state().state).is_empty());
+
+    open_view_menu(&mut h);
+    h.get_by_label("Show world origin axes").click();
+    h.run_steps(2);
+
+    let st = &h.state().state;
+    assert!(!st.show_world_axes, "the Browser checkbox hides the axes");
+    assert!(st.show_grid, "the Browser checkbox leaves Grid on");
+    assert!(
+        !crate::interact::ground_grid_lines(st).is_empty(),
+        "the grid still draws with the Browser axes off"
+    );
+}
+
 #[test]
 fn the_choice_survives_a_restart_and_a_corrupt_file_starts_with_names_on() {
     let d = temp_dir("restart");

@@ -70,6 +70,10 @@ pub(super) fn edit_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
     {
         form.remove("pilot_len");
     }
+    // #4031: a right-hand cutter is written as absent.
+    if checked.get("cutter_hand").and_then(Value::as_str) == Some("right") {
+        checked.remove("cutter_hand");
+    }
     if let Some(path) = lost(&checked, &back, "") {
         return Err(format!("bad tool patch: unknown field {path} - a tool definition has no field \"{path}\""));
     }
