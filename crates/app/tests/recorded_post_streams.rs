@@ -184,6 +184,7 @@ fn drill_full_diameter() -> String {
     let tool = drill6();
     let holes = [Hole { xy: Point2::new(20.0, 10.0), radius: 3.0, entry_z: 0.0, floor_z: -10.0, through: true, stepped: false }];
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: camcraft_app::drilling::BreakThroughFrom::FullDiameter,
         clearance_z: 10.0,
