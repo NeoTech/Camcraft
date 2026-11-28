@@ -1,9 +1,10 @@
-//! M13.3: the `camcraft-sim` headless binary - a slot cut in a box
+//! M13.3: `camcraft-sim cl` (moved from the sim crate's binary, #2586) -
+//! the old behaviour, pinned: a slot cut in a box
 //! removes its own volume and passes; a rapid through the stock is
 //! flagged (exit 2); a missing file or a nonsense box exits 1 with a
 //! message, never a panic (Prime Directive).
 //!
-//! Gate map (M4.4): covers camcraft-sim src/bin/camcraft-sim.rs.
+//! Gate map (M4.4): covers camcraft-simview src/cl_cmd.rs.
 //!
 //! Provenance: our own fixtures, from the dexel removal law.
 
@@ -18,7 +19,7 @@ fn tmp(name: &str, body: &str) -> PathBuf {
 }
 
 fn run(args: &[OsString]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_camcraft-sim")).args(args).output().expect("spawn")
+    Command::new(env!("CARGO_BIN_EXE_camcraft-sim")).arg("cl").args(args).output().expect("spawn")
 }
 
 /// The CLFile plus the stock box 0..40 x 0..20 x -10..0 and a 10 mm tool.
