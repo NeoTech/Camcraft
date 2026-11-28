@@ -4,10 +4,10 @@
 use camcraft_app::operation;
 
 use crate::machine_modes;
-use crate::shortcut_keys::chord;
 use crate::state::State;
 
 use super::TYPES;
+use super::table;
 use super::gates::{NO_STOCK_TIP, browser_refusal, has_stock, no_tool_for, tool_law_note};
 
 /// One ribbon cell: command identity plus the state it reads for enabled,
@@ -56,26 +56,27 @@ pub(in crate::egui_app) enum Cmd {
     /// View door. Opening it is view state; a pick queues `SelectTheme`
     /// / `SelectColorVision`, kept as a user preference (#877).
     Theme,
+    /// Menu and keyboard only (#4484): copy the selected operation.
+    Copy,
+    /// Menu and keyboard only: paste the copied operation.
+    Paste,
+    /// Menu and keyboard only: the window close law (Ctrl+Q).
+    Quit,
+    /// Menu and keyboard only: flip perspective and orthographic (#434).
+    Projection,
 }
-
-/// The four anchor groups: file work opens the row, setup follows, and
-/// the run/judge groups close it. The middle is the registry's (below):
-/// the old hand-typed eight-cell Create group was M1.4.3's debt, home
-/// to kinds 0..=7 while the table grew - the registry counts the
-/// kinds, this comment never must.
-const FILE: (&str, &[Cmd]) =
-    ("File", &[Cmd::New, Cmd::Model, Cmd::Project, Cmd::Save, Cmd::SaveAs, Cmd::Post]);
-const SETUP: (&str, &[Cmd]) =
-    ("Setup", &[Cmd::Setups, Cmd::Stock, Cmd::Origin, Cmd::Tools]);
 
 /// The bar's whole op-shortcut budget (the ribbon law): at most this
 /// many Create cells stand inline, and they are the user's pins. The
 /// rest of the catalog lives behind the section doors at every width.
 pub(super) const MAX_PINS: usize = 4;
-const MODIFY: (&str, &[Cmd]) = ("Modify", &[Cmd::Undo, Cmd::Redo, Cmd::Run, Cmd::Delete]);
-const INSPECT: (&str, &[Cmd]) =
-    ("Inspect", &[Cmd::Frame, Cmd::Paths, Cmd::Simulate, Cmd::Deviate]);
-const VIEW: (&str, &[Cmd]) = ("View", &[Cmd::View, Cmd::Theme]);
+
+/// One anchor group from the command table (#4484): file work opens the
+/// row, setup follows, and the run/judge groups close it. The middle is
+/// the registry's (`ribbon_geometry`).
+fn anchor(title: &'static str) -> Group {
+    Group { title, cells: table::ribbon_group(title), section: None }
+}
 
 /// One ribbon group before layout: its caption and every cell it would
 /// show in a row that never ran out of width. `section` marks the
@@ -109,8 +110,8 @@ fn ribbon_geometry(
     pinned: &[usize],
 ) -> Vec<Group> {
     let mut plan = vec![
-        Group { title: FILE.0, cells: FILE.1.to_vec(), section: None },
-        Group { title: SETUP.0, cells: SETUP.1.to_vec(), section: None },
+        anchor(table::FILE),
+        anchor(table::SETUP),
     ];
     // Pinned kinds first among the Create groups, in pin order - and
     // only those the machine can run, so the hiding law has one more
@@ -159,38 +160,27 @@ fn ribbon_geometry(
             section: Some(s),
         })
     }));
-    plan.push(Group { title: MODIFY.0, cells: MODIFY.1.to_vec(), section: None });
-    plan.push(Group { title: INSPECT.0, cells: INSPECT.1.to_vec(), section: None });
-    plan.push(Group { title: VIEW.0, cells: VIEW.1.to_vec(), section: None });
+    plan.push(anchor(table::MODIFY));
+    plan.push(anchor(table::INSPECT));
+    plan.push(anchor(table::VIEW));
     plan
 }
 
 
-pub(super) fn label_of(c: Cmd) -> &'static str {
+/// A command's one label (#4484): the table's, or the registry's for the
+/// Create cells and the section doors.
+pub(in crate::egui_app) fn label_of(c: Cmd) -> &'static str {
     match c {
-        Cmd::New => "New",
-        Cmd::Model => "Model",
-        Cmd::Project => "Open",
-        Cmd::Save => "Save",
-        Cmd::SaveAs => "Save As",
-        Cmd::Post => "Post",
-        Cmd::Setups => "Setups",
-        Cmd::Stock => "Stock",
-        Cmd::Origin => "Origin",
-        Cmd::Tools => "Tools",
-        Cmd::Machine => "Machine",
         Cmd::Create(_) => "op", // formatted by the group row; ribbon shows TYPES
-        Cmd::Undo => "Undo",
-        Cmd::Redo => "Redo",
-        Cmd::Run => "Run",
-        Cmd::Delete => "Delete",
-        Cmd::Frame => "Frame",
-        Cmd::Paths => "Paths",
-        Cmd::Simulate => "Simulate",
-        Cmd::Deviate => "Deviate",
-        Cmd::View => "Panels",
-        Cmd::Theme => "Theme",
         Cmd::More(s) => s.label(),
+        other => match table::row_of(other) {
+            Some(r) => r.label,
+            None => {
+                debug_assert!(false, "{other:?} has no command table row");
+                diag_warn!("ribbon: {other:?} has no command table row");
+                "?"
+            }
+        },
     }
 }
 
@@ -249,12 +239,12 @@ pub(in crate::egui_app) fn tip_of(c: Cmd, state: &State) -> String {
         return why.into();
     }
     match c {
-        Cmd::New => format!("New document\t{}", chord("N")),
-        Cmd::Model => format!("Open a mesh model\t{}", chord("O")),
-        Cmd::Project => format!("Open a project\t{}", chord("Shift+O")),
-        Cmd::Save => format!("Save the project\t{}", chord("S")),
-        Cmd::SaveAs => format!("Save the project under a new name\t{}", chord("Shift+S")),
-        Cmd::Post => format!("Post NC program (validation gate), then review it\t{}", chord("P")),
+        Cmd::New => with_key("New document", c),
+        Cmd::Model => with_key("Open a mesh model", c),
+        Cmd::Project => with_key("Open a project", c),
+        Cmd::Save => with_key("Save the project", c),
+        Cmd::SaveAs => with_key("Save the project under a new name", c),
+        Cmd::Post => with_key("Post NC program (validation gate), then review it", c),
         Cmd::Setups => "Setups: create, activate and delete the document's setups".into(),
         Cmd::Stock => "Stock definition".into(),
         Cmd::Origin => "Work offset (WCS)".into(),
@@ -305,11 +295,11 @@ pub(in crate::egui_app) fn tip_of(c: Cmd, state: &State) -> String {
             }
         }
         Cmd::More(s) => format!("The rest of the {} kinds", s.label()),
-        Cmd::Undo => format!("Undo\t{}", chord("Z")),
-        Cmd::Redo => format!("Redo\t{}", chord("Y")),
+        Cmd::Undo => with_key("Undo", c),
+        Cmd::Redo => with_key("Redo", c),
         Cmd::Run => "Generate the selected operation".into(),
-        Cmd::Delete => "Delete the selection\tDel".into(),
-        Cmd::Frame => "Frame all\tF".into(),
+        Cmd::Delete => with_key("Delete the selection", c),
+        Cmd::Frame => with_key("Frame all", c),
         Cmd::Paths => if state.show_all_paths {
             "Hide every toolpath".into()
         } else {
@@ -321,5 +311,17 @@ pub(in crate::egui_app) fn tip_of(c: Cmd, state: &State) -> String {
         }
         Cmd::View => "Show or hide the browser, properties and machines panes, or reset the layout".into(),
         Cmd::Theme => "Pick the document's theme and colour-vision mode (undoable)".into(),
+        Cmd::Copy => with_key("Copy the selected operation", c),
+        Cmd::Paste => with_key("Paste the copied operation", c),
+        Cmd::Quit => with_key("Quit the application", c),
+        Cmd::Projection => with_key("Switch between perspective and orthographic projection", c),
+    }
+}
+
+/// A tip with the command's shortcut hint from the table after a tab.
+fn with_key(text: &str, c: Cmd) -> String {
+    match table::key_hint(c) {
+        Some(k) => format!("{text}\t{k}"),
+        None => text.to_owned(),
     }
 }

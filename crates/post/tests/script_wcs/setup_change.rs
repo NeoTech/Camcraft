@@ -3,7 +3,10 @@
 //! Gate map: covers assets/posts/haas.cps, assets/posts/mazak.cps,
 //! assets/posts/doosan-dnm.cps, assets/posts/sinumerik.cps,
 //! assets/posts/heidenhain.cps, assets/posts/grblhal.cps, assets/posts/tinyg.cps,
-//! camcraft_post::post::engine.
+//! assets/posts/fanuc.cps, camcraft_post::post::engine.
+
+#[path = "setup_change/tool_change_retract.rs"]
+mod tool_change_retract; // #4341: Z up before a later tool change's G49
 
 use camcraft_post::cl::{MoveKind, PathBuilder};
 use camcraft_post::geometry::Point3;

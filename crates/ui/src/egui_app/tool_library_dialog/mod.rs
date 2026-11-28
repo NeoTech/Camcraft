@@ -71,8 +71,9 @@ pub(crate) mod recipes_tab;
 pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
-/// #4451: display only - private to this window, so no law can read it.
-mod thread_form;
+/// #4451: display only - in `crates/ui`, so no law can read it. #4452:
+/// the Properties side preview (`tool_preview`) draws the teeth too.
+pub(crate) mod thread_form;
 pub(crate) mod thumbs;
 pub(crate) mod tool_tab;
 

@@ -94,8 +94,10 @@ fn title_bar_shows_update_notice_when_newer_release_is_injected_and_opens_notes_
     let settings = h.get_by_role_and_label(Role::Button, SETTINGS).rect();
     let home = h.get_by_role_and_label(Role::Button, HOME).rect();
     let donate = h.get_by_role_and_label(Role::Button, "Donate").rect();
+    // The ribbon's top band, under the menu bar (#4484).
+    let bar = super::panes::menu_bar_h(&super::theme::current());
     assert!(
-        notice_rect.top() >= 0.0 && notice_rect.bottom() <= 30.0,
+        notice_rect.top() >= bar && notice_rect.bottom() <= 31.0 + bar,
         "notice sits in top band: {notice_rect:?}"
     );
     assert!(
