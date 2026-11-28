@@ -102,7 +102,10 @@ fn set_folded(tree: &mut Tree<Tab>, i: NodeIndex, folded: bool) {
 }
 
 /// Fold the main-area leaf that holds `tab`, the way the dock's arrow does.
-/// The viewport refuses. Returns whether the leaf is folded now.
+/// The viewport refuses. Returns whether the leaf is folded now. The shell
+/// folds through the dock's arrow; this is the seam for tests and a later
+/// fold command.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn fold(dock: &mut DockState<Tab>, tab: &Tab) -> bool {
     let tree = dock.main_surface_mut();
     let Some(i) = find(tree, tab) else { return false };
@@ -135,6 +138,7 @@ fn restore(tree: &mut Tree<Tab>, folds: &mut PaneFolds, i: NodeIndex) -> bool {
 }
 
 /// Whether the main-area leaf that holds `tab` is folded.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn is_folded(dock: &DockState<Tab>, tab: &Tab) -> bool {
     let tree = dock.main_surface();
     find(tree, tab).is_some_and(|i| tree[i].is_collapsed())
