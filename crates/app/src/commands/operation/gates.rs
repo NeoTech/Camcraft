@@ -170,6 +170,15 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             family.work(),
         )));
     }
+    // #4081: a laser cutter cuts only laser work; no laser operation
+    // ships before the Laser Profile slice, so each kind is refused here.
+    if machine == crate::machine::Kind::Laser {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a laser cutter, which cuts only laser operations",
+            params.kind(),
+            family.work(),
+        )));
+    }
     // #532: wire EDM work needs a wire EDM, and a wire EDM cuts only it.
     if family == Family::WireEdm || machine == crate::machine::Kind::WireEdm {
         return Err(CommandError::Invalid(format!(

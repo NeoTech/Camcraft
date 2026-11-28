@@ -223,6 +223,24 @@ fn release_and_ignored_steps_get_the_longer_stall_time() {
     assert_eq!(watchdog::limit_for(&args(&["--release"]), u64::MAX), Duration::from_secs(u64::MAX), "no overflow");
 }
 
+/// #4101: a build step (a quick or batch gate's `--no-run` build, a `cargo build`) is a build, not a
+/// test - a cold link of a large test binary can be silent past the debug stall time - so it gets the
+/// longer stall time too. A debug test step, and clippy, keep the base time.
+#[test]
+fn build_steps_get_the_longer_stall_time() {
+    let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let long = Duration::from_secs(15 * watchdog::SLOW_FACTOR * 60);
+    let build = ["test", "-j", "4", "-p", "camcraft-ui", "--no-run", "--lib"];
+    assert_eq!(watchdog::limit_for(&args(&build), 15), long, "the quick gate's ui build");
+    assert_eq!(watchdog::limit_for(&args(&["build", "-p", "camcraft-app", "--bin", "camcraft-cli"]), 15), long);
+    assert_eq!(watchdog::limit_for(&args(&["test", "-p", "camcraft-ui", "--lib"]), 15), Duration::from_secs(15 * 60));
+    assert_eq!(watchdog::limit_for(&args(&["clippy", "-p", "camcraft-ui", "--all-targets"]), 15), Duration::from_secs(15 * 60));
+    // A test binary named `build` is not a build step: only the subcommand counts.
+    assert_eq!(watchdog::limit_for(&args(&["test", "-p", "x", "--test", "build"]), 15), Duration::from_secs(15 * 60));
+    let (_, line) = watchdog::from_value(None);
+    assert!(line.contains("--release, --ignored and build steps"), "the plan line names the build steps: {line}");
+}
+
 #[test]
 fn a_stall_has_its_own_row_and_exit_code() {
     assert_eq!(crate::exec::row(true, false), "ok");

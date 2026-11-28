@@ -88,8 +88,10 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     let imp = ImportModel::within_in(&path, budget, units).map_err(|e| e.to_string())?;
     let name = given_name.unwrap_or_else(|| imp.name.clone());
     let notes = imp.notes.clone();
+    let mut picks = None;
     if model::find_by_name(&env.world, &name).is_some() {
         let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?.with_fidelity(imp.coarse_mm).with_file_tolerance(imp.file_tolerance).with_hole(imp.hole.clone()).with_budget(imp.facet_budget).with_step_source(imp.step_source).with_source(imp.source).with_source_faces(imp.source_faces);
+        picks = cmd.follow_report().to_json();
         env.history.execute(&env.world, cmd);
     } else {
         env.history.execute(&env.world, imp.renamed(&name));
@@ -109,6 +111,11 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // with its neighbours) is in the result, by name.
     if !notes.is_empty() {
         out["notes"] = json!(notes);
+    }
+    // #3915: the picks that followed their SolidCraft names at this
+    // update, and each that could not, by operation and name.
+    if let Some(p) = picks {
+        out["picks"] = p;
     }
     Ok(out)
 }

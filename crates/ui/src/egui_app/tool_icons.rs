@@ -31,6 +31,7 @@ pub(crate) fn tool_icon(kind: ToolKind) -> Icon {
         ToolKind::Probe => Icon::ToolProbe,
         ToolKind::Torch => Icon::ToolTorch,
         ToolKind::Waterjet => Icon::ToolWaterjet,
+        ToolKind::Laser => Icon::ToolLaser,
         ToolKind::Electrode => Icon::ToolElectrode,
         ToolKind::ThreadMill => Icon::ToolThreadMill,
         ToolKind::ThreadMillSingle => Icon::ToolThreadMillSingle,
@@ -86,7 +87,7 @@ pub(crate) fn named_glyph(ui: &mut Ui, world: &World, name: &str) {
 /// labels are unchanged); the glyph is decoration.
 pub(crate) fn tool_combo(ui: &mut Ui, world: &World, id: &str, idx: &mut usize, names: &[String]) {
     let cur: String = names.get((*idx).min(names.len().saturating_sub(1))).cloned().unwrap_or_default();
-    ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
+    let r = ComboBox::from_id_salt(id).width(CTRL_W).selected_text(cur).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
             ui.horizontal(|ui| {
                 let tool = model::find_by_name(world, n).and_then(|e| model::tool_of(world, &e));
@@ -97,4 +98,5 @@ pub(crate) fn tool_combo(ui: &mut Ui, world: &World, id: &str, idx: &mut usize, 
             });
         }
     });
+    super::layout::name_by_row(ui, r.response);
 }

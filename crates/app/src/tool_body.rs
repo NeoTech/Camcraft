@@ -56,7 +56,10 @@ pub enum BodyFrame {
     /// #369: a lathe-held body - its placement in the turning tool
     /// frame, its optional insert zone (#396: the insert plate the
     /// judge leaves out), and its clearance bands along the spindle.
-    Lathe { place: LathePlacement, zone: Option<InsertZone>, clearance: Arc<LatheClearance> },
+    /// #3643: `pad` is how far (mm) the steel may stand outside the
+    /// facets (a meshed body's chord deviation); the bands are already
+    /// grown by it, and every rebuild and the file keep it.
+    Lathe { place: LathePlacement, zone: Option<InsertZone>, clearance: Arc<LatheClearance>, pad: f64 },
 }
 
 /// The tool kinds a lathe holds: they take a lathe-frame body only

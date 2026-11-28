@@ -45,10 +45,11 @@ fn reach_follows_the_crate_dependencies() {
     assert_eq!(reach["app"], set(&["app", "ui"]));
     assert_eq!(reach["motion"], set(&["app", "motion", "ui"]));
     assert_eq!(reach["geometry"], set(&["app", "cl", "gcode", "geometry", "motion", "post", "sim", "tools", "ui"]));
-    // gpu (#2620) has no camcraft-* dependency: the kernel reaches every crate but it.
-    let all_but_gpu = plan::ALL_CRATES.iter().filter(|d| **d != "gpu").map(|d| (*d).to_string());
+    // gpu (#2620) and ui-kit (#4394) have no camcraft-* dependency: the kernel reaches every crate but them.
+    let all_but_gpu = plan::ALL_CRATES.iter().filter(|d| !matches!(**d, "gpu" | "ui-kit")).map(|d| (*d).to_string());
     assert_eq!(reach["kernel"], all_but_gpu.collect::<BTreeSet<_>>());
     assert_eq!(reach["gpu"], set(&["gpu", "ui"]));
+    assert_eq!(reach["ui-kit"], set(&["ui", "ui-kit"]));
 }
 
 #[test]

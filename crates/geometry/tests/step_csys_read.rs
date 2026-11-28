@@ -205,3 +205,30 @@ fn corrupt_input_is_a_clean_error_never_a_panic() {
     let r = read_tool_csys(&looped).expect("reads");
     assert!(r.find(CsysRole::InProcess).is_err_and(|e| e.contains("#50")), "{:?}", r.refused);
 }
+
+#[test]
+fn mcs_insert_names_the_mounting_frame_and_two_mounts_are_ambiguous() {
+    // #3643: an insert states where it sits in its seat as MCS_INSERT.
+    assert_eq!(CsysRole::classify("MCS_INSERT"), CsysRole::Mounting);
+    assert_eq!(CsysRole::classify(" mcs_insert "), CsysRole::Mounting);
+    for other in ["MCS_", "MCS_1", "MCS_INSERT_2", "MCSINSERT"] {
+        assert_eq!(CsysRole::classify(other), CsysRole::Other, "{other}");
+    }
+    let text = fixture("tool_csys_iso13399.step");
+    let renamed = text.replacen("AXIS2_PLACEMENT_3D('MCS',", "AXIS2_PLACEMENT_3D('MCS_INSERT',", 1);
+    assert_ne!(renamed, text, "the fixture names an MCS");
+    let r = read_tool_csys(&renamed).expect("reads");
+    let mount = r.find(CsysRole::Mounting).expect("MCS_INSERT is the mounting frame");
+    assert_eq!(mount.name, "MCS_INSERT");
+    assert!((mount.origin[2] + 40.0).abs() < 1e-12, "{:?}", mount.origin);
+    // MCS and MCS_INSERT in one file: two mounting frames, refused by name.
+    let both = text.replacen(
+        "#40 = AXIS2_PLACEMENT_3D('MCS', #41, #32, #33);",
+        "#40 = AXIS2_PLACEMENT_3D('MCS', #41, #32, #33);\n#45 = AXIS2_PLACEMENT_3D('MCS_INSERT', #41, #32, #33);",
+        1,
+    );
+    assert_ne!(both, text, "the fixture writes the MCS line");
+    let r = read_tool_csys(&both).expect("reads");
+    let err = r.find(CsysRole::Mounting).expect_err("two mounting frames");
+    assert!(err.contains("2 coordinate systems claim Mounting") && err.contains("MCS_INSERT"), "{err}");
+}

@@ -180,7 +180,7 @@ fn each_mount_file_is_its_own_post_machine_ops_and_work_offset() {
     assert!(is_fanuc_on(a, "VMC 3-AXIS"), "post A for machine A:\n{a}");
     assert!(a.contains("(SETUP: Setup1)") && !a.contains("N10 "), "{a}");
     assert!(index_of(a, "(OPERATION: Face1a - FACE - G54)") < index_of(a, "(OPERATION: Face1b - FACE - G54)"));
-    assert!(a.contains("G90 G54") && !a.contains("G55"), "Setup1's own work offset only:\n{a}");
+    assert!(a.contains("G94 G54") && !a.contains("G55"), "Setup1's own work offset only:\n{a}");
     assert!(!a.contains("Face2") && !a.contains("Setup2") && !a.contains("770M"), "nothing of Setup2:\n{a}");
 
     assert!(is_siemens_on(b, MACHINE_B), "post B for machine B:\n{b}");

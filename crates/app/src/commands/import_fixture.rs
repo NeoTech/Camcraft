@@ -100,12 +100,13 @@ impl ImportFixture {
         &self.name
     }
 
-    /// What an update changed (`None` for a fresh import).
+    /// What an update changed (`None` for a fresh import), with the picks
+    /// that followed their SolidCraft names and each that could not (#3915).
     #[must_use]
     pub fn update_summary(&self) -> Option<String> {
         match &self.landing {
             Landing::Fresh(_) => None,
-            Landing::Update(u) => Some(u.changes().describe()),
+            Landing::Update(u) => Some(u.summary()),
         }
     }
 }

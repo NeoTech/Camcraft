@@ -233,3 +233,17 @@ fn a_submodule_step_runs_only_that_submodule_in_real_cargo() {
     assert!(stdout.contains("alpha::a1"), "{stdout}");
     assert!(stdout.contains("4 filtered out"), "the other submodules must not run: {stdout}");
 }
+
+/// #3189: the integration tests of `camcraft-motion` live in domain directory suites. The crate has
+/// at most 16 test binaries, and each motion binary of `SLOW_BINARIES` stays a flat binary of its own,
+/// so that batch still skips it and release still runs it.
+#[test]
+fn motion_tests_fold_into_at_most_sixteen_binaries() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let bins = scan::binaries(&root, "motion");
+    assert!(bins.len() <= 16, "{} motion test binaries (at most 16): {bins:?}", bins.len());
+    for slow in plan::SLOW_BINARIES.iter().filter_map(|k| k.strip_prefix("motion:")) {
+        assert!(bins.iter().any(|b| b == slow), "slow binary {slow} missing: {bins:?}");
+        assert!(root.join(format!("crates/motion/tests/{slow}.rs")).is_file(), "slow binary {slow} is not flat");
+    }
+}

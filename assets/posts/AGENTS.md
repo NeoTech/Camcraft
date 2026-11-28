@@ -61,7 +61,7 @@ and tormach-lathe.cps: the LinuxCNC G-code reference's G59.1-G59.3);
 `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
-reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `rotariesBeforeTraverse = true` (#3100) says the script turns the rotaries to each section's pose at the safe Z before its first X/Y traverse - the first-traverse law then reads the work at the operation's own pose, not at every pose the previous program can leave; a script without it is read the strict way, a user's own script that declares it is taken at its word with a note on the path, and each shipped post that declares it has a posting test of the real order (tormach.cps sets it); `uprightReturn = true` (#3477) says the script retracts to a safe height and commands the rotaries to zero at the start of each section that follows a tilted section, before its first X/Y traverse - without it the engine refuses by name a section that opens with no stated angle after a section that left a rotary off zero, and each shipped post that declares it has a posting test of the real order (`crates/post/tests/upright_after_tilt.rs`; fanuc, doosan-dnm, mach4 and tormach set it); `manualToolChange = ["manual-retract-top"]` (#4085) lists the manual tool change modes (`tooling.tool_change`: `manual`, `manual-retract-top`) for which the script writes a stop and the operator checks at each tool change - on a machine that states a manual mode the script does not list, the engine refuses by name, with the post and the machine, before any hook runs (`crates/post/src/post/manual_change.rs`; heidenhain.cps and heidenhain-klartext.cps list `manual-retract-top`); a script that lists a mode also refuses by name each installation its sequence was not verified for, because the retract and the stop depend on machine parameters (#4114: both Heidenhain posts accept only the Fehlmann Picomax 55 with iTNC 530 NC 340490-03); `liveTooling = true` (issue #33) says the
+reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `rotariesBeforeTraverse = true` (#3100) says the script turns the rotaries to each section's pose at the safe Z before its first X/Y traverse - the first-traverse law then reads the work at the operation's own pose, not at every pose the previous program can leave; a script without it is read the strict way, a user's own script that declares it is taken at its word with a note on the path, and each shipped post that declares it has a posting test of the real order (tormach.cps sets it); `uprightReturn = true` (#3477) says the script retracts to a safe height and commands the rotaries to zero at the start of each section that follows a tilted section, before its first X/Y traverse - without it the engine refuses by name a section that opens with no stated angle after a section that left a rotary off zero, and each shipped post that declares it has a posting test of the real order (`crates/post/tests/script_rotary/upright_after_tilt.rs`; fanuc, doosan-dnm, mach4 and tormach set it); `manualToolChange = ["manual-retract-top"]` (#4085) lists the manual tool change modes (`tooling.tool_change`: `manual`, `manual-retract-top`) for which the script writes a stop and the operator checks at each tool change - on a machine that states a manual mode the script does not list, the engine refuses by name, with the post and the machine, before any hook runs (`crates/post/src/post/manual_change.rs`; heidenhain.cps and heidenhain-klartext.cps list `manual-retract-top`); a script that lists a mode also refuses by name each installation its sequence was not verified for, because the retract and the stop depend on machine parameters (#4114: both Heidenhain posts accept only the Fehlmann Picomax 55 with iTNC 530 NC 340490-03); `liveTooling = true` (issue #33) says the
 script voices a `PARAM LiveTool` section - C-axis live-tool work, the
 stream's X Y Z the part-frame tip and C the stated spindle angle - and
 without it the engine refuses such a section by name (only
@@ -79,7 +79,7 @@ inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
 axis is refused by name. Each built-in mill post sets it (#2475: the
 other dialects are verified by the trace test
-`crates/post/tests/wcs_flip_dialects.rs` and its goldens). The same flag covers a
+`crates/post/tests/script_wcs/wcs_flip_dialects.rs` and its goldens). The same flag covers a
 flipped WCS axis (#1649, `PARAM WcsFlip`): the engine mirrors that
 section the same way (a helical arc included), and a script that sets
 the flag writes a note that names the flipped axes. `probeAxisInversion =
@@ -189,6 +189,13 @@ write (the gate), so the released program never carries one.
   OUTPUT only when `rtcp === true`; a tilted record on a non-RTCP
   machine is a `message()` refusal — never a reinterpretation), and
   the rate ceilings for anything you pace.
+- **Z goes up before a later tool change's G49 (#4341).** A
+  Fanuc-family control can move Z on a `G49` block with no axis word.
+  A preamble of a section after the first that writes `G49` and `T M6`
+  lifts Z first, by the post's own retract method, unless a Go home or
+  a setup-change stop already lifted it. A `G43.4` that is still armed
+  is cancelled before that lift. Mazak, Fanuc and Doosan DNM do this
+  (`crates/post/tests/script_wcs/setup_change/tool_change_retract.rs`).
 - **Up is the machine's word.** A retract in machine coordinates
   (`G53 G0 Z..`) reads `machine.safeRetractZ` (#495); machine Z0 is the
   top of travel only by convention (Tormach's), and a machine homed
@@ -256,7 +263,7 @@ write (the gate), so the released program never carries one.
   group with `G80` and posts as the stream says. The program never
   moves between holes lower than the verified path, and a cut that
   leaves the hole inside a group is refused by name
-  (`crates/post/tests/cycle_hop.rs` reads every cycle post back).
+  (`crates/post/tests/script_cycles/cycle_hop.rs` reads every cycle post back).
   A cycle read away from its hole with no rapid to it (two cycle
   records back to back, or a cycle straight after probing) is seated
   at the section's own `RetractPlane`: up to it, over the hole, down
@@ -444,9 +451,9 @@ not run on a control in this form;
 what is inferred, and `docs/decisions/4076-ln2w-wire-offset.md` is the
 decision record of the offset. Its goldens ride under `nc/sodick-ln2w/`
 (`crates/app/tests/wire_post/sodick_aq600l.rs`); its synthetic-stream
-pins are in `crates/post/tests/sodick_ln2w/pins.rs` and, for the offset,
-`crates/post/tests/sodick_ln2w/offset.rs` (test binary
-`script_sodick_ln2w`).
+pins are in `crates/post/tests/script_goldens/sodick_ln2w/pins.rs` and, for the offset,
+`crates/post/tests/script_goldens/sodick_ln2w/offset.rs` (test binary
+`script_goldens`, module `script_sodick_ln2w`).
 
 ## Adding a post to the app
 

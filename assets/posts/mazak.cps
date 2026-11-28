@@ -233,11 +233,16 @@ function retractHome(xyToo) {
       return;
     }
     block(["G53", "G00", w("Z", machine.safeRetractZ)]);
+    zUp = true;
     return;
   }
   block(["G91", "G28", "Z0"]);
   if (xyToo) block(["G28", "X0", "Y0"]);
+  zUp = true;
 }
+// #4341: Z stands at its safe retract height (a Go home or a setup-change
+// lift); the next preamble opens the section and clears it.
+var zUp = false;
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
 function arcWord(k, v) { return wo(k, v, k === "X" ? orgX : (k === "Y" ? orgY : orgZ)); }  // #3442: a position word as written, for arcFate
@@ -588,6 +593,13 @@ function startPreamble() {
   opNotes();
   // #1649: the operator reads why every sign on a flipped axis is the other one.
   if (wcsFlip) note("WCS " + wcsFlip.split("").join(" AND ") + " FLIPPED - PROGRAM MIRRORED");
+  // #4341: G49 moves Z to remove the length offset (MAZATROL MATRIX
+  // EIA/ISO programming manual, tool length offset cancel), and T M6
+  // follows. A later section first lifts Z by the safeRetract method,
+  // unless a Go home or a setup change already did. The G90 below ends
+  // the G28 retract's G91.
+  if (secStarted > 0 && !zUp) retractHome(false);
+  zUp = false;
   // #4343: every F word is a feed per minute, so the preamble states G94.
   // A control left in G95 (feed per revolution) by an earlier program or
   // MDI would read F1200 as 1200 per revolution.

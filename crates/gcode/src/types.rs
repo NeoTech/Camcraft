@@ -229,6 +229,8 @@ impl LineMap {
 pub struct ParsedSection {
     pub index: usize,
     pub tool_number: Option<u32>,
+    /// Tool name of a Klartext `TOOL CALL "NAME"`; `None` for a numbered tool and for RS-274.
+    pub tool_name: Option<String>,
     pub work_offset: WorkOffset,
     pub length_offset: Option<u32>,
     pub spindle_rpm: Option<f64>,

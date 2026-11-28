@@ -1,43 +1,42 @@
 //! #3896 (U5 of #3663): the Recipes tab of the tool library window's
 //! editor - the tool's speeds and feeds for each workpiece material. It
 //! draws the same rows as Properties' Cutting data group
-//! (`tool_cutting_rows::cutting_rows_with`), with read-only columns for
-//! the surface speed and the feed per tooth, and a mark on the row that
-//! the document's material runs. "Suggest" fills a row from the cutting
-//! table and "Copy from tool" takes the rows of another tool. Both write
+//! (`tool_cutting_rows::cutting_rows_with`). Suggest, Copy and Add write
 //! the window's draft only: the editor's one Apply lands it as
 //! `ChangeTool`, one undo step. No command is new.
 //! #3930: the rest of Properties' old Cutting data group (the tool's own
-//! spindle rpm and feed, the lathe rows, centre cutting) follows the table
+//! spindle rpm and feed, the lathe rows) follows the table
 //! (`tool_settings_grid::cutting_base`), so the summary page loses no edit.
+//! #4337 (U11): one line says what a recipe is; a star marks the row of
+//! the stock material in force (the setup stock's, else the document's),
+//! the row operations take; each row's surface speed and chip load stand
+//! under the table (`recipes_derived`, computed when their input
+//! changes); the buttons (`recipes_actions`) and a units note follow.
+//! #4453: the surface speed and chip load are inputs (`recipes_speeds`):
+//! an edit sets the row's stored rpm or feed; the derived line is their
+//! hover text.
 //! Provenance: our own tab over the tool draft and the handbook relations
 //! in `recipes_fill`; no HSMWorks material involved.
 
-use egui::{Id, RichText, Ui};
+use egui::{RichText, Ui};
 
-use camcraft_app::cutting;
-use camcraft_app::model;
-use camcraft_app::tool_cutting_rows::CuttingRow;
+use camcraft_app::tool_cutting_rows::{CuttingRow, material_label};
 use camcraft_app::tools::{ToolKind, ToolMaterial, WorkMaterial};
 use camcraft_app::units::Unit;
 
 use super::super::fields::combo;
 use super::super::layout::{prop_row, prop_row_hint};
 use super::super::tool_cutting_rows::{Extra, cutting_rows, cutting_rows_with};
-use super::recipes_fill::{
-    copy_rows, copyable, feed_per_tooth, is_marked, names_material, rotating, suggest, suggest_refusal,
-    surface_speed,
-};
+use super::recipes_derived::derived_line;
+use crate::state::DerivedKey;
+use super::recipes_fill::{is_marked, names_material, rotating};
 use crate::state::{State, ToolUi};
+
 
 /// The tab's name, and its AccessKit label.
 pub(crate) const TAB: &str = "Recipes";
-/// The mark on the row that the document's material runs.
-pub(crate) const MARK: &str = "document material";
-/// The button that fills a row from the cutting table.
-pub(crate) const SUGGEST: &str = "Suggest";
-/// The button that copies the rows of another tool.
-pub(crate) const COPY: &str = "Copy from tool";
+/// The mark on the row of the stock material in force.
+pub(crate) const STAR: &str = "★";
 
 /// The flute counts the combo offers; a stated count outside it is shown
 /// as its own entry and never rewritten (the operation page's rule).
@@ -49,7 +48,8 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     super::super::tool_settings_grid::cutting_base(ui, state);
 }
 
-/// The per-material rows, with Suggest and Copy for a rotating tool.
+/// The per-material rows, with the derived line and the buttons for a
+/// rotating tool.
 fn rows(ui: &mut Ui, state: &mut State) {
     let kind = state.tool_ui.tool_kind();
     if kind == ToolKind::Wire {
@@ -62,32 +62,84 @@ fn rows(ui: &mut Ui, state: &mut State) {
         cutting_rows(ui, &mut state.tool_ui, u, torch);
         return;
     }
-    let doc = cutting::material_of(&state.world);
-    edge_rows(ui, &mut state.tool_ui);
-    suggest_row(ui, state, doc);
-    copy_row(ui, state);
-    note(ui, &match doc {
-        Some(m) => format!("Document material: {}. The marked row is the one its operations run.", m.label()),
-        None => "No workpiece material is stated (an operation's Feeds tab sets it), so no row is marked.".to_owned(),
-    });
-    let t = &state.tool_ui;
-    let (d, z) = (t.diameter, t.flutes);
-    let named = doc.is_some_and(|m| names_material(&t.cutting, m));
-    let cells = move |ui: &mut Ui, row: &CuttingRow| {
-        ui.label(surface_speed(d, row.rpm).map_or_else(|| "-".to_owned(), |vc| vc_text(vc, u)));
-        match feed_per_tooth(row.feed, row.rpm, z) {
-            Some(fz) => ui.label(fz_text(fz, u)),
-            None => ui.label("-").on_hover_text("needs a spindle speed and a stated flute count"),
-        };
-        if is_marked(row, doc, named) {
-            ui.label(RichText::new(MARK).italics().color(ui.visuals().text_color()))
-                .on_hover_text("the row that operations on the document's workpiece material run");
+    let active = camcraft_app::setup::active(&state.world);
+    let stock = camcraft_app::stock_material::in_force(&state.world, active.as_deref());
+    let named = stock.is_some_and(|m| names_material(&state.tool_ui.cutting, m));
+    note(ui, &explanation(stock, named));
+    let lead = |ui: &mut Ui, row: &CuttingRow| {
+        if is_marked(row, stock, named) {
+            ui.label(RichText::new(STAR).color(ui.visuals().text_color()))
+                .on_hover_text("the row that operations on the stock material take");
         } else {
             ui.label("");
         }
     };
-    let extra = Extra { heads: heads(u), cells: &cells };
-    cutting_rows_with(ui, &mut state.tool_ui, u, false, Some(&extra));
+    cutting_rows_with(ui, &mut state.tool_ui, u, false, Some(&Extra { lead: &lead }));
+    let lines = derived(state, u);
+    super::recipes_speeds::draw(ui, &mut state.tool_ui, u, &lines);
+    super::recipes_actions::buttons(ui, state, stock);
+    note(ui, &units_note(u));
+    edge_rows(ui, &mut state.tool_ui);
+}
+
+/// The tab's first line: what a recipe is, and which row operations take.
+#[must_use]
+pub(crate) fn explanation(stock: Option<WorkMaterial>, named: bool) -> String {
+    let head = "One recipe for each work material.";
+    match stock {
+        Some(m) if named => format!(
+            "{head} The {STAR} marks the stock material of this document ({}): operations take that row.",
+            m.label()
+        ),
+        Some(m) => format!(
+            "{head} No row names the stock material ({}), so operations take the Unknown row: the {STAR} marks it.",
+            m.label()
+        ),
+        None => format!(
+            "{head} No stock material is stated (the Stock page states it), so operations take the Unknown row and no row has the {STAR}."
+        ),
+    }
+}
+
+/// The derived line of each drawn row, top down (the default row first
+/// when the draft stores none, as the table draws it), from the cache
+/// while the input stays.
+fn derived(state: &mut State, unit: Unit) -> Vec<String> {
+    let t = &state.tool_ui;
+    let lead = (!t.cutting.iter().any(CuttingRow::is_unknown)).then(|| CuttingRow::plain(None, t.rpm, t.feed));
+    let keys: Vec<DerivedKey> = lead
+        .iter()
+        .chain(t.cutting.iter().filter(|r| !r.is_recipe()))
+        .map(|r| DerivedKey { material: r.material, diameter: t.diameter, rpm: r.rpm, feed: r.feed, flutes: t.flutes, unit })
+        .collect();
+    let Some(view) = state.tool_library.as_mut() else {
+        return keys.iter().map(derived_line).collect();
+    };
+    let c = &mut view.recipes;
+    match &c.derived {
+        Some((k, lines)) if *k == keys => lines.clone(),
+        _ => {
+            let lines: Vec<String> = keys.iter().map(derived_line).collect();
+            c.derived = Some((keys, lines.clone()));
+            c.computes = c.computes.saturating_add(1);
+            lines
+        }
+    }
+}
+
+/// The units of the table's numbers and of the derived line.
+#[must_use]
+pub(crate) fn units_note(u: Unit) -> String {
+    let (vc, fz) = match u {
+        Unit::Millimeters => ("m/min", "mm"),
+        Unit::Inches => ("sfm", "in"),
+    };
+    format!(
+        "Units: feed {}, steps {}. Surface speed in {vc}, chip load in {fz} per tooth. A zero step reads \"not stated\": the {} row gives it.",
+        u.feed_suffix(),
+        u.suffix(),
+        material_label(None)
+    )
 }
 
 /// A dimmed line of the tab (the form's `hint` would turn into the
@@ -96,40 +148,25 @@ fn note(ui: &mut Ui, text: &str) {
     ui.add(egui::Label::new(RichText::new(text).weak()).wrap());
 }
 
-/// The read-only column heads, in the document's units.
-fn heads(u: Unit) -> Vec<String> {
-    let (vc, fz) = match u {
-        Unit::Millimeters => ("Vc (m/min)", "fz (mm)"),
-        Unit::Inches => ("Vc (sfm)", "fz (in)"),
-    };
-    vec![vc.to_owned(), fz.to_owned(), String::new()]
-}
-
-/// Surface speed: m/min, or surface feet per minute in an inch document.
-fn vc_text(vc: f64, u: Unit) -> String {
-    match u {
-        Unit::Millimeters => format!("{vc:.0}"),
-        Unit::Inches => format!("{:.0}", vc * 1000.0 / 304.8),
-    }
-}
-
-/// Feed per tooth: mm, or inch in an inch document.
-fn fz_text(fz: f64, u: Unit) -> String {
-    match u {
-        Unit::Millimeters => format!("{fz:.3}"),
-        Unit::Inches => format!("{:.4}", fz / 25.4),
-    }
-}
-
 /// The tool's edge material and flute count: the inputs of the feed per
 /// tooth and of "Suggest". Draft fields; Apply lands them.
 fn edge_rows(ui: &mut Ui, t: &mut ToolUi) {
+    tool_material_row(ui, t);
+    flutes_row(ui, t);
+}
+
+/// The edge material combo. #4336: the Tool tab's CUTTER group draws it too.
+pub(super) fn tool_material_row(ui: &mut Ui, t: &mut ToolUi) {
     let tm_names = ["Not stated", ToolMaterial::Hss.label(), ToolMaterial::Carbide.label()];
     let mut tm = t.tool_material.map_or(0, |m| m as usize + 1);
     prop_row_hint(ui, "Tool material", "the cutting edge's material; the table's speeds depend on it", |ui| {
         combo(ui, "tool_recipes_tool_material", &mut tm, &tm_names)
     });
     t.tool_material = tm.checked_sub(1).and_then(|i| ToolMaterial::ALL.get(i).copied());
+}
+
+/// The flute count combo. #4336: the Tool tab's CUTTER group draws it too.
+pub(super) fn flutes_row(ui: &mut Ui, t: &mut ToolUi) {
     let odd = t.flutes.filter(|z| !FLUTES.contains(z));
     let names: Vec<String> = std::iter::once("Not stated".to_owned())
         .chain(FLUTES.iter().chain(odd.iter()).map(u32::to_string))
@@ -142,80 +179,4 @@ fn edge_rows(ui: &mut Ui, t: &mut ToolUi) {
     };
     prop_row(ui, "Flutes", |ui| combo(ui, "tool_recipes_flutes", &mut z, &refs));
     t.flutes = names.get(z).and_then(|n| n.parse::<u32>().ok());
-}
-
-/// "Suggest for <material>": fills that material's row from the cutting
-/// table, clamped to the document machine's stated limits.
-fn suggest_row(ui: &mut Ui, state: &mut State, doc: Option<WorkMaterial>) {
-    let id = Id::new("tool_recipes_suggest_for");
-    let fallback = doc.map_or(0, |m| m as usize);
-    let mut idx = ui.data(|d| d.get_temp::<usize>(id)).unwrap_or(fallback);
-    let before = idx;
-    let labels: Vec<&str> = WorkMaterial::ALL.iter().map(|m| m.label()).collect();
-    let refusal = suggest_refusal(&state.tool_ui);
-    let clicked = prop_row_hint(ui, "Suggest for", "fill this material's row from the cutting table; Apply writes it", |ui| {
-        let b = ui
-            .add_enabled(refusal.is_none(), egui::Button::new(SUGGEST))
-            .on_hover_text("the table's spindle speed and feed for this tool on this material")
-            .on_disabled_hover_text(refusal.as_deref().unwrap_or_default())
-            .clicked();
-        combo(ui, "tool_recipes_suggest_for", &mut idx, &labels);
-        b
-    });
-    if idx != before {
-        ui.data_mut(|d| d.insert_temp(id, idx));
-    }
-    let Some(m) = WorkMaterial::ALL.get(idx).copied() else {
-        return;
-    };
-    if clicked {
-        let machine = camcraft_app::machine::of_setup(&state.world, None).1;
-        state.status = match suggest(&mut state.tool_ui, m, machine.as_ref()) {
-            Ok(()) => format!("{} row suggested - Apply writes it to the tool", m.label()),
-            Err(why) => format!("No suggestion: {why}"),
-        };
-    }
-}
-
-/// "Copy from tool": another document tool's material rows into the draft.
-fn copy_row(ui: &mut Ui, state: &mut State) {
-    let me = state.tool_ui.name.clone();
-    let others: Vec<String> = state.tool_names().into_iter().filter(|n| *n != me).collect();
-    let id = Id::new("tool_recipes_copy_from");
-    let kept = ui.data(|d| d.get_temp::<String>(id));
-    let mut idx = kept.and_then(|k| others.iter().position(|n| *n == k)).unwrap_or(0);
-    let before = idx;
-    let source = others.get(idx).cloned();
-    let rows: Vec<CuttingRow> = source
-        .as_deref()
-        .and_then(|n| model::find_by_name(&state.world, n))
-        .and_then(|e| model::tool_of(&state.world, &e))
-        .map(|t| copyable(&t.cutting).copied().collect())
-        .unwrap_or_default();
-    let why = match &source {
-        None => Some("no other tool is in the document".to_owned()),
-        Some(n) if rows.is_empty() => Some(format!("tool {n} has no material rows")),
-        Some(_) => None,
-    };
-    let names: Vec<&str> = others.iter().map(String::as_str).collect();
-    let clicked = prop_row_hint(ui, "Copy from", "the other tool's material rows replace or join this draft's", |ui| {
-        let b = ui
-            .add_enabled(why.is_none(), egui::Button::new(COPY))
-            .on_hover_text("copy the material rows into this draft; Apply writes them")
-            .on_disabled_hover_text(why.as_deref().unwrap_or_default())
-            .clicked();
-        if !names.is_empty() {
-            combo(ui, "tool_recipes_copy_from", &mut idx, &names);
-        }
-        b
-    });
-    if idx != before
-        && let Some(n) = others.get(idx)
-    {
-        ui.data_mut(|d| d.insert_temp(id, n.clone()));
-    }
-    if clicked && let Some(n) = source {
-        let count = copy_rows(&mut state.tool_ui, &rows);
-        state.status = format!("{count} rows copied from tool {n} - Apply writes them to the tool");
-    }
 }

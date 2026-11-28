@@ -1,15 +1,16 @@
 //! The source faces of a model (#3915): for a model imported from a
 //! Solidcraft design, SolidCraft's name of each face of the body and the
-//! facets each face became (`geometry::source_faces`). Nothing reads it yet:
-//! it is held so that a later step can follow face picks by name.
+//! facets each face became (`geometry::source_faces`). `UpdateModel` reads
+//! it to follow face picks by name (`commands::update_model_follow`).
 //!
 //! Provenance: our own ECS helper in the `mesh_solids` and `model_source`
 //! pattern (#917, #2463). No HSMWorks material consulted.
 //!
 //! ## The law here
 //!
-//! - In memory only: the project file does not save it, so a saved project
-//!   is the same as before, and a reopened project has none.
+//! - The project file saves it beside the facets (`source_faces`, no
+//!   version step: `project/source_faces_dto.rs`), so a reopened project
+//!   still follows picks by name at the next re-import.
 //! - Only the commands that land facets on a model write it (the import,
 //!   `UpdateModel` with `with_source_faces`, the undo of a delete), after
 //!   the facets and their revision are landed.
