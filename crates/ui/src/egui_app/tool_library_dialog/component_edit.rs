@@ -6,7 +6,10 @@
 //! them, as one undoable `EditDocumentComponent` that derives each of
 //! those tools again in the same undo step. A holder's gauge length is
 //! offered when its built-in shape is known (`holder_entry`): the outline
-//! is the holder library's at the new length (`ComponentGeometry::holder`).
+//! is the holder library's at the new length, only when the holder's own
+//! outline is that holder's with its body section longer or shorter
+//! (`ComponentGeometry::regauged_holder`, #4496); else the edit is refused
+//! by name, and the library body is never drawn over other steel.
 //! Provenance: our own editor over our own component commands; no
 //! HSMWorks material involved.
 
@@ -42,7 +45,7 @@ pub(crate) fn build(d: &ComponentDraft, row: &DocumentComponent) -> Result<(Tool
     let component = ToolComponent::new(&d.id, d.name.trim(), kind).map_err(|e| e.to_string())?;
     let geometry = match (d.gauge, holder_entry(row)) {
         (Some(g), Some(entry)) if Some(g) != gauge_of(row) => {
-            ComponentGeometry::holder(&entry, ADAPTIVE_PORT, g).map_err(|e| format!("gauge length {g} mm: {e}"))?
+            row.geometry.regauged_holder(&entry, ADAPTIVE_PORT, g).map_err(|e| format!("gauge length {g} mm: {e}"))?
         }
         _ => row.geometry.clone(),
     };

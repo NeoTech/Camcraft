@@ -19,12 +19,17 @@ mod background_generate;
 mod background_streams;
 #[path = "mcp/approach_distance.rs"]
 mod mcp_approach_distance;
+// #2443: the drill cycle word `deep` (G83).
+#[path = "mcp/drill_deep.rs"]
+mod drill_deep;
 #[path = "mcp/finish3d_direction.rs"]
 mod mcp_finish3d_direction;
 #[path = "mcp/finish3d_pass_start.rs"]
 mod mcp_finish3d_pass_start;
 mod mcp_open;
 // #3449: every accepted field of a kind, optional ones and enum words.
+#[path = "mcp/hole_pattern.rs"]
+mod hole_pattern;
 #[path = "mcp/op_type_fields.rs"]
 mod op_type_fields;
 // #3012: pattern folders - commands, project file, MCP and the post.

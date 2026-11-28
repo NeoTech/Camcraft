@@ -9,6 +9,9 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "contour_dxf_sketch/start_point.rs"]
+mod start_point;
+
 use flecs_ecs::prelude::World;
 use serde_json::{Value, json};
 

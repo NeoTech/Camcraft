@@ -146,3 +146,50 @@ fn a_tabbed_contour_saved_before_the_bump_reads_stale() {
         "the general reason: no own input moved"
     );
 }
+
+/// #2443: Auto read the R plane's air as depth and drilled the catalog
+/// first-part holes with a full-retract peck (G83 Q6); it now chooses the
+/// chip-break peck (G73). A Drill cache saved before the bump reads Stale,
+/// the post refuses it by name, and once generated again it posts G73.
+#[test]
+fn a_drill_cache_saved_before_the_2443_bump_reads_stale_and_does_not_post() {
+    let world = crate::world::new_world();
+    let proj = repo("examples/catalog/2d/first-part/first-part.camproj");
+    let notes =
+        crate::project::load_noted(&world, &proj).unwrap_or_else(|e| panic!("load {}: {e}", proj.display()));
+    assert!(notes.is_empty(), "load notes: {notes:?}");
+    let mut h = History::default();
+    for (op, _) in crate::setup::operation_order(&world) {
+        h.execute(&world, GenerateOperation::new(&world, &op).expect("generate"));
+    }
+    let name = "Drill1";
+    let e = crate::model::find_by_name(&world, name).expect("the drill op loads");
+    assert_eq!(status_of(&world, &e), OpStatus::Ok, "the regenerated cache is current");
+    let op = crate::model::operation_of(&world, &e).expect("op");
+    let current = op.stamp.expect("cached").0;
+    let old = stamp_before(&world, &op.tool, &op.src, &op.params, name, op.setup.as_deref()).0;
+    assert_ne!(current, old, "the bump separates a saved cache from a fresh one");
+
+    let path = std::env::temp_dir().join(format!("camcraft-2443-pre-bump-{}.camproj", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    crate::project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    let from = format!("\"stamp\": {current}");
+    assert_eq!(text.matches(&from).count(), 1, "one stamp on the drill op");
+    std::fs::write(&path, text.replace(&from, &format!("\"stamp\": {old}"))).expect("rewrite");
+
+    let back = crate::world::new_world();
+    crate::project::load(&back, &path).expect("load the pre-bump file");
+    let _ = std::fs::remove_file(&path);
+    let e = crate::model::find_by_name(&back, name).expect("the drill op loads");
+    assert_eq!(status_of(&back, &e), OpStatus::Stale, "the cache saved before the bump reads stale");
+    let err = crate::posting::post_setup_unwritten(&back).map(|_| ()).expect_err("a stale cache never posts");
+    assert!(err.contains("Drill1: inputs moved since generation"), "{err}");
+
+    let mut h = History::default();
+    h.execute(&back, GenerateOperation::new(&back, name).expect("generate"));
+    assert_eq!(status_of(&back, &e), OpStatus::Ok);
+    let posted = crate::posting::post_setup_unwritten(&back).expect("it posts once generated again");
+    assert!(posted.program.contains("G73"), "the chip-break peck posts");
+    assert!(!posted.program.contains("G83"), "no full-retract peck from the old Auto law");
+}

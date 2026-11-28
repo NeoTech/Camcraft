@@ -2,7 +2,11 @@
 //! Clipper2 port. Goldens are hand-computable; degenerate inputs must
 //! error, never panic (Prime Directive).
 //!
-//! Gate map (M4.4): covers camcraft_geometry::geo2d.
+//! Gate map (M4.4): covers camcraft_geometry::geo2d,
+//! camcraft_geometry::hole_pattern.
+
+#[path = "geo2d/hole_pattern.rs"]
+mod hole_pattern;
 
 use camcraft_geometry::geo2d::{GeoError, Loop, Point2, Region};
 

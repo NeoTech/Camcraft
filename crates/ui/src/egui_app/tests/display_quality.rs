@@ -5,7 +5,8 @@
 //! the view file, and "Look at a work plane" turns the view to face the
 //! plane of the clicked origin axis.
 //!
-//! #2958: the "Line width" and "Anti-aliasing" entries. A pick is a
+//! #2958: the "Line width" and "Anti-aliasing" entries, since #4493 in the
+//! Graphics section of the Settings window (not the Display menu). A pick is a
 //! per-user view setting: it goes out to the view file at once, survives a
 //! restart, queues no command, and Ctrl+Z does not take it back. Another
 //! view setting never resets it. An anti-aliasing count that the graphics
@@ -13,7 +14,7 @@
 //! by name and not kept.
 //!
 //! Provenance: our own tests over our own menu and shell; no vendor material.
-//! Gate map: covers ui::egui_app::display_menu, ui::display_quality,
+//! Gate map: covers ui::egui_app::display_menu, ui::egui_app::settings_window, ui::display_quality,
 //! ui::look_at_plane, ui::state_view, app::view through the State handoff.
 
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ use egui_kittest::kittest::{NodeT, Queryable};
 use super::*;
 use crate::display_quality::QualityPreset;
 use crate::egui_app::display_menu as menu;
+use crate::egui_app::settings_window as settings;
 use crate::state::DisplayMode;
 
 type Toggled = egui::accesskit::Toggled;
@@ -242,16 +244,20 @@ fn temp_dir(tag: &str) -> PathBuf {
     std::fs::canonicalize(&d).expect("canonical folder")
 }
 
-/// A shell that writes `file`, with the Display menu open through a real
-/// press on the viewport's Display button.
+/// A shell that writes `file`, with the Settings window open on its
+/// Graphics section through real presses (#4493: the line width and the
+/// anti-aliasing left the Display menu).
 fn open_menu_kept(file: &std::path::Path, offered: &[u32]) -> Harness<'static, ShellUi> {
     let mut h = shell_harness();
     h.state_mut().state.view_store = Some(file.to_path_buf());
     h.state_mut().state.samples_offered = offered.to_vec();
     h.run();
-    let p = hud(h.state()).nav_rect(viewcube::Nav::Display).center();
-    click_viewport(&mut h, p);
-    assert!(h.state().state.display_menu_open, "a press on Display opens the menu");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, crate::egui_app::settings_drop::SETTINGS).click();
+    // The window is centred: let its sizing pass settle before a click.
+    h.run_steps(4);
+    h.get_by_label(settings::Section::Graphics.label()).click();
+    h.run_steps(2);
+    assert!(h.state().state.settings_open, "a press on Settings opens the window");
     h
 }
 
@@ -267,9 +273,9 @@ fn the_defaults_are_one_and_a_half_points_and_four_samples() {
 }
 
 #[test]
-fn the_graphics_group_offers_the_line_widths_and_the_antialiasing() {
+fn the_settings_graphics_section_offers_the_line_widths_and_the_antialiasing() {
     let h = open_menu_kept(&temp_dir("labels").join(FILE_NAME), &[1, 4]);
-    for label in [menu::LINE_WIDTH, menu::ANTIALIAS, "1 pt", "1.5 pt", "2 pt", "3 pt", "Off", "2x", "4x"] {
+    for label in [settings::LINE_WIDTH, settings::ANTIALIAS, "1 pt", "1.5 pt", "2 pt", "3 pt", "Off", "2x", "4x"] {
         assert!(h.query_by_label(label).is_some(), "entry {label:?}");
     }
     assert!(h.query_by_label("Line width").is_some());
@@ -284,7 +290,7 @@ fn a_line_width_pick_is_kept_survives_a_restart_and_undo_leaves_it() {
     h.get_by_label("2 pt").click();
     h.run_steps(2);
     assert_eq!(h.state().state.line_width, LineWidth::Bold);
-    assert!(h.state().state.display_menu_open, "a choice keeps the menu open, as the other entries do");
+    assert!(h.state().state.settings_open, "a choice applies at once and keeps the window open");
     assert!(h.state().state.pending.is_empty(), "a view setting queues no command");
     assert_eq!(view::load(&file).0.line_width, LineWidth::Bold, "the pick goes out to the file at once");
     assert_eq!(h.state().state.history.is_dirty(), dirty, "a view setting is not an unsaved change");

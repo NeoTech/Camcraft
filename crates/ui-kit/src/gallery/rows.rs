@@ -23,7 +23,7 @@ pub fn colours(t: &Tokens) -> Vec<(&'static str, Color32)> {
         overlay_track, drop_veil, empty_hint, pick_halo, plate_hole,
         plate_dowel, gcode_line,
         tool_ground, tool_axis, tool_grid, tool_flute, tool_shank, tool_body, tool_edge, tool_holder, tool_note,
-        tool_dim, thumb_flute, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
+        tool_dim, thumb_flute, tool_model_flute, tool_model_shank, tool_model_holder, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
         close_hover, close_ink,
         radius_widget: _, radius_window: _, radius_menu: _,
         item_spacing_x: _, item_spacing_y: _, button_padding_x: _,
@@ -57,7 +57,7 @@ pub fn colours(t: &Tokens) -> Vec<(&'static str, Color32)> {
         ("overlay_text", overlay_text), ("overlay_track", overlay_track),
         ("drop_veil", drop_veil), ("empty_hint", empty_hint), ("pick_halo", pick_halo),
         ("plate_hole", plate_hole), ("plate_dowel", plate_dowel), ("gcode_line", gcode_line),
-        ("tool_ground", tool_ground), ("tool_axis", tool_axis), ("tool_grid", tool_grid), ("tool_flute", tool_flute), ("tool_shank", tool_shank), ("tool_body", tool_body), ("tool_edge", tool_edge), ("tool_holder", tool_holder), ("tool_note", tool_note), ("tool_dim", tool_dim), ("thumb_flute", thumb_flute), ("bad_ink", bad_ink), ("warn_ink", warn_ink), ("mount_axis", mount_axis), ("mount_radial", mount_radial), ("mount_tip", mount_tip), ("mount_origin", mount_origin), ("mount_hint", mount_hint),
+        ("tool_ground", tool_ground), ("tool_axis", tool_axis), ("tool_grid", tool_grid), ("tool_flute", tool_flute), ("tool_shank", tool_shank), ("tool_body", tool_body), ("tool_edge", tool_edge), ("tool_holder", tool_holder), ("tool_note", tool_note), ("tool_dim", tool_dim), ("thumb_flute", thumb_flute), ("tool_model_flute", tool_model_flute), ("tool_model_shank", tool_model_shank), ("tool_model_holder", tool_model_holder), ("bad_ink", bad_ink), ("warn_ink", warn_ink), ("mount_axis", mount_axis), ("mount_radial", mount_radial), ("mount_tip", mount_tip), ("mount_origin", mount_origin), ("mount_hint", mount_hint),
         ("close_hover", close_hover), ("close_ink", close_ink),
     ]
 }
@@ -79,7 +79,7 @@ pub fn geometry(t: &Tokens) -> Vec<(&'static str, f32)> {
         empty_hint: _, pick_halo: _, plate_hole: _, plate_dowel: _,
         gcode_line: _,
         tool_ground: _, tool_axis: _, tool_grid: _, tool_flute: _, tool_shank: _, tool_body: _, tool_edge: _, tool_holder: _, tool_note: _,
-        tool_dim: _, thumb_flute: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
+        tool_dim: _, thumb_flute: _, tool_model_flute: _, tool_model_shank: _, tool_model_holder: _, bad_ink: _, warn_ink: _, mount_axis: _, mount_radial: _, mount_tip: _, mount_origin: _, mount_hint: _,
         close_hover: _, close_ink: _,
         radius_widget, radius_window, radius_menu, item_spacing_x,
         item_spacing_y, button_padding_x, button_padding_y, control_height,
