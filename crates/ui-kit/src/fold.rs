@@ -135,13 +135,20 @@ pub enum StateFit {
     Full,
     /// The pane was too short for the text: the glyph alone.
     GlyphOnly,
-    /// Not even the glyph fitted.
+    /// Not even the glyph fitted, and the state needs attention: a warn
+    /// bar at the chip's foot, so the chip never reads as clean.
+    Mark,
+    /// Not even the glyph fitted, and all is well: nothing is painted.
     Nothing,
 }
 
+/// The height of the warn bar at the foot of a chip (`StateFit::Mark`).
+const MARK_BAR: f32 = 4.0;
+
 /// Paint the state line from `top`. When the text does not fit, paint the
-/// glyph alone, so that a chip never looks clean by accident (the text is
-/// still in the tooltip).
+/// glyph alone. When not even the glyph fits and the state needs attention,
+/// paint a warn bar at the chip's foot. A chip never looks clean by accident
+/// (the text is still in the tooltip).
 pub fn paint_state(painter: &egui::Painter, rect: Rect, top: f32, st: &ChipState, pal: &Tokens) -> StateFit {
     let glyph_ink = match st.tone {
         ChipTone::Ok => pal.text_dim,
@@ -154,6 +161,12 @@ pub fn paint_state(painter: &egui::Painter, rect: Rect, top: f32, st: &ChipState
     let glyph = [(st.glyph(), glyph_ink)];
     if turned(painter, rect, top, job(&glyph, pal.font_row), pal.text).is_some() {
         StateFit::GlyphOnly
+    } else if st.tone == ChipTone::Attention {
+        // The title ends at least `TITLE_PAD` above the foot, so the bar
+        // never covers it.
+        let bar = Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - MARK_BAR), rect.right_bottom());
+        painter.rect_filled(bar, 0.0, glyph_ink);
+        StateFit::Mark
     } else {
         StateFit::Nothing
     }
@@ -295,21 +308,35 @@ mod tests {
         }
     }
 
+    fn fit_at(ctx: &egui::Context, st: &ChipState, height: f32) -> StateFit {
+        let rect = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(CHIP_WIDTH, height));
+        let mut seen = StateFit::Nothing;
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            seen = paint_state(&ui.painter_at(rect), rect, 4.0, st, &Tokens::DARK);
+        });
+        out.textures_delta.clear();
+        seen
+    }
+
     #[test]
     fn a_short_pane_paints_the_glyph_alone_not_nothing() {
         let ctx = egui::Context::default();
         let st = ChipState { tone: ChipTone::Attention, text: "1 blocked \u{b7} 3 stale \u{b7} 2 not generated".into(), detail: String::new() };
-        let mut seen = Vec::new();
-        for height in [600.0, 90.0, 20.0] {
-            let rect = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(CHIP_WIDTH, height));
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-                seen.push(paint_state(&ui.painter_at(rect), rect, 4.0, &st, &Tokens::DARK));
-            });
-            out.textures_delta.clear();
+        assert_eq!(fit_at(&ctx, &st, 600.0), StateFit::Full, "a tall pane has room for the words");
+        assert_eq!(fit_at(&ctx, &st, 90.0), StateFit::GlyphOnly, "a short pane keeps the glyph");
+        assert_eq!(fit_at(&ctx, &st, 20.0), StateFit::Mark, "a tiny pane keeps a warn bar");
+        let ok = ChipState { tone: ChipTone::Ok, text: "Up to date".into(), detail: String::new() };
+        assert_eq!(fit_at(&ctx, &ok, 20.0), StateFit::Nothing, "a clean chip may stay bare");
+    }
+
+    #[test]
+    fn an_attention_chip_paints_a_state_at_every_height() {
+        let ctx = egui::Context::default();
+        let st = ChipState { tone: ChipTone::Attention, text: "1 stale".into(), detail: String::new() };
+        for height in (8..700).step_by(3) {
+            let seen = fit_at(&ctx, &st, height as f32);
+            assert_ne!(seen, StateFit::Nothing, "height {height}: an attention chip must paint something");
         }
-        assert_eq!(seen[0], StateFit::Full, "a tall pane has room for the words");
-        assert_eq!(seen[1], StateFit::GlyphOnly, "a short pane keeps the glyph");
-        assert_eq!(seen[2], StateFit::Nothing, "a tiny pane has the folded mark only");
     }
 
     #[test]

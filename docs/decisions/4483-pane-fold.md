@@ -65,10 +65,12 @@ new one without a change to the setups file format in `camcraft-app`.
 **Follow-up #4503.**
 - A chip whose pane is too short for the state text paints the glyph alone
   (check or warning), so that it never looks clean by accident. The text
-  stays in the tooltip. A pane too short even for the glyph keeps the
-  folded mark.
+  stays in the tooltip. A pane too short even for the glyph paints a warn
+  bar at the chip's foot when the state needs attention. Only a clean chip
+  stays bare. (The folded mark is for a pane too short for the title.)
 - The Browser chip counts the warnings of the cached toolpaths ("4 warnings"),
-  read as the tree row reads them. An operation with warnings is therefore
+  read as the tree row reads them, also for a stale or blocked operation
+  (its row prints its old warnings). An operation with warnings is therefore
   not "Up to date" on the chip: the chip says what the tree says.
 - A folded leaf with several tabs shows the state of its ACTIVE tab only,
   because the chip is titled for that tab and a state of another pane
