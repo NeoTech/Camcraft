@@ -319,11 +319,88 @@ fn a_fold_does_not_move_the_camera() {
 
 /// Add a Bore operation through the command queue, with Contour1's tool.
 fn add_op(h: &mut H, name: &str) {
-    let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
     let tool = contour_tool(h);
+    add_op_with(h, name, &tool);
+}
+
+fn add_op_with(h: &mut H, name: &str, tool: &str) {
+    let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
     h.state_mut().state.pending.push_back(CommandKind::CreateOperation {
         name: name.into(),
-        tool,
+        tool: tool.into(),
+        src: SrcRef::Stock,
+        params: crate::operations::quick_params(index),
+    });
+    h.run_steps(3);
+}
+
+fn contour_tool(h: &H) -> String {
+    let w = &h.state().state.world;
+    let e = model::find_by_name(w, "Contour1").expect("the seed's op");
+    model::operation_of(w, &e).expect("op").tool
+}
+
+#[test]
+fn a_never_generated_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    add_op(&mut h, "Bore9");
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let browser = chip_texts(&h, &Tab::Browser);
+    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 not generated")), "Browser: {browser:?}");
+    let props = chip_texts(&h, &Tab::Properties);
+    assert!(props.iter().any(|t| t == "\u{26A0} Not generated"), "Properties: {props:?}");
+}
+
+#[test]
+fn a_blocked_operation_shows_on_both_folded_chips() {
+    let mut h = seeded();
+    // The command layer refuses a tool the operation cannot use, so name
+    // a tool that is not in the document.
+    add_op_with(&mut h, "Bore9", "NoSuchTool");
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
+    h.run_steps(2);
+    assert!(fold::fold(&mut h.state_mut().dock, &Tab::Properties));
+    h.run_steps(3);
+    let texts = chip_texts(&h, &Tab::Properties);
+    assert!(texts.iter().any(|t| t == "\u{2714} Up to date"), "the open operation is current: {texts:?}");
+    make_stale(&mut h);
+    let texts = chip_texts(&h, &Tab::Properties);
+    assert!(texts.iter().any(|t| t == "\u{26A0} Needs regenerate"), "the open operation needs work: {texts:?}");
+}
+
+#[test]
+fn a_fold_does_not_move_the_camera() {
+    let mut h = seeded();
+    let before = h.state().state.cam;
+    for tab in [Tab::Browser, Tab::Properties] {
+        assert!(fold::fold(&mut h.state_mut().dock, &tab));
+    }
+    h.run_steps(3);
+    let folded = h.state().state.cam;
+    h.state_mut().state.layout_request = Some(LayoutRequest::Reset);
+    h.run_steps(3);
+    let after = h.state().state.cam;
+    for cam in [folded, after] {
+        assert_eq!(cam.target, before.target, "the orbit target stays");
+        assert_eq!((cam.yaw, cam.pitch, cam.dist), (before.yaw, before.pitch, before.dist), "the view stays");
+    }
+}
+
+/// Add a Bore operation through the command queue, with Contour1's tool.
+fn add_op(h: &mut H, name: &str) {
+    let tool = contour_tool(h);
+    add_op_with(h, name, &tool);
+}
+
+fn add_op_with(h: &mut H, name: &str, tool: &str) {
+    let index = camcraft_app::operation::ALL_LABELS.iter().position(|s| *s == "Bore").expect("a Bore kind");
+    h.state_mut().state.pending.push_back(CommandKind::CreateOperation {
+        name: name.into(),
+        tool: tool.into(),
         src: SrcRef::Stock,
         params: crate::operations::quick_params(index),
     });
@@ -362,7 +439,7 @@ fn a_blocked_operation_shows_on_both_folded_chips() {
     tool.tip_angle = 118.0;
     h.state_mut().state.pending.push_back(CommandKind::ChangeTool { name, tool });
     h.run_steps(3);
-    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
+    crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Bore9".into()));
     for tab in [Tab::Browser, Tab::Properties] {
         assert!(fold::fold(&mut h.state_mut().dock, &tab));
     }
