@@ -13,7 +13,7 @@ use crate::plan::{Plan, Step};
 use crate::scan::re;
 pub use crate::known_fail::expect_fail_note;
 #[path = "gpu_report.rs"]
-mod gpu_report;
+pub(crate) mod gpu_report;
 
 pub struct Run {
     pub root: PathBuf,
@@ -241,6 +241,7 @@ impl Run {
     /// Runs one step with its `-j` and `--test-threads` set to `jobs` (`budget::scale`). A debug suite
     /// step of a crate in `built` starts its test executable; each other step starts cargo (`direct`).
     pub(crate) fn execute(root: &Path, log_dir: &Path, dry: bool, n: usize, s: &Step, jobs: usize, built: &Built) -> Result<Done, String> {
+        if let Some(mode) = s.site { return crate::site_step::execute(root, log_dir, dry, n, s, mode); } // #4133: not cargo
         let args = gpu_report::output_args(&crate::budget::scale(&s.args, jobs));
         let log = log_dir.join(log_name(n, &s.name));
         let dir = if s.in_ui { root.join("crates").join("ui") } else { root.to_path_buf() };

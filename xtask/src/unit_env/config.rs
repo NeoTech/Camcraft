@@ -94,7 +94,7 @@ mod tests {
         for key in ["build.rustflags", "build.target", "profile.dev.opt-level", "target.'cfg(unix)'.rustflags", "profile"] {
             assert!(text.contains(key), "missing {key}: {text}");
         }
-        for path in [base.join(".cargo/config.toml"), root.join(".cargo/config.toml"), ui.join(".cargo/config"), home.join("config.toml")] {
+        for path in [base.join(".cargo").join("config.toml"), root.join(".cargo").join("config.toml"), ui.join(".cargo").join("config"), home.join("config.toml")] {
             assert_eq!(n.iter().filter(|s| s.contains(&path.display().to_string())).count(), 1, "{text}");
         }
         assert!(!text.contains("profile.ignored"));

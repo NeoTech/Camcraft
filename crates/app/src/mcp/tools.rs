@@ -89,6 +89,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::workholding_tools::TOOLS)
         .chain(super::sheet_job_tools::TOOLS)
         .chain(super::order_tools::TOOLS)
+        .chain(super::pattern_tools::TOOLS)
         .chain(super::sinker_tools::TOOLS)
         .chain(super::machine_tools::TOOLS)
         .chain(super::tool_number_tools::TOOLS)
@@ -175,7 +176,11 @@ fn import_model(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
     let name = opt_str(a, "name")?.map_or(Value::Null, |n| json!(n));
     let budget = a.get("facet_budget").cloned().unwrap_or(Value::Null);
     let units = opt_str(a, "units")?.map_or(Value::Null, |u| json!(u));
-    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget, units])
+    // #3915: an update answers with what moved (`changes`).
+    let before = super::reimport_changes::before(env);
+    let mut out = api::v_import(env, vec![json!(req_str(a, "path")?), name, budget, units])?;
+    super::reimport_changes::add(env, &before, &mut out);
+    Ok(out)
 }
 
 fn export_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {

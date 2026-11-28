@@ -48,7 +48,8 @@ fn suites(p: &crate::plan::Plan, krate: &str) -> Vec<String> {
 fn cps_only_change_selects_the_suites_posting_through_it() {
     let p = plan_for(&root(), &["assets/posts/fanuc.cps"]);
     let got = app_suites(&p);
-    for must in ["fanuc_post", "conformance"] {
+    // #3188: the Fanuc post suite is the `fanuc_post` module of the `script_dialects` directory suite.
+    for must in ["script_dialects", "conformance"] {
         assert!(got.iter().any(|b| b == must), "{must} missing from {got:?}");
     }
     assert!(!p.notes.iter().any(|n| n.contains("no tests to run")), "{:?}", p.notes);
@@ -56,21 +57,24 @@ fn cps_only_change_selects_the_suites_posting_through_it() {
 
 #[test]
 fn a_cps_change_skips_suites_that_never_name_it() {
-    // The heidenhain suites moved to camcraft-post (#921): they are post suites now.
+    // The heidenhain suites moved to camcraft-post (#921): they are post suites now. Since #3188 the
+    // post suites are directory suites: `script_edm` names no Fanuc script, `script_cycles` holds
+    // `heidenhain_cycles`.
     let got = suites(&plan_for(&root(), &["assets/posts/fanuc.cps"]), "post");
-    assert!(!got.iter().any(|b| b == "heidenhain_block_form"), "{got:?}");
+    assert!(!got.iter().any(|b| b == "script_edm"), "{got:?}");
     let got = suites(&plan_for(&root(), &["assets/posts/heidenhain.cps"]), "post");
-    assert!(got.iter().any(|b| b == "heidenhain_cycles"), "{got:?}");
+    assert!(got.iter().any(|b| b == "script_cycles"), "{got:?}");
 }
 
 #[test]
 fn mch_only_change_selects_the_suites_using_that_machine() {
     let got = app_suites(&plan_for(&root(), &["assets/machines/3axis-vmc.mch"]));
-    for must in ["arc_planes", "conformance"] {
+    // #3188: `arc_planes` is a module of the post `script_arcs` suite.
+    for must in ["script_arcs", "conformance"] {
         assert!(got.iter().any(|b| b == must), "{must} missing from {got:?}");
     }
     let post = suites(&plan_for(&root(), &["assets/machines/3axis-vmc.mch"]), "post");
-    assert!(post.iter().any(|b| b == "comment_escape"), "comment_escape missing from {post:?}");
+    assert!(post.iter().any(|b| b == "script_dialects"), "script_dialects missing from {post:?}");
 }
 
 #[test]

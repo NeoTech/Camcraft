@@ -30,11 +30,14 @@ use super::pose::{is_vertical, normalize_axis};
 
 #[path = "transform_climb.rs"]
 mod climb;
+#[path = "transform_copies.rs"]
+mod copies;
 #[path = "transform_mirror.rs"]
 mod mirror;
 #[path = "transform_rotary.rs"]
 mod rotary;
 
+pub use copies::{copies, MAX_COPIES};
 pub use mirror::{mirror_plane, MirrorMode, MirrorPlane, PassFamily};
 pub use rotary::{rotate_about_axis, RotaryAxis};
 

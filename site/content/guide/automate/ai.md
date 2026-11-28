@@ -160,6 +160,11 @@ or **Local Q&A (Read-Only)** for text answers. Both presets use Ollama too.
 Prompt-JSON asks for confirmation before each document edit. Read-only Q&A
 runs no tools and displays a banner.
 
+The local tool set includes `rename_operation`, `edit_tool` and
+`set_work_material`. A local model can therefore rename an operation,
+edit a tool and set the work material. These tools keep their usual
+checks, confirmation and undo.
+
 **Offline only** is saved in the app preferences. It blocks cloud presets
 before a request leaves the app. The HTTP client also restricts the
 connection to loopback endpoints. It does not configure an external agent:

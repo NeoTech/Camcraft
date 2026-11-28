@@ -1,11 +1,13 @@
-//! HEIDENHAIN Klartext (conversational, `.H`) reader, first slice: a 3-axis subset into the same `ParsedProgram` sections as the RS-274 reader.
+//! HEIDENHAIN Klartext (conversational, `.H`) reader: a 3-axis subset into the same `ParsedProgram` sections as the RS-274 reader.
 //! Provenance: HEIDENHAIN iTNC 530 conversational user's manual 533 190-22 and the TNC cycle manuals, as summarized in docs/research/heidenhain/; CamCraft's own Klartext post output (assets/posts/heidenhain-klartext.cps). Decisions: docs/decisions/2227-klartext-reader.md.
 
 mod blocks;
 mod cycles;
 mod exec;
+mod old_cycles;
 mod path;
 mod source;
+mod taps;
 mod words;
 
 use camcraft_geometry::geometry::Point3;

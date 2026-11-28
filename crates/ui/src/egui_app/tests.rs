@@ -145,6 +145,8 @@ mod tool_library_preview;
 mod tool_library_assembly;
 // #3896: the Recipes tab of the tool library window's editor.
 mod tool_library_recipes;
+// #4453: the Recipes tab's surface speed and chip load inputs.
+mod tool_library_recipe_speeds;
 // #3898: the copies, the add's undo step and the caches (review of #4271).
 mod tool_library_component_copies;
 // #3897 (U6 of #3663): the Holders page and the mock-up gaps.
