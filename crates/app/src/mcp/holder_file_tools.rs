@@ -11,7 +11,6 @@ use super::component_library_tools::{full_library, library_prop};
 use super::setup_tools::{cmd_err, obj};
 use super::tools::{Tool, req_str};
 use crate::commands::{ImportHolders, export_holders as holder_text};
-use crate::component_library;
 use crate::script::Env;
 
 pub(super) const TOOLS: &[Tool] = &[
@@ -23,7 +22,7 @@ pub(super) const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "import_holders",
-        description: "Import a holder file (camcraft-components/1) as user holders of the document, in one undo step. An id that the document or the component library holds already takes a new user:holder:<name> id. Refused by name, with no change: an unreadable file, every component library file refusal, a file with no component, and a component that is not a holder.",
+        description: "Import a holder file (camcraft-components/1) as user holders of the document, in one undo step. An id that the document or the component library holds already takes a new user:holder:<name> id. Refused by name, with no change: an unreadable file, an unreadable component library (its ids cannot be kept clear), every component library file refusal, a file with no component, and a component that is not a holder.",
         schema: s_import,
         run: import_holders,
     },
@@ -54,9 +53,10 @@ fn export_holders(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String
 fn import_holders(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let path = req_str(a, "path")?.trim();
     let text = std::fs::read_to_string(path).map_err(|e| format!("holder file {path} is not read: {e}"))?;
-    // A new id keeps clear of the library ids; an unreadable user library
-    // leaves the built-in ids, which a new `user:` id can never take.
-    let library = full_library(a).unwrap_or_else(|_| component_library::with_builtins(Vec::new()));
+    // A new id keeps clear of the library ids. An unreadable library is
+    // refused by name: without its ids, a new id could equal a library id.
+    let library = full_library(a)
+        .map_err(|e| format!("holders not imported: the component library is not read, so its ids are not kept clear: {e}"))?;
     let reserved: Vec<String> = library.iter().map(|c| c.component.id().to_owned()).collect();
     let cmd = ImportHolders::from_text(&env.world, &text, &reserved).map_err(cmd_err)?;
     let imported: Vec<Value> = cmd.imported().iter().map(|i| json!({ "file_id": i.file_id, "id": i.id })).collect();

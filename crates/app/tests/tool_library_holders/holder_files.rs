@@ -3,8 +3,10 @@
 //! undo step; an id the document or the library holds takes a new
 //! `user:holder:<name>` id; a file that is not correct (bad JSON, a
 //! truncated file, a wrong envelope, a row that is not a holder, no
-//! row) is refused by name with nothing applied; a built-in row is not
-//! exported; the MCP tools do the same through the same command.
+//! row, a holder outline with a negative radius or fewer than 3 points)
+//! is refused by name with nothing applied; a built-in row is not
+//! exported; the MCP tools do the same through the same command, and
+//! an unreadable component library refuses the MCP import.
 //! Provenance: our own tests over our own format and command.
 
 use camcraft_app::commands::holder_file::is_holder;
@@ -16,7 +18,7 @@ use camcraft_app::world::new_world;
 use camcraft_tools::component::ToolComponent;
 use camcraft_tools::component_geometry::ComponentGeometry;
 use flecs_ecs::prelude::World;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::assembly_cmds::{fly, holder};
 use super::call;
@@ -38,6 +40,22 @@ fn import(w: &World, h: &mut History, text: &str, reserved: &[String]) -> Result
     let s = cmd.summary();
     h.execute(w, cmd);
     Ok(s)
+}
+
+/// `text` with every body outline replaced by `points` ([z, r, arc] rows).
+fn with_outline(text: &str, points: &Value) -> String {
+    fn walk(v: &mut Value, points: &Value) {
+        match v {
+            Value::Object(o) => o.iter_mut().for_each(|(k, x)| if k == "points" { *x = points.clone() } else { walk(x, points) }),
+            Value::Array(a) => a.iter_mut().for_each(|x| walk(x, points)),
+            _ => {}
+        }
+    }
+    let mut v: Value = serde_json::from_str(text).expect("a holder file");
+    walk(&mut v, points);
+    let out = serde_json::to_string_pretty(&v).expect("text");
+    assert_ne!(out, serde_json::to_string_pretty(&serde_json::from_str::<Value>(text).expect("json")).expect("text"));
+    out
 }
 
 #[test]
@@ -84,19 +102,26 @@ fn a_file_that_is_not_correct_is_refused_by_name_with_nothing_applied() {
     let body = LibraryComponent::from_row(component(&src, "fly-25").expect("body")).expect("library row");
     let with_body = component_library::to_text(&[body]).expect("text");
     let empty = component_library::to_text(&[]).expect("text");
-    let cases: [(&str, String, &str); 6] = [
+    let negative = with_outline(&text, &json!([[0.0, 0.0, 0.0], [0.0, 25.0, 0.0], [50.0, -25.0, 0.0], [50.0, 0.0, 0.0]]));
+    let too_few = with_outline(&text, &json!([[0.0, 0.0, 0.0], [50.0, 0.0, 0.0]]));
+    let cases: [(&str, String, &str); 8] = [
         ("bad JSON", "{ not json".to_owned(), "bad JSON"),
         ("truncated", text.chars().take(text.chars().count() / 2).collect(), "bad JSON"),
         ("wrong format", text.replace("camcraft-components", "camcraft-tools"), "format is 'camcraft-tools'"),
         ("binary", "\u{0}\u{1}\u{2}".to_owned(), "not a holder file"),
         ("not a holder", with_body, "'fly-25' in the holder file is not a holder"),
         ("no row", empty, "holds no holder"),
+        ("outline: a negative radius", negative, "point 3 has a negative radius"),
+        ("outline: fewer than 3 points", too_few, "at least 3 points"),
     ];
     for (what, bad, says) in cases {
         let (w, mut h) = shop();
         let before = components(&w);
         let err = import(&w, &mut h, &bad, &[]).expect_err(what);
         assert!(err.contains(says), "{what}: {err}");
+        if what.starts_with("outline") {
+            assert!(err.contains("'bt40-cyl20'"), "{what}: the refusal names the holder: {err}");
+        }
         assert_eq!(components(&w), before, "{what}: the document does not change");
         assert!(h.undo(&w) && h.undo(&w) && !h.undo(&w), "{what}: no history entry");
     }
@@ -142,7 +167,12 @@ fn mcp_export_and_import_holders_use_the_one_command() {
     assert!(!list.to_string().contains("user:holder:"), "one undo removes the import: {list}");
     std::fs::write(dir.join("bad.camcomponents"), "{ not json").expect("write");
     let bad = dir.join("bad.camcomponents").display().to_string();
-    let (err, msg) = call(&mut s, 7, "import_holders", json!({ "path": bad }));
+    let (err, msg) = call(&mut s, 7, "import_holders", json!({ "path": bad, "library": library }));
     assert!(err && msg.as_str().is_some_and(|m| m.contains("not a holder file")), "{msg}");
+    // An unreadable library is refused by name: its ids cannot be kept clear.
+    let (err, msg) = call(&mut s, 8, "import_holders", json!({ "path": file, "library": bad }));
+    assert!(err && msg.as_str().is_some_and(|m| m.contains("component library is not read")), "{msg}");
+    let (_, list) = call(&mut s, 9, "list_tool_components", json!({ "library": library }));
+    assert!(!list.to_string().contains("user:holder:"), "nothing is applied: {list}");
     let _ = std::fs::remove_dir_all(&dir);
 }
