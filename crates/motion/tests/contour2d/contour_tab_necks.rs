@@ -4,7 +4,7 @@
 //!
 //! Gate map (M4.4): covers camcraft_motion::machining2d (contour, tab_bridge, tab_clear).
 
-mod common;
+use crate::common;
 
 use camcraft_motion::cl::{MoveKind, Toolpath};
 use camcraft_motion::entry::Entry3D;

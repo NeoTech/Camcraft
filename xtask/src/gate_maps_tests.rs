@@ -343,7 +343,8 @@ fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
         // #3188: the moved post and sim files are modules of these directory suites.
         ("post", &["script_dialects", "script_cycles", "script_probe"]),
         ("sim", &["gouge_laws", "reach_laws"]),
-        ("motion", &["arcs"]),
+        // #3189: `arcs` is a module of the `contour2d` directory suite.
+        ("motion", &["contour2d"]),
         ("cl", &["origin_approach"]),
         ("app", &[]),
     ];

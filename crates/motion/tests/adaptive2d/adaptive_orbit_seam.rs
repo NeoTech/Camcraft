@@ -46,7 +46,7 @@ fn params() -> PocketParams {
 
 #[test]
 fn the_users_z10_bore_level_keeps_its_hsm_plan() {
-    let pts: Vec<Point2> = include_str!("fixtures/bore_z10_center.txt")
+    let pts: Vec<Point2> = include_str!("../fixtures/bore_z10_center.txt")
         .lines()
         .filter_map(|l| {
             let mut it = l.split_whitespace().map(str::parse::<f64>);

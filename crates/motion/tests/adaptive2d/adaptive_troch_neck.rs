@@ -1,15 +1,14 @@
 //! Adaptive trochoid shape checks from the project tests for issues #1509 and #2990.
 //! Gate map: covers camcraft_motion::machining2d (adaptive_troch, adaptive_troch_lanes, adaptive_troch_clean), camcraft_motion::quality.
 
-#[path = "common/adaptive_troch.rs"]
-mod fixtures;
+use crate::fixtures;
 
 use fixtures::*;
 use camcraft_motion::machining2d::PocketParams;
 use camcraft_motion::geo2d::Region;
 
 #[test]
-#[ignore = "heavy lane: motion heavy: adaptive_troch_neck (168 s alone in debug, #3514)"]
+#[ignore = "heavy lane: motion heavy: adaptive2d (168 s alone in debug, #3514)"]
 fn triangle_and_wide_to_narrow_neck_are_cleared() {
     let p = PocketParams { bottom_z: -3.0, ..params() };
     let Ok(tri) = Region::new(vec![poly(&[(0.0, 0.0), (60.0, 0.0), (0.0, 60.0)])]) else { panic!("triangle") };
