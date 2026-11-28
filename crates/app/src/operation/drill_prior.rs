@@ -130,3 +130,36 @@ fn revolved_surface(dex: &Columns<'_>, c: Point2, r: f64) -> Option<f64> {
     }
     top
 }
+
+/// #2443 review: the highest material over each hole's drill disk
+/// (radius `r`), aligned with `holes`, for Auto's cycle choice
+/// (`CycleParams::material_top`): the part and the raw stock first, then,
+/// only where the raw stock stands above a mouth, the stock the program
+/// ahead leaves (cutting the program ahead costs, so it is read only
+/// then). NaN where nothing stands over a hole: the mouth alone.
+pub(super) fn material_tops(
+    holes: &[crate::drilling::Hole],
+    part: &[crate::geometry::Triangle],
+    stock: &[crate::geometry::Triangle],
+    r: f64,
+    prior: &mut PriorCell,
+    revolved: bool,
+) -> Vec<f64> {
+    let read = |pr: Option<PriorRead<'_>>| -> Vec<f64> {
+        holes
+            .iter()
+            .map(|h| {
+                let pb = pr.as_ref().and_then(|p| p.surface(h.xy, r));
+                super::drill_reach::top_over(part, stock, h.xy.x, h.xy.y, r, pb).unwrap_or(f64::NAN)
+            })
+            .collect()
+    };
+    let raw = read(None);
+    if !raw.iter().zip(holes).any(|(t, h)| *t > h.entry_z + 1e-6) {
+        return raw;
+    }
+    match prior.get() {
+        Some(dex) => read(Some(PriorRead { dex, revolved })),
+        None => raw,
+    }
+}

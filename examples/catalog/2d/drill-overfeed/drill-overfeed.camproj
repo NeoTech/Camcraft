@@ -1,5 +1,5 @@
 {
-  "version": 83,
+  "version": 84,
   "entities": [
     {
       "name": "DR-0600",
@@ -98,7 +98,7 @@
             "break_through_from": "full_diameter"
           }
         },
-        "stamp": 1154229835449475595,
+        "stamp": 11377889235304066836,
         "cache": {
           "moves": [
             {
