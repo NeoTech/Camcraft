@@ -1,0 +1,92 @@
+//! #4055: the invariants of the path kernel's stage types, through the
+//! public API only. A value of a public type is valid by construction: each
+//! test builds the invalid cases and expects a named refusal. The K7 law
+//! suite (#4027) joins this directory suite: one generic check for each law
+//! (`l1_guide` .. `l7_move`, `link_rule`) over the stage traits, the kit
+//! that runs a kind's planners (`kit`, `grid`), the stand-in planners that
+//! prove each check (`standins`), and the registry of the 16 phase-1 kinds
+//! (`registry`).
+//!
+//! Gate map: covers pathkernel::{frame, verdict, region, region_build, region_check, region_chain, selection, guide, guide::choice, guide::rings, guide::rows, guide::cover, guide::mark, guide::all, guide::medial, guide::trace, guide::helix, guide::lead, order, order::side, order::chain, order::stage, load, link, link::proof, link::route, link::approach, entry, entry::air, entry::column, entry::exit, entry::hole, entry::material, entry::proof, entry::room, entry::stage, plan, recipe}.
+//! Provenance: our own design record, RECOMMENDED.md heading "#4024 - Path
+//! kernel K0" (the laws as checks), and the delivery plan
+//! docs/decisions/4325-path-kernel-delivery.md.
+
+#[path = "laws/air_approach.rs"]
+mod air_approach;
+#[path = "laws/common.rs"]
+mod common;
+#[path = "laws/construction.rs"]
+mod construction;
+#[path = "laws/entry.rs"]
+mod entry;
+#[path = "laws/entry_stage.rs"]
+mod entry_stage;
+#[path = "laws/exit.rs"]
+mod exit;
+#[path = "laws/grid.rs"]
+mod grid;
+#[path = "laws/guide.rs"]
+mod guide;
+#[path = "laws/guide_guard.rs"]
+mod guide_guard;
+#[path = "laws/guide_helix.rs"]
+mod guide_helix;
+#[path = "laws/guide_kit.rs"]
+mod guide_kit;
+#[path = "laws/guide_laws.rs"]
+mod guide_laws;
+#[path = "laws/guide_medial.rs"]
+mod guide_medial;
+#[path = "laws/guide_rings.rs"]
+mod guide_rings;
+#[path = "laws/guide_rows.rs"]
+mod guide_rows;
+#[path = "laws/guide_trace.rs"]
+mod guide_trace;
+#[path = "laws/kit.rs"]
+mod kit;
+#[path = "laws/kit_geo.rs"]
+mod kit_geo;
+#[path = "laws/l1_guide.rs"]
+mod l1_guide;
+#[path = "laws/l2_sides.rs"]
+mod l2_sides;
+#[path = "laws/l3_order.rs"]
+mod l3_order;
+#[path = "laws/l4_fallback.rs"]
+mod l4_fallback;
+#[path = "laws/l5_entry.rs"]
+mod l5_entry;
+#[path = "laws/l6_load.rs"]
+mod l6_load;
+#[path = "laws/l7_move.rs"]
+mod l7_move;
+#[path = "laws/later_stages.rs"]
+mod later_stages;
+#[path = "laws/link_rule.rs"]
+mod link_rule;
+#[path = "laws/load.rs"]
+mod load;
+#[path = "laws/load_stage.rs"]
+mod load_stage;
+// #4407: the pins of "no silent recovery", outside `laws/` (another PR
+// edits that directory at the same time).
+#[path = "no_silent/entry.rs"]
+mod no_silent_entry;
+#[path = "no_silent/exit.rs"]
+mod no_silent_exit;
+#[path = "laws/order.rs"]
+mod order;
+#[path = "laws/order_link.rs"]
+mod order_link;
+#[path = "laws/plan.rs"]
+mod plan;
+#[path = "laws/refusals.rs"]
+mod refusals;
+#[path = "laws/region.rs"]
+mod region;
+#[path = "laws/registry.rs"]
+mod registry;
+#[path = "laws/standins.rs"]
+mod standins;

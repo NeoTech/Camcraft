@@ -11,10 +11,11 @@
 //! file, and Auto is absent from both. The #3319 law rides along: no
 //! lateral rapid below the clearance plane.
 //!
-//! Gate map: covers app::operation (generate, params digest), app::mcp
+//! Gate map: covers app::operation (generate, params digest, planner_switch), app::mcp
 //! (edit_operation, undo), app::project (params, params_impl),
-//! motion::machining2d (pass_start, level_rings, level_order, air_entry),
-//! sim::verify (entry_advice).
+//! motion::machining2d (pass_start, level_rings, level_order, air_entry,
+//! ring_set, ring_links, ring_entry),
+//! sim::verify (entry_advice), pathkernel::engine (the #4055 switch).
 //! Provenance: our own regression of the maintainer's report; no vendor
 //! material consulted.
 
@@ -26,8 +27,22 @@ mod entry_advice;
 mod flanks;
 #[path = "offset_pass_start/lifts.rs"]
 mod lifts;
+#[path = "offset_pass_start/planner_switch.rs"]
+mod planner_switch;
+#[path = "offset_pass_start/shared_planner.rs"]
+mod shared_planner;
 #[path = "offset_pass_start/start_side_entry.rs"]
 mod start_side_entry;
+#[path = "offset_pass_start/kernel_laws_fig8.rs"]
+mod kernel_laws_fig8;
+/// The law measures of `camcraft-motion`'s test helpers (#4154), shared
+/// by `#[path]` with no new dependency between our crates.
+#[allow(dead_code)]
+#[path = "../../motion/tests/common"]
+mod motion_common {
+    pub mod law_measure;
+    mod mask_grid;
+}
 
 use area_support::*;
 use camcraft_app::machining2d::{PASS_START_NOTE, PassStart};

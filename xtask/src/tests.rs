@@ -195,7 +195,7 @@ fn batch_skips_slow_binaries_and_release_runs_everything() {
     assert!(b.contains(&"motion suites: waterline | test -j 6 -p camcraft-motion --no-fail-fast --test waterline -- --test-threads=6".to_string()));
     assert!(!b.iter().any(|s| s.starts_with("motion suites: finish3d") || s.starts_with("app suites: center_cut_multiaxis")), "{b:#?}");
     assert!(b.contains(&"[ui] ui suites: lib | test -j 6 -p camcraft-ui --no-fail-fast --lib -- --test-threads=6".to_string()), "{b:#?}");
-    assert!(b[b.len() - 2].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-cl"));
+    assert!(b[b.len() - 2].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-pathkernel -p camcraft-cl"));
     assert_eq!(b[b.len() - 1], format!("{} | ", crate::site_step::NAME), "#4133: batch ends with the site tests");
     let r: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
     // Two prebuilds, then one step for each target (#1941): lib, bins and doc of ALL_CRATES plus the 5 fixture
@@ -388,4 +388,19 @@ fn packaging_build_clears_compiler_wrappers() {
     // Only the one that is set is named; none set, nothing to clear.
     assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
     assert!(exec::packaging_env_clear(|_| false).is_empty());
+}
+
+/// #4055 pin: a source change in the path kernel plans the kernel's own suites, and the suites of the
+/// crates above it whose Gate map names the changed module (on the real workspace, not the fixture). The
+/// quick gate has no reverse-dependency fan-out: a suite of motion or app joins when its map names a
+/// `pathkernel::` module. Today only app's `offset_pass_start` does (the switch, `pathkernel::engine`).
+#[test]
+fn a_pathkernel_change_plans_its_suites_and_the_mapped_app_suite() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let plan = |f: &str| -> Vec<String> { steps(quick_plan(&root, &[f], &[], &[], false)).iter().map(line).collect() };
+    let got = plan("crates/pathkernel/src/engine.rs");
+    assert!(got.iter().any(|s| s.starts_with("pathkernel suites: lib")), "{got:#?}");
+    assert!(got.iter().any(|s| s.starts_with("app suites: offset_pass_start")), "{got:#?}");
+    let got = plan("crates/pathkernel/src/verdict.rs");
+    assert!(got.iter().any(|s| s.starts_with("pathkernel suites: lib")), "{got:#?}");
 }

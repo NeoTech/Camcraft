@@ -30,6 +30,7 @@ pub mod break_through;
 pub mod entry;
 pub mod entry_arc;
 pub mod links;
+pub mod kernel_emit;
 // #1558: a zig-zag ramp flown as the ring's own helical arcs.
 pub mod ring_zig;
 #[cfg(test)]
@@ -79,3 +80,6 @@ pub use camcraft_geometry::{geo2d, geometry};
 pub use camcraft_geometry::geometry::{stock, units};
 pub use camcraft_sim::{fixture, stock_sim, verify};
 pub use camcraft_tools::tools;
+/// #4055: the path kernel (record RECOMMENDED.md `## #4024`);
+/// the app reaches it through this re-export, with no direct edge.
+pub use camcraft_pathkernel as pathkernel;

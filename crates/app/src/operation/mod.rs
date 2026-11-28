@@ -133,6 +133,8 @@ pub mod wire_op;
 pub mod wire_comp;
 mod agie_profile;
 mod agie_die;
+mod planner_switch;
+pub use planner_switch::{PHASE1_KINDS, check_engine, planner_engine};
 pub(crate) use agie_profile::{AgieSketch, agie_job, agie_quality, agie_sketch_job};
 mod wire_ruled;
 pub(crate) mod wire_sketch;

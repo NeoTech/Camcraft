@@ -621,9 +621,9 @@ the fonts. The UI must render them: each panel's draw code must use them.
   the parent). Systems query directly. `decompose` stores facets directly
   into `Part`.
 - Check only the touched crates, with `-p` for each: `camcraft-ui`,
-  `camcraft-app`, `camcraft-motion`, `camcraft-sim`, `camcraft-post`,
-  `camcraft-tools`, `camcraft-cl`, `camcraft-geometry`. Do not build the
-  full workspace: that rebuilds flecs.
+  `camcraft-app`, `camcraft-motion`, `camcraft-pathkernel`, `camcraft-sim`,
+  `camcraft-post`, `camcraft-tools`, `camcraft-cl`, `camcraft-geometry`. Do
+  not build the full workspace: that rebuilds flecs.
 
 ## Code shape
 

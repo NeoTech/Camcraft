@@ -49,6 +49,8 @@ pub use camcraft_motion::machining2d;
 pub use camcraft_motion::machining3d;
 pub use camcraft_motion::multiaxis;
 pub use camcraft_motion::turning;
+/// #4055: the path kernel, through motion (no direct app edge).
+pub use camcraft_motion::pathkernel;
 pub mod logging;
 pub mod machine;
 // #25: deviation classes on the machined mesh.

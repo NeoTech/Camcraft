@@ -16,6 +16,8 @@
 
 mod area_support;
 mod common;
+#[path = "pocket_pass_start/kernel_baseline.rs"]
+mod kernel_baseline;
 
 use area_support::*;
 use camcraft_app::machining2d::{PASS_START_REST_NOTE, PASS_START_ZIGZAG_NOTE, PassStart, RestParams, RestSource};

@@ -1,7 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/app", "crates/cl", "crates/gcode", "crates/motion", "crates/post", "crates/sim",
-  "crates/tools", "crates/ui", "crates/ui-kit", "crates/geometry", "crates/kernel", "crates/gpu", "xtask"]
+  "crates/tools", "crates/ui", "crates/ui-kit", "crates/geometry", "crates/kernel", "crates/gpu", "crates/pathkernel",
+  "xtask"]
 
 [workspace.package]
 version = "0.28.0"
@@ -17,6 +18,7 @@ camcraft-tools = { path = "crates/tools" }
 camcraft-post = { path = "crates/post" }
 camcraft-sim = { path = "crates/sim" }
 camcraft-motion = { path = "crates/motion" }
+camcraft-pathkernel = { path = "crates/pathkernel" }
 camcraft-gpu = { path = "crates/gpu" }
 camcraft-ui-kit = { path = "crates/ui-kit" }
 

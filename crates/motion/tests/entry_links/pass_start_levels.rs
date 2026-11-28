@@ -7,18 +7,28 @@
 //! the full tool width, never cross the part wall and cut the band whole.
 //!
 //! Gate map: covers camcraft_motion::machining2d (pass_start, level_rings,
-//! level_order, ring_side, pocket, pocket_avoid, ladder_links) and
-//! camcraft_geometry::geo2d (clip_line).
+//! level_order, ring_side, ring_set, ring_links, ring_entry, pocket,
+//! pocket_avoid, ladder_links),
+//! camcraft_geometry::geo2d (clip_line) and
+//! camcraft_pathkernel::guide (rings: `kernel_rings.rs`; trace, medial,
+//! helix: `kernel_guides.rs`), camcraft_geometry::geo2d (medial,
+//! side_offset).
 //! Provenance: our own regression of the second read on PR #3353; no
 //! vendor material consulted.
 
 use crate::common;
+#[path = "pass_start_levels/kernel_guides.rs"]
+mod kernel_guides;
+#[path = "pass_start_levels/kernel_rings.rs"]
+mod kernel_rings;
 #[path = "pass_start_levels/one_ring_set.rs"]
 mod one_ring_set;
 #[path = "pass_start_levels/ring_links.rs"]
 mod ring_links;
 #[path = "pass_start_levels/pocket_outside.rs"]
 mod pocket_outside;
+#[path = "pass_start_levels/shared_planner.rs"]
+mod shared_planner;
 
 use camcraft_motion::cl::Toolpath;
 use camcraft_motion::entry::Entry3D;
@@ -301,3 +311,7 @@ fn a_pocket_with_a_hollow_boss_is_cut_whole() {
         cuts_whole(&format!("pass_start_hollow_boss_{}", start.label()), &pocket, &pocket, side);
     }
 }
+
+// #4153: the old-planner baseline of each phase-1 kind (golden pins).
+#[path = "pass_start_levels/kernel_baseline/mod.rs"]
+mod kernel_baseline;

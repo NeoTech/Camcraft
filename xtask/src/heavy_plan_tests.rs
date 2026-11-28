@@ -44,7 +44,9 @@ fn reach_follows_the_crate_dependencies() {
     let reach = heavy::reach(&root()).expect("manifests");
     assert_eq!(reach["app"], set(&["app", "ui"]));
     assert_eq!(reach["motion"], set(&["app", "motion", "ui"]));
-    assert_eq!(reach["geometry"], set(&["app", "cl", "gcode", "geometry", "motion", "post", "sim", "tools", "ui"]));
+    assert_eq!(reach["geometry"], set(&["app", "cl", "gcode", "geometry", "motion", "pathkernel", "post", "sim", "tools", "ui"]));
+    // #4055: the path kernel sits between geometry and motion; it reaches motion, app and ui only.
+    assert_eq!(reach["pathkernel"], set(&["app", "motion", "pathkernel", "ui"]));
     // gpu (#2620) and ui-kit (#4394) have no camcraft-* dependency: the kernel reaches every crate but them.
     let all_but_gpu = plan::ALL_CRATES.iter().filter(|d| !matches!(**d, "gpu" | "ui-kit")).map(|d| (*d).to_string());
     assert_eq!(reach["kernel"], all_but_gpu.collect::<BTreeSet<_>>());
