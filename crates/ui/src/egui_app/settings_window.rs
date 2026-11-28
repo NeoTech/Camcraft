@@ -37,7 +37,7 @@ pub(crate) const CHECK_FOR_UPDATES: &str = "Check for updates";
 
 /// One section of the window, in list order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Section {
+pub enum Section {
     #[default]
     Appearance,
     Graphics,
