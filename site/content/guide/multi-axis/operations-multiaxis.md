@@ -72,7 +72,7 @@ cannot, so post multi-axis work with a machine that states its rotaries.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/five-axis](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/five-axis)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-contour5d" /> }} ![View of waterline passes with a leaning tool axis.](../../../operation-paths.svg#Contour5D)
@@ -129,7 +129,7 @@ by name.
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/five-axis](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/five-axis)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-flow5d" /> }} ![View of curved surface passes following the surface direction.](../../../operation-paths.svg#Flow5D)
@@ -176,7 +176,7 @@ model to ride".
 <!-- catalog:examples:start -->
 **Example cases**
 
-No catalog case yet.
+- [multiaxis/five-axis](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/multiaxis/five-axis)
 <!-- catalog:examples:end -->
 
 {{ <icon name="op-swarf" /> }} ![View of passes along a ruled flank with a leaning tool.](../../../operation-paths.svg#Swarf)

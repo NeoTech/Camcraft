@@ -102,6 +102,8 @@ mod catalog_multiaxis_indexed {
     }
 }
 
+include!("example_catalog/case_multiaxis_five_axis.rs");
+
 // These full-case checks exceed the 60 s debug budget. The heavy lane keeps
 // both checks; example_catalog_adaptive pins the committed program in quick.
 mod catalog_2d_adaptive_pocket {
