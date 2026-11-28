@@ -24,11 +24,13 @@
 //! components (`lathe_stack`).
 //! #3919: the built-in shrink-fit chucks (`builtin_shrink`).
 //! #4340: the tool copy with its holder and stack (`duplicate_tool`).
+//! #4370: the tool rename with its operations (`rename_tool`).
 //! Gate map (M4.4): covers app::tool_library, app::commands (tool_import, tool_assembly),
 //! app::mcp (import_tool_library), app::script (importTools), app::tool_body, app::tool_assembly,
 //! app::project (component_wire, assembly_wire), app::component_library, app::commands (component_sync),
 //! app::mcp (component_tools, assembly_tools, component_library_tools),
-//! app::commands (tool_duplicate), app::mcp (tool_duplicate).
+//! app::commands (tool_duplicate), app::mcp (tool_duplicate),
+//! app::commands (tool_rename), app::mcp (tool_rename).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportMode, ImportReport, ImportTools, SetStock, SetToolBody,
@@ -74,6 +76,8 @@ mod lathe_stack_pad;
 mod builtin_shrink;
 #[path = "tool_library_holders/duplicate_tool.rs"]
 mod duplicate_tool;
+#[path = "tool_library_holders/rename_tool.rs"]
+mod rename_tool;
 
 const DRAWN: &str = "Six";
 const MESH: &str = "Four";

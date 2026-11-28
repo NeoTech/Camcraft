@@ -361,3 +361,7 @@ pub(crate) use delete::ToolRecords;
 #[path = "tool_duplicate.rs"]
 mod duplicate;
 pub use duplicate::DuplicateTool;
+
+#[path = "tool_rename.rs"]
+mod rename;
+pub use rename::RenameTool;

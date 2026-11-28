@@ -168,7 +168,7 @@ pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::{BoxPoint, OriginAt, SetWcsOrigin, place_setup_origin};
 pub use wcs_circle::SetWcsAtCircleCentre;
 pub use set_wcs_flip::SetWcsFlip;
-pub use tool::{AddTool, ChangeTool, DeleteTool, DuplicateTool, HolderPick};
+pub use tool::{AddTool, ChangeTool, DeleteTool, DuplicateTool, HolderPick, RenameTool};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_assembly::{DeleteDocumentComponent, EditDocumentComponent, SetToolAssembly, UpsertDocumentComponent};
 pub use component_sync::SyncDocumentComponent;
