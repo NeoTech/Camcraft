@@ -85,6 +85,8 @@ pub mod pattern_folder;
 pub use camcraft_motion::plasma;
 // #1883: the waterjet profile and the 2D sheet kernel it shares.
 pub use camcraft_motion::{sheet, waterjet};
+// #4081: the laser profile generator (the waterjet's laws, its own voice).
+pub use camcraft_motion::laser;
 pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
@@ -192,6 +194,8 @@ pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;
 pub use camcraft_tools::cutting_rows as tool_cutting_rows;
 pub use camcraft_tools::waterjet as waterjet_tools;
+// #4081: the laser head's constructor and door.
+pub use camcraft_tools::laser as laser_tools;
 // #1521: a torch's cut-data recipe per material and plate thickness.
 pub use camcraft_tools::plasma_cut as plasma_cut_tools;
 pub use camcraft_tools::wire as wire_tools;

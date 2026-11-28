@@ -6,6 +6,22 @@ use super::{move_extremes, say, slowest_axis, Machine, MachineCheck};
 use crate::{model, operation::Family, tools::ToolKind};
 
 pub(super) fn check_waterjet_ops(world: &World, machine: &Machine, ops: &[(String, Entity)]) -> Result<MachineCheck, String> {
+    check_xy_ops(world, machine, ops, XyCutter { family: Family::Waterjet, tool: ToolKind::Waterjet, word: "waterjet" })
+}
+
+/// An X/Y gantry's cutter (#4081): the one family it admits, the one
+/// tool kind that family mounts, and the word its refusals use.
+pub(super) struct XyCutter {
+    pub family: Family,
+    pub tool: ToolKind,
+    pub word: &'static str,
+}
+
+/// The X/Y gantry checks a waterjet and a laser share: the family, the
+/// tool kind and its door, no rotary move, the axis feed ceilings and
+/// the strokes.
+pub(super) fn check_xy_ops(world: &World, machine: &Machine, ops: &[(String, Entity)], c: XyCutter) -> Result<MachineCheck, String> {
+    let w = c.word;
     let mut out = MachineCheck::default();
     out.notes.push(format!("{}: no spindle; spindle rpm and power are not judged", machine.model));
     if machine.axis(2).is_none() {
@@ -13,13 +29,13 @@ pub(super) fn check_waterjet_ops(world: &World, machine: &Machine, ops: &[(Strin
     }
     for (name, e) in ops {
         let op = model::operation_of(world, e).ok_or_else(|| format!("{name}: lost its operation"))?;
-        if op.params.kind().info().family() != Family::Waterjet {
-            say(&mut out, format!("{name}: a waterjet machine admits only waterjet operations"));
+        if op.params.kind().info().family() != c.family {
+            say(&mut out, format!("{name}: a {w} machine admits only {w} operations"));
         }
         let tool = model::find_by_name(world, &op.tool).and_then(|e| model::tool_of(world, &e))
             .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
-        if tool.kind != ToolKind::Waterjet {
-            say(&mut out, format!("{name}: a waterjet operation requires a waterjet tool"));
+        if tool.kind != c.tool {
+            say(&mut out, format!("{name}: a {w} operation requires a {w} tool"));
         }
         if let Some(why) = tool.torch_refusal() {
             say(&mut out, format!("{name}: {why}"));
@@ -28,7 +44,7 @@ pub(super) fn check_waterjet_ops(world: &World, machine: &Machine, ops: &[(Strin
         let (_, origin) = crate::posting::wcs_context(world, op.setup.as_deref());
         for (i, mv) in cache.path.moves.iter().enumerate() {
             if mv.rotary.is_some() || mv.axis.is_some_and(|a| !crate::cl::is_vertical(&a)) {
-                say(&mut out, format!("{name}: move {i} tilts or turns; a waterjet has no rotary axis"));
+                say(&mut out, format!("{name}: move {i} tilts or turns; a {w} has no rotary axis"));
             }
             if let Some(feed) = mv.feed {
                 // An arc drives both XY axes even when its endpoints coincide.

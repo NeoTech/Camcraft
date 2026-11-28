@@ -98,7 +98,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
 
 /// The tabs: on or off, the width, and one world XY position per tab.
 /// The count is the number of positions.
-fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<JetTabsOp>) {
+pub(super) fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<JetTabsOp>) {
     let mut on = tabs.is_some();
     check_row(ui, "Hold with tabs", &mut on);
     if !on {

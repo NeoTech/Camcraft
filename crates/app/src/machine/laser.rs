@@ -1,15 +1,13 @@
-//! Laser cutter program checks (#4081). In the kind slice no laser
-//! operation exists, so a laser machine refuses each operation by name;
-//! the Laser Profile slice judges its own moves here.
+//! Laser cutter program checks (#4081): the waterjet's X/Y gantry
+//! checks with the laser's family, tool kind and words.
 //! Provenance: our own machine-limit law, on the waterjet checks (#1881).
 
-use super::{say, Machine, MachineCheck};
+use flecs_ecs::prelude::{Entity, World};
 
-pub(super) fn check_laser_ops(machine: &Machine, ops: &[(String, flecs_ecs::prelude::Entity)]) -> MachineCheck {
-    let mut out = MachineCheck::default();
-    out.notes.push(format!("{}: no spindle; spindle rpm and power are not judged", machine.model));
-    for (name, _) in ops {
-        say(&mut out, format!("{name}: a laser machine admits only laser operations"));
-    }
-    out
+use super::waterjet::{check_xy_ops, XyCutter};
+use super::{Machine, MachineCheck};
+use crate::{operation::Family, tools::ToolKind};
+
+pub(super) fn check_laser_ops(world: &World, machine: &Machine, ops: &[(String, Entity)]) -> Result<MachineCheck, String> {
+    check_xy_ops(world, machine, ops, XyCutter { family: Family::Laser, tool: ToolKind::Laser, word: "laser" })
 }

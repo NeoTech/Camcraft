@@ -71,7 +71,7 @@ pub fn model_loaded(world: &World, declared: Option<&str>) -> bool {
 /// Can this kind take a profile as its source? The 2D cut kinds only.
 #[must_use]
 pub fn admits(params: &OpParams) -> bool {
-    matches!(params.kind().info().section, Section::Mill2D | Section::Plasma | Section::WireEdm | Section::Waterjet)
+    matches!(params.kind().info().section, Section::Mill2D | Section::Plasma | Section::WireEdm | Section::Waterjet | Section::Laser)
 }
 
 /// Does this kind cut to a solid model's surface in 3D?

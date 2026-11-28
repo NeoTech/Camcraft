@@ -8,13 +8,19 @@ pub(super) fn problems(world: &World) -> Vec<String> {
     let Ok(ops) = super::program_ops(world) else {
         return Vec::new();
     };
+    use crate::operation::Family;
     ops.into_iter()
-        .filter(|(_, entity)| {
-            crate::model::operation_of(world, entity)
-                .is_some_and(|op| op.params.kind().info().family() == crate::operation::Family::Waterjet)
+        .filter_map(|(name, entity)| {
+            match crate::model::operation_of(world, &entity)?.params.kind().info().family() {
+                Family::Waterjet => Some(format!(
+                    "{name}: waterjet posting is unavailable: standoff height, jet on/off records, pierce dwell records, and waterjet laws are not implemented"
+                )),
+                // #4081: the laser post is the next slice.
+                Family::Laser => Some(format!(
+                    "{name}: laser posting is unavailable: beam on/off records, power records and pierce dwell records are not implemented"
+                )),
+                _ => None,
+            }
         })
-        .map(|(name, _)| format!(
-            "{name}: waterjet posting is unavailable: standoff height, jet on/off records, pierce dwell records, and waterjet laws are not implemented"
-        ))
         .collect()
 }

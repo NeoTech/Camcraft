@@ -1410,6 +1410,7 @@ impl HeightRefs for OpParams {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::WaterjetProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
+            OpParams::LaserProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
             OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::SlotUndercut(p) => {

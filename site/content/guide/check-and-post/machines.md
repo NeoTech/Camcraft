@@ -6,9 +6,9 @@ aliases = ["guide/machines/"]
 +++
 
 A machine file (`.mch`) declares a **kind**: `mill`, `router`, `lathe`, `mill-turn`,
-`plasma`, `wire_edm`, `sinker_edm` or `waterjet`. A file that declares
+`plasma`, `wire_edm`, `sinker_edm`, `waterjet` or `laser`. A file that declares
 nothing is read from its axes (a mill unless it has a lathe's X/Z pair or
-a turning rotary); plasma, EDM and waterjet are never guessed, only
+a turning rotary); plasma, EDM, waterjet and laser are never guessed, only
 declared. The kind decides
 which operations the document accepts, which posts the picker lists and
 which limits the program is checked against. See [Setups](@/guide/set-up/setups.md)
@@ -36,6 +36,15 @@ feed limits, including arc extremes, and says which Z and spindle checks do
 not apply. The [Waterjet Profile](@/guide/operations/operations-waterjet.md)
 operation cuts on it, and the generic ISO abrasive waterjet post
 (`waterjet-iso.cps`) posts it.
+
+A **laser** machine file has the same rules as a waterjet file: linear X
+and Y axes, an optional Z (the focus height), and no spindle, live
+tooling, rotary axis or coolant. Its tool is a **Laser head**: no spindle
+(rpm zero), a positive kerf, and no cut recipes (the operation states the
+power and the feed). The machine check judges the same X/Y travel and
+feed limits. The [Laser Profile](@/guide/operations/operations-laser.md)
+operation cuts on it. No built-in post serves a laser cutter yet, so a
+laser program is not posted.
 
 The picker lists posts for the setup's machine kind. A loaded post also
 refuses by name any operation or move that it cannot express.

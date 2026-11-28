@@ -187,6 +187,7 @@ pub fn region_z(
         OpParams::PlasmaProfile(p) => resolve(p.top_z),
         // The waterjet cut rides the sheet's top (#1883).
         OpParams::WaterjetProfile(p) => resolve(p.top_z),
+        OpParams::LaserProfile(p) => resolve(p.top_z),
         // The wire's profile is read on the workpiece's top (#532).
         OpParams::WireContour(p) => resolve(p.top_z),
         // The electrode enters at the work top (#541).
@@ -425,6 +426,14 @@ pub fn resolve_params_with(
         // The waterjet cut (#1883): the jet-off plane, the sheet's top
         // (the cut plane) and bottom - no hop plane.
         OpParams::WaterjetProfile(p) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Top of Plate Z", p.top_z)?),
+            Some(req("Bottom of Plate Z", p.bottom_z)?),
+            None,
+            None,
+        ),
+        // The laser cut (#4081): the waterjet's three planes.
+        OpParams::LaserProfile(p) => (
             req("Clearance Z", p.clearance_z)?,
             Some(req("Top of Plate Z", p.top_z)?),
             Some(req("Bottom of Plate Z", p.bottom_z)?),

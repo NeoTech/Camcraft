@@ -138,6 +138,8 @@ impl KindInfo {
             | OpType::BoringTurning
             // #1883: the waterjet's lead picks are owed (the plasma's: #3334).
             | OpType::WaterjetProfile
+            // #4081: the laser rides the waterjet's generator; its lead picks too.
+            | OpType::LaserProfile
             | OpType::TrochoidalSlot
             | OpType::SlotUndercut
             // #2826: the flow band's own start and exit ride its
@@ -194,6 +196,7 @@ impl OpParams {
             | OpParams::Thread { picks, .. } => Some(picks),
             OpParams::PlasmaProfile(p) => Some(&p.picks),
             OpParams::WaterjetProfile(p) => Some(&p.picks),
+            OpParams::LaserProfile(p) => Some(&p.picks),
             OpParams::WireContour(p) => Some(&p.picks),
             OpParams::SinkerBurn(p) => Some(&p.picks),
             OpParams::SinkerSideBurn(p) => Some(&p.burn.picks),
@@ -252,6 +255,7 @@ impl OpParams {
             | OpParams::Thread { picks, .. } => Some(picks),
             OpParams::PlasmaProfile(p) => Some(&mut p.picks),
             OpParams::WaterjetProfile(p) => Some(&mut p.picks),
+            OpParams::LaserProfile(p) => Some(&mut p.picks),
             OpParams::WireContour(p) => Some(&mut p.picks),
             OpParams::SinkerBurn(p) => Some(&mut p.picks),
             OpParams::SinkerSideBurn(p) => Some(&mut p.burn.picks),

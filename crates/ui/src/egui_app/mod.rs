@@ -212,6 +212,8 @@ mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
 mod waterjet_page;
+// #4081: the Laser Profile's page.
+mod laser_page;
 mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;

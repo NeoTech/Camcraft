@@ -46,6 +46,7 @@ FAMILIES = {
     "probing": {"Probe": "Probe"},
     "plasma": {"PlasmaProfile": "Plasma Profile"},
     "waterjet": {"WaterjetProfile": "Waterjet Profile"},
+    "laser": {"LaserProfile": "Laser Profile"},
     "edm": {
         "WireContour": "Wire Contour", "SinkerBurn": "Sinker Burn",
         "SinkerSideBurn": "Sinker Side Burn",

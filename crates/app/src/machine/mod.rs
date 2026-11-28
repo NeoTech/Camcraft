@@ -143,7 +143,7 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
         return waterjet::check_waterjet_ops(world, machine, program);
     }
     if kind(Some(machine)) == Kind::Laser {
-        return Ok(laser::check_laser_ops(machine, program));
+        return laser::check_laser_ops(world, machine, program);
     }
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);

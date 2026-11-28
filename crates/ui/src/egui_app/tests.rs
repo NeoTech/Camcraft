@@ -169,6 +169,8 @@ mod ribbon_cell_fill;
 mod theme_op_tabs_tree;
 mod theme_tree_hits;
 mod waterjet_recipe;
+// #4081: the Laser Profile on the ribbon and its page.
+mod laser_ribbon;
 mod catalog_filters;
 mod cycle_combo;
 mod holes_break_through;
@@ -2949,6 +2951,8 @@ fn tips_match_the_imgui_table() {
             == camcraft_app::operation::Family::Sinker;
         let is_waterjet = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::Waterjet;
+        let is_laser = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Laser;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
         } else if is_wire {
@@ -2963,6 +2967,9 @@ fn tips_match_the_imgui_table() {
         } else if is_waterjet {
             // #1883: nor the jet's.
             "The document's machine is a mill - waterjet operations do not drive it; mount a waterjet (Setup > Machine)".to_owned()
+        } else if is_laser {
+            // #4081: nor the beam's.
+            "The document's machine is a mill - laser cutting operations do not drive it; mount a laser cutter (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

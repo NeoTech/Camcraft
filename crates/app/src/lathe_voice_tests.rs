@@ -140,6 +140,8 @@ fn want(ty: OpType) -> Want {
         | OpType::SlotUndercut
         | OpType::WaterjetProfile
         | OpType::MultiAxisDeburr
+        // #4081: the laser profile, like the waterjet's.
+        | OpType::LaserProfile
         // #2826: the flow band is the rotary kinds' mill sibling.
         | OpType::RotaryFlow => Want::Refused,
     }
@@ -187,7 +189,7 @@ fn every_kind_is_work_spindle_live_tool_or_refused_by_name() {
         // The post's own order: a path stating C is live-tool work.
         assert_eq!(voice(&params, &stating_c(meridian()), ORIGIN), LatheVoice::LiveTool, "{}", info.label);
     }
-    assert_eq!((turns, holes, refused), (12, 1, 36), "the table covers every kind");
+    assert_eq!((turns, holes, refused), (12, 1, 37), "the table covers every kind");
     assert_eq!(turns + holes + refused, KindInfo::ALL.len());
 }
 

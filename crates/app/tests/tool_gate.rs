@@ -227,6 +227,7 @@ fn the_refusal_names_a_fitting_catalog_entry() {
         (OpType::FormTurning, "'FG-0600-04' (4 mm form gauge)"),
         (OpType::WireContour, "'EDM-W025' (0.25 mm wire)"),
         (OpType::WaterjetProfile, "'WJ-KERF-080' (0.8 mm waterjet nozzle)"),
+        (OpType::LaserProfile, "'LZ-KERF-020' (0.2 mm laser head)"),
         (OpType::SlotUndercut, "'TS-2000-0600' (20 mm T-slot cutter)"),
     ] {
         let why = tool_gate::create_refusal(&world, ty.info()).expect("empty rack");

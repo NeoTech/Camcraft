@@ -100,6 +100,12 @@ pub fn voice(params: &OpParams, path: &Toolpath, origin: [f64; 3]) -> LatheVoice
              spindle, and a jet has none; post it through a waterjet post, or suppress the operation"
                 .to_owned(),
         ),
+        // #4081: nor a laser head.
+        OpParams::LaserProfile(_) => LatheVoice::Refused(
+            "a Laser Profile operation cannot be posted through a lathe post - it would open the section on the work \
+             spindle, and a beam has none; post it through a laser post, or suppress the operation"
+                .to_owned(),
+        ),
         // #532: a wire has no spindle either - the family door and the
         // post door refuse it first; this says so in its own words.
         OpParams::WireContour(_) => LatheVoice::Refused(

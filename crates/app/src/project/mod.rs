@@ -159,6 +159,9 @@ pub use plasma_dto::*;
 // #1883: the waterjet profile's file mirror.
 mod waterjet_dto;
 pub use waterjet_dto::*;
+// #4081: the laser profile's file mirror.
+mod laser_dto;
+pub use laser_dto::*;
 mod wire_edm_dto;
 pub use wire_edm_dto::*;
 // #541: the sinker burn's file mirror.

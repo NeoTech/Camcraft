@@ -109,11 +109,15 @@ fn no_orphan_tool_kinds() {
             continue;
         }
         if k == ToolKind::Laser {
-            // #4081 slice 1: the laser head exists before its operation,
-            // so every operation refuses it; the Laser Profile slice makes
-            // it the one operation that cuts with a laser head.
+            // #4081: the Laser Profile is the one operation that cuts
+            // with a laser head; every other family refuses it.
             for row in KindInfo::ALL {
-                assert!(!row.accepts(k), "{:?} accepts a laser head before the laser operation exists", row.ty);
+                assert_eq!(
+                    row.accepts(k),
+                    row.ty == OpType::LaserProfile,
+                    "{:?}: only the Laser Profile cuts with a laser head",
+                    row.ty
+                );
             }
             continue;
         }

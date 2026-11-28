@@ -92,7 +92,7 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
         Some(k) => {
             let f = k.family();
             let (fword, mword) = (f.work(), f.machine());
-            let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker | camcraft_app::operation::Family::Waterjet) { "" } else { " or a mill-turn" };
+            let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker | camcraft_app::operation::Family::Waterjet | camcraft_app::operation::Family::Laser) { "" } else { " or a mill-turn" };
             Some(format!(
                 "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)",
                 k.label,
@@ -270,6 +270,8 @@ pub(in crate::egui_app) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             operation::Section::Sinker => Icon::Drill,
             // #1883: the waterjet section wears its op's own glyph.
             operation::Section::Waterjet => Icon::WaterjetProfile,
+            // #4081: the laser section wears its op's own glyph.
+            operation::Section::Laser => Icon::LaserProfile,
         }),
         // The machine door wears its workspace's glyph (#207), from the
         // existing set: the face mill for Milling, the turned bar for

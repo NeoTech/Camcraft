@@ -31,6 +31,8 @@ pub use tilt_basis::CURRENT_TILT_BASIS;
 mod undercut;
 pub use undercut::SlotUndercutOp;
 mod waterjet;
+// #4081: the laser profile, on the waterjet's lead, side and tab types.
+mod laser;
 mod wire_edm;
 
 pub use area::{
@@ -54,6 +56,7 @@ pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
 pub use waterjet::{JetLead, JetSide, JetTabsOp, WaterjetOp};
+pub use laser::LaserOp;
 pub use sinker::{
     SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerPass, SinkerSide,
     SinkerSideBurnOp, SinkerSideDirection,

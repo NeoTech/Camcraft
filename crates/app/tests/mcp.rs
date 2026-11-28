@@ -27,6 +27,9 @@ mod mcp_open;
 // #3449: every accepted field of a kind, optional ones and enum words.
 #[path = "mcp/op_type_fields.rs"]
 mod op_type_fields;
+// #4081: the Laser Profile over MCP.
+#[path = "mcp/laser_profile.rs"]
+mod laser_profile;
 // #3012: pattern folders - commands, project file, MCP and the post.
 #[path = "mcp/pattern_folder.rs"]
 mod pattern_folder;

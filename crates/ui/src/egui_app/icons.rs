@@ -106,6 +106,9 @@ icon_table! {
     /// A waterjet profile (#1883): the nozzle and its straight jet
     /// through the sheet.
     WaterjetProfile => "op-waterjet-profile", "icon-waterjet-profile";
+    /// A laser profile (#4081): the laser head, its thin beam and the
+    /// kerf it burns through the sheet.
+    LaserProfile => "op-laser-profile", "icon-laser-profile";
     // Holes and probing:
     Drill => "op-drill", "icon-drill";
     Bore => "op-bore", "icon-bore";

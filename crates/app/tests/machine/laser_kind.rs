@@ -1,15 +1,14 @@
-//! #4081 slice 1: the laser machine kind and the laser head at the app
-//! doors - the editor's validator, the blank draft, the tool door, the
-//! project round trip, the family gate and the program check. No laser
-//! operation exists yet, so a laser machine refuses each operation by
-//! name and no built-in post claims it.
+//! #4081: the laser machine kind and the laser head at the app doors -
+//! the editor's validator, the blank draft, the tool door, the project
+//! round trip and the family gate. A laser machine admits only the
+//! Laser Profile, and no built-in post claims it.
 //! Provenance: our own synthetic fixtures from the issue's rules.
 
 use camcraft_app::commands::{AddTool, CreateOperation, History, SetStock};
 use camcraft_app::geometry::{IDENTITY_Q, Point3};
 use camcraft_app::machine::{self, Kind, Machine};
 use camcraft_app::model;
-use camcraft_app::operation::{Family, Height, OpParams, SrcRef};
+use camcraft_app::operation::{Family, Height, OpParams, Section, SrcRef};
 use camcraft_app::project;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
@@ -96,11 +95,15 @@ fn the_laser_head_passes_the_tool_door_and_round_trips_the_project() {
 }
 
 #[test]
-fn a_laser_machine_admits_no_operation_in_this_slice() {
-    for family in [Family::Mill, Family::Turn, Family::Plasma, Family::WireEdm, Family::Sinker, Family::Waterjet] {
-        assert!(!family.admits(Kind::Laser), "{family:?} admits a laser");
+fn a_laser_machine_admits_only_the_laser_profile() {
+    for family in [Family::Mill, Family::Turn, Family::Plasma, Family::WireEdm, Family::Sinker, Family::Waterjet, Family::Laser] {
+        assert_eq!(family.admits(Kind::Laser), family == Family::Laser, "{family:?}");
     }
-    assert!(camcraft_app::operation::shown_for(Kind::Laser).is_empty(), "no ribbon section for a laser yet");
+    for kind in [Kind::Mill, Kind::Lathe, Kind::MillTurn, Kind::Plasma, Kind::WireEdm, Kind::SinkerEdm, Kind::Waterjet] {
+        assert!(!Family::Laser.admits(kind), "{kind:?} admits laser work");
+    }
+    assert_eq!(camcraft_app::operation::shown_for(Kind::Laser), vec![Section::Laser]);
+    assert_eq!(Section::Laser.kinds_for(Kind::Laser).len(), 1);
 
     // The door: a milling op on a laser setup never exists, refused by name.
     let w = new_world();
@@ -109,14 +112,8 @@ fn a_laser_machine_admits_no_operation_in_this_slice() {
     h.execute(&w, AddTool::new(&w, "EM-0400-2FL", mill).expect("tool"));
     let loc = Location { pos: Point3::new(0.0, 0.0, 0.0), rot: IDENTITY_Q };
     h.execute(&w, SetStock::new(&w, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, loc).expect("stock"));
-    h.execute(&w, CreateOperation::new(&w, "Face1", "EM-0400-2FL", SrcRef::Stock, face()).expect("a face on the mill"));
     machine::set(&w, "synthetic-laser.mch", Some(&laser()));
     assert_eq!(machine::kind_of(&w), Kind::Laser);
     let err = CreateOperation::new(&w, "Face2", "EM-0400-2FL", SrcRef::Stock, face()).err().expect("refused");
-    assert!(format!("{err:?}").contains("laser cutter, which cuts only laser operations"), "{err:?}");
-
-    // The program check: an op made before the laser was mounted is refused too.
-    let face1 = model::find_by_name(&w, "Face1").expect("the face op");
-    let check = machine::check_ops(&w, &laser(), &[("Face1".to_owned(), face1)]).expect("the check runs");
-    assert!(check.problems.iter().any(|p| p == "Face1: a laser machine admits only laser operations"), "{:?}", check.problems);
+    assert!(format!("{err:?}").contains("laser cutter, which cuts only laser operations (a Laser Profile)"), "{err:?}");
 }
