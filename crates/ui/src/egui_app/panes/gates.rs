@@ -60,7 +60,27 @@ pub(in crate::egui_app) fn enabled(c: Cmd, state: &State) -> bool {
         // The same gate as Simulate: a program with no generated move
         // has nothing to judge - the cell stays dark until there is.
         Cmd::Deviate => state.has_toolpaths(),
+        Cmd::Copy => state.selected_operation().is_some(),
+        Cmd::Paste => state.operation_clipboard.is_some(),
         _ => true,
+    }
+}
+
+/// Why a disabled menu row is disabled (#4484), for the gates that have
+/// no refusal of their own; the Create rows and the browser build speak
+/// through `tip_of`. `None` when the command is live.
+pub(in crate::egui_app) fn disabled_reason(c: Cmd, state: &State) -> Option<&'static str> {
+    if enabled(c, state) {
+        return None;
+    }
+    match c {
+        Cmd::Undo => Some("Nothing to undo"),
+        Cmd::Redo => Some("Nothing to redo"),
+        Cmd::Run | Cmd::Copy => Some("Select an operation first"),
+        Cmd::Delete => Some("Select something first"),
+        Cmd::Simulate | Cmd::Deviate => Some("Generate a toolpath first"),
+        Cmd::Paste => Some("Copy an operation first"),
+        _ => None,
     }
 }
 
@@ -301,5 +321,7 @@ pub(in crate::egui_app) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
         // The Theme door follows the View door: a list door captioned by
         // its own word (no fitting glyph in the bundled set).
         Cmd::View | Cmd::Theme => None,
+        // Menu and keyboard only (#4484): no ribbon cell, no glyph.
+        Cmd::Copy | Cmd::Paste | Cmd::Quit | Cmd::Projection => None,
     }
 }

@@ -293,7 +293,11 @@ fn layout_window_panel_setups() {
 /// button, inside the viewport, with its groups from top to bottom.
 #[test]
 fn layout_window_display_menu() {
-    let mut h = shell_harness();
+    // The plan's smallest screen (#4245, 1366 x 768): at 720 px high the
+    // menu bar (#4484) leaves too little room above the Display button.
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1366.0, 768.0))
+        .build_ui_state(frame, ShellUi::seeded());
     h.run();
     let pane = super::layout::leaf_rect(&h.state().dock, &Tab::Viewport).expect("viewport leaf");
     let button = hud(h.state()).nav_rect(viewcube::Nav::Display);

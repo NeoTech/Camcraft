@@ -114,6 +114,11 @@ pub(crate) fn shell_layout(
     // The View door's checkmarks read the dock as it stands; a toggle the
     // door files lands right after the ribbon, before the dock lays out.
     layout::settle(state, dock);
+    // #4484: the menu bar over the ribbon, read from the same command table.
+    egui::Panel::top("menu_bar")
+        .frame(egui::Frame::NONE)
+        .exact_size(panes::menu_bar_h(&pal))
+        .show(ui, |ui| panes::menu_bar(ui, &mut *state, &pal));
     egui::Panel::top("ribbon")
         .frame(egui::Frame::NONE)
         .exact_size(theme::ribbon_h(&pal))
@@ -153,8 +158,14 @@ pub(crate) fn shell_layout(
             super::home::page(ui, state, &pal);
             return;
         }
+        // #4483: the fold law holds folded side panes at chip width.
+        if layout::fold::settle(dock, &mut state.pane_folds) {
+            ui.ctx().request_repaint();
+        }
+        let dock_style = DockStyle::from_egui(ui.style().as_ref());
+        let tab_bar = dock_style.tab_bar.height;
         DockArea::new(&mut *dock)
-            .style(DockStyle::from_egui(ui.style().as_ref()))
+            .style(dock_style)
             // No per-area close-all: it is the X that took whole panes
             // away by accident. Tabs keep their own X where closable.
             .show_leaf_close_all_buttons(false)
@@ -165,6 +176,7 @@ pub(crate) fn shell_layout(
                 viewport_points,
                 left_press,
             });
+        layout::fold::chips(ui, dock, state, &pal, tab_bar);
     });
     // A locate draft whose form the dock did not draw is dropped (#566).
     crate::locate_pick::sweep(state);
