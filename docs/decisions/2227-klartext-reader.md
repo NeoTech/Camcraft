@@ -169,7 +169,8 @@ refused by name and line.
   A chamfer cuts the side length from each line (the cut-off triangle has two
   legs of that length). A transition that needs more of a line than the line
   has after an earlier cut-back is refused, as are two lines in line (no
-  corner).
+  corner). A transition that takes exactly the whole line leaves no line:
+  the reader writes no zero-length feed move for it.
 - *The F of RND / CHF acts only on the transition.* Without F, the
   transition uses the modal feed. The modal feed does not change.
 - *Only line-line transitions.* A transition next to an arc needs the fillet
@@ -178,12 +179,22 @@ refused by name and line.
   line with an M function that acts at the block end (before) or with any M
   function (after) is refused too: the order of these effects around the
   transition is not settled in our sources.
-- *Polar reference.* A polar coordinate that is not written, and the
-  reference of `IPR` / `IPA`, come from the tool position about the current
-  pole. An angle from a position differs from the last programmed angle only
-  by whole turns, which do not change an `LP` end point or a `CP` sweep. At
-  the pole the angle is not defined, so `LP` without `PA` and `CP` from the
-  pole are refused.
+- *Polar reference.* A polar coordinate that `LP` does not write, and the
+  base of `IPR` / `IPA`, is the last programmed value about the current
+  pole. Our sources do not say what the control keeps as that value after a
+  Cartesian move (`L`, `C`, `CR`, `CT`) or after a `CC` block that moves the
+  pole: it can be the old programmed value, which is not the polar radius or
+  angle of the tool position. The sources say no more for the angle than for
+  the radius, so one rule covers the two. The reader keeps the last `PR` and
+  `PA` only while it knows them exactly: from an `LP` (or a `CP` that writes
+  `PA`, or a `CP IPA` from a known angle) about the same pole, with no X/Y
+  move by another block and no move of the pole in between. A Z-only move,
+  an M block or a `CC` at the same point keeps them. `CP` takes its radius
+  from the tool position, so it keeps the last `PR` as it was. When the
+  reader does not know the value, it refuses the `LP` by name and line
+  ("LP without PR: the last polar radius about this pole is not known").
+  `LP PR+0` needs no angle: its end is the pole. `CP` itself is not
+  affected: the manual starts the arc at the tool position.
 - *CP direction.* `CP IPA` needs the sign of `IPA` and `DR` to agree, as in
   the manual's helix table; a mismatch is refused, not guessed. `CP PA` with
   the start angle is refused (write `IPA+360` for a full circle). `|IPA|` is
@@ -198,7 +209,9 @@ refused by name and line.
 
 **Dropped.** Reading a transition next to an arc as a transition next to its
 chord (wrong path); taking `CP IPA` as `|IPA|` in the direction of `DR`
-(guessed sweep); a tool-radius option to compute `RL` / `RR` (needs the
+(guessed sweep); the polar radius and angle of the tool position as the
+value of a polar coordinate that is not written (wrong after a Cartesian
+move or a moved pole, if the control keeps the programmed value); a tool-radius option to compute `RL` / `RR` (needs the
 control's corner and approach rules, a separate design).
 
 **Cost to change later.** A transition next to an arc is one new geometry

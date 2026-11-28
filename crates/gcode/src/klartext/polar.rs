@@ -23,10 +23,24 @@ impl Machine<'_> {
             .ok_or_else(|| b.invalid_modal(&format!("{what} needs a pole: a CC block before it")))
     }
 
-    /// Polar radius and angle (degrees) of the tool position about the pole.
-    fn polar_pos(&self, pole: Point2) -> (f64, f64) {
-        let (dx, dy) = (self.pos.x - pole.x, self.pos.y - pole.y);
-        (dx.hypot(dy), dy.atan2(dx).to_degrees())
+    /// Polar angle (degrees) of the tool position about the pole.
+    fn polar_angle(&self, pole: Point2) -> f64 {
+        (self.pos.y - pole.y)
+            .atan2(self.pos.x - pole.x)
+            .to_degrees()
+    }
+
+    /// Polar radius of the tool position about the pole.
+    fn polar_radius(&self, pole: Point2) -> f64 {
+        (self.pos.x - pole.x).hypot(self.pos.y - pole.y)
+    }
+
+    /// Forget the last programmed polar coordinates when the tool left the end
+    /// point `end` of the polar block (a cycle call by `M99` can move it).
+    fn keep_polar_if_at(&mut self, end: Point3) {
+        if self.pos.x != end.x || self.pos.y != end.y {
+            self.polar = PolarRef::default();
+        }
     }
 
     /// The tool-axis end of a polar block: `Z`, `IZ`, or the current Z.
@@ -40,7 +54,9 @@ impl Machine<'_> {
     }
 
     /// `LP PR.. PA.. [Z..] [R0] F../FMAX`: a straight line to polar coordinates.
-    /// A polar coordinate that is not written keeps its value of the tool position.
+    /// A polar coordinate that is not written, and the base of `IPR` / `IPA`,
+    /// is the last programmed value about this pole ([`PolarRef`]); when the
+    /// reader does not know that value, the block is refused.
     pub fn polar_line_block(&mut self, b: &Block, toks: &[String]) -> Result<(), GcodeError> {
         let w = decode_polar(b, toks, &self.q)?;
         if w.ccw.is_some() || w.radius.is_some() {
@@ -51,40 +67,37 @@ impl Machine<'_> {
         self.corner_words_check(b, &w, moves)?;
         self.pre_m(b, &w.m)?;
         let rate = self.feed_words(b, &w)?;
-        if moves {
-            let (r0, a0) = self.polar_pos(pole);
-            let r = match (w.pr, w.ipr) {
-                (Some(r), _) => r,
-                (None, Some(d)) => r0 + d,
-                (None, None) => r0,
-            };
-            if r < 0.0 {
-                return Err(b.invalid_modal(&format!("LP polar radius ({r}) is negative")));
-            }
-            let angle_from_pos = w.pa.is_none();
-            if angle_from_pos && r0 <= 1e-9 && r > 1e-9 {
-                return Err(b.invalid_modal(
-                    "LP needs PA: the tool is at the pole, so its polar angle is not defined",
-                ));
-            }
-            let a = match (w.pa, w.ipa) {
-                (Some(a), _) => a,
-                (None, Some(d)) => a0 + d,
-                (None, None) => a0,
-            };
-            if a.abs() > 2.0 * MAX_ANGLE {
-                return Err(b.invalid_modal(&format!("LP polar angle ({a}) is out of range")));
-            }
-            let (s, c) = a.to_radians().sin_cos();
-            let to = check_point(
-                b.line,
-                "end point",
-                Point3::new(pole.x + r * c, pole.y + r * s, self.polar_z(b, &w)?),
-            )?;
-            let (kind, feed) = line_feed(b, &w, rate, "LP")?;
-            self.line_to(b, kind, to, feed)?;
+        if !moves {
+            return self.post_m(b, &w.m, w.mb);
         }
-        self.post_m(b, &w.m, w.mb)
+        let last = self.polar;
+        let r = polar_value(b, w.pr, w.ipr, last.pr, "PR", "radius")?;
+        if r < 0.0 {
+            return Err(b.invalid_modal(&format!("LP polar radius ({r}) is negative")));
+        }
+        // At the pole (PR 0) the angle does not change the end point.
+        let a = match polar_value(b, w.pa, w.ipa, last.pa, "PA", "angle") {
+            Ok(a) => Some(a),
+            Err(_) if r <= 1e-9 => None,
+            Err(e) => return Err(e),
+        };
+        if let Some(a) = a
+            && a.abs() > 2.0 * MAX_ANGLE
+        {
+            return Err(b.invalid_modal(&format!("LP polar angle ({a}) is out of range")));
+        }
+        let (s, c) = a.unwrap_or(0.0).to_radians().sin_cos();
+        let to = check_point(
+            b.line,
+            "end point",
+            Point3::new(pole.x + r * c, pole.y + r * s, self.polar_z(b, &w)?),
+        )?;
+        let (kind, feed) = line_feed(b, &w, rate, "LP")?;
+        self.line_to(b, kind, to, feed)?;
+        self.polar = PolarRef { pr: Some(r), pa: a };
+        self.post_m(b, &w.m, w.mb)?;
+        self.keep_polar_if_at(to);
+        Ok(())
     }
 
     /// `CP PA.. DR±` or `CP IPA.. DR±` (with `Z`/`IZ`: a helix): an arc about the
@@ -102,7 +115,7 @@ impl Machine<'_> {
         }
         let ccw = w.ccw.ok_or_else(|| b.invalid_arc("CP needs DR+ or DR-"))?;
         let pole = self.pole(b, "CP")?;
-        let (r, a0) = self.polar_pos(pole);
+        let (r, a0) = (self.polar_radius(pole), self.polar_angle(pole));
         if r <= 1e-6 {
             return Err(b.invalid_arc("CP starts at the pole; the arc has no radius"));
         }
@@ -134,7 +147,54 @@ impl Machine<'_> {
             Point2::new(ry, -rx)
         });
         self.pos = to;
-        self.post_m(b, &w.m, None)
+        // CP takes its radius from the tool position, so the last programmed
+        // PR stays as it was. The end angle is known when the block writes PA,
+        // or when the start angle was known (IPA adds to it).
+        let pa = match w.pa {
+            Some(a) if w.ipa.is_none() => Some(a),
+            _ => self.polar.pa.map(|_| a0 + sweep),
+        };
+        self.polar.pa = pa;
+        self.post_m(b, &w.m, None)?;
+        self.keep_polar_if_at(to);
+        Ok(())
+    }
+}
+
+/// The polar coordinates last programmed about the current pole, as far as the
+/// reader knows them exactly. A `CC` block that moves the pole, and each move
+/// that is not `LP` / `CP` and changes the X/Y position, forget them: the
+/// control's last programmed value can then differ from the tool position
+/// (docs/decisions/2227-klartext-reader.md, "Polar reference").
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PolarRef {
+    /// Last programmed polar radius `PR`.
+    pub pr: Option<f64>,
+    /// Last programmed polar angle `PA`, in degrees.
+    pub pa: Option<f64>,
+}
+
+/// One polar coordinate of an `LP` block: the absolute word, the incremental
+/// word added to the last programmed value, or the last programmed value.
+fn polar_value(
+    b: &Block,
+    abs: Option<f64>,
+    inc: Option<f64>,
+    last: Option<f64>,
+    word: &str,
+    what: &str,
+) -> Result<f64, GcodeError> {
+    let unknown = |how: &str| {
+        b.invalid_modal(&format!(
+            "LP {how}: the last polar {what} about this pole is not known (write {word})"
+        ))
+    };
+    match (abs, inc, last) {
+        (Some(v), _, _) => Ok(v),
+        (None, Some(d), Some(l)) => Ok(l + d),
+        (None, Some(_), None) => Err(unknown(&format!("I{word}"))),
+        (None, None, Some(l)) => Ok(l),
+        (None, None, None) => Err(unknown(&format!("without {word}"))),
     }
 }
 

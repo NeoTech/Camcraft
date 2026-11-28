@@ -211,8 +211,11 @@ impl Machine<'_> {
             let (t1, t2) = corner_points(&c, &p, v, len, b.line)?;
             check_point(c.block.line, "transition start", t1)?;
             check_point(c.block.line, "transition end", t2)?;
-            self.current
-                .push_move(p.line, MoveKind::Feed, t1, Some(p.feed));
+            // A transition that takes the whole line before leaves no line.
+            if !same_xy(p.start, t1) {
+                self.current
+                    .push_move(p.line, MoveKind::Feed, t1, Some(p.feed));
+            }
             match c.kind {
                 CornerKind::Round(r) => {
                     let (center, ccw) = round_center(p.dir, v, t1, r);
@@ -235,7 +238,8 @@ impl Machine<'_> {
                 dir: Point2::new(dx / len, dy / len),
                 feed,
             });
-        } else {
+        } else if !same_xy(start, to) {
+            // A transition that takes the whole line after leaves no line.
             self.current
                 .push_move(b.line, MoveKind::Feed, to, Some(feed));
         }
@@ -283,6 +287,13 @@ fn corner_points(
     let t1 = Point3::new(p.corner.x - u.x * dist, p.corner.y - u.y * dist, z);
     let t2 = Point3::new(p.corner.x + v.x * dist, p.corner.y + v.y * dist, z);
     Ok((t1, t2))
+}
+
+/// Two points of the working plane at the same place (within 1e-6 mm, the
+/// length below which a line has no length in the working plane). The
+/// lines next to a transition have no Z change, so X/Y decide.
+fn same_xy(a: Point3, b: Point3) -> bool {
+    (a.x - b.x).hypot(a.y - b.y) <= 1e-6
 }
 
 /// Centre and direction of the rounding arc of radius `r` that starts at `t1`

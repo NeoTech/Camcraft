@@ -9,6 +9,7 @@ use super::KlartextOptions;
 use super::corner::{Corner, PendingLine};
 use super::cycles::DrillDef;
 use super::old_cycles::OldCycle;
+use super::polar::PolarRef;
 use super::source::Block;
 use super::words::QTable;
 use crate::section::SectionBuilder;
@@ -23,6 +24,8 @@ pub struct Machine<'a> {
     pub pos: Point3,
     /// Circle centre of the last `CC` block (modal).
     pub cc: Option<Point2>,
+    /// Polar coordinates last programmed about `cc`, where known.
+    pub polar: PolarRef,
     /// Unit XY direction at the end of the last move, for `CT`.
     pub tangent: Option<Point2>,
     /// A straight line that waits for the `RND` / `CHF` block after it.
@@ -58,6 +61,7 @@ impl<'a> Machine<'a> {
             modal,
             pos,
             cc: None,
+            polar: PolarRef::default(),
             tangent: None,
             pending: None,
             corner: None,
@@ -99,7 +103,13 @@ impl<'a> Machine<'a> {
         if self.ended.is_some() {
             return Err(b.syntax("executable block after program end (M2/M30)"));
         }
-        self.dispatch(b, &w)
+        let (x, y, cc) = (self.pos.x, self.pos.y, self.cc);
+        self.dispatch(b, &w)?;
+        let moved = self.pos.x != x || self.pos.y != y || self.cc != cc;
+        if moved && !matches!(w[0], "LP" | "CP") {
+            self.polar = PolarRef::default();
+        }
+        Ok(())
     }
 
     fn begin(&mut self, b: &Block, w: &[&str]) -> Result<(), GcodeError> {

@@ -197,3 +197,91 @@ fn klartext_rnd_on_the_first_move_of_a_section_starts_at_the_line_start() {
     assert_to(&s[0], 15.0, 0.0, -1.0);
     assert_arc(&s[1], 15.0, 5.0, true);
 }
+
+/// Assert that no move of the program has zero length.
+fn assert_no_zero_move(p: &camcraft_gcode::ParsedProgram) {
+    for m in moves(p) {
+        let len = (m.to.x - m.from.x)
+            .hypot(m.to.y - m.from.y)
+            .hypot(m.to.z - m.from.z);
+        assert!(len > 1e-6, "zero-length move {m:?}");
+    }
+}
+
+#[test]
+fn klartext_transition_that_takes_the_whole_line_leaves_no_zero_length_move() {
+    let base = "L X+0 Y+0 Z-1 R0 F100";
+    // CHF 10 takes all of the 10 mm line before it.
+    let p = ok(&pgm(&[base, "L X+10", "CHF 10", "L X+10 Y+20"]));
+    assert_no_zero_move(&p);
+    let m = moves(&p);
+    assert_eq!(m.len(), 3, "line, chamfer, line: {m:?}");
+    assert_to(m[1], 10.0, 10.0, -1.0);
+    assert_eq!(p.line_for_move(0, 1), Some(4), "the chamfer maps to CHF");
+    // CHF 5 takes all of the 5 mm line after it.
+    let p = ok(&pgm(&[base, "L X+10", "CHF 5", "L X+10 Y+5"]));
+    assert_no_zero_move(&p);
+    let m = moves(&p);
+    assert_eq!(m.len(), 3, "line, line, chamfer: {m:?}");
+    assert_to(m[1], 5.0, 0.0, -1.0);
+    assert_to(m[2], 10.0, 5.0, -1.0);
+    // RND R10 on a right angle takes all of both 10 mm lines.
+    let p = ok(&pgm(&[base, "L X+10", "RND R10", "L X+10 Y+10"]));
+    assert_no_zero_move(&p);
+    let m = moves(&p);
+    assert_eq!(m.len(), 2, "line, rounding arc: {m:?}");
+    assert_to(m[1], 10.0, 10.0, -1.0);
+    assert_arc(m[1], 0.0, 10.0, true);
+}
+
+#[test]
+fn klartext_rnd_after_a_line_with_m3_or_m8() {
+    for m_word in ["M3", "M8"] {
+        let line = format!("L X+10 {m_word}");
+        let p = ok(&pgm(&[
+            "L X+0 Y+0 Z-1 R0 F100",
+            &line,
+            "RND R2",
+            "L X+10 Y+10",
+        ]));
+        let m = moves(&p);
+        assert_eq!(m.len(), 4, "{m_word}: {m:?}");
+        assert_to(m[1], 8.0, 0.0, -1.0);
+        assert_arc(m[2], 8.0, 2.0, true);
+        assert_to(m[3], 10.0, 10.0, -1.0);
+    }
+}
+
+#[test]
+fn klartext_chf_between_an_l_and_an_lp_line() {
+    let p = ok(&pgm(&[
+        "CC X+0 Y+0",
+        "L X+0 Y+0 Z-1 R0 F100",
+        "L X+10",
+        "CHF 2",
+        "LP PR+10 PA+90",
+    ]));
+    let m = moves(&p);
+    let s = std::f64::consts::SQRT_2;
+    assert_eq!(m.len(), 4);
+    assert_to(m[1], 8.0, 0.0, -1.0);
+    assert_to(m[2], 10.0 - s, s, -1.0);
+    assert!(m[2].arc.is_none() && m[2].kind == MoveKind::Feed);
+    assert_to(m[3], 0.0, 10.0, -1.0);
+}
+
+#[test]
+fn klartext_transition_with_fmax_is_refused() {
+    for bad in ["RND R2 FMAX", "CHF 2 FMAX"] {
+        let e = refusal(&pgm(&[
+            "L X+0 Y+0 Z-1 R0 F100",
+            "L X+10",
+            bad,
+            "L X+10 Y+10",
+        ]));
+        assert!(
+            matches!(&e, GcodeError::UnsupportedCode { line: 4, .. }),
+            "{bad}: {e}"
+        );
+    }
+}
