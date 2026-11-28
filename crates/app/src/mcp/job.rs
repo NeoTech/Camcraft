@@ -73,6 +73,8 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
                 // #3070: the guided sheet job (allowance always shown).
                 "sheet_job": s.as_deref().and_then(|n| crate::sheet_job::of(w, n)).as_ref().map(super::sheet_job_tools::job_view),
+                // #3406: the part-in-spindle mode and its table stations.
+                "part_in_spindle": s.as_deref().map_or(serde_json::Value::Null, |n| super::part_in_spindle_tools::view(w, Some(n))),
                 // #2410: the router options the setup's machine offers (the UI reads the same list).
                 "router_options": crate::router_offer::router_options(w, d).iter().map(|o| o.word()).collect::<Vec<_>>(),
                 // #1862: what stands for the setup's model - a part, or the

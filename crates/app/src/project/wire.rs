@@ -95,6 +95,7 @@ pub fn collect(world: &World) -> ProjectFile {
                         nose_to_axis: d.nose_to_axis.filter(|v| v.is_finite()),
                         workholding_max_rpm: d.workholding_max_rpm,
                         sheet_job: d.sheet_job,
+                        part_in_spindle: d.part_in_spindle.clone(),
                         order: d.order,
                     })
             } else {

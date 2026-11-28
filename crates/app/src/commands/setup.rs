@@ -145,6 +145,7 @@ impl CreateSetup {
                 nose_to_axis: None,
                 workholding_max_rpm: None,
                 sheet_job: None,
+                part_in_spindle: None,
                 // #3447: the program order is the creation order.
                 order: Some(order),
             }
@@ -182,6 +183,7 @@ impl CreateSetup {
                 // #3070: a new setup holds other stock - the sheet job's
                 // numbers do not describe it.
                 sheet_job: None,
+                part_in_spindle: None,
                 // #3447: a setup added later posts later, whatever its name.
                 order: Some(order),
             }

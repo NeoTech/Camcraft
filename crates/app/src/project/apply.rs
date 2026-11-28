@@ -994,6 +994,10 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 if let Some(why) = sdto.sheet_job.as_ref().and_then(crate::sheet_job::invalid) {
                     return Err(corrupt(format!("setup '{}': {why}", dto.name)));
                 }
+                // #3406: likewise a part-in-spindle record.
+                if let Some(why) = sdto.part_in_spindle.as_ref().and_then(crate::part_in_spindle::invalid) {
+                    return Err(corrupt(format!("setup '{}': {why}", dto.name)));
+                }
                 entity.entity_view(world).set(SetupDef {
                     stock: sdto.stock,
                     // `wcs_one` left exactly one name on every setup.
@@ -1016,6 +1020,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     nose_to_axis: sdto.nose_to_axis,
                     workholding_max_rpm: sdto.workholding_max_rpm,
                     sheet_job: sdto.sheet_job,
+                    part_in_spindle: sdto.part_in_spindle,
                     // #3447: absent in every earlier file - name order.
                     order: sdto.order,
                 });

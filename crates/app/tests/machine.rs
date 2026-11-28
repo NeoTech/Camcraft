@@ -42,6 +42,9 @@ mod hobby_routers;
 // #4081: the laser machine kind and the laser head at the app doors.
 #[path = "machine/laser_kind.rs"]
 mod laser_kind;
+// #3406: part-in-spindle mode and table tool stations on a mill.
+#[path = "machine/part_in_spindle.rs"]
+mod part_in_spindle;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()

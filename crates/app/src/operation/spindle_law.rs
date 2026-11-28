@@ -242,7 +242,8 @@ fn refusal(r: &SpindleReading, slot: &str) -> GenError {
 /// about this same spindle, so a revolved part off it is refused here
 /// by name rather than drilled about a line it is not on.
 pub(crate) fn turns(world: &World, setup: Option<&str>, params: &super::OpParams) -> bool {
-    let kind = crate::machine::kind_of_setup(world, setup);
+    // #3406: a part-in-spindle setup's axial Drill turns about its spindle.
+    let kind = crate::part_in_spindle::work_kind(world, setup);
     params.kind().info().family() == super::Family::Turn
         || match params {
             super::OpParams::Drill { cross, .. } => {

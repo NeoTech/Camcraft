@@ -151,6 +151,10 @@ pub(super) fn check_tool(world: &World, tool: &str) -> Result<(), CommandError> 
 /// and the refusal names both sides by name.
 pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
     use crate::operation::Family;
+    // #3406: a part-in-spindle setup on a mill has its own door.
+    if let Some(verdict) = crate::part_in_spindle::door(world, context, params) {
+        return verdict.map_err(CommandError::Invalid);
+    }
     let info = params.kind().info();
     let family = info.family();
     // #388: the machine of the setup the op lives in - the active one

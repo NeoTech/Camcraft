@@ -95,8 +95,9 @@ fn work_speed(world: &World, declared: Option<&str>, voice: WorkVoice, e: &flecs
     use crate::machine::Kind;
     let section = crate::lathe_voice::voice_of(world, e);
     let kind = crate::machine::kind_of_setup(world, declared);
-    // A lathe or mill-turn has a work spindle holding the chuck.
-    let chucked = matches!(kind, Kind::Lathe | Kind::MillTurn);
+    // A lathe or mill-turn has a work spindle holding the chuck; a
+    // part-in-spindle mill (#3406) holds the work in its own collet.
+    let chucked = matches!(kind, Kind::Lathe | Kind::MillTurn) || crate::part_in_spindle::active(world, declared);
     match (voice, section) {
         (_, None) => WorkSpeed::Not,
         // A C section turns the work on C; only a milling post on a

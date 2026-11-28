@@ -444,7 +444,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         )
     };
     // #388: the op's own setup's machine, active or not.
-    let machine_kind = crate::machine::kind_of_setup(world, setup);
+    // #3406: a part-in-spindle setup's work is a lathe's (the part turns).
+    let machine_kind = crate::part_in_spindle::work_kind(world, setup);
     // The lathe spindle law (issue #62): every kind that turns about the
     // fitted axis - the turning family, and the lathe's axial Drill -
     // must have that axis ON the spindle the post programs (world Z

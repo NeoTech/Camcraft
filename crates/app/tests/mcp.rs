@@ -55,6 +55,9 @@ mod source_names;
 mod svg;
 #[path = "mcp/trochoid_pass_start.rs"]
 mod trochoid_pass_start;
+// #3406: part-in-spindle mode and table stations.
+#[path = "mcp/part_in_spindle.rs"]
+mod part_in_spindle;
 
 use camcraft_app::mcp::{self, Server};
 
