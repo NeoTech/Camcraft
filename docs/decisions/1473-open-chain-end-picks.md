@@ -22,11 +22,10 @@ machining boundary keeps its source-pick refusal, including an offset or
 extension. A pick numerically equal to a cutter endpoint does not prove
 source identity in these routes.
 
-The fork at v0.27.0 rotates sketch geometry for WCS yaw but does not rotate
-Contour picks. This slice therefore refuses an open sketch start pick
-under nonzero WCS yaw before input rotation. No-pick and closed-only paths
-retain their existing behavior. Importing a general pick-rotation change
-from canonical main was dropped because it changes other operation kinds.
+The published v0.27.0 base already rotates operation picks with the sketch
+geometry for WCS yaw. This slice reuses that mapping. A model-space pick
+and its source endpoint enter the generation frame through the same
+transform. No new frame mapping or blanket yaw refusal is needed.
 
 **Coverage:** the original regression runs the same natural-end assertion
 on unchanged canonical main `6898b02ea3195e9124e6113afd6ab3cee38d0c50`.
@@ -36,9 +35,11 @@ for both travel directions. Additional pins cover leads at each depth,
 wrong ends, interior and nearby points, the exit refusal, and unproved
 part, stock and boundary picks. The short terminal-leg fixture retains its
 clearance asserts and adds a source mapping refusal. App command tests
-cover both climb settings, per-chain reversal, multiple-chain refusal and
-the WCS yaw frame refusal. Independent verification supplies run results.
-No golden or snapshot is changed.
+cover both climb settings, per-chain reversal and multiple-chain refusal.
+The yaw pin compares a valid model endpoint pick with all automatic moves.
+It also refuses a wrong model point that numerically equals the rotated
+endpoint before that wrong point receives its own transform. Independent
+verification supplies run results. The issue fix changes no golden or snapshot.
 
 Canonical main also has Do-not-touch open-run routes absent from this
 fork cut. The inspected canonical source wrappers delegate an empty avoid
@@ -53,6 +54,6 @@ contribution uses `Refs #1473` and does not close the issue.
 
 **Cost of later change:** offset-source support needs explicit endpoint
 correspondence through trimming and offsets, plus cut-direction and lead
-proofs. Interior picks need a rule for the remaining run. WCS yaw support
-needs the pick and chain in the same frame. None needs a file-format change
-for this endpoint-only slice.
+proofs. Interior picks need a rule for the remaining run. Existing WCS yaw
+mapping stays in its owning module. None needs a file-format change for
+this endpoint-only slice.

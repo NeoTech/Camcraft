@@ -65,7 +65,7 @@ fn an_open_sketch_start_pick_requires_one_selected_chain() {
 }
 
 #[test]
-fn an_open_sketch_start_pick_under_wcs_yaw_is_refused_by_name() {
+fn an_open_sketch_start_pick_follows_the_existing_wcs_yaw_mapping() {
     let (_dir, world, mut history) = sheet_world("start-yaw");
     let ids = plate_ids(&world);
     let location = Location {
@@ -79,12 +79,22 @@ fn an_open_sketch_start_pick_under_wcs_yaw_is_refused_by_name() {
     let mut params = stock_contour_params();
     run(&world, &mut history, CreateOperation::new(&world, "Automatic", TOOL, source.clone(), params.clone()), "create automatic");
     run(&world, &mut history, GenerateOperation::new(&world, "Automatic"), "generate without a pick under yaw");
+    let entity = model::find_by_name(&world, "Automatic").expect("automatic operation");
+    let automatic = model::toolpath_of(&world, &entity).expect("automatic path").path;
     if let OpParams::Contour { picks, .. } = &mut params {
-        // This is the rotated start's XY, not the original source endpoint (20, 10).
+        picks.start = vec![PathPick::xy(Point2::new(20.0, 10.0))];
+    }
+    run(&world, &mut history, CreateOperation::new(&world, "Picked", TOOL, source.clone(), params.clone()), "create picked");
+    run(&world, &mut history, GenerateOperation::new(&world, "Picked"), "generate model pick under yaw");
+    let entity = model::find_by_name(&world, "Picked").expect("picked operation");
+    let picked = model::toolpath_of(&world, &entity).expect("picked path").path;
+    assert_eq!(picked.moves, automatic.moves, "the pick and chain must rotate together");
+    if let OpParams::Contour { picks, .. } = &mut params {
+        // This matches the generation-frame start numerically, but is not the model endpoint.
         picks.start = vec![PathPick::xy(Point2::new(19.0, 11.0))];
     }
-    run(&world, &mut history, CreateOperation::new(&world, "Picked", TOOL, source, params), "create picked");
-    let e = GenerateOperation::new(&world, "Picked").err().expect("pick frame is not proved under yaw");
+    run(&world, &mut history, CreateOperation::new(&world, "Wrong", TOOL, source, params), "create wrong model pick");
+    let e = GenerateOperation::new(&world, "Wrong").err().expect("wrong model point must rotate and refuse");
     let msg = e.to_string();
-    assert!(msg.contains("start point") && msg.contains("WCS yaw") && msg.contains("pick frame mapping"), "{msg}");
+    assert!(msg.contains("start point") && msg.contains("endpoint chosen by climb"), "{msg}");
 }
