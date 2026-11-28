@@ -23,7 +23,8 @@
 //! the document (`multi_seat`). #3643: a turning tool from linked lathe
 //! components (`lathe_stack`).
 //! #3919: the built-in shrink-fit chucks (`builtin_shrink`).
-//! #4339: standalone tools converted to component stacks (`convert`).
+//! #4339: standalone tools converted to component stacks (`convert`), the
+//! posted program and holder outline they keep (`convert_outline`).
 //! Gate map (M4.4): covers app::tool_library, app::commands (tool_import, tool_assembly),
 //! app::mcp (import_tool_library), app::script (importTools), app::tool_body, app::tool_assembly,
 //! app::project (component_wire, assembly_wire), app::component_library, app::commands (component_sync),
@@ -56,6 +57,8 @@ mod assembly_cmds;
 mod component_files;
 #[path = "tool_library_holders/convert.rs"]
 mod convert;
+#[path = "tool_library_holders/convert_outline.rs"]
+mod convert_outline;
 #[path = "tool_library_holders/component_sync.rs"]
 mod component_sync;
 #[path = "tool_library_holders/component_mcp.rs"]

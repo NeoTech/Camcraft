@@ -2,14 +2,15 @@
 //! A document of standalone end mills: two on a BT30 ER20 holder with
 //! 10 mm of shank in the holder, one with a longer gauge length than the
 //! built-in holder, one with the old default stick-out (no shank in the
-//! holder), one with no holder, and one with a 6.35 mm shank that no
-//! whole-millimetre collet takes. Pinned: the preview names each verdict
+//! holder), one stuck out 5 mm past its shank's end, one with no holder,
+//! and one with a 6.35 mm shank that no whole-millimetre collet takes. Pinned: the preview names each verdict
 //! (same, different with its differences, no match with its reason); the
 //! "same" rows convert in one undo step, and undo restores every tool and
 //! the component table exactly; a "different" row is not converted by
 //! default and converts only when named; a "no match" row refuses the
-//! whole command by name; the posted program of a converted tool does not
-//! change; the MCP dry run returns the preview and changes nothing.
+//! whole command by name; the MCP dry run returns the preview and changes
+//! nothing. The posted program and the holder outline of each converted
+//! row kind are pinned in `convert_outline`.
 //! Provenance: our own tests over our own commands.
 
 use camcraft_app::commands::{
@@ -17,8 +18,7 @@ use camcraft_app::commands::{
 };
 use camcraft_app::mcp::Server;
 use camcraft_app::model;
-use camcraft_app::operation::{Height, OpParams, OpStatus, SrcRef, status_of};
-use camcraft_app::posting;
+use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::{DocumentComponent, ToolAssembly, ToolBody};
 use camcraft_app::tool_assembly::{assembly_of, components};
 use camcraft_app::tool_body::body_of;
@@ -29,16 +29,19 @@ use serde_json::json;
 
 use super::{call, cat};
 
-const SIX: &str = "Six";
-const SIX_B: &str = "Six B";
-const LONG: &str = "Long";
-const BARE: &str = "Bare";
-const INCH: &str = "Inch";
-const LEGACY: &str = "Legacy";
-const ALL: [&str; 6] = [SIX, SIX_B, LONG, BARE, INCH, LEGACY];
+pub(super) const SIX: &str = "Six";
+pub(super) const SIX_B: &str = "Six B";
+pub(super) const LONG: &str = "Long";
+pub(super) const BARE: &str = "Bare";
+pub(super) const INCH: &str = "Inch";
+pub(super) const LEGACY: &str = "Legacy";
+pub(super) const DEEP: &str = "Deep";
+pub(super) const ALL: [&str; 7] = [SIX, SIX_B, LONG, BARE, INCH, LEGACY, DEEP];
 const HOLDER: &str = "BT30 ER20";
+/// How far past its shank's end `Deep` sticks out (mm).
+pub(super) const DEEP_GAP: f64 = 5.0;
 
-fn face() -> OpParams {
+pub(super) fn face() -> OpParams {
     OpParams::Face {
         holes: Default::default(),
         tilt: None,
@@ -56,16 +59,26 @@ fn face() -> OpParams {
     }
 }
 
-/// The five standalone tools, stock, and a generated Face operation on
-/// `Six`.
-fn shop() -> (World, History) {
+/// The seven standalone tools, stock, and a generated Face operation on
+/// each of `Six`, `Legacy` and `Deep` (one "same" row, the two kinds of
+/// "different" shank row).
+pub(super) fn shop() -> (World, History) {
     let w = camcraft_app::world::new_world();
     let mut h = History::default();
     let stock = camcraft_app::stock::StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 };
     h.execute(&w, SetStock::new(&w, stock, Default::default()).expect("stock"));
     let inch = Tool { shank_d: 6.35, ..cat("EM-0600-4FL") };
     let six = cat("EM-0600-4FL");
-    for (name, tool) in [(SIX, six.clone()), (SIX_B, six.clone()), (LONG, six.clone()), (LEGACY, six.clone()), (BARE, cat("EM-0800-4FL")), (INCH, inch)] {
+    let tools = [
+        (SIX, six.clone()),
+        (SIX_B, six.clone()),
+        (LONG, six.clone()),
+        (LEGACY, six.clone()),
+        (DEEP, six.clone()),
+        (BARE, cat("EM-0800-4FL")),
+        (INCH, inch),
+    ];
+    for (name, tool) in tools {
         h.execute(&w, AddTool::new(&w, name, tool).expect("tool"));
     }
     let held = Some(six.flute_len + six.shank_len - 10.0);
@@ -77,10 +90,17 @@ fn shop() -> (World, History) {
     }
     let gauge = camcraft_app::holder_library::find(HOLDER).expect("entry").gauge_len;
     h.execute(&w, SetToolBody::library(&w, LONG, HOLDER, Some(gauge + 5.0), held).expect("long holder"));
-    h.execute(&w, CreateOperation::new(&w, "FaceSix", SIX, SrcRef::Stock, face()).expect("op"));
-    h.execute(&w, GenerateOperation::new(&w, "FaceSix").expect("generate"));
+    let deep = Some(six.flute_len + six.shank_len + DEEP_GAP);
+    h.execute(&w, SetToolBody::library(&w, DEEP, HOLDER, None, deep).expect("deep holder"));
+    for (op, tool) in OPS {
+        h.execute(&w, CreateOperation::new(&w, op, tool, SrcRef::Stock, face()).expect("op"));
+        h.execute(&w, GenerateOperation::new(&w, op).expect("generate"));
+    }
     (w, h)
 }
+
+/// The operations of `shop`, with their tools.
+pub(super) const OPS: [(&str, &str); 3] = [("FaceSix", SIX), ("FaceLegacy", LEGACY), ("FaceDeep", DEEP)];
 
 type Snapshot = (Vec<DocumentComponent>, Vec<(Tool, Option<ToolBody>, Option<ToolAssembly>)>);
 
@@ -105,7 +125,7 @@ fn the_preview_names_each_verdict() {
     let (w, _) = shop();
     let rows = plan(&w, &[]).expect("plan");
     let tools: Vec<&str> = rows.iter().map(|r| r.tool.as_str()).collect();
-    assert_eq!(tools, vec![BARE, INCH, LEGACY, LONG, SIX, SIX_B], "every standalone tool, sorted");
+    assert_eq!(tools, vec![BARE, DEEP, INCH, LEGACY, LONG, SIX, SIX_B], "every standalone tool, sorted");
     let six = rows.iter().find(|r| r.tool == SIX).expect("six");
     assert_eq!(six.verdict, Verdict::Same, "{six:?}");
     assert_eq!(six.names, vec!["BT30 ER20".to_owned(), "ER20 collet 8 mm".to_owned(), SIX.to_owned()]);
@@ -116,6 +136,10 @@ fn the_preview_names_each_verdict() {
     let Verdict::Different(diffs) = verdict(&w, LEGACY) else { panic!("Legacy is different") };
     let six = cat("EM-0600-4FL");
     let want = format!("shank length {:.3} -> {:.3} mm", six.shank_len, six.shank_len + six.shank_d);
+    assert_eq!(diffs, vec![want], "only the shank, never the gauge length");
+    // Stuck out past the shank's end: the shank fills the gap and one shank diameter more.
+    let Verdict::Different(diffs) = verdict(&w, DEEP) else { panic!("Deep is different") };
+    let want = format!("shank length {:.3} -> {:.3} mm", six.shank_len, six.shank_len + DEEP_GAP + six.shank_d);
     assert_eq!(diffs, vec![want], "only the shank, never the gauge length");
     let Verdict::NoMatch(why) = verdict(&w, BARE) else { panic!("Bare has no holder") };
     assert!(why.contains("no holder"), "{why}");
@@ -172,27 +196,6 @@ fn a_no_match_row_refuses_the_whole_command_by_name() {
     assert!(ConvertToComponents::new(&w, &[]).is_err(), "an empty selection");
     assert!(ConvertToComponents::new(&w, &[SIX.to_owned(), SIX.to_owned()]).is_err(), "a name twice");
     assert_eq!(snapshot(&w), before, "nothing changed");
-}
-
-fn post(w: &World, tag: &str) -> String {
-    let out = std::env::temp_dir().join(format!("camcraft-4339-{tag}-{}.nc", std::process::id()));
-    let _ = std::fs::remove_file(&out);
-    posting::post_setup(w, &out).expect("posted");
-    let text = std::fs::read_to_string(&out).expect("program");
-    let _ = std::fs::remove_file(&out);
-    text
-}
-
-#[test]
-fn the_posted_program_of_a_converted_tool_does_not_change() {
-    let (w, mut h) = shop();
-    let before = post(&w, "before");
-    h.execute(&w, ConvertToComponents::new(&w, &[SIX.to_owned()]).expect("convert"));
-    let op = model::find_by_name(&w, "FaceSix").expect("op");
-    if status_of(&w, &op) == OpStatus::Stale {
-        h.execute(&w, GenerateOperation::new(&w, "FaceSix").expect("generate again"));
-    }
-    assert_eq!(post(&w, "before"), before, "the same program after the conversion");
 }
 
 #[test]

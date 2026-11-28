@@ -15,11 +15,12 @@ use camcraft_tools::component::{ComponentKind, CuttingItem, ToolComponent, ADAPT
 use camcraft_tools::component_fit::check_fit;
 use camcraft_tools::component_geometry::ComponentGeometry;
 use camcraft_tools::connection_code::ConnectionCode;
+use camcraft_tools::holder_profile::HolderProfile;
 
 use crate::commands::tool_assembly::ToolUpdate;
 use crate::component_library::{builtins, BUILTIN_PREFIX};
 use crate::model;
-use crate::schema::{AssemblyLink, DocumentComponent, LibraryRef};
+use crate::schema::{AssemblyLink, DocumentComponent, LibraryRef, ToolBody};
 use crate::tool_assembly::{self as ta, Mount};
 use crate::tool_body::{self, LATHE_HELD};
 use crate::tools::Tool;
@@ -122,7 +123,10 @@ fn row(world: &World, name: &str, entity: Entity, table: &[DocumentComponent], l
     if LATHE_HELD.contains(&current.kind) {
         return ConvertRow::no(name, format!("no holder: a {} sits in a lathe holder, which has no built-in component", current.kind));
     }
-    let Some(href) = tool_body::body_of(world, &entity).and_then(|b| b.library) else {
+    let Some(old) = tool_body::body_of(world, &entity) else {
+        return ConvertRow::no(name, "no holder: the tool names no library holder");
+    };
+    let Some(href) = old.library.clone() else {
         return ConvertRow::no(name, "no holder: the tool names no library holder");
     };
     let holder_id = format!("{BUILTIN_PREFIX}holder:{}", href.entry);
@@ -135,6 +139,9 @@ fn row(world: &World, name: &str, entity: Entity, table: &[DocumentComponent], l
     // no shank in the holder, which a stack refuses: the cutting item
     // takes one shank diameter more of shank, in the bore, and the gauge
     // length stays. The longer shank shows as a difference.
+    // A projection past the shank's end leaves a gap between the shank and
+    // the holder nose: the longer shank fills that gap too (steel added
+    // outside the holder, never taken away).
     let full = current.flute_len + current.shank_len;
     let item = if href.projection >= full {
         Tool { shank_len: href.projection - current.flute_len + current.shank_d.max(1.0), ..current.clone() }
@@ -147,9 +154,12 @@ fn row(world: &World, name: &str, entity: Entity, table: &[DocumentComponent], l
     };
     let mut chain = vec![holder.clone()];
     if check_fit(&holder.component, ADAPTIVE_PORT, &cutting.component).is_err() {
+        // Only a built-in collet (a document copy or the library's own):
+        // never a user adapter or extension, which would move the gauge.
+        let collet_prefix = format!("{BUILTIN_PREFIX}collet:");
         let takes = |r: &&DocumentComponent| {
             matches!(r.component.kind(), ComponentKind::AdaptiveItem { .. })
-                && r.component.id() != holder_id
+                && r.component.id().starts_with(&collet_prefix)
                 && check_fit(&holder.component, ADAPTIVE_PORT, &r.component).is_ok()
         };
         let collets: Vec<&DocumentComponent> = table.iter().chain(library).filter(takes).collect();
@@ -195,7 +205,14 @@ fn row(world: &World, name: &str, entity: Entity, table: &[DocumentComponent], l
     if let Err(e) = ToolUpdate::new(world, name, &links, &next) {
         return ConvertRow::no(name, e.to_string());
     }
-    let diffs = differences(&current, &derived.tool, href.gauge_len + href.projection, derived.gauge_len);
+    let mut diffs = differences(&current, &derived.tool, href.gauge_len + href.projection, derived.gauge_len);
+    // The holder body the collision laws read: the library holder's own
+    // outline, or a difference; a smaller outline is no match.
+    match outline_difference(&old, &current, derived.body.as_ref(), &derived.tool) {
+        Ok(None) => {}
+        Ok(Some(d)) => diffs.push(d),
+        Err(why) => return ConvertRow::no(name, why),
+    }
     let verdict = if diffs.is_empty() { Verdict::Same } else { Verdict::Different(diffs) };
     ConvertRow { tool: name.to_owned(), links, names, adds, verdict }
 }
@@ -216,6 +233,46 @@ fn cutting_row(name: &str, tool: &Tool, table: &[DocumentComponent]) -> Result<D
         Some(held) if *held != row => Err(format!("the document holds another tool component '{id}'")),
         _ => Ok(row),
     }
+}
+
+/// The stack's holder body against the library holder body the tool has
+/// now. `Ok(None)`: the same outline, bit for bit (the drawn profile and
+/// the bands). `Ok(Some(..))`: another outline that covers the old one
+/// everywhere, in words. `Err(..)`: no body, or an outline that is
+/// narrower than the old one anywhere - the collision laws must never
+/// read a smaller holder. Compared as the laws read the bands
+/// (`tool_body::checked_profile`).
+pub fn outline_difference(old: &ToolBody, now: &Tool, new: Option<&ToolBody>, next: &Tool) -> Result<Option<String>, String> {
+    let Some(new) = new else {
+        return Err("the stack has no holder body".to_owned());
+    };
+    let (Some(a), Some(b)) = (old.profile(), new.profile()) else {
+        return Err("the holder body is not a spindle body".to_owned());
+    };
+    if old.spun == new.spun && a == b && old.machine_default == new.machine_default {
+        return Ok(None);
+    }
+    let a = tool_body::checked_profile(now, a.clone(), old.machine_default);
+    let b = tool_body::checked_profile(next, b.clone(), new.machine_default);
+    let reach = |p: &HolderProfile, z: f64| {
+        p.bands().iter().filter(|q| q.above <= z && z <= q.above + q.len).fold(0.0_f64, |m, q| m.max(q.r))
+    };
+    let mut cuts: Vec<f64> =
+        a.bands().iter().chain(b.bands()).flat_map(|q| [q.above, q.above + q.len]).filter(|z| z.is_finite()).collect();
+    cuts.sort_by(f64::total_cmp);
+    cuts.dedup();
+    let mut wider = 0.0_f64;
+    for w in cuts.windows(2) {
+        let z = 0.5 * (w[0] + w[1]);
+        let (ra, rb) = (reach(&a, z), reach(&b, z));
+        if rb < ra {
+            return Err(format!(
+                "the stack's holder outline is narrower than the library holder at {z:.3} mm above the tip ({rb:.3} < {ra:.3} mm radius)"
+            ));
+        }
+        wider = wider.max(rb - ra);
+    }
+    Ok(Some(format!("holder outline: not the library holder's own (up to {wider:.6} mm wider, never narrower)")))
 }
 
 /// The differences between the tool now and the derived tool, in words.
