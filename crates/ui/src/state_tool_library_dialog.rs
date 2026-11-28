@@ -183,6 +183,8 @@ pub struct ToolLibraryView {
     pub stack: Option<StackDraft>,
     /// #4337: the Recipes tab's derived lines.
     pub recipes: RecipesView,
+    /// #4370: the editor's typed new name (`state_tool_rename`).
+    pub rename: Option<super::RenameDraft>,
 }
 
 /// #4337: the Recipes tab's derived lines (surface speed and chip load of
@@ -288,6 +290,7 @@ impl State {
     pub(crate) fn close_tool_in_library(&mut self) {
         if let Some(view) = self.tool_library.as_mut() {
             view.editor = None;
+            view.rename = None;
         }
     }
 
@@ -312,9 +315,10 @@ impl State {
     /// tool now reads as a draft. Duplicate copies the applied tool, so the
     /// footer disables it while this holds (no edit is dropped silently).
     /// A draft not yet read (or read before a command) is not dirty: the
-    /// next draw reads it again.
+    /// next draw reads it again. #4370: the typed name is apart
+    /// (`library_draft_changed` adds it).
     #[must_use]
-    pub(crate) fn library_draft_changed(&self) -> bool {
+    pub(crate) fn library_fields_changed(&self) -> bool {
         let Some(e) = self.tool_library.as_ref().and_then(|v| v.editor.as_ref()) else {
             return false;
         };

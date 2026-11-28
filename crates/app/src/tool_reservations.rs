@@ -27,9 +27,16 @@ pub(crate) fn on_machine(machine: &Machine, name: &str, kind: ToolKind, number: 
 
 /// Edits judge every machine that uses the tool; an unused tool takes the active machine.
 pub(crate) fn for_tool(world: &World, name: &str, kind: ToolKind, number: u32) -> Result<(), String> {
+    for_tool_as(world, name, name, kind, number)
+}
+
+/// #4370: judge the tool that the operations know as `users` under the
+/// name `name` (a rename asks the machines of those operations about the
+/// new name).
+pub(crate) fn for_tool_as(world: &World, users: &str, name: &str, kind: ToolKind, number: u32) -> Result<(), String> {
     let mut machines = Vec::new();
     for (_, entity) in model::named_entities(world) {
-        if let Some(op) = model::operation_of(world, &entity).filter(|op| op.tool == name) {
+        if let Some(op) = model::operation_of(world, &entity).filter(|op| op.tool == users) {
             let machine = crate::machine::of_setup(world, op.setup.as_deref());
             if !machines.contains(&machine) {
                 machines.push(machine);

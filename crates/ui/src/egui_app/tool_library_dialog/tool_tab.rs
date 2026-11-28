@@ -11,12 +11,14 @@
 //! a SHANK group; then the assembly group. Each value is a draft field
 //! with its unit as a suffix (the form seam); the footer's Apply lands
 //! them through `ChangeTool` (and `SetToolNumber`), one undo step.
+//! #4370: the Name row is a text field; Apply renames the tool
+//! (`RenameTool`) and each operation that uses it.
 //! Provenance: our own tab over the tool draft; no HSMWorks material
 //! involved.
 
 use egui::{RichText, Ui};
 
-use super::super::layout::prop_row_hint;
+use super::super::layout::{hint, text_row};
 use super::super::tool_settings_grid as grid;
 use crate::state::State;
 
@@ -25,16 +27,15 @@ pub(crate) const CUTTER: &str = "CUTTER";
 pub(crate) const SHANK: &str = "SHANK";
 /// The name row's label.
 pub(crate) const NAME: &str = "Name";
-/// Why the name is not typed here (no rename command yet).
+/// #4370: what a new name does (Apply lands it as one `RenameTool`).
 pub(crate) const NAME_HINT: &str =
-    "the tool's name; operations and scripts address the tool by it, so it is not changed here";
+    "the tool's name; Apply renames the tool, and each operation that uses it follows the new name";
 
 /// The rows, then "Edit tool shape". Returns whether that button was
 /// clicked; the caller opens the shape window after the window's draft is
 /// put back (`State::with_library_draft`).
 pub(super) fn draw(ui: &mut Ui, state: &mut State) -> bool {
-    let name = state.tool_ui.name.clone();
-    prop_row_hint(ui, NAME, NAME_HINT, |ui| ui.label(name));
+    name_row(ui, state);
     grid::type_row(ui, state);
     grid::number_row(ui, state);
     section(ui, CUTTER);
@@ -46,6 +47,18 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) -> bool {
     ui.button("Edit tool shape")
         .on_hover_text("open the drawn holder profile, the cutter and the body in their own window")
         .clicked()
+}
+
+/// #4370: the Name row is a text field. The typed name is a draft of
+/// the window (`State::set_library_name_text`); the footer's Apply lands
+/// it with the other draft fields.
+fn name_row(ui: &mut Ui, state: &mut State) {
+    let name = state.tool_ui.name.clone();
+    let mut text = state.library_name_text(&name);
+    if text_row(ui, NAME, &mut text, "tool_library_name", 220.0).changed() {
+        state.set_library_name_text(&name, text);
+    }
+    hint(ui, NAME_HINT);
 }
 
 /// The cutter's rows in the mock-up's order, then the rows that only the

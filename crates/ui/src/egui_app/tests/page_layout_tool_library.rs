@@ -202,6 +202,9 @@ fn layout_window_tool_editor() {
         }
         prev = Some((l, r.top()));
     }
+    // #4370: the Name row is a text field (Apply renames the tool).
+    let name_field = node.query_all_by_role_and_label(egui::accesskit::Role::TextInput, NAME).next().map(|n| n.rect());
+    assert!(name_field.is_some_and(|r| r.right() < view.left()), "the Name row has a text field in the rows: {name_field:?}");
     assert!(rect(crate::egui_app::tool_library_dialog::assembly_group::HEADING).top() > rect("Shank diameter").top(), "the assembly group follows the SHANK group");
     assert!(win.expand(1.0).contains_rect(holder), "the toggles {holder:?} stay in the window {win:?}");
     // #3908: Flutes follows Holder on its row, or wraps under it.

@@ -59,6 +59,9 @@ mod program_info;
 mod tool_library_io;
 #[path = "state_tool_library_dialog.rs"]
 mod tool_library_dialog;
+#[path = "state_tool_rename.rs"]
+mod tool_rename;
+pub use tool_rename::RenameDraft;
 pub use tool_library_dialog::{
     EditorFace, HoldersView, LibraryPage, PreviewMode, ToolCategory, ToolEditorTab, ToolLibraryView, ToolSource,
 };
@@ -389,6 +392,12 @@ pub enum CommandKind {
     /// #4340: copy a stored tool with its holder and component stack
     /// (`DuplicateTool`) and open the copy in the tool library's editor.
     DuplicateTool(String),
+    /// #4370: rename a stored tool and each operation that uses it
+    /// (`RenameTool`) - the tool library editor's Apply of its Name field.
+    RenameTool {
+        from: String,
+        to: String,
+    },
     /// #371: set (`Some`) or clear (`None`) a tool's modelled body - the
     /// tool editor's Apply body / Clear body, one `SetToolBody`.
     SetToolBody {
@@ -3441,6 +3450,8 @@ impl State {
     /// call every frame; never blocks.
     pub fn drain_actions(&mut self) {
         use crate::frame_cost::span;
+        // #4370: the views follow a tool that a command renames.
+        let views = self.tool_views();
         while let Some(action) = self.pending.pop_front() {
             let _s = span("commands/run");
             self.run(action);
@@ -3467,6 +3478,7 @@ impl State {
         crate::frame_cost::time("commands/retire_feedback", || self.retire_stale_feedback());
         // #406: the incoming stock's sheet follows the open setup page.
         crate::frame_cost::time("commands/incoming_view", || crate::incoming_view::refresh(self));
+        self.follow_renamed_tools(views);
         let _s = span("commands/tool_shape_editor");
         // The editor window's ghost law, mirroring `pane_target`: an open
         // editor never keeps pointing at a name the document lost under it
@@ -3876,6 +3888,7 @@ impl State {
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not deleted: {err}")),
             },
             CommandKind::DuplicateTool(name) => self.run_duplicate_tool(&name),
+            CommandKind::RenameTool { from, to } => self.run_rename_tool(&from, &to),
             CommandKind::CreateOperation {
                 name,
                 tool,

@@ -252,14 +252,19 @@ fn act(state: &mut State, face: &frame::Face, ask: frame::Ask) {
 
 /// One Apply queues the draft (`ChangeTool`, or `ReshapeTool` when a drawn
 /// cutter rides it) and, when the number changed, `SetToolNumber` - the
-/// same commands as Properties' Apply.
+/// same commands as Properties' Apply. #4370: a typed new name lands last,
+/// as one `RenameTool`; a rename alone queues only that.
 fn apply_tool(state: &mut State) {
-    let _ = state.with_library_draft(|state, _| {
-        let name = state.tool_ui.name.clone();
-        let apply = state.apply_tool_numbers(&name);
-        state.pending.push_back(apply);
-        super::tool_settings::push_number_if_changed(state, &name);
-    });
+    let rename = state.library_rename();
+    if rename.is_none() || state.library_fields_changed() {
+        let _ = state.with_library_draft(|state, _| {
+            let name = state.tool_ui.name.clone();
+            let apply = state.apply_tool_numbers(&name);
+            state.pending.push_back(apply);
+            super::tool_settings::push_number_if_changed(state, &name);
+        });
+    }
+    state.push_library_rename(rename);
 }
 
 /// The full list, or the rail beside the editor when a tool is open.
