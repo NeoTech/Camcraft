@@ -251,6 +251,17 @@ fn layout_window_tool_editor() {
     assert!(tab.top() < explain.top() && explain.bottom() <= material.top() + 1.0, "the explanation {explain:?} heads the table {material:?}");
     assert!(material.left() < rpm.left() && rpm.left() < stepdown.left(), "Material, Spindle rpm, Stepdown read left to right");
     assert!(add.top() > material.bottom(), "the buttons {add:?} follow the table");
+    // #4453: the surface speed and chip load inputs stand between the
+    // table and the buttons, the surface speed left of the chip load.
+    let vc_fz = |what: &str| {
+        node.query_all_by_label_contains(what)
+            .find(|n| n.accesskit_node().role() == egui::accesskit::Role::SpinButton)
+            .unwrap_or_else(|| panic!("the Recipes tab has no {what:?} input"))
+            .rect()
+    };
+    let (vc, fz) = (vc_fz(crate::egui_app::tool_library_dialog::recipes_speeds::VC), vc_fz(crate::egui_app::tool_library_dialog::recipes_speeds::FZ));
+    assert!(vc.top() > rpm.bottom() && vc.bottom() <= add.top() + 1.0, "the surface speed {vc:?} stands under the table, above the buttons");
+    assert!((vc.top() - fz.top()).abs() < 2.0 && vc.right() <= fz.left(), "the surface speed {vc:?} then the chip load {fz:?} on one row");
     assert!((add.top() - suggest.top()).abs() < 2.0 && add.right() <= suggest.left() + 1.0, "Add {add:?} then Suggest {suggest:?} on one row");
     assert!(copy.top() >= suggest.top() - 2.0, "Copy {copy:?} follows Suggest, on its row or under it");
     assert!(units.top() > copy.top() && units.bottom() < apply.top(), "the units note {units:?} follows the buttons, above Apply");
