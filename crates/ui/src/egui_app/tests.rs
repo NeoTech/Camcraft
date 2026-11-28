@@ -302,6 +302,8 @@ mod setup_post_options_bleed;
 mod import_outward;
 // #1988: painted ribbon cells, tabs, and dropdown rows expose AccessKit nodes.
 mod ribbon_accesskit;
+// #4484: the one command table, the menu bar and its layout test.
+mod command_table;
 // #1946: native AI chat dock panel, worker, Inbox::channel MCP dispatch, and offline UI tests.
 mod ai_chat;
 // #2011: EDM tool visibility matches selectable machine kinds.
