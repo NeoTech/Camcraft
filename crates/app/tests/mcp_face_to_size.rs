@@ -169,6 +169,8 @@ fn face_to_size_refuses_bad_numbers_by_name_and_changes_nothing() {
         (with("tool", json!("")), "tool"),
         (with("tool", json!("NO-SUCH-TOOL")), "NO-SUCH-TOOL"),
         (with("final_z", json!(-20.0)), "stock bottom"),
+        (with("stock", json!({ "dx": 80.0, "dy": 60.0, "dz": -5.0 })), "stock size"),
+        (with("stock", json!({ "dx": 0.0, "dy": 60.0, "dz": 20.0 })), "stock size"),
     ];
     for (args, words) in cases {
         let why = c.refused("face_to_size", args.clone());

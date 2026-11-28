@@ -94,6 +94,11 @@ fn check_numbers(s: &FaceToSizeSpec) -> Result<(), CommandError> {
     if s.feed <= 0.0 || s.plunge_feed <= 0.0 {
         return Err(invalid(format!("the feed {} and the plunge feed {} must be more than 0", s.feed, s.plunge_feed)));
     }
+    if let Some(size) = s.stock
+        && !size.iter().all(|v| v.is_finite() && *v > 0.0)
+    {
+        return Err(invalid(format!("the stock size {size:?} must be three numbers more than 0")));
+    }
     if s.tool.trim().is_empty() {
         return Err(CommandError::Needs("face to size needs a tool - add a facing tool first".into()));
     }
