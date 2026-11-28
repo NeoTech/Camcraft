@@ -24,6 +24,7 @@ pub(super) struct CleanChain {
 
 /// Peel outward from `cleared.offset(-(r + 0.02))` inside `center` up to `step <= 0.6*r`
 /// per ring, keeping only chains that remove real uncut stock inside `reach`.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn plan_cleanup(
     center: &Region,
@@ -34,6 +35,23 @@ pub(super) fn plan_cleanup(
     optimal_load: f64,
     climb: bool,
     t: &AdaptiveTrochParams,
+) -> Result<(Vec<CleanChain>, Region), GenError> {
+    plan_cleanup_step(center, reach, used_center, cleared, d, optimal_load, climb, t, 1.0)
+}
+
+/// [`plan_cleanup`] with its peel step scaled by `step_scale` (#3849:
+/// the engagement check's step-down ladder).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn plan_cleanup_step(
+    center: &Region,
+    reach: &Region,
+    used_center: &Region,
+    cleared: &Region,
+    d: f64,
+    optimal_load: f64,
+    climb: bool,
+    t: &AdaptiveTrochParams,
+    step_scale: f64,
 ) -> Result<(Vec<CleanChain>, Region), GenError> {
     let r = 0.5 * d;
     let raw_center = center.offset(-0.5e-3)?;
@@ -57,14 +75,15 @@ pub(super) fn plan_cleanup(
     let safe_center = round_acute_corners(&raw_center, rho_acute, 0.20 * r)?.union(&air0)?.intersect(&raw_center)?;
     let mut prev_safe = air0.clone();
     // 0.18*r peel steps with 0.20*r 90-deg rounding hold <= 90 deg even into tight neck corners.
-    let step = load_step(d, optimal_load).min(0.18 * r);
+    let base_step = load_step(d, optimal_load).min(0.18 * r);
     // A custom contact-angle limit must also bound the cleanup front.
     let angle_scale = if t.max_engagement < 90.0 { 1.0 - t.max_engagement.to_radians().cos() } else { 1.0 };
     let engagement_step = 0.18 * r * angle_scale;
-    let step = step.min(engagement_step);
+    let step = (base_step.min(engagement_step) * step_scale).max(1e-4);
+    let max_peel_steps = ((MAX_PEEL_STEPS as f64) / step_scale).ceil().max(1.0) as usize;
     let mut chains = Vec::new();
 
-    for k in 1..=MAX_PEEL_STEPS {
+    for k in 1..=max_peel_steps {
         if uncut.offset(-UNCUT_SKIN_ERODE)?.is_empty() || safe_center.difference(&prev_safe)?.area() < 0.02 {
             break;
         }

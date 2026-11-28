@@ -46,6 +46,8 @@ mod heavy_covers_tests;
 mod heavy_files;
 #[cfg(test)]
 mod heavy_files_tests;
+#[cfg(test)]
+mod heavy_gate_map_tests;
 mod lanes;
 mod light;
 #[cfg(test)]
@@ -82,7 +84,10 @@ mod merge_plan_out;
 #[cfg(test)]
 mod merge_plan_tests;
 mod merge_review;
+mod merge_trial;
 mod package;
+#[cfg(test)]
+mod ownership_contract_tests;
 mod path_mods;
 mod plan;
 mod process_bump;
@@ -103,6 +108,9 @@ mod select;
 #[cfg(test)]
 mod select_tests;
 mod single;
+mod site_step;
+#[cfg(test)]
+mod site_step_tests;
 mod stale_base;
 #[cfg(test)]
 mod stale_base_tests;
@@ -131,16 +139,17 @@ pub use gate_args::{parse_gate, GateArgs};
 
 pub(crate) const USAGE: &str = "\
 usage:
-  cargo xtask gate quick [--base main] [--heavy]   tests the diff touches (test fns where it can)
-  cargo xtask gate batch                           per-crate debug prebuilds, then parallel lanes for each test target minus SLOW_BINARIES, ui, clippy (#1941, #2727)
+  cargo xtask gate quick [--base main] [--heavy]   tests the diff touches (test fns where it can); the site tests when a site_step::INPUTS path changed
+  cargo xtask gate batch                           per-crate debug prebuilds, then parallel lanes for each test target minus SLOW_BINARIES, ui, clippy, site tests (#1941, #2727, #4133)
   cargo xtask gate light                           the light twins of the heavy tests, in release (#2569): at review and merge time
   cargo xtask gate heavy [--base main]             the release --ignored heavy lanes the diff reaches, also through crate dependencies (#2568)
       gate heavy: --covers <PR>:<head sha> [--covers ...]   a wave's trial tree: refuse a head that is not an ancestor of HEAD,
                                                    print the heads and HEAD^{tree}, write covers.txt to the logs (#3460)
   cargo xtask gate release [--no-snapshots]        everything, plus the --ignored heavy lanes (one step per binary) and the ui snapshot lane
+                                                   site tests (python, zola, node): a missing tool is SKIP in quick/batch, FAIL in release (#4133)
                                                    (--no-snapshots: not the Windows-made pixel goldens - cut.yml on Linux, #1413)
   cargo xtask gate test <filter> [--crate c] [--binary b] [--exact]   exactly the matching test(s)
-      any gate (not test): --only <step> [--only <step>...]   run only the steps whose name starts with <step> (kernel, clippy, ui)
+      any gate (not test): --only <step> [--only <step>...]   run only the steps whose name starts with <step> (kernel, clippy, ui, site tests)
       any gate (not test): --failed <gate-logs/run>           run only the steps that failed in that earlier run (#1702)
       any gate: --dry-run (or --plan) prints the plan without running it. Logs: gate-logs/<tier>-<timestamp>/.
   cargo xtask gate batch --lane N/M                lane N of M of the batch plan: each step is in exactly one lane; writes lane-result.tsv (#2908)
@@ -152,7 +161,7 @@ usage:
   cargo xtask decisions --version X.Y.Z            gather docs/decisions/*.md into RECOMMENDED.md
   cargo xtask release --version X.Y.Z --no-tag [--title T] [--skip-gate] [--skip-build] [--installer] [--dry-run]
                                                    the release cut on release/vX.Y.Z (scripts/release.ps1's phases)
-  cargo xtask merge-plan <PR>... | --label <name> [--json] | --delta <PR> --reviewed <sha>
+  cargo xtask merge-plan <PR>... | --label <name> [--json] [--check] | --delta <PR> --reviewed <sha>
                                                    the merge order of open PRs (waves, refresh only at merge time)
                                                    or the delta class of a PR since a reviewed head (#1221)
   cargo xtask process-bump                         PROCESS_VERSION + 1, the one writer of that file (#1153)

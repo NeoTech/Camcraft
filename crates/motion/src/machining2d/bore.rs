@@ -271,6 +271,12 @@ pub fn bore_started(p: &BoreParams, pass_start: PassStart) -> Result<Toolpath, G
         .with_arc_radius(p.tool_diameter)
         .with_links(p.links, p.helix_radius)
         .with_ring_zig();
+    // The user chose a ramp or a helix: a small ring takes the many legs its
+    // angle needs. A plunge bore keeps the 64-leg law, so a cutter that may
+    // not plunge into solid is still refused by name (#1036), not ramped.
+    if p.entry != Entry3D::Plunge {
+        motion = motion.with_zig_legs(crate::links::MAX_BORE_ZIG_LEGS);
+    }
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     // #3360/#3402: Outside cuts each level's wall ring first, a full tool
     // width along the hole wall in uncut stock. The family warning law

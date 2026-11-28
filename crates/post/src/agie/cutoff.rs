@@ -1,4 +1,4 @@
-//! Straight open QN2 cut from the Agie Processor open-work format and CAMCraft's controller trials.
+//! Straight open QN2 cut from our own implementation of the open-work format and CamCraft's controller trials.
 use super::{AgieJob, AgieSide, contour::micrometres};
 use crate::agie_setup::{CUTOFF_HEIGHT_UM, CutoffSetup20, CutoffSide, qn2_offsets_um};
 

@@ -32,7 +32,8 @@ FAMILIES = {
         "Flow5D": "5-Axis Flow", "MultiAxisContour": "Multi-Axis Contour",
         "Swarf": "Swarf", "AdvancedSwarf": "Advanced Swarf",
         "RotaryContour": "Rotary Contour", "RotaryParallel": "Rotary Parallel",
-        "RotaryOffset": "Rotary Offset", "MultiAxisRough": "Multi-Axis Rough",
+        "RotaryOffset": "Rotary Offset", "RotaryFlow": "Rotary Flow",
+        "MultiAxisRough": "Multi-Axis Rough",
         "MultiAxisDeburr": "Multi-Axis Deburr",
     },
     "turning": {

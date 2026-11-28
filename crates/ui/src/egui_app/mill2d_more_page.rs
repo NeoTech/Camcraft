@@ -36,10 +36,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             helix_radius, blend_turns, blend_radius,
             tilt,
             extend_start,
-            extend_end, picks: _,
+            extend_end, picks,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "s", Some((entry, helix_radius)), links);
+                // #3325: the slot end where the pass starts, and where it stops.
+                super::start_exit_rows::end_groups(ui, u, picks);
             }
             if tab == SEC_GEO {
                 // #1504: picks seed the slot and bound it - echoed here,

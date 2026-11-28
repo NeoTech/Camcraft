@@ -279,6 +279,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_cross_drill_enters_the_posed_law_but_an_axial_drill_does_not() {
+        use crate::drilling::{CrossHole, CycleChoice};
+        let rotaries = [AxisLimits { name: "A".into(), rotary: true, axis: Some([1.0, 0.0, 0.0]), turns_part: Some(true), ..Default::default() }];
+        let mut params = OpParams::Drill {
+            clearance_z: super::super::Height::fixed(40.0), retract_z: None,
+            top_z: super::super::Height::fixed(20.0), bottom_z: None,
+            cycle: CycleChoice::Auto, peck: 0.0, dwell: 0.0, feed: 120.0, plunge_feed: 80.0,
+            holes: vec![],
+            cross: vec![CrossHole { origin: Point3::new(10.0, 0.0, 0.0), dir: Point3::new(-1.0, 0.0, 0.0), radius: 2.0, entry_d: 0.0, floor_d: -6.0, through: false }],
+            break_through: None, break_through_from: Default::default(), picks: Default::default(),
+        };
+        assert!(!multi_axis(&params) && params.tilt().is_none(), "only the cross-drill branch can admit this kind");
+        let origin = Point3::new(2.0, 3.0, 5.0);
+        assert!(matches!(turn_of(&params, true, Some(&rotaries), [2.0, 3.0, 5.0]),
+            Ok(Some(PosedTurn::Line { origin: o, dir: [1.0, 0.0, 0.0] })) if o == origin));
+        assert!(matches!(turn_of(&params, false, Some(&rotaries), [0.0; 3]), Ok(None)), "not the mill posting order");
+        assert!(matches!(turn_of(&params, true, None, [0.0; 3]), Ok(None)), "no mounted rotary");
+        if let OpParams::Drill { cross, .. } = &mut params {
+            cross.clear();
+        }
+        assert!(matches!(turn_of(&params, true, Some(&rotaries), [0.0; 3]), Ok(None)), "an axial drill is not a posed kind");
+    }
+
+    #[test]
+    fn the_fixed_table_reads_a_single_rotary_line_in_the_paths_height_scale() {
+        // One table rotary, not the two-rotary sphere. The origin and
+        // plane base differ in X and Z; the non-unit up must normalize.
+        let turn = PosedTurn::Line { origin: Point3::new(2.0, 3.0, 5.0), dir: [1.0, 0.0, 0.0] };
+        let table = [FixtureBox { min: Point3::new(-200.0, -200.0, -1e6), max: Point3::new(200.0, 200.0, 7.0) }];
+        let names = [MACHINE_TABLE.to_string()];
+        assert_eq!(table_top(&turn, &table, &names, [0.0, 0.0, 1.0], Point3::ZERO), Some(7.0));
+        // lift = (2-8)*0.6 + (5-20)*0.8 = -15.6; top-o.z = 2.
+        let top = table_top(&turn, &table, &names, [3.0, 0.0, 4.0], Point3::new(8.0, 3.0, 20.0)).expect("table top");
+        assert!((top - (-13.6)).abs() < 1e-12, "{top}");
+        assert_eq!(table_top(&turn, &table, &["vise".into()], [0.0, 0.0, 1.0], Point3::ZERO), None);
+    }
+
+    #[test]
     fn the_fixed_table_reads_its_top_in_the_paths_height_scale() {
         // The table top at Z0, the lines through (0, 0, 5): upright the
         // top is Z0; along a B 30 axis from the plane origin (0, 0, 20)

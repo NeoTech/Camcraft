@@ -30,6 +30,8 @@ use std::path::Path;
 
 #[path = "posting_agie.rs"]
 pub mod agie;
+#[path = "posting_aliases.rs"]
+pub mod aliases;
 
 #[path = "posting_waterjet.rs"]
 mod waterjet;
@@ -61,10 +63,11 @@ pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 /// The registry entries that speak WIRE EDM (#533): RS-274 motion with
 /// the control's own codes from the machine file, and (#617) the Sodick
 /// dialect with its manual's words, and (#2700) the G-EDM dialect for
-/// G-RBLv3 controllers. They serve wire EDMs only, and no cutting post
-/// serves one. The first is the default for a wire EDM.
+/// G-RBLv3 controllers, and (#4045) the Sodick LN2W dialect. They serve
+/// wire EDMs only, and no cutting post serves one. The first is the
+/// default for a wire EDM.
 pub const WIRE_POSTS: &[&str] =
-    &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)", agie::POST, "G-EDM Wire EDM"];
+    &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)", agie::POST, "G-EDM Wire EDM", "Sodick Wire EDM (LN2W)"];
 
 /// The registry entries that speak SINKER EDM (#542): RS-274 motion
 /// with the control's own codes from the machine file, each declaring
@@ -100,6 +103,8 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
         Kind::SinkerEdm => sinker_post,
         // No waterjet post ships in this data-model slice.
         Kind::Waterjet => false,
+        // #4081: no laser post ships in the kind slice; the laser post slice adds it.
+        Kind::Laser => false,
     }
 }
 
@@ -126,7 +131,8 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::SinkerEdm => SINKER_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn | crate::machine::Kind::Waterjet => PostRef::Builtin,
+        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn | crate::machine::Kind::Waterjet
+        | crate::machine::Kind::Laser => PostRef::Builtin,
     }
 }
 
@@ -372,6 +378,8 @@ mod wcs_slot;
 mod mounts;
 #[path = "posting_setup_change.rs"]
 mod setup_change;
+#[path = "posting_pattern.rs"]
+mod pattern;
 #[path = "posting_program.rs"]
 mod program;
 pub use program::{
@@ -445,7 +453,7 @@ pub(crate) fn json_map_to_overrides(val: &Value) -> Result<BTreeMap<String, Opti
 
 /// Resolve a built-in post name or `.cps` file path to its [`PostRef`] and script text (#258, #2190).
 pub fn resolve_cps(cps: &str) -> Result<(PostRef, String), String> {
-    let cps = agie::current_name(cps);
+    let cps = aliases::current_name(cps);
     if BUILTINS.iter().any(|(n, _)| *n == cps) {
         return Ok((PostRef::Named(cps.to_owned()), builtin_post_text(cps)?.to_owned()));
     }
@@ -650,7 +658,7 @@ fn post_script_as(
 pub fn post_setup_unwritten(world: &World) -> Result<Posted, String> {
     let post = mounts::single(world, true)?.post;
     if agie::is_native(&post) {
-        return Err("Native wire EDM jobs require a job directory on the desktop or CLI".into());
+        return Err("Agie Wire EDM jobs require a job directory on the desktop or CLI".into());
     }
     let (label, cps) = script_of(&post)?;
     let posted = post_script_body_with(world, &cps, Some(&label), Some(&post), None);
@@ -1001,6 +1009,9 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
     problems.extend(crate::operation::avoid::live_avoid_problems(world));
+    // #3012: each shifted copy of a pattern folder, against the machine
+    // travel and the fixtures - the copy-1 clauses above do not see it.
+    problems.extend(pattern::pattern_problems(world));
     let plasma_line = match (plasma.line, wire.line) {
         (Some(p), Some(w)) => Some(format!("{p}; {w}")),
         (p, w) => p.or(w),
@@ -1016,6 +1027,10 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     let not_judged = match (not_judged, swing) {
         (Some(s), Some(w)) => Some(format!("{s}; {w}")),
         (s, w) => s.or(w),
+    };
+    let not_judged = match (not_judged, pattern::not_judged(world)) {
+        (Some(s), Some(p)) => Some(format!("{s}; {p}")),
+        (s, p) => s.or(p),
     };
     GateReport { problems, not_judged, warnings: plasma.warnings }
 }
@@ -1179,8 +1194,12 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
     })?;
     // #1532: a setup change stops for the re-clamp (by default).
     let changes = setup_change::fold(world, &ops, &mut afters, by_post)?;
-    let mut streams = Vec::with_capacity(ops.len());
-    for (name, e) in &ops {
+    // #3012: a pattern folder's members post once per copy (by tool: one
+    // section each; by part: one section per copy and member).
+    let plan = pattern::plan(world, &ops)?;
+    let mut streams = Vec::with_capacity(plan.len());
+    for unit in &plan {
+        let (name, e) = (&unit.name, &unit.entity);
         let op = model::operation_of(world, e)
             .ok_or_else(|| format!("{name}: lost its operation"))?;
         let cache = model::toolpath_of(world, e)
@@ -1268,7 +1287,8 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         // #630: a nose-centre turning path posts as the tool's control
         // point for its orientation (or is refused by name when the
         // orientation cannot cut it); the cache stays the nose truth.
-        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin)
+        let path = pattern::path_for(unit, &cache.path, hs.clearance).map_err(|e| format!("{display_name}: {e}"))?;
+        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &path, origin)
             .map_err(|e| format!("{display_name}: {e}"))?;
         let d = Dump {
             op_kind: &op_kind,
@@ -1298,7 +1318,7 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).
-            after: afters.get(name).copied().unwrap_or_default(),
+            after: if unit.last { afters.get(name).copied().unwrap_or_default() } else { Default::default() },
             tool_number,
             tool_name: &op.tool,
             tool_diameter: tool.diameter,
@@ -1332,13 +1352,15 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
         edm_params::insert(&op.params, &tool, &mut records);
         // #2769: what the stock box bounds, for a post's blank definition.
         stock_shape::insert(world, setup, &mut records);
-        // #988: a left-hand-cut thread mill turns M4.
-        if let OpParams::Thread { passes, .. } = &op.params
-            && passes.spindle_reverse
-        {
+        // #988: a left-hand-cut thread mill turns M4 - and only an
+        // operation that ASKS to reverse gets the ask on the records
+        // (#4031: the request, not the post, decides).
+        if operation::tool_gate::requests_reverse(&op.params) {
             post::ask_reverse_spindle(&mut records);
         }
-        setup_change::ask(&changes, name, &mut records);
+        if unit.last {
+            setup_change::ask(&changes, name, &mut records);
+        }
         section_mode::insert(&op.params, &posted, &mut records);
         streams.push((name.clone(), records));
     }
@@ -1567,6 +1589,17 @@ impl HeightRefs for OpParams {
                 ..
             } => {
                 let mut v = vec![clearance_z, top_z, bottom_z];
+                v.extend(retract_z.iter());
+                v
+            }
+            // The flow band's two radii (#2826): the same walk, minus
+            // the window the picks replaced.
+            OpParams::RotaryFlow {
+                clearance_z,
+                retract_z,
+                ..
+            } => {
+                let mut v = vec![clearance_z];
                 v.extend(retract_z.iter());
                 v
             }

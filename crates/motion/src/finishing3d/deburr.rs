@@ -60,6 +60,7 @@ use crate::machining2d::GenError;
 use super::crease::{chain, cmp_pt, vkey, vkey_scale, Seg};
 use super::deburr_contact::contact_drop;
 use super::deburr_filter::{DeburrEdges, EdgeFilter};
+use super::deburr_seam::ChainSeam;
 use super::deburr_scan::{scan, EdgeScan, Exposed};
 use super::deburr_size::{clip, emit_runs, steep, BreakProfile, DeburrBreak, MAX_PASSES, RIM_WEDGE_DEG};
 
@@ -193,6 +194,14 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
 /// ride to the exposed edges on those chains, `edges.exclude` leaves
 /// its chains out. The filter laws are `deburr_filter`'s.
 pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'_>) -> Result<Toolpath, GenError> {
+    deburr_seamed(facets, p, edges, &ChainSeam::default())
+}
+
+/// [`deburr_edges`] with the user's start and exit points (#3329): the
+/// chain nearest the start pick is cut first from its point nearest it,
+/// the chain nearest the exit pick last to its point nearest it
+/// (`deburr_seam`). An empty `seam` is [`deburr_edges`], byte for byte.
+pub fn deburr_seamed(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'_>, seam: &ChainSeam) -> Result<Toolpath, GenError> {
     p.validate(facets)?;
     let drop = p.drop();
     if !drop.is_finite() || drop <= 0.0 {
@@ -282,6 +291,10 @@ pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'
         ));
     }
     runs.sort_by(|a, b| cmp_pt(a.0[0], b.0[0]));
+    // #3329: the picks order the chains before any motion; the breaks
+    // below stay the automatic runs, the edges this ride cuts.
+    let closed: Vec<bool> = runs.iter().map(|(r, _)| r.len() >= 3 && r.first().map(|q| vkey(*q, s)) == r.last().map(|q| vkey(*q, s))).collect();
+    let seamed = seam.order(&runs, &closed, facets, p.clearance_z)?;
 
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     if flips > 0 {
@@ -305,7 +318,7 @@ pub fn deburr_edges(facets: &[Triangle], p: &DeburrParams, edges: &DeburrEdges<'
             "deburr: {out_of_size} edges have a wedge angle outside the break size's range and were skipped - Constant Width sizes wedges from 30 deg, Constant Depth up to 150 deg"
         ));
     }
-    emit_runs(&mut b, &runs, p)?;
+    emit_runs(&mut b, seamed.as_deref().unwrap_or(&runs), p)?;
     let mut path = b.finish();
     if !path.all_finite() {
         return Err(GenError::Invalid("deburr path left the finite horizon".into()));

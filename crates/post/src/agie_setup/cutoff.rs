@@ -1,4 +1,4 @@
-//! Setup-only straight open cut on a 20 mm plate, from the Agie Processor open-work format
+//! Setup-only straight open cut on a 20 mm plate, from our own implementation of the open-work format
 //! and CamCraft's offline control checks of #2962.
 
 use super::{SetupError, SetupFiles, WorkSide, piece, qn2_offsets_um, setup_files, valid_stem};

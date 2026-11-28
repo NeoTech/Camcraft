@@ -246,6 +246,7 @@ fn rotary_offset_on_the_bar() -> (World, OpParams) {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
         picks: Default::default(),
     };
     (world, params)

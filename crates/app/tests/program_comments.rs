@@ -133,7 +133,7 @@ const MILL: &[(&str, [&str; 3], &str)] = &[
             "; OPERATION: Contour1 - 2D CONTOUR - G54",
             "; T3 EM-0600 - BULL-NOSE D6 R0.5",
         ],
-        "T3 D3 M6",
+        "T3 D1 M6", // #4143: the first cutting edge, not D = T
     ),
     (
         "heidenhain",

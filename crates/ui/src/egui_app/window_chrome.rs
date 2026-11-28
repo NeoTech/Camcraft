@@ -9,12 +9,9 @@
 //! Provenance: our own; the caption-button hover convention (neutral fill,
 //! red close) is the common desktop one. No vendor material consulted.
 
-use egui::{Align, Color32, Id, Layout, Rect, Response, RichText, Sense, Stroke, Ui, WidgetInfo, WidgetType, vec2};
+use egui::{Align, Id, Layout, Rect, Response, RichText, Sense, Stroke, Ui, WidgetInfo, WidgetType, vec2};
 
 use super::theme;
-
-/// The close button's hover fill (the desktop caption-close red).
-pub const CLOSE_HOVER: Color32 = Color32::from_rgb(0xC4, 0x2B, 0x1C);
 
 /// Whether the window `id` is collapsed (kept in egui memory, like the
 /// built-in title bar's own collapse state).
@@ -30,10 +27,12 @@ fn caption(ui: &mut Ui, close: bool, label: &str, glyph: impl FnOnce(&Ui, Rect, 
     resp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
     let mut ink = ui.visuals().text_color();
     if resp.hovered() {
-        let fill = if close { CLOSE_HOVER } else { theme::current().field_hover };
+        // The desktop caption-close red and its white cross (#1120: tokens).
+        let t = theme::current();
+        let fill = if close { t.close_hover } else { t.field_hover };
         ui.painter().rect_filled(rect, 2.0, fill);
         if close {
-            ink = Color32::WHITE;
+            ink = t.close_ink;
         }
     }
     let side = h * 0.42;

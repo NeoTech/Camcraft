@@ -183,12 +183,12 @@ pub(super) fn default_limit_check(world: &World, m: &Machine, ops: &[(String, En
             if let Some(hi) = m.spindle_max
                 && rpm > hi
             {
-                say(format!("{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0}", op.tool));
+                say(format!("{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0} - {}", op.tool, crate::machine::SPINDLE_FIX));
             }
             if let Some(lo) = m.spindle_min
                 && rpm < lo
             {
-                say(format!("{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0}", op.tool));
+                say(format!("{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0} - {}", op.tool, crate::machine::SPINDLE_FIX));
             }
         }
         let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;

@@ -1,4 +1,4 @@
-//! The cutoff examples: a native wire EDM open cut through CLI selection and
+//! The cutoff examples: an Agie Wire EDM open cut through CLI selection and
 //! posting (#2962), on original synthetic full-height retained prisms with
 //! straight stock edges.
 use std::{fs, path::Path, process::Command};

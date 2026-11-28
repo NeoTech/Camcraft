@@ -662,6 +662,17 @@ pub struct EntityDto {
     /// SHA-256. Absent: not linked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<super::SourceDto>,
+    /// #3915: SolidCraft's face names of a model imported from a `.sc`
+    /// file, and the facets each named face became (`schema::SourceFaces`).
+    /// No version step (the `solids` precedent): an old reader drops it
+    /// and only loses the follow by name at the next re-import. A record
+    /// that does not read or does not tile the facets is dropped at load.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::source_faces_dto::lenient"
+    )]
+    pub source_faces: Option<super::source_faces_dto::SourceFacesDto>,
     /// Absent means Model; only non-model entities carry the tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EntityKind>,
@@ -703,6 +714,10 @@ pub struct EntityDto {
     /// `kind == Some(Entry)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<super::program_entry_dto::ProgramEntryDto>,
+    /// A pattern folder (#3012); present exactly when
+    /// `kind == Some(Pattern)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<super::pattern_dto::PatternDto>,
     /// A DXF profile's drawing (#1862); present exactly when
     /// `kind == Some(Sketch)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]

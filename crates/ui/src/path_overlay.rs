@@ -183,6 +183,11 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     // M13.4: the move kinds wear the viewer's colour-vision palette.
     let pal = crate::egui_app::colorvision::palette_of(&state.world);
     let ground = crate::egui_app::theme::current().viewport;
+    // #4266: the paths are work-side steel - they ride the playhead's
+    // work turn with the part, in ONE display frame, and the turned
+    // lines are cached under the unturned cache's own identity (the
+    // "Frame cost" law: a paused playhead reads, a scrubbed one rebuilds).
+    let view = crate::work_turn::play_view(state);
     let mut drawn = Vec::new();
     for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
         // Browser-eye hidden: the cache still exists and still posts, it
@@ -199,6 +204,7 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
         let Some((lines, whole)) = cache.lines_of(&state.world, entity, look) else {
             continue;
         };
+        let lines = turned(state, &lines, view.as_ref());
         drawn.push(entity);
         // #261: warned moves wear the gouge colour (crate::path_lines).
         if !append(&mut out, &lines) || !whole {
@@ -219,6 +225,33 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
         crate::path_lines::refusal_mark(&mut out, at, pal, arm);
     }
     out
+}
+
+/// One path's lines under the playhead's work turn, cached under the
+/// unturned cache line's own identity (#4266). No turn (no playhead
+/// turn) is the cached lines themselves.
+fn turned(
+    state: &State,
+    lines: &std::sync::Arc<Vec<[f32; 6]>>,
+    view: Option<&crate::work_turn::TurnView>,
+) -> std::sync::Arc<Vec<[f32; 6]>> {
+    let Some(v) = view else { return std::sync::Arc::clone(lines) };
+    let probe = crate::frame_cache::probe6(
+        lines.first().copied().unwrap_or_default(),
+        lines.last().copied().unwrap_or_default(),
+    );
+    let view = *v;
+    state.frame_cache.turned_lines.turned(
+        std::sync::Arc::as_ptr(lines) as u64,
+        lines.len(),
+        view.bits,
+        probe,
+        || {
+            let mut out = lines.as_ref().clone();
+            crate::work_turn::turn_lines(&mut out, Some(&view));
+            out
+        },
+    )
 }
 
 /// Append one path's lines within the vertex budget. False (logged)

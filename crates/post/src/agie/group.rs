@@ -1,5 +1,5 @@
 //! Native job export of two to nine captured punches or two die openings on one plate, from the
-//! Agie Processor work format and CamCraft's offline control checks of #2961, #2977 and #2980.
+//! work format of our own implementation and CamCraft's offline control checks of #2961, #2977 and #2980.
 
 use std::path::Path;
 

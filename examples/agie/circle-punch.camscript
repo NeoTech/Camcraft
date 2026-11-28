@@ -22,4 +22,4 @@ cam.call("set_operation_geometry", {operation: "Punch1",
   picks: [{model: "circle-punch", id: outline.id}]
 });
 cam.generate();
-cam.post({to: "CIRCLE20", cps: "Native wire EDM job files", options: {separationLengthMm: 1.0}});
+cam.post({to: "CIRCLE20", cps: "Agie Wire EDM (AgieVision)", options: {separationLengthMm: 1.0}});

@@ -105,6 +105,7 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
     out.extend(
         super::trunnion_refusals(&v, &axes)
             .into_iter()
+            .chain(super::work_length_refusals(&axes))
             .map(|(key, rule)| Refusal::new(key, rule)),
     );
     for head in head_parts(&v) {
@@ -141,7 +142,7 @@ fn general(v: &Value, out: &mut Vec<Refusal>) {
     match g.and_then(|g| g.get("kind")) {
         None | Some(Value::Null) => {}
         Some(Value::String(w)) if w.is_empty() || Kind::from_word(w).is_some() => {}
-        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, router, lathe, mill-turn, plasma, waterjet, wire_edm or sinker_edm"))),
+        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, router, lathe, mill-turn, plasma, waterjet, laser, wire_edm or sinker_edm"))),
     }
 }
 
@@ -384,7 +385,7 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     // #2374: the named post is a built-in one that serves this kind.
     // #3537: a hidden alias name counts as the registry name it selects.
     let known = |n: &str| {
-        let n = crate::posting::agie::current_name(n);
+        let n = crate::posting::aliases::current_name(n);
         crate::posting::BUILTINS.iter().any(|(b, _)| *b == n).then(|| crate::posting::post_serves(n, k))
     };
     if let Some(rule) = super::post_name_refusal(v, k.word(), known) {
@@ -397,7 +398,7 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
         // the axis the control raises and probes with.
         Kind::Mill | Kind::MillTurn | Kind::Plasma => &["X", "Y", "Z"],
         // #530: a wire cuts in X/Y (U/V add taper); a sinker burns in Z.
-        Kind::WireEdm | Kind::Waterjet => &["X", "Y"],
+        Kind::WireEdm | Kind::Waterjet | Kind::Laser => &["X", "Y"],
         Kind::SinkerEdm => &["Z"],
     };
     for l in need {
@@ -408,6 +409,10 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     // #669: the plasma rules, the same list the reader refuses on.
     if k == Kind::Waterjet {
         out.extend(super::waterjet_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
+    }
+    // #4081: the laser rules, the same list the reader refuses on.
+    if k == Kind::Laser {
+        out.extend(super::laser_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     }
     if k == Kind::Plasma {
         out.extend(super::plasma_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));

@@ -23,4 +23,4 @@ cam.call("set_operation_geometry", {operation: "Punch1",
   picks: [{model: "three-corner-punch", id: outline.id}]
 });
 cam.generate();
-cam.post({to: "THREEARC", cps: "Native wire EDM job files", options: {separationLengthMm: 1.0}});
+cam.post({to: "THREEARC", cps: "Agie Wire EDM (AgieVision)", options: {separationLengthMm: 1.0}});

@@ -7,25 +7,49 @@
 //!
 //! Gate map (M4.4): covers app::mcp, app::script, app::project::json,
 //! app::cli, app::tool_library, app::commands (tool_import),
-//! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
+//! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35),
+//! app::pattern_folder, app::commands::pattern_folder, app::mcp::pattern_tools (#3012).
 
 mod common;
+#[path = "mcp/add_tool_spindle_warning.rs"]
+mod add_tool_spindle_warning;
 #[path = "mcp/background_generate.rs"]
 mod background_generate;
 #[path = "mcp/background_streams.rs"]
 mod background_streams;
 #[path = "mcp/approach_distance.rs"]
 mod mcp_approach_distance;
+// #2443: the drill cycle word `deep` (G83).
+#[path = "mcp/drill_deep.rs"]
+mod drill_deep;
 #[path = "mcp/finish3d_direction.rs"]
 mod mcp_finish3d_direction;
 #[path = "mcp/finish3d_pass_start.rs"]
 mod mcp_finish3d_pass_start;
 mod mcp_open;
+// #3449: every accepted field of a kind, optional ones and enum words.
+#[path = "mcp/hole_pattern.rs"]
+mod hole_pattern;
+#[path = "mcp/op_type_fields.rs"]
+mod op_type_fields;
+// #3012: pattern folders - commands, project file, MCP and the post.
+#[path = "mcp/pattern_folder.rs"]
+mod pattern_folder;
+#[path = "mcp/pattern_folder_law.rs"]
+mod pattern_folder_law;
+#[path = "mcp/pattern_folder_post.rs"]
+mod pattern_folder_post;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;
+// #3915: import_model's `changes` when it updates a model.
+#[path = "mcp/reimport_changes.rs"]
+mod reimport_changes;
 #[path = "mcp/slot_tool_fit.rs"]
 mod slot_tool_fit;
+// #3915: SolidCraft face names on features and picks.
+#[path = "mcp/source_names.rs"]
+mod source_names;
 // #1880: import_svg, the importSvg script verb and the ImportSvg command.
 #[path = "mcp/svg.rs"]
 mod svg;

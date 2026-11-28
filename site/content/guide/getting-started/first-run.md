@@ -46,7 +46,7 @@ Shortcuts on this page are written with Ctrl. On macOS, press Cmd in their place
   {{ <icon name="tree-machine" /> }} machine, {{ <icon name="act-post" /> }} post, {{ <icon name="tree-fixture" /> }} fixtures and {{ <icon name="tools" /> }} tools, and the {{ <icon name="tree-op-group" /> }} operations.
 - **The properties pane** shows the page of whatever you selected. For a
   tool, it shows that tool's settings; browsing the tool library happens in
-  the separate **Tool library** pane (see [Tools](@/guide/set-up/tools.md)).
+  the separate **Tool library** window (see [Tools](@/guide/set-up/tools.md)).
 - **The viewport** shows the model, stock, toolpaths and simulation.
 
 Hover any ribbon button to read what it does. A greyed-out operation says

@@ -157,6 +157,8 @@ Actions runs only on a pushed release tag (`release.yml`).
   what was dropped.
 - [Machine onboarding](docs/MACHINE-ONBOARDING.md): source facts, registration,
   software-test seams, and current limitations for machine definitions/posts.
+- [SolidCraft and CamCraft over MCP](docs/user-guide/solidcraft-camcraft-mcp.md):
+  one external agent, a local CAD-to-CAM walkthrough, and cross-app safety limits.
 - `AGENTS.md`: engineering rules (clean-room protocol, the never-crash /
   never-gouge directive, layering, testing).
 - `RELEASE_NOTES.md`, `TESTING.md`: the current release.
@@ -181,7 +183,8 @@ CamCraft is built largely by AI coding agents working under
 [`AGENTS.md`](AGENTS.md), with a human maintainer approving what lands.
 Outside contributors follow the same flow. The full rules live in
 `AGENTS.md` ("Issue Law" and "Commits and Releases"); this is the short
-version.
+version. To find work that fits your AI subscription, read
+[How you can help, by AI budget](#how-you-can-help-by-ai-budget).
 
 ### Tools
 
@@ -208,6 +211,35 @@ version.
   still work.
 - Project agents and skills for Claude Code live in `.claude/agents/` and
   `.claude/skills/` (gate runner, graph updater, PR reviewer).
+
+### How you can help, by AI budget
+
+Pick work that fits your AI subscription. A large issue on a small plan
+uses all the quota, and the PR stops before it is complete.
+
+| Your budget | Pick | Do not pick |
+|---|---|---|
+| No AI subscription | Test on a real machine (air cuts or foam cuts). Report bugs with the posted program. Send the programming manual of your control. Check the docs. | Code issues. |
+| Small plan (about USD 20 each month; a few hours of this project each week) | `effort:low` issues: docs, labels, a test fixture, a string. Work on one small PR at a time. Review one small PR. | `effort:medium` and higher. Two PRs at the same time. |
+| Medium plan | `effort:medium` issues: one crate, a known pattern. | `effort:high` and `effort:max`. |
+| Large plan or team seats | `effort:high` and `effort:max` issues, reviews, research. | - |
+
+**If you run out of quota.** Open the PR as a draft with the work that you
+have. Tick "Allow edits by maintainers". Write the comment `help me finish`.
+The maintainers build, test and complete the PR.
+
+**You do not need a big disk.** The review machines build and test each PR.
+Run only the tests of your change, or no tests.
+
+**Use the fork flow.**
+
+1. Work on a branch in your fork.
+2. Open the PR from that branch into `NeoTech/Camcraft:main`.
+3. Push the review fixes to the same branch.
+4. Merge `main` into the branch. Do not rebase or force-push an open PR.
+
+Do not push to `NeoTech/Camcraft`. Ask questions about ownership on the PR.
+A maintainer gives the answer.
 
 ### Issues
 

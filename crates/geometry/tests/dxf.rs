@@ -5,6 +5,13 @@ use camcraft_geometry::dxf::{Limits, Primitive, Unit, Units, parse, parse_with_l
 use camcraft_geometry::geo2d::Point2;
 use std::f64::consts::{FRAC_PI_2, PI};
 
+#[path = "dxf/block_curves.rs"]
+mod block_curves;
+#[path = "dxf/blocks.rs"]
+mod blocks;
+#[path = "dxf/curves.rs"]
+mod curves;
+
 fn drawing(header: &str, tables: &str, entities: &str) -> String {
     format!(
         "0\nSECTION\n2\nHEADER\n{header}0\nENDSEC\n0\nSECTION\n2\nTABLES\n{tables}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n{entities}0\nENDSEC\n0\nEOF\n"

@@ -59,7 +59,8 @@ use hull::hull_dist;
 use hull::{holder_approach, seg_dist};
 #[cfg(test)]
 use top::{facet_top, meets_disk};
-use top::{r_plane_clear, top_over};
+use top::r_plane_clear;
+pub(super) use top::top_over;
 
 const TOL: f64 = 1e-6;
 

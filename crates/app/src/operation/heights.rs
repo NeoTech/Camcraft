@@ -178,6 +178,9 @@ pub fn region_z(
         // The deburr window's ceiling names the same high station:
         // the ride's tips stand at or below it (M2.5 E B).
         | OpParams::Deburr { top_z, .. } | OpParams::MultiAxisDeburr { top_z, .. } => resolve(*top_z),
+        // The flow band has no section plane (#2826): the picks bound
+        // its extent, so the shadow draws at no one level.
+        OpParams::RotaryFlow { .. } => None,
         // The probe's station is its expected contact (#108).
         OpParams::Probe { target, .. } => Some(target[2]),
         // The plasma cut rides the plate's top (#670).
@@ -451,6 +454,18 @@ pub fn resolve_params_with(
             Some(req("Bottom of Part Z", p.bottom_z)?),
             None,
             opt("Retract Z", p.retract_z)?,
+        ),
+        // The flow band's two heights (#2826): clearance and retract
+        // alone, read as BALL-CENTER RADII about the stated axis -
+        // the picks bound the band, so no top or bottom exists to
+        // resolve. The resolved numbers are the radii the kernel
+        // guards against the work's true radius (#2774).
+        OpParams::RotaryFlow { clearance_z, retract_z, .. } => (
+            req("Clearance Z", *clearance_z)?,
+            None,
+            None,
+            None,
+            opt("Retract Z", *retract_z)?,
         ),
     };
     Ok(ResolvedHeights { clearance, top, bottom, face_top, retract })

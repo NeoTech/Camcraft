@@ -49,6 +49,17 @@ impl OpParams {
         !matches!(self, OpParams::Pocket { .. }) && self.links().is_some_and(|l| l.approach.predrilled)
     }
 
+    /// A Bore's entry word: plunge, ramp or helix, by name otherwise.
+    #[must_use]
+    pub fn bore_entry_refusal(entry: crate::machining3d::Entry3D) -> Option<String> {
+        use crate::machining3d::Entry3D;
+        // An allow-list: a new entry word is refused here until a Bore ride
+        // is written for it. The circular ramp (Arc) has no meaning on a
+        // ring ladder.
+        (!matches!(entry, Entry3D::Plunge | Entry3D::Ramp | Entry3D::Helix))
+            .then(|| "a Bore enters with plunge, ramp or helix; arc is not offered".to_string())
+    }
+
     /// The by-name refusal behind a failed [`Self::is_sane`], where a
     /// kind can say it (#546: the sinker burn's wear rate and layer
     /// step; the side burn's structural refusal, which names a wear rate
@@ -86,9 +97,12 @@ impl OpParams {
             OpParams::Finish3D { direction_angle, .. } => {
                 crate::finishing3d::parallel_angle_refusal(*direction_angle).map(str::to_owned)
             }
+            OpParams::Bore { entry, .. } => Self::bore_entry_refusal(*entry),
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),
             OpParams::SlotUndercut(p) => p.refusal(),
+            // #3334: an exit pick beside control compensation.
+            OpParams::PlasmaProfile(p) => p.pick_refusal(),
             OpParams::Pocket { corner_relief, .. }
             | OpParams::Offset2D { corner_relief, .. } => corner_relief.validate().err().map(|e| e.to_string()),
             OpParams::Adaptive2D { method, troch, corner_relief, pass_start, .. } => troch.refusal().or_else(|| {
@@ -755,6 +769,13 @@ impl OpParams {
                 // stepover rides the same Some-or-derived law as the
                 // finish's.
                 let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                // #2772: a stated rotation axis is a direction - three
+                // finite numbers, not all zero. A leaning line is a
+                // statement the resolver and the letter door judge by
+                // name, not a sanity matter here.
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
                 pos(*tolerance)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
@@ -766,6 +787,15 @@ impl OpParams {
                     && angle(lag_deg)
                     && *max_tilt_deg > 0.0
                     && *max_tilt_deg <= 180.0
+                    // #2772: the twins' read-back (the or-pattern shares
+                    // Flow and the drive-curve contour, which state no
+                    // axis of their own).
+                    && (match self {
+                        OpParams::RotaryContour { stated_axis, .. } | OpParams::RotaryParallel { stated_axis, .. } => {
+                            direction(stated_axis)
+                        }
+                        _ => true,
+                    })
                     && (match self {
                         OpParams::Parallel5D { stepover, .. }
                         | OpParams::Swarf { stepover, .. }
@@ -773,6 +803,40 @@ impl OpParams {
                         | OpParams::Flow5D { stepover, .. } => stepover.is_none_or(pos),
                         _ => true,
                     })
+            }
+            // The flow band's door (#2826): the twins' shape minus the
+            // station window the picks replace - the same pose door,
+            // the same stated-direction law, the raster's derived
+            // stepover, and heights read as radii (their own guard
+            // lives in the kernel, against the work's true radius).
+            OpParams::RotaryFlow {
+                tolerance,
+                stepover,
+                clearance_z,
+                retract_z,
+                feed,
+                plunge_feed,
+                climb: _,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            } => {
+                let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
+                pos(*tolerance)
+                    && stepover.is_none_or(pos)
+                    && clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && pos(*feed)
+                    && pos(*plunge_feed)
+                    && angle(lead_deg)
+                    && angle(lag_deg)
+                    && *max_tilt_deg > 0.0
+                    && *max_tilt_deg <= 180.0
+                    && direction(stated_axis)
             }
             // The wrap ladder's door (M5.1 stage E2): the Pocket3D
             // door's numbers - plain stepover, radial stepdown, the
@@ -798,9 +862,15 @@ impl OpParams {
                 lead_deg,
                 lag_deg,
                 max_tilt_deg,
+                stated_axis,
                 ..
             } => {
                 let angle = |v: &f64| v.is_finite() && v.abs() <= 90.0;
+                // #2772: the twins' own direction law for the op's
+                // stated axis.
+                let direction = |v: &Option<[f64; 3]>| {
+                    v.is_none_or(|d| d.iter().all(|x| x.is_finite()) && d.iter().map(|x| x * x).sum::<f64>() > 0.0)
+                };
                 pos(*tolerance)
                     && pos(*stepover)
                     && nneg(*stock_to_leave)
@@ -818,6 +888,7 @@ impl OpParams {
                     && angle(lag_deg)
                     && *max_tilt_deg > 0.0
                     && *max_tilt_deg <= 180.0
+                    && direction(stated_axis)
             }
             // The stamped ladder's door (M5.1 stage E3): the Pocket3D
             // door verbatim - the hop plane included, which the plain

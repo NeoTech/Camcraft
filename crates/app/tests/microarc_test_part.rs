@@ -239,6 +239,7 @@ fn wrap_world() -> World {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
         picks: Default::default(),
     };
     let ball = tool("BN-0600", 0.125, 8000.0, 8.0 * IN);

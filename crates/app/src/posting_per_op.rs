@@ -168,6 +168,13 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
+    // #3012: a by-part pattern folder posts an operation in several
+    // sections; one file per operation cannot hold that order.
+    if let Some((dup, _)) = streams.iter().enumerate().find_map(|(i, (n, _))| streams[..i].iter().find(|(m, _)| m == n)) {
+        return Err(format!(
+            "{dup}: a by-part pattern folder posts it once per copy - post one program, or set the folder to by tool"
+        ));
+    }
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.
@@ -185,7 +192,7 @@ fn post_per_op_with(
             ScriptPost::Anonymous => false,
         };
         if native {
-            return Err("Choose One program to create a native wire EDM job directory".into());
+            return Err("Choose One program to create an Agie Wire EDM job directory".into());
         }
         let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
         crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;

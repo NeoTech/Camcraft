@@ -465,6 +465,12 @@ pub enum Warning {
     /// stock at a pass start that no earlier cut cleared, from the first
     /// cut at `at`. Advisory: the entry is the user's and is verified.
     PlungeIntoStock { at: usize },
+    /// #3849: a trochoidal clean-up pass measured `measured_deg` of radial
+    /// engagement, above the operation's `limit_deg` ceiling, even after
+    /// reducing the clean-up peel step. Advisory (tool load risk, not a
+    /// gouge): shown on the operation and status line; does not hold the
+    /// post.
+    EngagementExceeded { at: usize, measured_deg: f64, limit_deg: f64 },
 }
 
 impl Warning {
@@ -484,7 +490,8 @@ impl Warning {
                 | Warning::PlungeTooDeep { .. }
                 | Warning::EntryNotRecommended { .. }
                 | Warning::EntryStandIn { .. }
-                | Warning::PlungeIntoStock { .. })
+                | Warning::PlungeIntoStock { .. }
+                | Warning::EngagementExceeded { .. })
     }
 
     /// The envelope report's unjudged hidden half, as the warning that
@@ -553,9 +560,8 @@ impl core::fmt::Display for Warning {
             // The raise is the same in each frame.
             Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, tilted: true } => write!(
                 f,
-                "the first rapid (move {at}) comes from an unknown position at the clearance height {height_mm:.3} mm, \
-                 under the {} top at {top_mm:.3} mm (both measured along the tilted tool axis) - raise the clearance \
-                 height by at least {:.3} mm",
+                "the first rapid (move {at}) comes from an unknown position at the clearance height {height_mm:.3} \
+                 mm, under the {} top at {top_mm:.3} mm (both measured along the tilted tool axis) - raise the clearance height by at least {:.3} mm",
                 if *fixture { "fixture" } else { "stock" },
                 top_mm - height_mm
             ),
@@ -662,6 +668,11 @@ impl core::fmt::Display for Warning {
                 "Pass starts at: the selected Plunge entry plunges into uncut stock where a pass starts in material, \
                  from move {at}: Arc is recommended, because it enters from the air outside the stock where it fits \
                  (the post is not held: the cut is verified)"
+            ),
+            Warning::EngagementExceeded { at, measured_deg, limit_deg } => write!(
+                f,
+                "clean-up engagement measured {measured_deg:.1} deg from move {at}, above the {limit_deg:.1} deg limit - \
+                 reduce optimal load or increase the engagement limit (the post is not held: the risk is the tool load)"
             ),
         }
     }

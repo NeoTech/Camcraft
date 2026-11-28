@@ -8,8 +8,8 @@ aliases = ["guide/operations-multiaxis/"]
 This page is the reference for the kinds in the **Multi-axis** group of
 the [operations](@/guide/operations/_index.md) ribbon: 5-Axis Contour, 5-Axis
 Parallel, 5-Axis Flow, Multi-Axis Contour, Swarf, Advanced Swarf, Rotary
-Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough and Multi-Axis
-Deburr. For the
+Contour, Rotary Parallel, Rotary Offset, Rotary Flow, Multi-Axis Rough and
+Multi-Axis Deburr. For the
 tabs themselves and what a click picks, see that page; for what a refusal
 means in general, see [Reading a refusal](@/guide/reference/refusals.md).
 
@@ -119,6 +119,11 @@ the ball off its dead centre on flat-ish ground.
 A stated stepover is the flat-ground spacing; on a slope it follows the
 terrain's cosine.
 
+5-Axis Parallel takes a start point and an exit point. The cut starts at
+the raster corner nearest the start point. The last pass ends at the
+corner nearest the exit point. A pick that no corner is near is refused
+by name.
+
 ## 5-Axis Flow
 
 <!-- catalog:examples:start -->
@@ -217,6 +222,10 @@ direction follows it; split the ruled faces or finish with 5-Axis
 Parallel"; "the mesh is too coarse for the ruling to be seen anywhere:
 refine it or finish with 5-Axis Parallel".
 
+Each exit rise under a lying tool is proved with an exact swept-tool
+distance. A retract rapid that cannot rise straight up first leaves along
+the contact normal.
+
 ## Advanced Swarf
 
 <!-- catalog:examples:start -->
@@ -248,6 +257,8 @@ No catalog case yet.
 **For:** finishing a turned workpiece in rings around its axis, the tool
 posed off the radial. The axis is fitted to the model, not set. Choose it
 for a part standing on its axis; a bar lying flat is Rotary Parallel work.
+The Rotary Contour and Rotary Parallel toolbar icons show this difference:
+an upright Z part axis and a horizontal X part axis.
 
 **Picks:** none.
 
@@ -312,11 +323,72 @@ before Rotary Contour or Rotary Parallel.
 | Passes | Tolerance | 0.05 (the verify budget) |
 | Lead in / Lead out | Entry | Plunge, down the radial |
 
+With **Strategy** set to **Zigzag**, each level finishes its walls with a closing
+ring. This removes the cusps between row ends on flats and other walls
+perpendicular to the rows. A ring that wraps the full turn skips the seam's
+duplicate edges, so it does not cut the same seam line twice. A boundary
+that does not wrap the seam closes normally. Inspect the generated path;
+this does not change the Adaptive seam refusals below.
+
 **Common refusals:** "the rotary wrap needs a closed solid, but the mesh
 is open: ... edges bound one facet only (a hole in the skin)"; "a feature
 that is not turned (a flat, a keyway, a cross hole) crosses the rotary
 wrap's seam ..."; "the wrapped work has no radial extent to rough"; "the
 height window leaves no station of the work to rough".
+
+## Rotary Flow
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+No catalog case yet.
+<!-- catalog:examples:end -->
+
+{{ <icon name="op-rotary-flow" /> }} ![View of flow passes that blend between two picked helical edges on a turned rotor.](../../../operation-paths.svg#RotaryFlow)
+
+**For:** finishing a helical band on a turned part, such as the flank of
+a screw rotor or a spiral groove, on a continuous 4-axis rotary. The
+passes blend from one picked guide edge to the next, so each pass follows
+the helix. Choose it when rings (Rotary Contour) or straight passes
+(Rotary Parallel) cross the band at a bad angle.
+
+**Picks:** one or more edge chains on the Geometry tab: the edges of the
+band. There is no Top Z or Bottom Z: the picked chains bound the band.
+The picked chains read as one ordered set:
+
+- Two chains machine one band between them.
+- Three or more chains machine one band for each adjacent pair. A shared
+  boundary chain is cut once, not twice.
+- A single helical chain machines the full revolution: its second edge is
+  the next lap of the same chain.
+- A chain that runs against its pair is walked backwards, and the notes
+  say so. You do not have to reverse a pick.
+
+Rotary Flow refuses a guide set where any two guide chains meet or cross,
+not only adjacent ones. The refusal names the two guides and the crossing
+point.
+
+**Rotation axis.** The axis is stated, not only fitted: the operation's
+own axis, else the machine's rotary axis through the work offset. With
+neither, the axis is fitted to the model as for Rotary Contour.
+
+| Tab | Setting | Default |
+|---|---|---|
+| Heights | Clearance radius | 25 above the stock top, read as a ball-center radius about the axis |
+| Heights | Retract radius | off: links at the clearance radius |
+| Passes | Rotation axis | follows the machine |
+| Passes | Stepover | Auto: by the scallop law; a stated value is the spacing at the outermost radius of the band |
+| Passes | Lead / lag / max tilt | 0 / 0 / 90 |
+| Passes | Tolerance | 0.05: the scallop budget between passes |
+| Feeds | Feed / Plunge feed / Climb milling | 1200 / 300 / on |
+
+**Common refusals:** "Rotary Flow needs at least one picked guide chain;
+got 0 - pick one helical edge for a full revolution, or the two edges that
+bound the band"; "Rotary Flow: the bands between chains ... advance in
+opposite directions - pick the guide chains in band order along the
+surface";
+"Rotary Flow reads its clearance height as a ball-center radius about the
+stated ... - raise it"; "Rotary Flow needs a ball-nose tool, ...".
 
 ## Multi-Axis Rough
 

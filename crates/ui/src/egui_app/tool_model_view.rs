@@ -15,10 +15,12 @@ use camcraft_app::geometry::Triangle;
 use crate::state::Orbit;
 
 /// The background of every tool preview.
-pub(super) const BG: Color32 = Color32::from_rgb(24, 26, 31);
+pub(super) fn tool_ground() -> Color32 {
+    crate::egui_app::theme::current().tool_ground
+}
 /// Past this many facets the view paints every n-th one (picking still
 /// reads them all) - a vendor STEP can carry 10^5+.
-const MAX_PAINTED: usize = 30_000;
+pub(crate) const MAX_PAINTED: usize = 30_000;
 /// The default view: a three-quarter look from +X-Y, above.
 const YAW0: f32 = -0.9;
 const PITCH0: f32 = 0.45;
@@ -113,20 +115,83 @@ pub(super) fn bounds(tris: &[Triangle]) -> ([f64; 3], [f64; 3]) {
 /// The screen mesh of `tris` in `view`: far facets first, each shaded by
 /// how squarely it faces the eye.
 pub(super) fn project(view: &View, tris: &[Triangle]) -> Mesh {
+    project_with(view, tris, |_, lit| {
+        let g = (60.0 + 150.0 * lit).clamp(0.0, 255.0) as u8;
+        Color32::from_rgb(g, g, g.saturating_add(12))
+    })
+}
+
+/// #4452: the part of a tool a facet of the 3D preview belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Part {
+    /// The cutting part: the steel below the flute length.
+    Flute,
+    /// The steel above the flute length: the neck and the shank.
+    Shank,
+    /// The holder: the revolved holder or the landed body.
+    Holder,
+}
+
+/// #4452: the theme inks of the three parts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PartInks {
+    pub flute: Color32,
+    pub shank: Color32,
+    pub holder: Color32,
+}
+
+impl PartInks {
+    /// The inks of the theme in use.
+    pub(crate) fn current() -> Self {
+        let t = crate::egui_app::theme::current();
+        Self { flute: t.tool_model_flute, shank: t.tool_model_shank, holder: t.tool_model_holder }
+    }
+
+    pub(crate) fn of(&self, p: Part) -> Color32 {
+        match p {
+            Part::Flute => self.flute,
+            Part::Shank => self.shank,
+            Part::Holder => self.holder,
+        }
+    }
+}
+
+/// The darkest share of an ink, on a facet seen edge-on.
+pub(crate) const SHADE_MIN: f32 = 0.45;
+
+/// #4452: `ink` lit by `lit` (0 edge-on .. 1 facing the eye): from
+/// [`SHADE_MIN`] of the ink up to the ink itself (a NaN light reads as
+/// the plain view's 0.3). The alpha is kept.
+pub(crate) fn shade(ink: Color32, lit: f64) -> Color32 {
+    let lit = if lit.is_finite() { lit.clamp(0.0, 1.0) } else { 0.3 };
+    let k = SHADE_MIN + (1.0 - SHADE_MIN) * lit as f32;
+    let ch = |c: u8| (f32::from(c) * k).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_unmultiplied(ch(ink.r()), ch(ink.g()), ch(ink.b()), ink.a())
+}
+
+/// #4452: the screen mesh of `tris` with each facet in the ink of its
+/// part (`parts[i]`; a facet without a part is the holder), shaded as
+/// [`project`] shades.
+pub(super) fn project_parts(view: &View, tris: &[Triangle], parts: &[Part], inks: PartInks) -> Mesh {
+    project_with(view, tris, |i, lit| shade(inks.of(parts.get(i).copied().unwrap_or(Part::Holder)), lit))
+}
+
+/// The projection itself: `ink(index, lit)` gives each facet's colour.
+fn project_with(view: &View, tris: &[Triangle], ink: impl Fn(usize, f64) -> Color32) -> Mesh {
     let stride = tris.len().div_ceil(MAX_PAINTED).max(1);
-    let mut order: Vec<(f64, &Triangle)> = tris
+    let mut order: Vec<(f64, usize, &Triangle)> = tris
         .iter()
+        .enumerate()
         .step_by(stride)
-        .map(|t| (view.depth(centroid(t)), t))
-        .filter(|(z, _)| z.is_finite())
+        .map(|(i, t)| (view.depth(centroid(t)), i, t))
+        .filter(|(z, _, _)| z.is_finite())
         .collect();
     order.sort_by(|a, b| b.0.total_cmp(&a.0));
     let mut mesh = Mesh::default();
-    for (_, t) in order {
+    for (_, i, t) in order {
         let [a, b, c] = [t.a, t.b, t.c].map(|p| [p.x, p.y, p.z]);
         let lit = norm(cross(sub(b, a), sub(c, a))).map_or(0.3, |n| dot(n, view.f).abs());
-        let g = (60.0 + 150.0 * lit).clamp(0.0, 255.0) as u8;
-        let col = Color32::from_rgb(g, g, g.saturating_add(12));
+        let col = ink(i, lit);
         let base = mesh.vertices.len() as u32;
         for q in [a, b, c] {
             mesh.colored_vertex(view.screen(q), col);

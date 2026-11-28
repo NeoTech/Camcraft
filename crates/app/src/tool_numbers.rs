@@ -49,6 +49,15 @@ pub fn next_free(world: &World) -> Option<u32> {
     next_free_from(&taken)
 }
 
+/// The number `AddTool` gives a new tool `name` of `kind` (#3667): the
+/// lowest free number that the active machine does not reserve, or a free
+/// reserved probe pocket for a probe. `None` when `AddTool` refuses the tool.
+#[must_use]
+pub fn next_free_for(world: &World, name: &str, kind: crate::tools::ToolKind) -> Option<u32> {
+    let taken: Vec<u32> = numbers(world).ok()?.into_iter().map(|(_, n)| n).collect();
+    crate::tool_reservations::allocate(world, name, kind, &taken).ok()
+}
+
 /// Every tool in document order, with the number it posts as.
 ///
 /// # Errors

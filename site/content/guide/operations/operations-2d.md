@@ -165,6 +165,18 @@ angle. An unset entry angle means 3 degrees, independently of the link
 angle. If there is too little room for that ramp, the path reports its
 substitution and uses the plunge feed. Read the generated entry notes.
 
+On an outside contour, **Ramp** also descends along the lead-in and ring
+onto each level. **Helix** uses the same ramp, not a helical orbit; a path
+note explains the substitution once. The default **Plunge** is unchanged.
+Where tabs stand at the level, or the lead-in and ring are too short for
+the ramp angle, the path instead uses a grazing dive at the lead-in and
+names the reason. Inspect these notes and the generated descent. This does
+not promise a ramp between every ring at the same depth.
+
+With control or wear compensation, Ramp and Helix entries or level
+transitions are refused. Use a supported entry and transition instead;
+do not remove the compensation check to obtain a path.
+
 <div class="guide-pair">
 
 ![2D contour toolpath without lead-in plunging directly onto the workpiece corner](../../../images/guide/op-2d-lead-before.png)
@@ -179,6 +191,10 @@ substitution and uses the plunge feed. Read the generated entry notes.
 Outside or pick a smaller tool"; "cannot cut the gap at (x, y): it is
 narrower than the tool's ... diameter"; "a Contour's open boundary must be
 an open chain".
+
+2D Contour takes **Do not touch** faces and edges (Geometry tab,
+**Boundaries**). The full tool stays clear of them on cuts, leads, links
+and plunges. A cut that cannot stay clear is refused by name.
 
 ## 2D Pocket
 
@@ -243,6 +259,22 @@ It is the same option as on 2D Offset:
 Only the ring strategies (Waterline, Offset rings) have a ring order.
 Zigzag rows and rest machining keep their own order. When you set Inside
 or Outside on them, the path notes say that the option is not used.
+
+**Do not touch** also applies to 2D Pocket, including rest machining.
+On **Geometry > Boundary > Boundaries**, choose **Pick protected** and
+pick model faces or edge chains. Choose **Done**, set **Clearance**, and
+choose **Apply**. The keep-out protects the flutes, shank and holder on
+cuts, entries, keep-down links, rapid links and the final clearance lift.
+Clearance adds standoff to **Stock to leave**. A cut with no safe room is
+refused by name; inspect the remaining stock around protected items.
+The MCP tool `set_operation_do_not_touch` sets the same protection.
+
+A planned corner relief that no pass can reach is not a completed cut.
+The operation notes identify the boundary corner:
+`corner relief at (x, y) is not cut: no pass vertex reaches the relief spur`.
+Each missed corner is named once, even across several levels. The
+material remains at that corner. Inspect the path and change the tool,
+boundary or relief choice as needed; regenerate and verify before posting.
 
 **Common refusals:** "pocket is narrower than the tool"; "stepover leaves
 bands the tool cannot reach"; a pick that "projects to a line from above
@@ -312,6 +344,11 @@ spacing set by the load.
 | Passes | Stock to leave | 0 |
 | Heights | Stepdown | 5 |
 | Lead in / Lead out | Entry | Helix, radius 1 |
+
+The Trochoidal clean-up passes of 2D and 3D Adaptive are checked against
+the engagement limit. If a clean-up pass takes more than the limit, the
+pass steps down by itself and the toolpath shows a named advisory
+warning.
 
 **Method** chooses Spiral or Trochoidal. Trochoidal follows the pocket's
 medial lanes, including parallel branches around islands, then cleans up
@@ -398,6 +435,8 @@ This release note applies until a build with the fixes ships.
   full-width slots in the stock.
 - **Inside** starts at the part or island wall and works out. Each ring
   follows the walls, and the outer edge comes last.
+- Where the offset rings of two lobes merge, the rings no longer cut a
+  full-width pass at the merge.
 - Some cuts still take the full tool width. The toolpath then shows a
   **Pass start** warning that names the case:
   - **Outside** on a closed pocket: the first ring runs along the pocket
@@ -729,6 +768,9 @@ chamfer mill"; "a 45-degree chamfer takes a 90-degree cone; 'T5' has ...
 degrees"; "the cone of ... is ... mm of flute, short of the ... mm depth
 this face stands at".
 
+On a closed pass from a model source, 2D Chamfer writes arcs with
+circular interpolation (G2/G3) where the fit stays within the tolerance.
+
 ## Circular
 
 <!-- catalog:examples:start -->
@@ -810,11 +852,18 @@ starts empty and refuses to generate until it has holes.
 |---|---|---|
 | Heights | R plane (feed starts here) | model top + 0 |
 | Heights | Bottom Z | each hole's own floor; **Override the hole floors** to set one |
-| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by depth against diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder) |
+| Passes | Cycle | Auto: the tool decides (a tap taps, a boring bar bores, a drill chooses by the depth in material against its diameter); or Spot, Drill, Peck, Tap (rigid), Bore, Back bore, Tap (floating holder), Ream, Fine bore, Deep peck (full retract) |
 | Passes | Peck depth | Auto (by the cycle) |
 | Passes | Dwell at bottom | 0 s |
 
 Tools: drill, tap or boring bar.
+
+Auto measures each hole's depth from its mouth, not from the R plane. The
+air between the R plane and the hole does not count. A drill takes the
+Drill cycle (`G81`) to one diameter of material, the chip-break Peck
+(`G73`) to four diameters, and the full-retract peck (`G83`) past that.
+Choose **Deep peck (full retract)** to get `G83` on any hole, for example
+in a gummy material that packs chips.
 
 A cross drill can use a reduced-fidelity model when its mesh error leaves
 a positive verification tolerance. CamCraft increases the required
@@ -871,6 +920,11 @@ For a blind hole, the ring spacing uses the cutter's reach at the floor,
 so a bull-nose does not leave an interior floor ridge. Small holes keep a
 single ring when its floor bands meet. A plan needing more than 4,096
 rings is refused before generation; review the hole and tool sizes.
+
+The Bore page has an **Entry** group: plunge (the default), **Ramp** or
+**Helix**. The approach ramp and helix angles cap each descent. A ramp or
+helix entry works down to a hole 0.025 mm wider than the tool. An Arc
+entry is refused by name.
 
 A Bore **Ramp** entry zig-zags along the first radial sweep. An unset
 entry angle means 3 degrees. A separate link angle does not steepen it.

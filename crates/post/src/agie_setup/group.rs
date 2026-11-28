@@ -1,5 +1,5 @@
 //! Setup-only group of two to nine captured punches or two die openings on one 20 mm plate, from
-//! the Agie Processor work format and CamCraft's offline control checks of #2961, #2977 and #2980.
+//! the work format of our own implementation and CamCraft's offline control checks of #2961, #2977 and #2980.
 
 use super::{SetupError, SetupFiles, WorkSide, piece, qn2_offsets_um, resources, valid_stem};
 

@@ -17,15 +17,18 @@ mod operator_side;
 pub use operator_side::OperatorSide;
 mod kind;
 pub(crate) mod installation;
-pub use installation::{ControllerIdentity, ToolChangeMode};
+pub use installation::{ControllerIdentity, DNumberRule, ToolChangeMode};
 mod no_spindle;
 mod parse;
 mod plasma;
 mod post_name;
 mod waterjet;
 pub use waterjet::waterjet_refusals;
+mod laser;
+pub use laser::laser_refusals;
 mod rows;
 mod swing;
+pub use swing::{turns_work, work_length_refusals, WORK_LENGTHS};
 mod tooling;
 pub mod reservations;
 mod tree;
@@ -50,6 +53,6 @@ pub use trunnion::{trunnion_refusals, RotarySignConvention};
 
 mod check;
 mod judge;
-pub use check::{MachineCheck, SourceLocation, REPORT_CAP};
+pub use check::{spindle_range_warning, MachineCheck, SourceLocation, REPORT_CAP, SPINDLE_FIX};
 // Shared with the app-specific plasma, waterjet, EDM and posted-lathe checks.
 pub use judge::{fine_bore_gate, move_extremes, say, slowest_axis, tap_gate};

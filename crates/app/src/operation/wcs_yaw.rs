@@ -360,6 +360,16 @@ fn rotate_params(r: &Rot2, params: &mut OpParams) {
         }
         _ => {}
     }
+    // #3326 review: each start and exit pick is stated in Setup `S` and
+    // enters `W_gen` with the geometry that it names, for every kind. This is
+    // the one place that turns a pick (the Slot of #3325 included): a second
+    // loop in a kind's arm turns its picks two times. The stored picks stay in
+    // model coordinates; these are the temporary generation-frame points.
+    if let Some(picks) = params.path_picks_mut() {
+        for k in picks.start.iter_mut().chain(&mut picks.exit) {
+            k.xy = r.p2(k.xy);
+        }
+    }
 }
 
 #[cfg(test)]

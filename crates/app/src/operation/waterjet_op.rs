@@ -96,6 +96,7 @@ pub fn waterjet_params(op: &WaterjetOp, tool: &Tool, hs: &ResolvedHeights, model
         clearance_z: hs.clearance,
         cut_z: top,
         model_excess,
+        voice: camcraft_motion::sheet::Voice::WATERJET,
     })
 }
 

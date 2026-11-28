@@ -3,10 +3,14 @@
 //! step; the loopback listener that carries it; and the CLI's flag.
 //!
 //! Gate map (M4.4): covers app::mcp (live, listen, bridge, link,
-//! link_client) and app::cli_ui (the `--ui` lane, #3751).
+//! link_client, link_owner) and app::cli_ui (the `--ui` lane, #3751).
 
+#[path = "mcp_live/idle_timeout.rs"]
+mod idle_timeout;
 #[path = "mcp_live/ui_link.rs"]
 mod ui_link;
+#[path = "mcp_live/ui_link_owner.rs"]
+mod ui_link_owner;
 
 use camcraft_app::commands::History;
 use camcraft_app::mcp::provider::{FallbackMode, parse_prompt};
@@ -353,33 +357,87 @@ fn an_idle_client_is_dropped_by_name_and_the_next_one_is_served() {
 /// keeps its session however long it runs.
 #[test]
 fn a_client_that_keeps_talking_is_never_dropped_as_idle() {
-    let window = Duration::from_millis(400);
-    let inbox = Inbox::listen_with_idle(0, Box::new(|| {}), window).expect("listen");
-    let addr = inbox.addr().expect("bound address");
-    let client = std::thread::spawn(move || -> Vec<String> {
-        let s = TcpStream::connect(addr).expect("connect");
-        s.set_read_timeout(Some(Duration::from_secs(5))).expect("timeout");
-        let mut w = s.try_clone().expect("clone");
-        let mut r = BufReader::new(s);
-        let mut answers = Vec::new();
-        // Eight calls 150 ms apart: three windows long in all.
-        for id in 0..8 {
-            std::thread::sleep(Duration::from_millis(150));
-            writeln!(w, r#"{{"jsonrpc":"2.0","id":{id},"method":"ping"}}"#).expect("send");
-            let mut line = String::new();
-            r.read_line(&mut line).expect("answer");
-            answers.push(line);
-        }
-        answers
-    });
     let world = new_world();
     let mut history = History::default();
-    pump_until(&inbox, &world, &mut history, &|| client.is_finished());
-    let answers = client.join().expect("client thread");
-    assert_eq!(answers.len(), 8);
-    for (id, a) in answers.iter().enumerate() {
-        assert!(a.contains(&format!("\"id\":{id}")) && !a.contains("idle"), "call {id}: {a}");
+    // Scheduling slack, not the proof of liveness: the exchanges below
+    // must span two whole windows, and this same client must then expire.
+    let window = Duration::from_secs(2);
+    let inbox = Inbox::listen_with_idle(0, Box::new(|| {}), window).expect("listen");
+    let s = TcpStream::connect(inbox.addr().expect("bound address")).expect("connect");
+    s.set_read_timeout(Some(window * 3)).expect("read timeout");
+    s.set_write_timeout(Some(window * 3))
+        .expect("write timeout");
+    let mut w = s.try_clone().expect("clone");
+    let mut r = BufReader::new(s);
+    let ping = |id| json!({ "jsonrpc": "2.0", "id": id, "method": "ping" }).to_string();
+    let started = Instant::now();
+    writeln!(w, "{}", ping(0)).expect("first ping");
+    let mut last_answered = started;
+    for id in 0..8 {
+        let deadline = Instant::now() + window * 3;
+        let req = loop {
+            if let Some(req) = inbox.next() {
+                break req;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "call {id} did not reach the owner"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!(req.line().trim(), ping(id));
+        // The listener is waiting for this answer. Queue the next complete
+        // message BEFORE releasing it: client scheduling after the reply
+        // cannot turn the next exchange into an unintended idle period.
+        if id < 7 {
+            writeln!(w, "{}", ping(id + 1)).expect("next ping");
+        }
+        // Spend time where the listener synchronizes with the owner, not
+        // in a sleeping client. Without activity refresh, it still expires
+        // at the initial window before all eight calls can complete.
+        std::thread::sleep(window / 4);
+        let answer = answer_live(&world, &mut history, None, req.line());
+        last_answered = Instant::now();
+        req.answer(answer.reply);
+        let mut line = String::new();
+        assert!(
+            r.read_line(&mut line).expect("active reply") > 0,
+            "call {id}: EOF"
+        );
+        let reply: Value = serde_json::from_str(&line).expect("JSON reply");
+        assert_eq!(reply["id"], json!(id), "call {id}: {line}");
+        assert_eq!(reply["result"], json!({}), "call {id}: {line}");
+        assert!(
+            reply.get("error").is_none() && !line.contains("idle"),
+            "call {id}: {line}"
+        );
     }
+    assert!(
+        started.elapsed() >= window * 2,
+        "the calls must outlive the initial window"
+    );
+
+    // Negative control on the identical connection and configured window:
+    // no more complete messages means an idle notice followed by EOF.
+    // The listener refreshes after writing the answer, so this timestamp
+    // precedes the refresh even if this thread reads the reply much later.
+    let mut line = String::new();
+    assert!(
+        r.read_line(&mut line)
+            .expect("idle notice after activity stops")
+            > 0
+    );
+    assert!(
+        line.contains("notifications/message") && line.contains("idle"),
+        "{line}"
+    );
+    assert!(
+        last_answered.elapsed() >= window,
+        "expired before the refreshed window: {:?}",
+        last_answered.elapsed()
+    );
+    line.clear();
+    assert_eq!(r.read_line(&mut line).expect("closed after idle notice"), 0);
 }
 
 /// #567 review (slow loris): a client trickling one byte faster than

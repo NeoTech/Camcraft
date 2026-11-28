@@ -263,11 +263,10 @@ fn band_material(world: &World, name: &str, (lo, hi): (Point3, Point3)) -> camcr
 /// tool width, where the band at the lobe tips splits the ring.
 /// #3744: Outside walks the one ring set (offsets of the part). At the
 /// waist the rings of the two lobes merge, and a ring corner there moves
-/// by more than one stepover: 495 full-width points before #3788. The
-/// fill rings of #3788 (a) clear the stock between two rings there: 21
-/// points stay, single samples at 7 ring corners (3 levels), and the
-/// narrow note names them (#3788 (c)). #3788 keeps the corners open; the
-/// pin goes back to 0 points and no note with them.
+/// by more than one stepover: 495 full-width points before #3788.
+/// #3788: recursive merge fills (`ring_fill`), lattice micro-step
+/// cleanup, and full-width-checked edge joins bring it back to 0 points
+/// and no narrow note.
 #[test]
 #[ignore = "heavy lane (#3316 fig8 Outside): one generation and its verify run past the 60 s debug budget (about 170 s) - run with --release -- --ignored"]
 fn fig8_outside_offset_cuts_no_move_at_full_width() {
@@ -275,9 +274,10 @@ fn fig8_outside_offset_cuts_no_move_at_full_width() {
     let (path, _) = offset_op(&world, &mut h, &name, stock.0.z, PassStart::Outside);
     let full = flanks::full_width_points(&path, &band_material(&world, &name, stock), R8);
     assert_names_each_full_width_cut(&world, &name, &path, &full, false);
-    assert!(full.len() <= 21, "{} full-width cut point(s) (#3788: 21 at 7 ring corners), the first at {:?}", full.len(), full.first());
+    assert_eq!(full.len(), 0, "{} full-width cut point(s), the first at {:?}", full.len(), full.first());
     let named: Vec<&String> = path.notes.iter().filter(|n| n.starts_with(PASS_START_NOTE)).collect();
     assert!(!named.iter().any(|n| n.contains("is a wall in the stock")), "the band starts in air: {named:?}");
+    assert!(!named.iter().any(|n| n.contains("take the full tool width")), "unexpected narrow note: {named:?}");
 }
 
 /// #3788 (c): no full-width cut is silent. When the meter finds a cut of
@@ -285,7 +285,13 @@ fn fig8_outside_offset_cuts_no_move_at_full_width() {
 /// narrow note; without `wall`, the note's first place is the meter's
 /// first place. With `wall`, the cuts along the part wall are named by
 /// the wall note.
-fn assert_names_each_full_width_cut(world: &World, name: &str, path: &Toolpath, full: &[camcraft_app::geo2d::Point2], wall: bool) {
+fn assert_names_each_full_width_cut(
+    world: &World,
+    name: &str,
+    path: &Toolpath,
+    full: &[camcraft_app::geo2d::Point2],
+    wall: bool,
+) -> Vec<camcraft_app::geo2d::Point2> {
     let notes: Vec<&String> = path.notes.iter().filter(|n| n.starts_with(PASS_START_NOTE)).collect();
     let e = model::find_by_name(world, name).expect("part");
     let part = camcraft_app::geometry::slice::project(&model::world_facets(world, &e).expect("facets"), 64).expect("part outline");
@@ -304,11 +310,12 @@ fn assert_names_each_full_width_cut(world: &World, name: &str, path: &Toolpath, 
         best
     };
     let on_wall = |q: &camcraft_app::geo2d::Point2| (to_wall(q) - R8).abs() < 0.5;
-    let (walled, open): (Vec<&camcraft_app::geo2d::Point2>, Vec<&camcraft_app::geo2d::Point2>) = full.iter().partition(|q| wall && on_wall(q));
+    let (walled, open): (Vec<camcraft_app::geo2d::Point2>, Vec<camcraft_app::geo2d::Point2>) =
+        full.iter().copied().partition(|q| wall && on_wall(q));
     if !walled.is_empty() {
         assert!(notes.iter().any(|n| n.contains("the part wall")), "{} cut(s) along the part wall are not named: {notes:?}", walled.len());
     }
-    let Some(first) = open.first() else { return };
+    let Some(first) = open.first() else { return open };
     let narrow = notes.iter().find(|n| n.contains("take the full tool width"));
     let Some(narrow) = narrow else { panic!("{} full-width cut(s) are not named, the first at {first:?}: {notes:?}", open.len()) };
     let at = format!("X {:.3}, Y {:.3}", first.x, first.y);
@@ -323,11 +330,12 @@ fn assert_names_each_full_width_cut(world: &World, name: &str, path: &Toolpath, 
     // (arcs, links) in another order there: the note is required, its
     // first place only where no wall cut comes first.
     assert!(wall || near(narrow), "the note names another place than the meter's first ({at}): {narrow}");
+    open
 }
 
 /// #3788 (c) pin: Inside on fig8 cuts its first ring along the part wall at
-/// the full tool width (named by the wall note) and more cuts at the
-/// waist; each one is named.
+/// the full tool width (named by the wall note) and leaves zero off-wall
+/// full-width cuts at the waist; each full-width cut is named.
 #[test]
 #[ignore = "heavy lane (#3788 fig8 Inside): one generation and the meter run past the 60 s debug budget - run with --release -- --ignored"]
 fn fig8_inside_offset_names_each_full_width_cut() {
@@ -336,7 +344,8 @@ fn fig8_inside_offset_names_each_full_width_cut() {
     let full = flanks::full_width_points(&path, &band_material(&world, &name, stock), R8);
     eprintln!("fig8 Inside: {} full-width point(s)", full.len());
     assert!(!full.is_empty(), "Inside starts on the part wall, so the meter reads full-width cuts");
-    assert_names_each_full_width_cut(&world, &name, &path, &full, true);
+    let open = assert_names_each_full_width_cut(&world, &name, &path, &full, true);
+    assert!(open.is_empty(), "fig8 Inside left {} off-wall full-width point(s), first {:?}", open.len(), open.first());
 }
 
 /// #3744 pin: the one ring set gives no crossing feeds on fig8, from

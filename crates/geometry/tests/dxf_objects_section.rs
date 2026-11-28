@@ -176,3 +176,19 @@ fn object_data_after_the_subclass_marker_stays_opaque() {
         parse(without.as_bytes()).unwrap()
     );
 }
+
+#[test]
+fn a_sun_object_in_objects_stays_inert() {
+    // AutoCAD writes SUN in OBJECTS (AcDbSun, no AcDbEntity), so it is not refused as a
+    // graphical entity there (#3683).
+    let body = format!(
+        "{ROOT}0\nDICTIONARY\n5\nA1\n330\nA0\n100\nAcDbDictionary\n3\nSun\n350\nB1\n\
+         0\nSUN\n5\nB1\n330\nA1\n100\nAcDbSun\n90\n1\n290\n1\n"
+    );
+    let with = format!("{ENTITIES}{}0\nEOF\n", section("OBJECTS", &body));
+    let without = format!("{ENTITIES}0\nEOF\n");
+    assert_eq!(
+        parse(with.as_bytes()).unwrap(),
+        parse(without.as_bytes()).unwrap()
+    );
+}

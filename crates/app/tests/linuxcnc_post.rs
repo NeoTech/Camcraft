@@ -38,7 +38,7 @@ fn tap_stream(kind: &str) -> String {
 const CODES: &[&str] = &[
     "G0", "G1", "G2", "G3", "G10", "G17", "G18", "G19", "G20", "G21", "G28", "G30", "G33.1", "G38.2", "G38.3",
     "G40", "G43", "G49", "G53", "G54", "G55", "G56", "G57", "G58", "G59", "G59.1", "G59.2", "G59.3", "G61",
-    "G64", "G73", "G80", "G81", "G82", "G83", "G84", "G85", "G86", "G89", "G90", "G91", "G91.1", "G94", "G99",
+    "G64", "G73", "G80", "G81", "G82", "G83", "G84", "G85", "G86", "G89", "G90", "G91", "G91.1", "G92.1", "G94", "G97", "G99",
     "M0", "M1", "M2", "M3", "M5", "M6", "M7", "M8", "M9", "M30",
 ];
 
@@ -123,7 +123,7 @@ fn an_unstated_safe_z_is_refused_never_g53_z0() {
 fn a_stated_safe_z_is_the_retract_before_m6_and_at_the_end() {
     let nc = post(&stated(Some(-2.0), false), STREAM, &Value::Null);
     let lines: Vec<&str> = nc.lines().collect();
-    assert_eq!(lines.get(1), Some(&"G21 G17 G90 G91.1 G94 G40 G49 G80"), "{nc}");
+    assert_eq!(lines.get(1), Some(&"G21 G17 G90 G91.1 G94 G40 G49 G80 G92.1 G97"), "{nc}");
     assert_eq!(lines.get(2), Some(&"G64 P0.025"), "{nc}");
     assert_eq!(lines.last(), Some(&"M30"), "{nc}");
     let t3 = lines.iter().position(|l| *l == "T3 M6").expect("tool 3");
@@ -227,4 +227,22 @@ fn mikron_wf3_dcm_posts_g33_1_rigid_tapping_and_refuses_mist_coolant() {
         warnings.iter().any(|w| w.contains("no mist coolant code")),
         "{warnings:?}"
     );
+}
+
+#[test]
+fn blend_tolerance_never_writes_g64_p0() {
+    // #4147: LinuxCNC reads G64 P0 as G64 with no deviation limit.
+    // When a tolerance rounds to zero under fu() resolution (0.001 mm or 0.0001 in),
+    // the post must clamp to the smallest positive value and never write P0.
+    let m = stated(Some(0.0), false);
+
+    // Header blend tolerance: 0.001 mm in inch is ~0.000039 in, which rounds to 0.0000 in.
+    let nc_inch = post(&m, STREAM, &json!({ "Units": "inch", "blendTolerance": 0.001 }));
+    assert!(nc_inch.contains("\nG64 P0.0001\n"), "inch header clamped: {nc_inch}");
+    assert!(!nc_inch.contains("P0\n") && !nc_inch.contains("P0.0000\n"), "never P0: {nc_inch}");
+
+    // Header blend tolerance: smallest metric value 0.001 mm writes P0.001.
+    let nc_mm = post(&m, STREAM, &json!({ "blendTolerance": 0.001 }));
+    assert!(nc_mm.contains("\nG64 P0.001\n"), "mm header clamped: {nc_mm}");
+    assert!(!nc_mm.contains("P0\n"), "never P0: {nc_mm}");
 }

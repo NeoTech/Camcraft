@@ -119,6 +119,16 @@ impl SinkerBurnOp {
         }
     }
 
+    /// The angles at which the orbit starts and ends under the start and
+    /// exit picks (#3333), read round the burn position.
+    ///
+    /// # Errors
+    /// `sinker_picks::orbit_ends`'s refusals, by name: a pick with no
+    /// orbit, a pick on the burn position, a pick a vector orbit cannot hold.
+    pub fn orbit_ends(&self) -> Result<crate::sinker_picks::OrbitEnds, String> {
+        crate::sinker_picks::orbit_ends((self.x, self.y), self.orbit.as_ref(), &self.picks)
+    }
+
     /// The finished cavity's numbers: unread (any finite, non-negative
     /// value) for a single burn; a rough or finish must pass
     /// [`Self::pass_refusal`].
@@ -180,6 +190,15 @@ impl SinkerSideBurnOp {
     #[must_use]
     pub fn side(&self) -> SinkerSide {
         SinkerSide { direction: self.direction, amount: self.amount, undersize: self.undersize }
+    }
+
+    /// The ends at which the side move starts and ends under the start
+    /// and exit picks (#3333): the burn position or the wall end.
+    ///
+    /// # Errors
+    /// `sinker_picks::side_ends`'s refusals, by name.
+    pub fn side_ends(&self) -> Result<crate::sinker_picks::SideEnds, String> {
+        crate::sinker_picks::side_ends((self.burn.x, self.burn.y), &self.side(), &self.burn.picks)
     }
 
     /// The structural refusal by name (no world): an orbit, a measured

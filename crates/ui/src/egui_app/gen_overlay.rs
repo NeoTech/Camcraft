@@ -5,7 +5,7 @@
 //! work; the shell repaints on a timer only while a job runs.
 //! Provenance: our own code over egui's painter; no HSMWorks material.
 
-use egui::{Align2, Color32, FontId, Rect, Stroke, Ui, Vec2};
+use egui::{Align2, FontId, Rect, Stroke, Ui, Vec2};
 
 use crate::gen_worker::overlay_text;
 use crate::state::State;
@@ -21,8 +21,8 @@ pub(super) fn paint(ui: &mut Ui, rect: Rect, state: &mut State, pal: &super::the
     let font = FontId::proportional(pal.font_label.max(10.0));
     let pad = pal.window_margin.clamp(4.0, 24.0);
     let text = overlay_text(&progress);
-    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font.clone(), Color32::WHITE).size().x);
-    let cancel_w = ui.fonts_mut(|f| f.layout_no_wrap(CANCEL.to_owned(), font.clone(), Color32::WHITE).size().x)
+    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font.clone(), pal.overlay_text).size().x);
+    let cancel_w = ui.fonts_mut(|f| f.layout_no_wrap(CANCEL.to_owned(), font.clone(), pal.overlay_text).size().x)
         + 2.0 * ui.spacing().button_padding.x
         + 8.0;
     let row_h = font.size + 2.0 * ui.spacing().button_padding.y + 2.0;
@@ -36,13 +36,13 @@ pub(super) fn paint(ui: &mut Ui, rect: Rect, state: &mut State, pal: &super::the
     let panel = Rect::from_min_size(egui::pos2(rect.center().x - width * 0.5, rect.min.y + pad), Vec2::new(width, height));
     let painter = ui.painter_at(rect);
     let radius = f32::from(pal.radius_window);
-    painter.rect_filled(panel, radius, Color32::from_black_alpha(200));
-    painter.rect_stroke(panel, radius, Stroke::new(1.0, Color32::from_white_alpha(60)), egui::StrokeKind::Inside);
+    painter.rect_filled(panel, radius, pal.overlay_panel);
+    painter.rect_stroke(panel, radius, Stroke::new(1.0, pal.overlay_edge), egui::StrokeKind::Inside);
     let row = Rect::from_min_size(egui::pos2(panel.min.x + pad, panel.min.y + pad), Vec2::new(width - 2.0 * pad, row_h));
-    painter.text(row.left_center(), Align2::LEFT_CENTER, text, font, Color32::WHITE);
+    painter.text(row.left_center(), Align2::LEFT_CENTER, text, font, pal.overlay_text);
     // The activity bar: a segment that sweeps the track once each 1.6 s.
     let track = Rect::from_min_size(egui::pos2(row.min.x, row.max.y + pad * 0.5), Vec2::new(row.width(), bar_h));
-    painter.rect_filled(track, bar_h * 0.5, Color32::from_white_alpha(40));
+    painter.rect_filled(track, bar_h * 0.5, pal.overlay_track);
     let seg = track.width() * 0.25;
     let phase = (progress.secs / 1.6).fract() as f32;
     let x0 = track.min.x + phase * (track.width() + seg) - seg;

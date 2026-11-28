@@ -101,6 +101,10 @@ pub enum CycleChoice {
     Spot,
     Drill,
     Peck,
+    /// Full-retract pecking (#2443): the tool leaves the hole after each
+    /// peck ([`CycleKind::Deep`], G83). Auto reaches it only past four
+    /// diameters; this is the user's word for a deep or gummy hole.
+    Deep,
     Tap,
 
     Bore,
@@ -160,6 +164,13 @@ pub struct CycleParams<'a> {
     /// Whether `through_clear` measures from the full cutting diameter
     /// (adding [`drill_point_length`]) or from the drill tip (#2441).
     pub break_through_from: BreakThroughFrom,
+    /// The highest material over each hole, aligned with `holes` (#2443
+    /// review): the part and the stock as the program ahead leaves them,
+    /// read by the caller. Auto chooses its cycle by the depth from the
+    /// higher of this and the mouth, never above the R plane, so uncut
+    /// stock over a mouth counts as material. Empty (or a non-finite
+    /// entry): the mouth alone.
+    pub material_top: &'a [f64],
 }
 
 /// A spot drill's dimple depth below the entry plane, unless the floor
@@ -242,21 +253,27 @@ pub const CHIP_BREAK: f64 = 1.0;
 /// to geometry the machine could not measure better.
 pub const FIT_TOL: f64 = 0.02;
 
+/// How close (mm) a depth must sit to an Auto limit to count as on it:
+/// one micron, under the posted resolution and far over float roundoff
+/// (a stock radius read as 25.000000000000004 must not flip the cycle).
+pub const AUTO_TOL: f64 = 1e-6;
+
 /// The Auto cycle law: the tool's kind speaks first (a tap taps, a
 /// boring bar bores); otherwise it is depth against the diameter -
 /// one length or less is a plain drill, up to four diameters a
 /// chip-break peck, deeper gets full-retract pecks and the dwell word
 /// (G83's shape). Spot is never automatic: it is what the user says it
-/// is.
+/// is. Both limits are inclusive within [`AUTO_TOL`], so a depth that
+/// lands on a limit picks the same cycle on every system (#2443 review).
 #[must_use]
 pub fn auto_kind(tool_kind: ToolKind, depth: f64, diameter: f64) -> CycleKind {
     match tool_kind {
         ToolKind::Tap => CycleKind::Tap,
         ToolKind::Bore => CycleKind::Bore,
         _ => {
-            if depth <= diameter {
+            if depth <= diameter + AUTO_TOL {
                 CycleKind::Drill
-            } else if depth <= 4.0 * diameter {
+            } else if depth <= 4.0 * diameter + AUTO_TOL {
                 CycleKind::Peck
             } else {
                 CycleKind::Deep

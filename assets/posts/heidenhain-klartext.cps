@@ -1,5 +1,5 @@
 // Original CamCraft Klartext post. HEIDENHAIN iTNC 530 Conversational Format,
-// 533 190-22 (9/2006), NC 340 490-03: §§4.4, 5.2, 6.4, 7.2, 7.4, 8.9, 14.4.
+// 533 190-22 (9/2006), NC 340 490-03: §§4.4, 5.2, 6.4, 7.2, 7.4, 8.9, 8.10, 14.4.
 // https://content.heidenhain.de/doku/tnc_guide/pdf_files/iTNC530/34049x-neu/en/bhb.pdf
 // Machine installation selects the qualified language profile and change procedure.
 description = "Heidenhain Klartext (metric 3-axis milling)";
@@ -14,8 +14,8 @@ serves = ["mill"];
 programUnits = "mm";
 coolantModes = true;
 failOnWarning = true;
-workOffsetIndex = true;
-workOffsetMax = 6;
+workOffsetIndex = true; floatingTapping = true; // #4227: cycle 206 needs the explicit floating-holder choice
+workOffsetMax = 6; manualToolChange = ["manual-retract-top"]; // #4085: it writes the stop and checks for this change
 
 var blockNumber = 0;
 var programName = "";
@@ -49,7 +49,7 @@ function decimal(value, places, limit, field) {
   return Number(value.toFixed(places));
 }
 function local(value, axis) {
-  return decimal(required(value, axis) - section["Origin" + axis], 4, 99999.9999, axis);
+  return decimal(required(value, axis) - section["Origin" + axis], dialect ? dialect.decimals : 4, dialect && dialect.decimals === 3 ? 99999.999 : 99999.9999, axis);
 }
 function coord(axis, value) {
   var n = local(value, axis);
@@ -71,8 +71,15 @@ function workOffsetName(n) {
 
 function onOpen() {
   var controller = machine.controllerIdentity;
-  if (!controller || controller.model !== "iTNC 530" || controller.nc_software !== "340490-03") {
+  if (!controller) {
     refuse("unsupported or missing controller profile; select iTNC 530 NC 340490-03");
+  }
+  dialectCheck(controller);
+  // #4114/#4095: the manual quill procedure (M140, M0 stops) is verified on
+  // one installation and NC software only, the same check as the DIN/ISO post.
+  if (controller.model !== "iTNC 530" || controller.nc_software !== "340490-03") {
+    refuse("controller profile " + dialect.profile + " (" + controller.model + " NC " + controller.nc_software +
+      ") is not verified for the manual quill procedure; select iTNC 530 NC 340490-03");
   }
   if (machine.model !== "Fehlmann Picomax 55 (iTNC 530)") {
     refuse("the manual quill procedure requires the Fehlmann Picomax 55 (iTNC 530) installation");
@@ -91,8 +98,40 @@ function onOpen() {
   if (minimum <= 0 || maximum < minimum) {
     refuse("the installation must state a positive spindle speed range");
   }
+  var configuredTolerance = (typeof machine.arcTolerance === "number" && machine.arcTolerance > 0)
+    ? machine.arcTolerance
+    : (machine.controller && typeof machine.controller.arcTolerance === "number" && machine.controller.arcTolerance > 0)
+      ? machine.controller.arcTolerance
+      : 0.016;
+  if (configuredTolerance > 0.016) {
+    refuse("arc tolerance " + configuredTolerance + " mm exceeds the 0.016 mm controller maximum (MP 7431)");
+  }
   programName = program.numbered ? String(program.number) : "CAMCRAFT";
   block("BEGIN PGM " + programName + " MM");
+}
+// #4095: the dialect of the stated control comes from the shared resolver
+// (camcraft_post::post::heidenhain_dialect, machine.heidenhainDialect;
+// docs/decisions/4095-heidenhain-dialect-resolver.md). This post writes
+// L M140 MB MAX, CYCL DEF 247 with Q339 (a preset-table row) and M137, so
+// each of these must exist with that meaning on the control. Coordinates
+// use the control's decimals.
+var dialect = null;
+function dialectCheck(controller) {
+  var d = machine.heidenhainDialect;
+  var who = controller.model + " NC " + controller.nc_software;
+  if (!d || typeof d !== "object" || d.error) {
+    refuse("unsupported controller profile: " + (d && d.error ? String(d.error) : "no dialect for " + who));
+  }
+  var lacks = [];
+  if (d.m140 !== "yes") lacks.push("M140 MB MAX");
+  if (d.cycle247 !== "presetTable") lacks.push("cycle 247 as a preset-table row");
+  if (d.m136m137 !== "yes") lacks.push("M137");
+  if (d.decimals !== 3 && d.decimals !== 4) lacks.push("3 or 4 coordinate decimals");
+  if (lacks.length) {
+    refuse("controller profile " + d.profile + " (" + who + ") does not confirm " + lacks.join(", ") +
+      ", which this post writes");
+  }
+  dialect = d;
 }
 function onParameter(name, value) {
   if (inSection) refuse("unexpected parameter inside a section: " + name);
@@ -122,12 +161,27 @@ function onParameter(name, value) {
     case "SectionMode":
       if (value === "3-axis") return;
       break;
+    case "Smoothing":
+      // #4095: a finite positive deviation in mm (post::dump writes no other).
+      if (typeof value !== "number" || !isFinite(value) || !(value > 0)) {
+        refuse("smoothing tolerance " + value + " is not a positive number of mm");
+      }
+      section.Smoothing = value;
+      return;
+    case "SmoothingMode":
+      if (value !== "finish" && value !== "rough") refuse("smoothing mode \"" + value + "\" is not finish or rough");
+      section.SmoothingMode = value;
+      return;
   }
   refuse("unsupported parameter " + name + " (" + value + ")");
 }
 function onToolChange(number, name) {
   if (inSection || !Number.isInteger(number) || number < 1 || number > 32767) {
     refuse("missing or invalid tool number");
+  }
+  // #4087: the machine's tool table (MP 7260 lines on the Picomax).
+  if (machine.toolNumberMax > 0 && number > machine.toolNumberMax) {
+    refuse("tool number " + number + " is above the machine tool table maximum " + machine.toolNumberMax);
   }
   if (section.tool !== undefined) refuse("multiple TOOL declarations in one section");
   section.tool = number;
@@ -136,8 +190,9 @@ function onToolChange(number, name) {
 var toolDefinitions = Object.create(null);
 function checkToolDefinition() {
   var kind = typeof section.ToolKind === "string" ? section.ToolKind.toLowerCase() : "";
-  if (["flat end mill", "ball-nose", "bull-nose", "chamfer mill"].indexOf(kind) === -1) {
-    refuse("unsupported milling tool kind " + (kind || "(unstated)"));
+  // #4227: a drill or a tap cuts only in a drilling cycle (axialOnly).
+  if (["flat end mill", "ball-nose", "bull-nose", "chamfer mill", "drill", "tap"].indexOf(kind) === -1) {
+    refuse("unsupported tool kind " + (kind || "(unstated)"));
   }
   var diameter = required(section.ToolDiameter, "ToolDiameter");
   var cornerRadius = section.ToolCornerRadius === undefined ? 0 : section.ToolCornerRadius;
@@ -243,6 +298,7 @@ function onSection() {
   block("M0");
   block("M3");
   block(flood ? "M8" : "M9");
+  smoothOn();
   // Establish the programmed start before the first record, including an arc
   // or a plunge as the first record. Stay at the upper limit during XY travel,
   // then descend only in the column of the verified start point.
@@ -269,12 +325,18 @@ function motion() {
   return p;
 }
 function onRapid() {
+  if (!inSection) refuse("motion outside an operation section");
+  if (holeMove(true)) return;
   var p = motion();
   block("L " + xyz(p.X, p.Y, p.Z) + " R0 FMAX");
 }
 function onLinear() {
+  if (!inSection) refuse("motion outside an operation section");
+  if (holeMove(false)) return;
+  axialOnly("feed");
   var p = motion();
   block("L " + xyz(p.X, p.Y, p.Z) + " R0 F" + rate(p.FeedRate, machine.feedRateMax, "feed"));
+  dwellAtDepth();
 }
 function onCircular() {
   // #3442: an arc whose written ends coincide is no C block (arcFate,
@@ -283,6 +345,8 @@ function onCircular() {
   var fate = arcFate(function (k, v) { return local(v, k); });
   if (fate === "linear") { onLinear(); return; }
   if (fate === "none") { motion(); return; }
+  closeHole();
+  axialOnly("arc");
   var p = motion();
   if (p.CircularPlane !== "XY" || p.Z !== p.StartZ) refuse("only constant-Z XY arcs are supported");
   var centre = p.IJKIncrement || {};
@@ -295,10 +359,21 @@ function onCircular() {
     refuse("rounding would turn the XY arc into a full circle");
   }
   var radius = Math.hypot(startX - cx, startY - cy);
-  // MP7431 permits 0.0001 through 0.016 mm. The machine's selected value
-  // is unstated, so use the strictest documented endpoint tolerance.
-  if (radius < 0.001 || Math.abs(radius - Math.hypot(endX - cx, endY - cy)) > 0.0001000001) {
-    refuse("inconsistent XY arc centre or radius");
+  var endRadius = Math.hypot(endX - cx, endY - cy);
+  // MP 7431 circle end point tolerance: default 0.016 mm for the Picomax 55 (iTNC 530).
+  var arcTolerance = (typeof machine.arcTolerance === "number" && machine.arcTolerance > 0)
+    ? machine.arcTolerance
+    : (machine.controller && typeof machine.controller.arcTolerance === "number" && machine.controller.arcTolerance > 0)
+      ? machine.controller.arcTolerance
+      : 0.016;
+  if (arcTolerance > 0.016) {
+    refuse("arc tolerance " + arcTolerance + " mm exceeds the 0.016 mm controller maximum (MP 7431)");
+  }
+  if (radius < 0.001) {
+    refuse("inconsistent XY arc centre or radius: radius " + radius.toFixed(4) + " mm is below 0.001 mm limit");
+  }
+  if (Math.abs(radius - endRadius) > arcTolerance + 1e-6) {
+    refuse("inconsistent XY arc centre or radius: start radius " + radius.toFixed(4) + " mm, end radius " + endRadius.toFixed(4) + " mm, limit " + arcTolerance + " mm");
   }
   if (p.CircularDirection !== "CW" && p.CircularDirection !== "CCW") refuse("unknown arc direction");
   var direction = p.CircularDirection === "CW" ? "DR-" : "DR+";
@@ -307,10 +382,14 @@ function onCircular() {
 }
 function onSectionEnd() {
   if (!inSection || !moved) refuse("operation section is empty or has no start");
+  closeHole();
+  owedDwell();
+  cycleSig = "";
   if (lastPoint[2] < section.ClearancePlane ||
       local(lastPoint[2], "Z") < local(section.ClearancePlane, "Z")) {
     refuse("operation ends below ClearancePlane; provide a verified retract before stopping the spindle");
   }
+  smoothOff();
   block("M9");
   block("M5");
   inSection = false;
@@ -322,10 +401,183 @@ function onClose() {
   block("END PGM " + programName + " MM");
 }
 
+// ------------------------------------------------------------ cycles
+// #4227: iTNC 530 Cycle Programming (NC 340 49x): cycles 9 DWELL TIME,
+// 200 DRILLING, 206 TAPPING NEW and 207 RIGID TAPPING NEW, at the
+// parameter set of the resolver's drillC200 "q211" level (no Q395).
+// A native cycle replaces only the hole chain that it does itself, and
+// each replaced move is compared with the cycle's own motion:
+// - DRILL / SPOT, cycle 200 with Q202 = the whole depth: one feed to the
+//   depth, the dwell Q211, FMAX back to Q200 (= R). Q204 = Q200, so the
+//   second clearance move is no move.
+// - TAP, cycle 207 (rigid) or 206 (floating): feed to the depth at the
+//   pitch feed, the spindle reverses, feed back to Q200 (= R).
+// PECK and DEEP post the checked chain as L blocks: the native peck
+// re-approach is not provably the chain (#4224,
+// docs/decisions/4224-heidenhain-peck-chain.md). Their dwell, and only
+// theirs, is cycle 9 after the last feed to the depth.
+// docs/decisions/4227-klartext-cycles.md records the choices.
+var CYCLE_TOL = 1e-6;
+var hole = null;          // the open hole: {x, y, r, steps, native, name}
+var cycleSig = "";        // the last CYCL DEF written in this section
+var pendingDwell = null;  // {z, s}: cycle 9 owed after the feed to the depth
+var dwellTaken = 0;       // the dwell the open cycle wrote (Q211 or cycle 9)
+function qword(n, v) {
+  // Increments and Q values carry four decimals, with an explicit sign.
+  var s = Number(v).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  if (s === "-0" || !s) s = "0";
+  return "Q" + n + "=" + (s.charAt(0) === "-" ? s : "+" + s);
+}
+function toolKindWord() {
+  return typeof section.ToolKind === "string" ? section.ToolKind.toLowerCase() : "";
+}
+function cycleDef(text, words) {
+  block("CYCL DEF " + text + " ~");
+  for (var i = 0; i < words.length; ++i) writeln("  " + words[i] + (i + 1 < words.length ? " ~" : ""));
+}
+function sameHole(p) {
+  return hole !== null && Math.abs(p.X - hole.x) < CYCLE_TOL && Math.abs(p.Y - hole.y) < CYCLE_TOL;
+}
+// A move of the open hole's chain. Native: compare it with the cycle's next
+// own move and write nothing (true). Explicit chain: false, the caller posts it.
+function holeMove(rapid) {
+  var p = properties;
+  if (hole === null) return false;
+  if (!sameHole(p) || p.Z > hole.r + CYCLE_TOL) {
+    if (hole.steps.length) refuse(hole.name + " ends before the hole chain returns to R");
+    hole = null;
+    return false;
+  }
+  if (!hole.native) return false;
+  // The tool stands at R after the cycle: a rapid there (the hop when the
+  // hop plane is R) moves nothing.
+  if (!hole.steps.length && rapid && Math.abs(p.Z - hole.r) <= CYCLE_TOL) { motion(); return true; }
+  var step = hole.steps.shift();
+  var feed = rapid ? null : p.FeedRate;
+  if (!step || step.rapid !== rapid || Math.abs(p.Z - step.z) > CYCLE_TOL ||
+      (!rapid && !(Math.abs(feed - step.f) <= CYCLE_TOL * Math.max(1, step.f)))) {
+    refuse("the hole chain is not the motion of " + hole.name);
+  }
+  motion();
+  return true;
+}
+function closeHole() {
+  if (hole !== null && hole.steps.length) refuse(hole.name + " ends before the hole chain returns to R");
+  hole = null;
+}
+// A drill or tap cuts only along the axis of a drilling cycle's hole.
+function axialOnly(what) {
+  var kind = toolKindWord();
+  if (kind !== "drill" && kind !== "tap") return;
+  var p = properties;
+  if (kind === "tap" || !sameHole(p) || Math.abs(p.StartX - p.X) > CYCLE_TOL ||
+      Math.abs(p.StartY - p.Y) > CYCLE_TOL || what === "arc") {
+    refuse("a " + kind + " tool cuts only inside its drilling cycle (" + what + ")");
+  }
+}
+function dwellWords(s) {
+  if (dialect.dwell !== "cycle9") {
+    refuse("controller profile " + dialect.profile + " does not confirm cycle 9 DWELL TIME, which this post writes");
+  }
+  var t = Number(s.toFixed(3));
+  if (!(t > 0) || t > 3600) refuse("dwell " + s + " s is outside 0.001 to 3600 s");
+  block("CYCL DEF 9.0 DWELL TIME");
+  block("CYCL DEF 9.1 DWELL " + t);
+  cycleSig = ""; // define the machining cycle again before its next call
+}
+function dwellAtDepth() {
+  var p = properties;
+  if (pendingDwell === null || !sameHole(p) || Math.abs(p.Z - pendingDwell.z) > CYCLE_TOL) return;
+  dwellWords(pendingDwell.s);
+  pendingDwell = null;
+}
+function owedDwell() {
+  if (pendingDwell !== null) refuse("drilling dwell without a feed move to the hole bottom");
+}
+function onCycle() {
+  if (!inSection) refuse("drilling cycle outside an operation section");
+  closeHole();
+  owedDwell();
+  dwellTaken = 0;
+  var p = properties, type = String(p.CycleType);
+  var tap = type === "TAP", floating = tap && p.TappingMode === "floating";
+  var name = tap ? (floating ? "cycle 206" : "cycle 207") : (type === "PECK" || type === "DEEP" ? type + " chain" : "cycle 200");
+  function bad(why) { refuse("drilling cycle " + type + ": " + why); }
+  if (["SPOT", "DRILL", "PECK", "DEEP", "TAP"].indexOf(type) === -1) bad("unsupported cycle kind");
+  var kind = toolKindWord();
+  if (tap !== (kind === "tap")) bad(tap ? "a tapping cycle requires a tap tool" : "a tap tool cuts only in a tapping cycle");
+  if (p.A !== undefined || p.B !== undefined || p.C !== undefined) bad("rotary or tilted hole");
+  var x = required(p.X, "hole X"), y = required(p.Y, "hole Y"), r = required(p.R, "hole R");
+  var bottom = required(p.Z, "hole depth"), entry = required(p.EntryZ, "hole entry");
+  // The tool stands over the hole at R: the stream rapids there first.
+  if (Math.abs(lastPoint[0] - x) > CYCLE_TOL || Math.abs(lastPoint[1] - y) > CYCLE_TOL ||
+      Math.abs(lastPoint[2] - r) > CYCLE_TOL) {
+    bad("the tool is not at the hole's R plane when the cycle starts");
+  }
+  var clearance = r - entry, depth = bottom - entry;
+  if (clearance < 0 || clearance > 99999.9999 || depth >= 0 || depth < -99999.9999) {
+    bad("needs a nonnegative R clearance and a negative depth below the hole entry");
+  }
+  if (finite(p.ChainBottomZ) && Math.abs(p.ChainBottomZ - bottom) > CYCLE_TOL) bad("the depth disagrees with the hole chain bottom");
+  var dwell = finite(p.P) ? Number(p.P) : 0;
+  if (!(dwell >= 0) || dwell > 3600) bad("invalid dwell");
+  if (type === "PECK" || type === "DEEP") {
+    // #4224: the checked chain posts as L blocks; cycle 9 dwells at its depth.
+    hole = { x: x, y: y, r: r, steps: [], native: false, name: name };
+    if (dwell > 0) pendingDwell = { z: bottom, s: dwell };
+    dwellTaken = dwell;
+    return;
+  }
+  var feedIn = finite(p.FeedRate) ? p.FeedRate : p.ChainFeedRate;
+  var feed = rate(feedIn, machine.feedRateMax, "cycle feed");
+  var words = [qword(200, clearance), qword(201, depth)];
+  var text;
+  if (tap) {
+    var rpm = rate(section.SpindleSpeed, machine.spindleMax, "SpindleSpeed");
+    if (rpm !== Math.round(rpm)) bad("tapping needs an integral spindle speed to state the pitch");
+    if (floating) {
+      if (Math.abs(feedIn - feed) > 0.0000005) bad("the floating tapping feed cannot be written at the control's feed resolution");
+      if (dwell > 0.5) bad("cycle 206 dwell must be at most 0.5 s to avoid wedging the tap");
+      text = "206 TAPPING NEW";
+      words.push(qword(206, feed), qword(211, dwell));
+    } else {
+      var pitch = feedIn / rpm;
+      if (pitch < 0.0001 || pitch > 99.9999 || Math.abs(pitch - Math.round(pitch * 10000) / 10000) > 0.0000005) {
+        bad("the tapping feed and spindle speed give no pitch at the control's resolution");
+      }
+      if (machine.rigidTapping === false) bad("rigid tapping is unavailable on this machine; select a floating holder explicitly if installed");
+      if (dwell !== 0) bad("cycle 207 has no dwell parameter");
+      text = "207 RIGID TAPPING NEW";
+      words.push(qword(239, pitch));
+    }
+  } else {
+    if (dialect.drillC200 !== "q211") {
+      bad("controller profile " + dialect.profile + " has cycle 200 level " + dialect.drillC200 + ", not the q211 level that this post writes");
+    }
+    // One plunge: the plunging depth is the whole depth.
+    text = "200 DRILLING";
+    words.push(qword(206, feed), qword(202, -depth), qword(210, 0));
+  }
+  words.push(qword(203, local(entry, "Z")), qword(204, clearance));
+  if (!tap) words.push(qword(211, dwell));
+  dwellTaken = tap && !floating ? 0 : dwell;
+  var sig = text + "|" + words.join("|");
+  if (sig !== cycleSig) { cycleDef(text, words); cycleSig = sig; }
+  block("CYCL CALL");
+  hole = {
+    x: x, y: y, r: r, native: true, name: name,
+    steps: [{ rapid: false, z: bottom, f: feedIn }, tap ? { rapid: false, z: r, f: feedIn } : { rapid: true, z: r }]
+  };
+}
+// The engine sends the cycle's dwell after onCycle: the cycle wrote it.
+function onDwell(seconds) {
+  if (!(Math.abs(Number(seconds) - dwellTaken) <= CYCLE_TOL)) refuse("dwell " + seconds + " s outside a drilling cycle that writes it");
+  dwellTaken = 0;
+}
+function finite(v) { return typeof v === "number" && isFinite(v); }
+
 // Refuse before the host can substitute an ordinary motion or comment for a
 // record that requests a material change, spindle synchronization or probing.
-function onCycle() { refuse("unsupported drilling cycle " + properties.CycleType); }
-function onDwell() { refuse("unsupported dwell"); }
 function onRadiusCompensation() { refuse("unsupported control cutter compensation"); }
 function onThreadCycle() { refuse("unsupported threading cycle"); }
 function onThreadCycleEnd() { refuse("unsupported threading cycle"); }
@@ -349,4 +601,64 @@ function onComment(text) {
   var singleLine = String(text || "").replace(/\s+/g, " ");
   var words = commentText(singleLine).match(/.{1,64}(?: |$)|.{1,64}/g) || [];
   for (var i = 0; i < words.length; ++i) block("; " + words[i].trim());
+}
+
+// ------------------------------------------------------------ smoothing
+// #4095 (the Klartext use of the #4226 flags): a section's smoothing ask
+// (PARAM Smoothing / SmoothingMode, #616) is cycle 32 TOLERANCE, 533 190-22
+// section 8.10 (pages 509-511): "CYCL DEF 32.0 TOLERANCE", "CYCL DEF 32.1
+// T<mm>" and, where the control takes it, "CYCL DEF 32.2 HSC-MODE:<0|1>
+// TA<deg>" (0 finish, 1 rough; TA is the rotary-axis tolerance). The
+// cycle is DEF active. A cycle 32 with T only gets HSC-MODE and TA 0 from
+// the control. The resolver's g62Mode says if the control takes HSC-MODE
+// ("option2": only with software option 2 in installed_options, which the
+// manual states for the 340 49x software), and g62TMaxUm is the largest T
+// on the 1 um grid (0: no cycle 32). T 0 is the machine builder's
+// tolerance, so a T that rounds to 0 is refused. This post moves no
+// rotary axis, so it writes TA0. A rough ask where HSC-MODE cannot be
+// written is refused: this post fails on each warning. The section end
+// resets the cycle (the manual: redefine it and answer the tolerance with
+// NO ENT, which leaves "CYCL DEF 32.1" with no T), so that no tolerance
+// goes into the next operation. docs/decisions/4095-klartext-cycle-32.md.
+var smoothActive = false;
+function smoothRefuse(why) {
+  refuse("smoothing " + why + " - refused, not posted");
+}
+function smoothOn() {
+  if (section.Smoothing === undefined) {
+    if (section.SmoothingMode !== undefined) smoothRefuse("mode " + section.SmoothingMode + " without a tolerance");
+    return;
+  }
+  var who = "controller profile " + dialect.profile;
+  var maxUm = Number(dialect.g62TMaxUm);
+  if (!(maxUm > 0)) smoothRefuse("tolerance " + section.Smoothing + " mm: " + who + " has no cycle 32 TOLERANCE");
+  var um = Math.round(Number(section.Smoothing.toFixed(3)) * 1000);
+  if (!(um > 0)) {
+    smoothRefuse("tolerance " + section.Smoothing + " mm writes T0 at 0.001 mm, which the control reads as the" +
+      " machine builder's tolerance - the smallest T is 0.001 mm");
+  }
+  var t = String(Number((um / 1000).toFixed(3)));
+  if (um > maxUm) {
+    smoothRefuse("tolerance T" + t + " mm is above the largest T of " + who + " (" +
+      String(Number((maxUm / 1000).toFixed(3))) + " mm)");
+  }
+  var mode = String(dialect.g62Mode);
+  var opt2 = Array.isArray(dialect.options) && dialect.options.indexOf(2) >= 0;
+  var hsc = mode === "yes" || (mode === "option2" && opt2);
+  if (hsc && section.SmoothingMode === undefined) smoothRefuse("tolerance without a finish or rough mode");
+  if (!hsc && section.SmoothingMode === "rough") {
+    smoothRefuse("mode rough: " + who + (mode === "option2"
+      ? " takes CYCL DEF 32.2 HSC-MODE only with software option 2 (HSC machining), which the machine file does not list"
+      : " has no documented HSC-MODE") + "; ask for finish smoothing, or none");
+  }
+  block("CYCL DEF 32.0 TOLERANCE");
+  block("CYCL DEF 32.1 T" + t);
+  if (hsc) block("CYCL DEF 32.2 HSC-MODE:" + (section.SmoothingMode === "rough" ? "1" : "0") + " TA0");
+  smoothActive = true;
+}
+function smoothOff() {
+  if (!smoothActive) return;
+  block("CYCL DEF 32.0 TOLERANCE");
+  block("CYCL DEF 32.1");
+  smoothActive = false;
 }

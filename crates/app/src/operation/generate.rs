@@ -64,6 +64,17 @@ pub fn entry_not_recommended(path: &Toolpath) -> Option<Warning> {
     Some(Warning::EntryNotRecommended { at, entry, inside })
 }
 
+/// #3849: a trochoidal clean-up pass whose radial engagement remained
+/// above `limit_deg` after peel step-down - one advisory warning on the
+/// operation and status line so an overloaded clean-up cut never passes
+/// silently. `at` is the clean-up feed through the measured peak, not
+/// the path's first cut.
+#[must_use]
+pub fn cleanup_engagement_warning(path: &Toolpath) -> Option<Warning> {
+    let (at, measured_deg, limit_deg) = crate::machining2d::cleanup_engagement_move(path)?;
+    Some(Warning::EngagementExceeded { at, measured_deg, limit_deg })
+}
+
 /// [`run_job`]'s body: every arm, unchanged.
 fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
@@ -90,6 +101,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut slot_bound,
         mut rotary_picks,
         mut prior,
+        prior_staged: _,
         verify_prior,
         mut drills_ahead,
         turned_ahead,
@@ -214,6 +226,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
+            // #4134: the control's wire offset over the judged path.
+            super::wire_comp::apply(op, &cond.0, &mut path)?;
             return Ok((path, Vec::new()));
         }
         let picks = if let Some(sketch) = &wire_sketch {
@@ -224,8 +238,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // #1109: an open run is entered from the stock's edge - the
         // setup's stock outline, read only when a run is picked.
         let stock = || stock_facets.as_deref().and_then(|f| slice::project(f, FOOTPRINT_SAMPLES).ok()).filter(|r| !r.is_empty());
+        // #3215: a model's profile has its arcs read back from the facets,
+        // bounded by the model's chord; a drawn chain keeps its polygon.
+        let arcs = wire_sketch.is_none().then_some(crate::geometry::import::step::CHORD_CAP + material.excess);
+        let comp_cond = cond.0.clone();
         let (path, warnings) = super::wire_op::generate_wire(
             op,
+            arcs,
             Ok(cond),
             &hs,
             picks,
@@ -238,6 +257,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             sketch.check_path(&path, k).map_err(GenError::Invalid)?;
             sketch.annotate(&mut path);
         }
+        super::wire_comp::apply(op, &comp_cond, &mut path)?;
         return Ok((path, warnings));
     }
     // The program ahead, cut only when a law asks (#89, #96 review).
@@ -466,6 +486,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             climb,
             blend_turns, blend_radius,
             holes,
+            picks,
             ..
         } => {
             let region = region_for_job(
@@ -538,7 +559,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let keep = avoid_spec
                 .as_ref()
                 .map(|spec| machining2d::FaceKeep { names: spec.names_list(), at: &keep_at });
-            let path = boundary_turn::face_over_back(&laid, &fparams, 0.0, solid.as_ref(), turn, keep.as_ref())?;
+            let path = boundary_turn::face_over_back(&laid, &fparams, 0.0, solid.as_ref(), turn, keep.as_ref(), picks)?;
             // M11.3 owed: the facer enters a radius off the footprint -
             // from air over the stock's edge; over the stock (an inner
             // patch) the entry runs on along its row out to air, or the
@@ -550,7 +571,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     path,
                     (stock_facets.as_deref(), m_gen, frame.as_ref()),
                     band.as_deref().unwrap_or(&[]),
-                    |lead| boundary_turn::face_over_back(&laid, &fparams, lead, solid.as_ref(), turn, keep.as_ref()),
+                    |lead| boundary_turn::face_over_back(&laid, &fparams, lead, solid.as_ref(), turn, keep.as_ref(), picks),
                     d * 0.5,
                 )?
             };
@@ -639,6 +660,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     area.take(),
                     d,
                     comp_name,
+                    avoid_spec.as_ref(),
                     &mut carry,
                 )?;
                 lk.approach.material_top = mat_top;
@@ -657,7 +679,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     _ => region_for_job(&mut picked_region, &mut section_z, &src, &params, m_gen, frame.as_ref())?,
                 };
                 let ctx = area.take().ok_or_else(|| unreached("contour open boundary"))?;
-                let path = super::contour_open::open_pass(&base, &ctx, &cp)?;
+                let path = super::contour_open::open_pass(&base, &ctx, &cp, avoid_spec.as_ref())?;
                 (base, path)
             } else { match &src {
                 SrcRef::Selection(_) => {
@@ -702,6 +724,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         }
                         apply_area_controls(Region::new(loops)?, ctx.as_ref())?
                     };
+                    let avoid_active = avoid_spec.as_ref().filter(|s| !s.is_empty());
+                    let is_blocked = |err: &GenError| {
+                        avoid_active.is_some()
+                            && matches!(
+                                err,
+                                GenError::Invalid(m)
+                                    if m.starts_with("cannot cut clear of protected 'Do not touch'")
+                                        && m.ends_with("no safe cutting room remains")
+                            )
+                    };
                     let rings = |cp: &ContourParams| {
                         if region.is_empty() {
                             Ok(Toolpath::new(Vec::new()))
@@ -712,17 +744,40 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             // (M13.11) when the picks span several models.
                             // #1927: a picked ring that meets its wall at no
                             // level - the side stands in the part - is refused.
-                            machining2d::contour_on_picked(&region, &m_gen.facets, &m_gen.bodies, cp)
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_on_picked_avoid(&region, &m_gen.facets, &m_gen.bodies, cp, spec),
+                                None => machining2d::contour_on_picked(&region, &m_gen.facets, &m_gen.bodies, cp),
+                            }
                         } else {
-                            machining2d::contour(&region, cp)
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_avoid(&region, cp, spec),
+                                None => machining2d::contour(&region, cp),
+                            }
                         }
                     };
-                    let mut path = rings(&cp)?;
-                    if let Some(m) = carry_need!(&super::top_stock::contour_reach(&region, cp.side == Side::Inside, d), &path) {
-                        cp.links.approach.material_top = Some(m);
-                        lk = cp.links;
-                        path = rings(&cp)?;
-                    }
+                    let mut blocked_err: Option<GenError> = None;
+                    let mut path = match rings(&cp) {
+                        Ok(mut p) => {
+                            if let Some(m) = carry_need!(&super::top_stock::contour_reach(&region, cp.side == Side::Inside, d), &p) {
+                                cp.links.approach.material_top = Some(m);
+                                lk = cp.links;
+                                p = rings(&cp)?;
+                            }
+                            p
+                        }
+                        Err(e) if !runs.is_empty() && is_blocked(&e) => {
+                            blocked_err = Some(e);
+                            let mut empty = Toolpath::new(Vec::new());
+                            if let Some(spec) = avoid_active {
+                                empty.notes.push(format!(
+                                    "Do not touch ({}): skipped closed selection ring(s) blocked on every level",
+                                    spec.names_list()
+                                ));
+                            }
+                            empty
+                        }
+                        Err(e) => return Err(e),
+                    };
                     if control_comp && !runs.is_empty() {
                         return Err(GenError::Invalid(format!(
                             "{comp_name} compensation does not ride open runs - pick closed rings, or choose In computer"
@@ -741,14 +796,34 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // no tilt frame: world facets are the job's frame).
                     let stock_at = |z: f64| stock_facets.as_deref().map_or(Ok(None), |f| cut(f, &[], z));
                     let part_at = |z: f64| if keep_parts.is_empty() { Ok(None) } else { cut(&keep_parts, &[], z) };
+                    let multi_items = !region.is_empty() || runs.len() > 1;
                     for run in &runs {
                         // #1015: a run refused shows the rings and runs before it.
-                        let next = if part_solid {
-                            machining2d::contour_open_run(run, &cp, &section_at)
+                        let res = if part_solid {
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_open_run_avoid(run, &cp, &section_at, spec),
+                                None => machining2d::contour_open_run(run, &cp, &section_at),
+                            }
                         } else {
-                            machining2d::contour_open_run_sided(run, &cp, *side, &stock_at, &part_at)
-                        }
-                        .map_err(|e| e.after_moves(&path.moves))?;
+                            match avoid_active {
+                                Some(spec) => machining2d::contour_open_run_sided_avoid(run, &cp, *side, &stock_at, &part_at, spec),
+                                None => machining2d::contour_open_run_sided(run, &cp, *side, &stock_at, &part_at),
+                            }
+                        };
+                        let next = match res {
+                            Ok(n) => n,
+                            Err(e) if multi_items && is_blocked(&e) => {
+                                blocked_err.get_or_insert(e);
+                                if let Some(spec) = avoid_active {
+                                    path.notes.push(format!(
+                                        "Do not touch ({}): skipped blocked open run",
+                                        spec.names_list()
+                                    ));
+                                }
+                                continue;
+                            }
+                            Err(e) => return Err(e.after_moves(&path.moves)),
+                        };
                         let said = next.notes.clone();
                         path = stitch(path, next);
                         for n in said {
@@ -756,6 +831,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                                 path.notes.push(n);
                             }
                         }
+                    }
+                    if !path.moves.iter().any(|m| m.kind == crate::cl::MoveKind::Feed)
+                        && let Some(e) = blocked_err
+                    {
+                        return Err(e);
+                    }
+                    if let Some(spec) = avoid_active {
+                        let rnotes = super::avoid::route_links(&mut path, spec, None);
+                        path.notes.extend(rnotes);
                     }
                     (region, path)
                 }
@@ -771,13 +855,23 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut cp = cp;
                     let run_whole = |cp: &ContourParams| -> Result<(Toolpath, Region), GenError> {
                         if part_solid {
-                            let (path, bands) = machining2d::contour_whole_bodies_with(
-                                &region,
-                                &m_gen.facets,
-                                &m_gen.bodies,
-                                cp,
-                                &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
-                            )?;
+                            let (path, bands) = match avoid_spec.as_ref().filter(|s| !s.is_empty()) {
+                                Some(spec) => machining2d::contour_whole_bodies_with_avoid(
+                                    &region,
+                                    &m_gen.facets,
+                                    &m_gen.bodies,
+                                    cp,
+                                    spec,
+                                    &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
+                                )?,
+                                None => machining2d::contour_whole_bodies_with(
+                                    &region,
+                                    &m_gen.facets,
+                                    &m_gen.bodies,
+                                    cp,
+                                    &mut |r| apply_area_full(r, whole_contour_area.as_ref()).map(|a| a.region),
+                                )?,
+                            };
                             let inside = cp.side == Side::Inside;
                             let mut reach = Region::empty();
                             for r in &bands {
@@ -789,7 +883,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             }
                             Ok((path, reach))
                         } else {
-                            let path = machining2d::contour(&region, cp)?;
+                            let path = match avoid_spec.as_ref().filter(|s| !s.is_empty()) {
+                                Some(spec) => machining2d::contour_avoid(&region, cp, spec)?,
+                                None => machining2d::contour(&region, cp)?,
+                            };
                             let reach = super::top_stock::contour_reach(&region, cp.side == Side::Inside, d);
                             Ok((path, reach))
                         }
@@ -1279,7 +1376,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
             // extra here.
+            // #3329: the start / exit picks seat each level's passes; no
+            // pick is the match below, move for move.
+            let seam = machining3d::LevelSeam::of(&params.path_picks());
             let generated = match &avoid_spec {
+                spec if !seam.is_empty() => {
+                    machining3d::pocket3d_picked(&material.facets, &region, air_stock, &pp, *shell, mask, spec.as_ref(), &seam)
+                }
                 spec if troch => {
                     machining3d::pocket3d_trochoidal(&material.facets, &region, &pp, *rest_rough, mask, spec.as_ref())
                 }
@@ -1485,8 +1588,19 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 None => None,
             };
             let drive = land.as_ref().map_or(&material.facets[..], |(f, _)| f.facets.as_slice());
+            // #3329: the picks choose the raster corner where the Parallel
+            // cut starts and where its last pass ends (each other pattern
+            // refuses a pick by name); an empty seam is the automatic
+            // path, byte for byte.
+            let seam = finishing3d::RasterSeam::of(&params.path_picks());
+            let seamed_ends = std::cell::Cell::new(None);
             let run = |fp: &Finish3DParams| -> Result<Toolpath, GenError> {
                 let whole = match fp.pattern {
+                _ if !seam.is_empty() => {
+                    let (t, ends) = finishing3d::finish_seamed(drive, fp, *direction_angle, &seam)?;
+                    seamed_ends.set(ends);
+                    t
+                }
                 finishing3d::FinishPattern::Waterline => {
                     finishing3d::waterline(drive, fp)?
                 }
@@ -1578,6 +1692,17 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 }
             };
             let mut path = finishing3d::center_cut_guard(tool.center_cutting, &solid, &fp, run)?;
+            // #3329: the clip of the area controls may cut the picked
+            // corner away; the finished path keeps it, or is refused.
+            if let Some(ends) = seamed_ends.get() {
+                finishing3d::raster_ends_kept(
+                    &path,
+                    ends,
+                    &seam,
+                    "the area controls clip the raster",
+                    "clear the area controls ('Do not touch', the machining boundary) or the picks",
+                )?;
+            }
             if clip.is_some() && let Some(spec) = &avoid_spec {
                 path.notes.push(format!(
                     "3D Finish keeps clear of 'Do not touch' {}; material beside these items may remain unfinished",
@@ -1648,7 +1773,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // is where it splits.
             let chains = drive_chains.take().ok_or_else(|| unreached("deburr chains"))??;
             let (include, exclude) = chains.split_at(super::deburr_picks::picked(&src).min(chains.len()));
-            let path = finishing3d::deburr_edges(
+            // #3329: the start / exit picks order the chains; an empty
+            // seam is the automatic ride, byte for byte.
+            let seam = finishing3d::ChainSeam::of(&params.path_picks(), tool.diameter);
+            let path = finishing3d::deburr_seamed(
                 &material.facets,
                 &DeburrParams {
                     width: *width,
@@ -1666,6 +1794,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     sizing: *sizing,
                 },
                 &finishing3d::DeburrEdges { include, exclude },
+                &seam,
             )?;
             (region, path)
         }
@@ -1784,10 +1913,17 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // paths of every v28 document regenerate byte-identical.
             let shank = (*shank_avoid).then(|| shank_of(&tool));
             // M11.3 owed: the centre-cutting law, read along the pose.
+            // #3330: the contour's start / exit picks seat its rings; an
+            // empty seam is the automatic ladder, byte for byte.
+            let seam = crate::finishing3d::RingSeam::of(&params.path_picks());
+            // #3330: the parallel's picks choose the raster corner where
+            // the cut starts and where the last pass ends; an empty seam
+            // is the automatic order, byte for byte.
+            let raster = crate::finishing3d::RasterSeam::of(&params.path_picks());
             let run = |q: &Finish3DParams| if is_contour {
-                crate::multiaxis::contour5d(&material.facets, q, &axis, shank.as_ref())
+                crate::multiaxis::contour5d_seamed(&material.facets, q, &axis, shank.as_ref(), &seam)
             } else {
-                crate::multiaxis::parallel5d(&material.facets, q, &axis, shank.as_ref())
+                crate::multiaxis::parallel5d_seamed(&material.facets, q, &axis, shank.as_ref(), &raster).map(|(t, _)| t)
             };
             let kind = if is_contour { "5-Axis Contour" } else { "5-Axis Parallel" };
             let path = super::plunge_solid::guard_posed(
@@ -1968,23 +2104,46 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #2848: picked faces. Rotary Parallel keeps its cut over
             // them (the axis still reads the whole model); a selection
             // the kind cannot use refuses here, by name.
-            let picked = super::rotary_picks::usable(rotary_picks.take(), &material.facets)?;
-            let run = |q: &Finish3DParams| if is_contour {
-                crate::multiaxis::rotary_contour(&material.facets, q, &axis)
-            } else {
-                crate::multiaxis::rotary_parallel_over(&material.facets, stock_facets.as_deref(), picked.as_deref(), q, &axis)
-            };
+            // #2772 parts 1-2: a stated rotation axis first - the op's
+            // own direction, else the machine's stated rotary lines,
+            // each anchored through the work offset origin and judged
+            // against the model's faces (`axis_stated::judged_any`);
+            // nothing stated keeps today's free fit.
             let kind = if is_contour { "Rotary Contour" } else { "Rotary Parallel" };
-            // M13.5 B: the letter is the machine's. The fitted line
-            // the kernel will turn about must be a rotary the mounted
-            // machine states (A/B on a table, or the spindle's C -
-            // issue #33 - whose angle the path then states).
-            let spindle_c = rotary_letter_gate(machine_rotaries.as_ref(), &material.facets, kind)?;
+            let lines = crate::rotary_stated::lines_of(
+                crate::rotary_stated::op_stated(&params),
+                machine_rotaries.as_ref().map(|(_, r)| r.as_slice()),
+                wcs_origin,
+            )
+            .transpose()
+            .map_err(|e| GenError::Invalid(format!("{kind}: {e}")))?;
+            let ax = match &lines {
+                Some(ls) => crate::multiaxis::axis_stated::judged_any(&material.facets, ls)?,
+                None => crate::multiaxis::axis::fit(&material.facets)?,
+            };
+            let picked = super::rotary_picks::usable(rotary_picks.take(), &material.facets, &ax)?;
+            let run = |q: &Finish3DParams| if is_contour {
+                crate::multiaxis::rotary_contour_stated(&material.facets, ax, q, &axis)
+            } else {
+                crate::multiaxis::rotary_parallel_over_stated(&material.facets, stock_facets.as_deref(), picked.as_deref(), ax, q, &axis)
+            };
+            // M13.5 B: the letter is the machine's. The line the
+            // kernel will turn about - stated (#2772) or fitted - must
+            // be a rotary the mounted machine states (A/B on a table,
+            // or the spindle's C - issue #33 - whose angle the path
+            // then states).
+            let spindle_c = super::rotary_gate::letter_gate(machine_rotaries.as_ref(), lines.as_ref().map(|_| &ax), &material.facets, kind)?;
             let path = super::plunge_solid::guard_posed(
                 kind, tool.center_cutting, tool.kind == crate::tools::ToolKind::BallNose, stock_facets.as_deref(), m_gen, frame.as_ref(), &fp, run,
             )?;
             // Issue #33: on the spindle's C the path states its angle.
-            let path = super::rotary_gate::stamp_spindle_c(path, spindle_c, (machine_rotaries.as_ref(), is_contour), *tolerance, kind)?;
+            let path = super::rotary_gate::stamp_spindle_c(
+                path,
+                spindle_c,
+                (machine_rotaries.as_ref(), if is_contour { super::rotary_gate::Unwind::Axial } else { super::rotary_gate::Unwind::NoProof }),
+                *tolerance,
+                kind,
+            )?;
             // #3096: the first rapid from the turret's index position onto the station.
             if let Some(ax) = spindle_c.filter(|_| super::rotary_traverse::answers(machine_kind, lathe_tool, &params, true)) {
                 let work = super::rotary_traverse::Work { part: &material.facets, part_solid, kept: &keep_parts, neighbours: &neighbour_parts, stock: stock_facets.as_deref(), stock_aabb, turning: &workholding.0, fixed: &workholding.1, excess: material.excess };
@@ -2066,22 +2225,39 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if let Some(picks) = rotary_picks.take() {
                 picks?;
             }
+            // #2772 parts 1-2: a stated rotation axis first - the op's
+            // own direction, else the machine's stated rotary lines,
+            // each anchored through the work offset origin and judged
+            // against the model's faces (`axis_stated::judged_any`);
+            // nothing stated keeps today's free fit.
+            let lines = crate::rotary_stated::lines_of(
+                crate::rotary_stated::op_stated(&params),
+                machine_rotaries.as_ref().map(|(_, r)| r.as_slice()),
+                wcs_origin,
+            )
+            .transpose()
+            .map_err(|e| GenError::Invalid(format!("Rotary Offset: {e}")))?;
+            let ax = match &lines {
+                Some(ls) => crate::multiaxis::axis_stated::judged_any(&material.facets, ls)?,
+                None => crate::multiaxis::axis::fit(&material.facets)?,
+            };
             // M13.5 B: the machine's letter for the line the ladder
             // wraps about, or the refusal by name.
-            let spindle_c = rotary_letter_gate(machine_rotaries.as_ref(), &material.facets, "Rotary Offset")?;
+            let spindle_c = super::rotary_gate::letter_gate(machine_rotaries.as_ref(), lines.as_ref().map(|_| &ax), &material.facets, "Rotary Offset")?;
             // M13.8: the ladder peels from the setup STOCK's outer
-            // radius about the fitted axis (the part's skin when no
+            // radius about the axis (the part's skin when no
             // separate stock is set, or when the stock sits inside it).
-            let path = crate::multiaxis::rotary_offset_in(
+            let path = crate::multiaxis::rotary_offset_stated(
                 &material.facets,
                 stock_facets.as_deref(),
+                ax,
                 &pp,
                 &axis,
             )?;
             // Issue #33: on the spindle's C the path states its angle,
             // split to the verify budget so the machine's C-linear
             // motion is the chord the laws judge.
-            let path = super::rotary_gate::stamp_spindle_c(path, spindle_c, (machine_rotaries.as_ref(), false), *tolerance, "Rotary Offset")?;
+            let path = super::rotary_gate::stamp_spindle_c(path, spindle_c, (machine_rotaries.as_ref(), super::rotary_gate::Unwind::NoProof), *tolerance, "Rotary Offset")?;
             // #3096: the first rapid from the turret's index position onto the station.
             if let Some(ax) = spindle_c.filter(|_| super::rotary_traverse::answers(machine_kind, lathe_tool, &params, true)) {
                 let work = super::rotary_traverse::Work { part: &material.facets, part_solid, kept: &keep_parts, neighbours: &neighbour_parts, stock: stock_facets.as_deref(), stock_aabb, turning: &workholding.0, fixed: &workholding.1, excess: material.excess };
@@ -2093,7 +2269,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // revolved about the same fitted axis, so a move in the air
             // outside its radius is clean and one into it is judged.
             super::plunge_solid::audit_bar(
-                "Rotary Offset", tool.center_cutting, &material.facets, stock_facets.as_deref(), &path, d * 0.5,
+                "Rotary Offset", tool.center_cutting, &material.facets, stock_facets.as_deref(), &path, d * 0.5, &ax,
             )?;
             (region, path)
         }
@@ -2355,6 +2531,103 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
+        // The rotary flow band (#2826, the second slice of #2804):
+        // the picked helical guide chains, unwrapped about the STATED
+        // axis (the op's own, else the machine's rotary line, else the
+        // twins' free fit - #2772's law, judged against the faces
+        // either way), machined where they stand by flow passes the
+        // kernel blends between each adjacent pair. No window clips
+        // the chains: a 360-degree helical band is the kind's own
+        // case, and the heights read as BALL-CENTER RADII about the
+        // axis - never as world Z - so the clearance and retract
+        // cylinders carry the links, and the kernel's radial guard
+        // refuses a number that does not clear the work (#2774's
+        // alignment: the offset sits on the rotary centreline, so a
+        // stock-top reference reads its radius above the stock's own
+        // max radius).
+        OpParams::RotaryFlow {
+            tolerance,
+            stepover,
+            feed,
+            plunge_feed,
+            climb,
+            lead_deg,
+            lag_deg,
+            max_tilt_deg,
+            ..
+        } => {
+            if tool.kind != crate::tools::ToolKind::BallNose {
+                return Err(GenError::Invalid(format!(
+                    "Rotary Flow needs a ball-nose tool, '{}' is a {}",
+                    tool_name, tool.kind
+                )));
+            }
+            let region = region_for_job(
+                    &mut picked_region,
+                    &mut section_z,
+                    &src,
+                    &params,
+                m_gen,
+                frame.as_ref(),
+            )?;
+            let chains = drive_chains
+                .take()
+                .ok_or_else(|| unreached("drive chains"))??;
+            // #2772 parts 1-2: a stated rotation axis first - the op's
+            // own direction, else the machine's stated rotary lines,
+            // each anchored through the work offset origin and judged
+            // against the model's faces (`axis_stated::judged_any`);
+            // nothing stated keeps the twins' free fit, whose own
+            // refusal names a model that says nothing of turning.
+            let lines = crate::rotary_stated::lines_of(
+                crate::rotary_stated::op_stated(&params),
+                machine_rotaries.as_ref().map(|(_, r)| r.as_slice()),
+                wcs_origin,
+            )
+            .transpose()
+            .map_err(|e| GenError::Invalid(format!("Rotary Flow: {e}")))?;
+            let ax = match &lines {
+                Some(ls) => crate::multiaxis::axis_stated::judged_any(&material.facets, ls)?,
+                None => crate::multiaxis::axis::fit(&material.facets)?,
+            };
+            let axis = crate::multiaxis::AxisControl {
+                lead_deg: *lead_deg,
+                lag_deg: *lag_deg,
+                max_tilt_deg: Some(*max_tilt_deg),
+            };
+            let fp = crate::multiaxis::RotaryFlowParams {
+                tool: &tool,
+                stepover: *stepover,
+                tolerance: *tolerance,
+                clearance: hl.clearance,
+                retract: hl.retract,
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+            };
+            // M13.5 B: the letter is the machine's. The line the
+            // kernel will turn the part about - stated (#2772) or
+            // fitted - must be a rotary the mounted machine states
+            // (A/B on a table, or the spindle's C - issue #33).
+            let spindle_c = super::rotary_gate::letter_gate(machine_rotaries.as_ref(), lines.as_ref().map(|_| &ax), &material.facets, "Rotary Flow")?;
+            let path = crate::multiaxis::rotary_flow(&chains, &material.facets, &ax, &fp, &axis)?;
+            super::plunge_solid::audit_posed(
+                "Rotary Flow", tool.center_cutting, stock_facets.as_deref(), m_gen, frame.as_ref(), &path, d * 0.5,
+            )?;
+            // Issue #33: on the spindle's C the path states its angle.
+            // #2828: the unwind law is proven on this kind's band links
+            // end to end - they rest ON the retract cylinder, never
+            // over an axial plane - so the band unwinds by whole turns
+            // at its radial retract links, the rewinds riding as orbit
+            // rapids the verifier and the post both judge.
+            let path = super::rotary_gate::stamp_spindle_c(path, spindle_c, (machine_rotaries.as_ref(), super::rotary_gate::Unwind::Radial), *tolerance, "Rotary Flow")?;
+            // #3096: the first rapid from the turret's index position onto the station.
+            if let Some(ax) = spindle_c.filter(|_| super::rotary_traverse::answers(machine_kind, lathe_tool, &params, true)) {
+                let work = super::rotary_traverse::Work { part: &material.facets, part_solid, kept: &keep_parts, neighbours: &neighbour_parts, stock: stock_facets.as_deref(), stock_aabb, turning: &workholding.0, fixed: &workholding.1, excess: material.excess };
+                super::rotary_traverse::judge_about(&path, "Rotary Flow", &ax, &tool, &work)?;
+            }
+            (region, path)
+        }
         OpParams::Slot {
             a,
             b,
@@ -2369,6 +2642,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             helix_radius, blend_turns, blend_radius,
             extend_start,
             extend_end,
+            picks,
             ..
         } => {
             // #1504: picks bound the room the slot may cut in - a slot
@@ -2380,10 +2654,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 room?.judge(*a, *b, *width)?;
             }
             let (ea, eb) = machining2d::slot_extended_ends(*a, *b, *extend_start, *extend_end)?;
-            let path = machining2d::slot(
-                ea,
-                eb,
-                &SlotParams {
+            let sp = SlotParams {
                     links: lk,
                     tool_diameter: d,
                     entry: *entry,
@@ -2399,8 +2670,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     feed: *feed,
                     plunge_feed: *plunge_feed,
                     climb: *climb,
-                },
-            )?;
+            };
+            // #3325: a start or exit pick chooses which end the pass
+            // starts on; without a pick the ends come back as they are.
+            let (ea, eb) = machining2d::slot_picked_ends(ea, eb, &sp, picks)?;
+            let path = machining2d::slot(ea, eb, &sp)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -2517,6 +2791,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             width,
             angle_deg,
             minimum_cone_radius,
+            tolerance,
             feed,
             plunge_feed,
             climb,
@@ -2608,7 +2883,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     let mut path = if region.is_empty() {
                         Toolpath::new(Vec::new())
                     } else {
-                        machining2d::chamfer(&region, &cp)?
+                        machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?
                     };
                     if !runs.is_empty() {
                         let cut = |facets: &[Triangle],
@@ -2642,7 +2917,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         m_gen,
                         frame.as_ref(),
                     )?;
-                    let path = machining2d::chamfer(&region, &cp)?;
+                    let path = machining2d::chamfer_with_tolerance(&region, &cp, *tolerance)?;
                     (region, path)
                 }
             }
@@ -2730,6 +3005,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     "a Break-through is a mill drill's setting - a lathe's axial and cross holes keep their own exit; clear it".into(),
                 ));
             }
+            // #3328: the picked first and last hole. A lathe's axial holes
+            // share the spindle axis, so no XY pick names one of them.
+            if lathe_axial && !params.path_picks().is_empty() {
+                return Err(GenError::Invalid(format!(
+                    "Drill: a start or exit point is not taken on a lathe's axial hole - {}; clear it on this operation",
+                    super::pick_kinds::PICK_TURRET
+                )));
+            }
+            let ordered = params.holes_in_pick_order(holes).map_err(GenError::Invalid)?;
+            let holes = ordered.as_slice();
             // No region feeds the generator - the hole list is the
             // geometry - but the verify pass below needs one, and it is
             // built the same shared way as every other kind's.
@@ -2854,7 +3139,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         tip_run,
                     );
                 }
+                // #2443 review: Auto counts uncut stock over a mouth as
+                // depth (the part, the raw stock, the program ahead).
+                let tops = if *cycle == drilling::CycleChoice::Auto {
+                    let stock = stock_facets.as_deref().unwrap_or(&[]);
+                    super::drill_prior::material_tops(holes, &material.facets, stock, 0.5 * d, &mut verify_prior, lathe_axial)
+                } else {
+                    Vec::new()
+                };
                 drilling::drill(&drilling::CycleParams {
+                    material_top: &tops,
                     through_clear: run,
                     break_through_from: tip_from,
                     clearance_z: hl.clearance,
@@ -2912,8 +3206,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             holes,
             break_through,
             pass_start,
+            entry: bore_entry,
             ..
         } => {
+            // The command doors refuse it first (`named_refusal`); this is
+            // the second check, for a project file or a caller that skipped them.
+            if let Some(why) = OpParams::bore_entry_refusal(*bore_entry) {
+                return Err(GenError::Invalid(why));
+            }
             // #1557: the stated break-through, the drill's own by default.
             let run = break_through.unwrap_or(drilling::THROUGH_CLEAR);
             broke = super::break_through::deepest(
@@ -2928,6 +3228,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #3328: the picked first and last hole.
+            let holes = params.holes_in_pick_order(holes).map_err(GenError::Invalid)?;
             // #3360: the shared ring order; Auto is the old ladder.
             let path = machining2d::bore_started(&machining2d::BoreParams {
                 links: lk,
@@ -2955,7 +3257,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 plunge_feed: *plunge_feed,
                 climb: *climb,
                 tolerance: *tolerance,
-                entry: Entry3D::Plunge,
+                entry: *bore_entry,
                 helix_radius: 1.0,
             }, *pass_start)?;
             (region, path)
@@ -2965,7 +3267,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // judged at the door, by name. Every move posted is plain
         // 3-axis interpolation (G2/G3 with Z) - no spindle sync.
         OpParams::Thread { holes, external, .. } => {
-            let plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
+            let mut plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
+            // #3328: the picked first and last hole.
+            plan.holes = params.holes_in_pick_order(&plan.holes).map_err(GenError::Invalid)?;
             // The crest law's wall: the tangency verdict reads the
             // furthest the teeth may reach. #1071: a hole's MAJOR circle,
             // grown from the model's own rim where that stands nearer;
@@ -3033,7 +3337,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // `tolerance` is the VERIFY budget (the envelope law's,
             // as in RotaryOffset) - the kernel itself chords the
             // profile by that law's own tol/4 promise.
-            let _ = tolerance;
             // #122: the setup's stock rides along, so an allowance
             // above a part at its finished length is faced off.
             let path = crate::turning::facing(
@@ -3049,6 +3352,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     nose_radius: tool.nose_radius,
                 },
             )?;
+            // #3331: the user's start and exit picks, in the lathe (Z, X) plane.
+            let law = crate::turning::PickLaw { kind: "Facing", nose: tool.nose_radius, leave: 0.0, tolerance: *tolerance };
+            let path = crate::turning::with_picks(path, &material.facets, stock_facets.as_deref(), &params.path_picks(), &law)?;
             (region, path)
         }
         // M5.2 stage B: the profile kinds. The same tool door as
@@ -3095,6 +3401,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 },
                 turn_stock,
             )?;
+            // #3331: the user's start and exit picks, in the lathe (Z, X) plane.
+            let law = crate::turning::PickLaw { kind: "Profile Rough", nose: tool.nose_radius, leave: *stock_to_leave, tolerance: *tolerance };
+            let path = crate::turning::with_picks(path, &material.facets, stock_facets.as_deref(), &params.path_picks(), &law)?;
             (region, path)
         }
         OpParams::ProfileFinish {
@@ -3130,6 +3439,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 },
                 turn_stock,
             )?;
+            // #3331: the user's start and exit picks, in the lathe (Z, X) plane.
+            let law = crate::turning::PickLaw { kind: "Profile Finish", nose: tool.nose_radius, leave: 0.0, tolerance: *tolerance };
+            let path = crate::turning::with_picks(path, &material.facets, stock_facets.as_deref(), &params.path_picks(), &law)?;
             (region, path)
         }
         // M5.2 stage C: the blade kinds. The tool door names the
@@ -4087,6 +4399,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #3035: Adaptive areas cut by Offset rings - a warning, not
             // only a note; advisory (the rings are verified above).
             warns.extend(strategy_fallback(&path));
+            // #3849: trochoidal clean-up passes that still exceed the
+            // engagement limit - advisory (verified path, load risk).
+            warns.extend(cleanup_engagement_warning(&path));
             // #3748: a selected entry that is not the recommended Arc on a
             // start-side pass - one advisory warning, the entry kept.
             let advice = entry_not_recommended(&path);
@@ -4105,6 +4420,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     stock_facets.as_deref(),
                     &cutter,
                     (tol, material.excess),
+                    rotary_axis.as_ref(),
                 );
             }
             // The all-air verdict (M13.8): a finish that provably cuts
@@ -4296,24 +4612,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             Ok((path_world, warns))
         }
     }
-}
-
-/// The rotary kinds' letter door (M13.5 B): the line the kernel will
-/// turn the part about, fitted from the same facets it reads, held
-/// against the mounted machine's rotary inventory. A fit that fails
-/// here is left to the kernel, which refuses it by its own name; a
-/// line no stated rotary holds refuses here. The spindle's C answers
-/// the fitted line (issue #33) - the path is then stamped with its C.
-fn rotary_letter_gate(
-    machine: Option<&(String, Vec<crate::machine::AxisLimits>)>,
-    facets: &[Triangle],
-    kind: &str,
-) -> Result<Option<crate::multiaxis::axis::Axis>, GenError> {
-    let Ok(ax) = crate::multiaxis::axis::fit(facets) else {
-        return Ok(None);
-    };
-    let letter = super::rotary_gate::rotary_letter(machine, [ax.dir.x, ax.dir.y, ax.dir.z], kind)?;
-    Ok((letter == Some('C')).then_some(ax))
 }
 
 /// The fixture laws (c2)/(d2) at generation, exactly as the post gate
@@ -4552,6 +4850,10 @@ pub(super) fn stock_to_leave_of(params: &OpParams) -> f64 {
         // ball's envelope at the curve's stations is the whole law.
         | OpParams::Flow5D { .. }
         | OpParams::MultiAxisContour { .. }
+        // The flow band's passes are the same answer on the rotor's
+        // own skin (#2826): a leave number could only move the rest
+        // verdict.
+        | OpParams::RotaryFlow { .. }
         // Facing leaves no shelf: the ladder steps to the facing
         // plane and stops - the tolerance measures the finish, a
         // stock-to-leave number would only move the verdict (M5.2 A).

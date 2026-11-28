@@ -754,10 +754,11 @@ dependencies = [
 
 [[package]]
 name = "camcraft-app"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
+ "camcraft-gcode",
  "camcraft-geometry",
  "camcraft-motion",
  "camcraft-post",
@@ -782,7 +783,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-cl"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-geometry",
  "tracing",
@@ -791,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-gcode"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -800,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-geometry"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-kernel",
  "clipper2-rust",
@@ -811,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-gpu"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "pollster 0.4.0",
  "tracing",
@@ -820,7 +821,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-kernel"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-kernel",
  "flate2",
@@ -832,6 +833,8 @@ dependencies = [
  "solidcore-step",
  "solidcore-tess",
  "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
  "truck-meshalgo",
  "truck-modeling",
  "truck-shapeops",
@@ -839,7 +842,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-motion"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -854,7 +857,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-post"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
@@ -870,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-sim"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -884,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-tools"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-geometry",
  "serde",
@@ -895,10 +898,11 @@ dependencies = [
 
 [[package]]
 name = "camcraft-ui"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "camcraft-app",
  "camcraft-gpu",
+ "camcraft-ui-kit",
  "chrono",
  "eframe",
  "egui",
@@ -919,6 +923,16 @@ dependencies = [
  "wasm-bindgen-futures",
  "winit",
  "winresource",
+]
+
+[[package]]
+name = "camcraft-ui-kit"
+version = "0.28.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "serde_json",
+ "winit",
 ]
 
 [[package]]
@@ -6423,7 +6437,7 @@ checksum = "0637d3a5566a82fa5214bae89087bc8c9fb94cd8e8a3c07feb691bb8d9c632db"
 
 [[package]]
 name = "xtask"
-version = "0.26.0"
+version = "0.28.0"
 dependencies = [
  "regex",
  "resvg",

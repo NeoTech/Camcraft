@@ -7,6 +7,10 @@
 //! finished profile - and none may stand farther out than the pass
 //! before it, where it would cut only air. One threading cuts every
 //! pass, so every skim's condition must state the rough pass's wire.
+//! An open run (#3216 over #538) threads each pass anew in the air: a
+//! travel move (a rapid, no wire through it) joins one pass's run-out
+//! to the next pass's run-in and marks the pass boundary that the
+//! verify and the post read each pass from.
 //!
 //! Provenance: general wire EDM practice (a rough cut followed by
 //! skim cuts at decreasing offsets, the finishing pass setting the
@@ -15,7 +19,7 @@
 //! manual, condition table or CAM product behaviour was consulted.
 
 use super::{cut_pass, invalid, WireParams, PATH_TOL};
-use crate::cl::Toolpath;
+use crate::cl::{MoveKind, Move, Toolpath};
 use crate::geo2d::{Loop, Point2};
 use crate::machining2d::GenError;
 
@@ -49,20 +53,16 @@ impl WirePass {
 /// command door's (the numbers are all the machine's).
 ///
 /// # Errors
-/// Skims on an open run or with tabs, a skim naming no condition, a skim whose wire is not the rough
+/// Skims with tabs, a skim naming no condition, a skim whose wire is not the rough
 /// pass's, a pass nearer the profile than the finishing pass, or a
-/// skim farther out than the pass before it.
+/// skim farther out than the pass before it. An open run takes skims
+/// too (#3216): each is entered from the air at the run's start end
+/// and walked in the run's own direction - a reversed one is refused
+/// by the open-run generator.
 pub fn check_passes(rough: &WireParams, skims: &[WirePass]) -> Result<(), GenError> {
     let Some(last) = skims.last() else {
         return Ok(());
     };
-    if rough.side.is_open_side() {
-        return Err(invalid(format!(
-            "the side is {} of travel, an open run, and {} skim pass(es) are stated - an open run is cut once, from the air to its run-out; skims walk a closed profile from its start hole",
-            rough.side.word(),
-            skims.len()
-        )));
-    }
     if rough.tabs.is_some() {
         return Err(invalid(format!(
             "tabs are stated with {} skim pass(es) - skims are cut on an untabbed profile only (#538 x #539); remove the tabs or the skims",
@@ -113,25 +113,50 @@ pub fn check_passes(rough: &WireParams, skims: &[WirePass]) -> Result<(), GenErr
 /// The rough pass, then every skim, each from the threading point and
 /// back to it at its own offset; every pass judged by the single-pass
 /// laws at its offset. With no skims this is [`super::wire_contour`]
-/// exactly.
+/// exactly. An open run (#3216) takes its skims through the open-run
+/// generator: each re-enters from the air at the run's start end, at
+/// its own run-in point, and is walked in the run's own direction -
+/// the wire is threaded anew for every pass, and a travel move (a
+/// rapid, no wire through it) joins one pass's run-out to the next
+/// pass's run-in, marking the pass boundary.
 ///
 /// # Errors
 /// [`check_passes`]'s refusals, then any pass's own.
 pub fn wire_passes(loops: &[Loop], chains: &[Vec<Point2>], rough: &WireParams, skims: &[WirePass]) -> Result<Toolpath, GenError> {
     check_passes(rough, skims)?;
+    let open = rough.side.is_open_side();
     let mut path = cut_pass(loops, chains, rough, false)?;
     for (i, s) in skims.iter().enumerate() {
         let p = s.params(rough);
         let pass = cut_pass(loops, chains, &p, s.reverse)?;
+        // An open run is threaded anew for every pass (#3216 over #538):
+        // the pass before ended at its own run-out, the wire cut there,
+        // and the next pass begins at its own run-in back at the run's
+        // start end. A travel move carries the boundary - the wire is
+        // not threaded through it - so the path stays one chained
+        // program, and the verify and the post read each pass as its
+        // own from the boundary the travel marks.
+        if open {
+            let (Some(from), Some(to)) = (path.end(), pass.start()) else {
+                return Err(invalid("the open run lays down no cut".into()));
+            };
+            path.moves.push(Move::new(MoveKind::Rapid, from, to, None));
+        }
         path.moves.extend(pass.moves);
+        let how = if open {
+            "in the run's own direction, threaded anew in the air at the run's start end".to_owned()
+        } else if s.reverse {
+            "clockwise (reversed)".to_owned()
+        } else {
+            "counter-clockwise".to_owned()
+        };
         path.notes.push(format!(
-            "wire EDM: skim {} - condition {} at {:.4} mm (wire radius {:.4} + spark gap {:.4}), cut {}",
+            "wire EDM: skim {} - condition {} at {:.4} mm (wire radius {:.4} + spark gap {:.4}), cut {how}",
             i + 1,
             s.condition,
             p.kerf_offset(),
             p.wire_diameter * 0.5,
             p.gap,
-            if s.reverse { "clockwise (reversed)" } else { "counter-clockwise" }
         ));
     }
     Ok(path)

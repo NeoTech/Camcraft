@@ -1,4 +1,4 @@
-//! The modeled workpiece of each operation of a native wire EDM job: one work, a group of two to
+//! The modeled workpiece of each operation of an Agie Wire EDM job: one work, a group of two to
 //! nine independently captured punches (#2961, #2980), or two openings of one die plate (#2977).
 //! Provenance: CAMCraft's Wire Contour workflow.
 
@@ -23,7 +23,7 @@ pub(super) fn jobs(
     let models = model::model_entities(world);
     if let [(name, op)] = operations {
         let [(source, _)] = models.as_slice() else {
-            return Err("The native wire EDM job requires exactly one modeled workpiece; additional parts or fixture models can intersect the controller path".into());
+            return Err("The Agie Wire EDM job requires exactly one modeled workpiece; additional parts or fixture models can intersect the controller path".into());
         };
         return Ok(vec![operation::agie_job(world, op, name, source, 1)?]);
     }

@@ -125,6 +125,10 @@ icon_table! {
     RotaryContour => "op-rotary-contour", "icon-rotary-contour";
     RotaryParallel => "op-rotary-parallel", "icon-rotary-parallel";
     RotaryOffset => "op-rotary-offset", "icon-rotary-offset";
+    /// The Rotary Flow band (#2826): the bar with its two diagonal
+    /// flow lines crossing it - the helical band the picked chains
+    /// span.
+    RotaryFlow => "op-rotary-flow", "icon-rotary-flow";
     MultiAxisRough => "op-multiaxis-rough", "icon-multiaxis-rough";
     Flow5D => "op-flow5d", "icon-flow5d";
     MultiAxisContour => "op-multiaxis-contour", "icon-multiaxis-contour";
@@ -188,6 +192,8 @@ icon_table! {
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
     ToolWaterjet => "tool-waterjet", "icon-tool-waterjet";
+    // #4081: the laser head - a head, its beam and the burst on the sheet.
+    ToolLaser => "tool-laser", "icon-tool-laser";
     ToolElectrode => "tool-electrode", "icon-tool-electrode";
     ToolWire => "tool-wire", "icon-tool-wire";
     // #894: the thread mills - a neck over a toothed head (multi-form)

@@ -1,5 +1,5 @@
 {
-  "version": 78,
+  "version": 84,
   "machine": {
     "path": "built-in: Sienci AltMill 4x4",
     "machine": {
@@ -152,7 +152,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 4451855355862169708,
+        "stamp": 8053170573755873677,
         "cache": {
           "moves": [
             {
@@ -1832,7 +1832,7 @@
             "optimal_load": 0.1464466094067262
           }
         },
-        "stamp": 2867939695465957816,
+        "stamp": 3851277092830093555,
         "cache": {
           "moves": [
             {
@@ -2700,7 +2700,7 @@
             "break_through_from": "full_diameter"
           }
         },
-        "stamp": 770863548812401268,
+        "stamp": 13008771919990229516,
         "cache": {
           "moves": [
             {

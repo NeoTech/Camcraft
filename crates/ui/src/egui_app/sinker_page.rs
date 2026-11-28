@@ -77,10 +77,10 @@ fn orbit_rows(ui: &mut Ui, u: Unit, orbit: &mut Option<SinkerOrbit>) {
     o.kind = kind;
     prop_row(ui, "Orbit radius", |ui| num(ui, u, &mut o.radius));
     if kind == SinkerOrbitKind::Vector {
-        prop_row(ui, "Vectors", |ui| ui.add(DragValue::new(&mut o.vectors).range(1..=camcraft_app::sinker_orbit::MAX_VECTORS)));
+        prop_row(ui, "Vectors", |ui| int_range_row(ui, &mut o.vectors, 1..=camcraft_app::sinker_orbit::MAX_VECTORS));
     }
     if kind == SinkerOrbitKind::Planetary {
-        prop_row(ui, "Turns", |ui| ui.add(DragValue::new(&mut o.turns).range(1..=camcraft_app::sinker_orbit::MAX_TURNS)));
+        prop_row(ui, "Turns", |ui| int_range_row(ui, &mut o.turns, 1..=camcraft_app::sinker_orbit::MAX_TURNS));
     }
     hint(ui, "the machine must list the pattern and state a maximum orbit radius - otherwise the burn is refused");
 }
@@ -105,7 +105,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     if tab == SEC_GEO {
         prop_row(ui, "Burn at X", |ui| num(ui, u, x));
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
-        prop_row(ui, "EDM condition", |ui| ui.add(egui::TextEdit::singleline(condition).desired_width(90.0)));
+        text_row(ui, "EDM condition", condition, "sinker.condition", 90.0);
         hint(ui, "the machine's own condition id - its spark gap places the electrode tip above the floor");
         condition_readout(ui, u, world, op_ctx.as_deref(), condition);
     }
@@ -157,8 +157,8 @@ fn condition_readout(ui: &mut Ui, u: Unit, world: &World, setup: Option<&str>, i
     let m = camcraft_app::machine::of_setup(world, setup).1;
     let cond = m.as_ref().and_then(|m| m.edm.as_ref()).and_then(|e| e.conditions.iter().find(|c| c.id == id));
     let word = |v: Option<f64>| v.map_or_else(|| "not stated".to_owned(), |x| format!("{} {}", units::len(x, u, 3), u.suffix()));
-    prop_row(ui, "Condition gap", |ui| ui.label(word(cond.and_then(|c| c.gap))));
-    prop_row(ui, "Condition undersize", |ui| ui.label(word(cond.and_then(|c| c.undersize))));
+    prop_row(ui, "Condition gap", |ui| list_row(ui, word(cond.and_then(|c| c.gap))));
+    prop_row(ui, "Condition undersize", |ui| list_row(ui, word(cond.and_then(|c| c.undersize))));
     if cond.is_none() {
         hint(ui, "the mounted machine states no condition with this id - the op refuses until it does");
     }

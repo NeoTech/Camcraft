@@ -40,28 +40,28 @@ fn sinker_electrode_is_hidden_when_sinker_edm_is_not_selectable_and_wire_is_offe
         .iter()
         .any(|(k, _, _)| *k == MachineKind::SinkerEdm);
     assert_eq!(
-        h.query_by_label_contains("EDM-E10X6  Ø").is_some(),
+        h.query_all_by_label("EDM-E10X6").next().is_some(),
         sinker_selectable,
         "Sinker Electrode catalog entry must only be visible when Sinker EDM is selectable"
     );
     assert!(
-        h.query_by_label_contains("EDM-W025  Ø").is_some(),
+        h.query_all_by_label("EDM-W025").next().is_some(),
         "Wire EDM is selectable, so the wire catalog entry must be visible"
     );
 
-    h.get_by_role_and_label(Role::ComboBox, "Tool type").click();
-    h.run_steps(3);
+    // #4335: the type column names the kinds of the offered rows only.
     assert_eq!(
-        h.query_by_label("sinker electrode").is_some(),
+        h.query_all_by_label("sinker electrode").next().is_some(),
         sinker_selectable,
-        "Catalog Tool type filter must hide sinker electrode unless Sinker EDM is selectable"
+        "the catalog rows must not name sinker electrode unless Sinker EDM is selectable"
     );
-    assert!(h.query_by_label("EDM wire").is_some(), "Catalog Tool type filter must list EDM wire");
-    h.get_by_label("All types").click();
-    h.run_steps(2);
+    assert!(h.query_all_by_label("EDM wire").next().is_some(), "a catalog row names EDM wire");
 
     h.get_by_label("New tool…").click();
     h.run_steps(3);
+    // #4335: the catalog rows name the kinds too; the form is in Properties.
+    h.state_mut().state.close_tool_library();
+    h.run_steps(2);
     h.query_all_by_role(Role::ComboBox)
         .find(|n| n.value().as_deref() == Some("End mill"))
         .expect("Type combo")
@@ -128,11 +128,14 @@ fn sinker_electrode_is_offered_only_when_sinker_edm_is_selectable_or_mounted() {
         .push_back(CommandKind::EditMachineApply { path: "sinker.mch".into(), machine: Box::new(m) });
     h.run_steps(3);
     assert!(
-        h.query_by_label_contains("EDM-E10X6  Ø").is_some(),
+        h.query_all_by_label("EDM-E10X6").next().is_some(),
         "mounting a Sinker EDM must reveal EDM-E10X6 in the catalog"
     );
     h.get_by_label("New tool…").click();
     h.run_steps(3);
+    // #4335: the catalog rows name the kinds too; the form is in Properties.
+    h.state_mut().state.close_tool_library();
+    h.run_steps(2);
     h.query_all_by_role(Role::ComboBox)
         .find(|n| n.value().as_deref() == Some("End mill"))
         .expect("Type combo")

@@ -13,7 +13,9 @@ declared. The kind decides
 which operations the document accepts, which posts the picker lists and
 which limits the program is checked against. See [Setups](@/guide/set-up/setups.md)
 for mounting a machine and [Reading a refusal](@/guide/reference/refusals.md) for the
-messages below.
+messages below. For how the machine file differs from the post, and where
+both sit between CAD and the machine, see
+[Model to Machine](@/guide/model-to-machine.md#machine-file-and-post-what-each-one-answers).
 
 | Kind | Operation families allowed | Posts that serve it | Shipped machine files |
 |---|---|---|---|
@@ -22,7 +24,7 @@ messages below.
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn (live tooling) | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), G-EDM Wire EDM; Sinker EDM (ISO) | Sodick ALC400G (complete its EDM data); supply a sinker machine file |
+| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), Sodick Wire EDM (LN2W), Agie Wire EDM (AgieVision), G-EDM Wire EDM; Sinker EDM (ISO) | Sodick ALC400G, Sodick AQ600L (complete their EDM data), AGIECUT Classic 2S (template, for the Agie Wire EDM (AgieVision) post only); supply a sinker machine file |
 
 A **waterjet** machine file needs linear X and Y axes; Z is optional. It
 is refused by name if it states a spindle, live tooling, a rotary axis or
@@ -68,7 +70,29 @@ your installed hardware.
 The {{ <icon name="tree-machine" /> }} Machine page has a **Library** picker and **Load other**, **Edit** and
 **Clear** actions. The overview shows the file's stated limits. A blank
 means **not stated**. The editor names invalid inputs and blocks saving
-until all refusals are fixed.
+until all refusals are fixed. The editor shows the spindle min/max speed
+refusal only under the two speed fields, not under the spindle power field.
+
+The Machines file editor adds, moves and removes the axes of a machine.
+It also reverses a linear axis and sets the direction of a rotary axis.
+
+A machine file can state more limits of the control. The post reads them:
+
+- `controller.work_offset_max` is the last preset row of the control. The
+  post refuses a higher work offset and names the setup.
+- `tooling.max_tool_number` is the highest tool number of the tool table.
+  Both Heidenhain posts refuse a higher tool number by name.
+- `tooling.d_number: "tool-number"` makes the Siemens 840D post write a
+  cutting edge D equal to the tool number T.
+- `tooling.spindle_mount` states the taper of the spindle. Each taper of
+  the holder library is a spindle mount, SK50 included.
+- `tooling.tool_change` can state a manual tool change: `manual` or
+  `manual-retract-top`. A post that does not write that manual tool change
+  refuses such a machine by name.
+
+The **Fehlmann Picomax 55** file states its travel limits, rigid tapping,
+5 preset rows and tool numbers up to 254. The library also has the
+**Haas VF-2SS YT** (`haas-vf2ssyt.mch`), with -508 to 508 mm of Y travel.
 
 In the browser's View controls, select **Show work envelope** to draw the
 active setup's machine travel as an outline. Mount a machine first. The
@@ -111,7 +135,7 @@ tapping uses G84.
 
 A router declares `router` in its machine file. It follows the mill's
 operation, posting and safety rules, using its stated travel, spindle
-range and tool table. The Tormach 24R, xsTECH and Sienci AltMill files
+range and tool table. The Tormach 24R, xsTECH, Sienci AltMill, Shapeoko and X-Carve files
 declare this kind.
 
 Router options stay on the **Milling** tab; there is no separate Router
@@ -129,7 +153,13 @@ before applying. Mounting a router does not relax the mill's checks:
 an out-of-travel move or excessive spindle rpm is refused by name.
 
 The library also supplies **Sienci AltMill 2x4**, **4x4** and **4x8**
-machines, paired with the **grblHAL** post. **grblHAL 3-axis** and
+machines, paired with the **grblHAL** post. For hobby frames it supplies
+**Carbide 3D Shapeoko 5 Pro** (4x4, 4x2 and 2x2), **Inventables X-Carve
+2021 1000 mm** and **Inventables X-Carve Pro** (4x4 and 4x2), paired with
+the **Grbl 1.1** post. These files state only the travel and the spindle
+that the makers publish. They state no axis rates and no machine-Z retract,
+so the Z lift stays in the work offset, and each tool change is an M0 stop.
+**grblHAL 3-axis** and
 **TinyG 3-axis** are generic controller examples. Check their travel,
 spindle and retract settings against your actual machine before use. For a
 complete sheet-goods walkthrough on the Sienci AltMill 4x4 (plus shop-router
@@ -223,6 +253,12 @@ machine has no spindle - a torch states no rpm, power, speed range or
 tapping` and `a plasma table cuts flat sheet in X and Y - it states no
 rotary axis`.
 
+## Laser
+
+A machine file can declare the `laser` kind, and a tool can be a laser
+head. There is no laser operation yet, so you cannot cut on a laser
+machine in this release.
+
 ## Wire and sinker EDM
 
 The library includes **Sodick ALC400G** (`sodick-alc400g.mch`): X/Y
@@ -236,6 +272,51 @@ cut ([Conditions](@/guide/operations/operations-edm.md#wire-edm-the-machine-the-
 The file supplies no wire diameter list and no EDM codes. The Sodick
 post writes a vertical 2-axis cut only, so it refuses a taper.
 The ALC400G control has not been confirmed to match the Mark 21 post.
+
+The library also includes **Sodick AQ600L** (`sodick-aq600l.mch`) for
+the LN2W control. Its default post is **Sodick Wire EDM (LN2W)**. The
+file states X/Y travel 600/400 mm, U/V travel 80/80 mm and a taper
+maximum of 20 degrees: check these figures against the specification
+sheet of your machine. The conditions `C001`, `C002` and `C903` and the
+guide heights are examples. Replace them before you cut.
+
+The **Sodick Wire EDM (LN2W)** post starts each cut in this order:
+`G00 X Y U0. V0.` on one line, `Z0.`, `T91`, `T84`, `T94`, the `C` word,
+then the first `G01`. Set Z0 at the control to the height of the upper
+head above the part. The post writes no `G20` or `G21`, because the
+LN2W control refuses `G21`: it posts millimetre documents only, and the
+unit setting of the control must be millimetres. The post writes
+a constant taper as a 4-axis program (#4075): after the `C` word it
+writes `TP` (the cut's bottom above the worktable), `TN` (the cut's
+top above the worktable) and `G74`. Each cut is `G01 X Y U V`: X Y on
+the cut's bottom, U V the top minus the bottom. `G75` follows the last
+cut. CamCraft does not know the fixture height, so you set it in the
+post option **Part bottom above the worktable (mm)**. If you do not set
+it, the post refuses each taper. The option is the `TP` of the first
+tapered cut of the program: the height of that cut's bottom above the
+worktable. A later tapered cut with a different bottom height gets a
+`TP` that is moved by the difference. Each section note names the work
+Z that its `TP` stands for (for example `TP 13. IS WORK Z8. ABOVE THE
+WORKTABLE`), so check that plane on the machine. The post refuses a
+tapered cut whose bottom is below the worktable by these numbers. The
+option holds one height for the
+program, so post the tapers of each setup as their own program. The
+post refuses a 4-axis cut with two profiles, an arc in a tapered cut,
+the angle form (`G51` / `G52` `A`) and a wire offset (G41 / G42) in a
+taper. Its output has not been verified on a control.
+
+The LN2W post can also let the control apply the wire offset. Set the
+Wire Contour compensation to control (see
+[Wire Contour](@/guide/operations/operations-edm.md#wire-contour)). The
+post then writes the part contour under G41 / G42 Hnnn before the
+lead-in, with one register for each pass from H001, and G40 on each
+lead-out. It refuses a lead-in or a lead-out that is shorter than the
+offset radius.
+
+The **Sodick Wire EDM (Mark 21)** program header names the Mark 21 /
+EX21 control. It warns that LN1W/LN2W is not supported (the `G21` alarm
+E00170 and other taper words). It states the threading that the program
+does: T91 with AWT.
 
 Wire Contour runs on a machine file that declares `wire_edm`. The
 **Generic ISO Wire EDM** post takes its EDM words from the file's

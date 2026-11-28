@@ -32,7 +32,8 @@ use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 
 use super::adaptive::{Spine, medial_spine, widest_point};
-use super::adaptive_troch_clean::{emit_cleanup, plan_cleanup};
+use super::adaptive_troch_check::{cleanup_engagement_note, plan_cleanup_checked};
+use super::adaptive_troch_clean::emit_cleanup;
 use super::adaptive_troch_lanes::{clearance, narrow_err, plan_all_lanes, rest_share, straightened, trochoid_params};
 use super::face::GenError;
 use super::pocket::{PocketParams, PocketStrategy};
@@ -171,8 +172,9 @@ pub(super) fn trochoidal_inside(
     }
     let planned = plan_all_lanes(region, &center, p, t)?;
     let reach = if p.stock_to_leave > 0.0 { region.offset(-p.stock_to_leave)? } else { region.clone() };
-    let (clean, final_cleared) =
-        plan_cleanup(&center, &reach, &planned.used_center, &planned.cleared, p.tool_diameter, p.optimal_load, p.climb, t)?;
+    let clean =
+        plan_cleanup_checked(region, &center, &reach, &planned.layouts, &planned.used_center, &planned.cleared, p, t)?;
+    let final_cleared = clean.cleared;
 
     let zs = super::equal_steps::cut_levels_for(p.top_z, &p.links.approach,p.bottom_z, p.stepdown)?;
     let hop = p.retract_z.unwrap_or(p.clearance_z);
@@ -196,7 +198,7 @@ pub(super) fn trochoidal_inside(
             bld.push(MoveKind::Rapid, p3(lay.entry, from), None);
             emit_level(&mut bld, &lay.lay, &lay.tp, z, from, true, lay.open).map_err(|e| renamed(e).with_ghost_moves(bld.moves()))?;
         }
-        emit_cleanup(&mut bld, &clean, p, z, above, hop);
+        emit_cleanup(&mut bld, &clean.chains, p, z, above, hop);
         above = z;
     }
     let at = bld.at();
@@ -223,8 +225,17 @@ pub(super) fn trochoidal_inside(
             t.max_engagement
         ));
     }
-    if !clean.is_empty() {
-        bld.note(format!("{WHO}: {} corner/wall clean-up pass(es) emitted", clean.len()));
+    if !clean.chains.is_empty() {
+        bld.note(format!("{WHO}: {} corner/wall clean-up pass(es) emitted", clean.chains.len()));
+    }
+    if clean.step_reduced {
+        bld.note(format!(
+            "{WHO}: clean-up peel step was reduced to hold the {:.1} deg engagement limit (measured {:.1} deg)",
+            t.max_engagement, clean.max_deg
+        ));
+    }
+    if let Some((deg, at)) = clean.exceeded {
+        bld.note(cleanup_engagement_note(deg, at, t.max_engagement));
     }
     let rest = rest_share(&reach, &final_cleared);
     if rest > REST_NOTE {
@@ -240,6 +251,9 @@ pub(super) fn trochoidal_inside(
 
     let path = bld.finish();
     check_path(&path, &center)?;
+    // A custom limit is held by the WHOLE path - lanes, links, clean-up,
+    // every level - or the path is refused (#3849 keeps this refusal; the
+    // clean-up check above only steps the peel down first).
     if t.max_engagement != DEFAULT_MAX_ENGAGEMENT {
         let spec = crate::quality::QualitySpec::new(p.tool_diameter);
         let mut stock = crate::quality::stock_for(region, p.top_z, p.bottom_z, p.tool_diameter, &spec)

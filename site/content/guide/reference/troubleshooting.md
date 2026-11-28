@@ -44,6 +44,20 @@ refuses by name rather than silently picking another.
 A flag with no value (`--gpu-backend needs a value ...`, `--gpu needs an
 adapter name ...`) is refused the same way: give it one.
 
+## GPU compute falls back to the CPU
+
+The log can report `uncaptured GPU error` or `GPU compute device lost`.
+The shared compute device then stays disabled for the rest of the process.
+CamCraft keeps the first failure reason, logs it once, and uses the CPU
+path for later stock-cut calculations. It does not repeatedly recreate
+the failed compute device.
+
+To start with compute disabled, set `CAMCRAFT_GPU_COMPUTE=off` before
+starting CamCraft. This does not select the adapter that draws the window.
+A compute fallback is not recovery from every graphics driver failure:
+if the window cannot render, use the window troubleshooting steps above.
+The CPU fallback does not bypass verification or establish machine safety.
+
 ## Posting
 
 All of these appear in the **Post refused** window; nothing was written to
@@ -137,6 +151,13 @@ the named operations and post again.
 that runs at generation, so nothing judged it.
 
 **Fix.** Regenerate the operation.
+
+## Operations go stale after an update
+
+A new build can fix a defect in a toolpath generator. When such a fix
+changes the toolpath, each cached toolpath that a project saved before the
+fix reads stale once. Generate those operations again before you post. An
+old wrong move can then never post silently.
 
 ## Verify warnings (collisions)
 
@@ -485,6 +506,8 @@ The same button asks for a screenshot of the whole application window
 and copies it to the clipboard. Paste the image into the GitHub issue
 description. The status line confirms the copy or reports that no
 screenshot arrived. Check the open issues first to avoid a duplicate.
+If CamCraft cannot read back the window picture, the status line says so
+and does not stay at copying. The complete text report is kept.
 
 ## AI Chat connection settings
 

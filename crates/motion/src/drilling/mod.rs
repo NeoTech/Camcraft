@@ -39,6 +39,8 @@ mod fine_bore;
 mod hole;
 mod merge;
 mod mouth;
+// #3328: the hole order under the start and exit picks.
+mod order;
 mod recognize;
 
 #[cfg(test)]
@@ -54,6 +56,8 @@ mod tests_backbore;
 mod tests_fine_bore;
 #[cfg(test)]
 mod tests_ream;
+#[cfg(test)]
+mod tests_auto_depth;
 
 pub use axial::{axial_doors, axial_warnings, AXIAL_TOL};
 pub use boss::recognize_bosses;
@@ -62,8 +66,9 @@ pub use cycle::drill;
 pub use fine_bore::FINE_BORE_MAX_SHIFT_UM;
 pub use hole::{
     auto_kind, drill_point_length, through_tip_run, BreakThroughFrom, CrossHole, CycleChoice,
-    CycleParams, Hole, CHIP_BREAK, SPOT_DEPTH, THROUGH_CLEAR,
+    CycleParams, Hole, AUTO_TOL, CHIP_BREAK, SPOT_DEPTH, THROUGH_CLEAR,
 };
+pub use order::{hole_order, in_order, HOLE_PICK_TOL};
 pub use recognize::{recognize, recognize_cross};
 
 #[cfg(test)]

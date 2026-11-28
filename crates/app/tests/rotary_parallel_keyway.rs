@@ -76,6 +76,7 @@ fn a_keyed_bar_cut_all_the_way_round_leaves_only_the_corner_rest() {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
         picks: Default::default(),
     };
     h.execute(&world, CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("key".into()), op).expect("create"));

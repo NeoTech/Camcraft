@@ -5,7 +5,8 @@
 
 use camcraft_app::mcp::Server;
 use camcraft_app::mcp::provider::{
-    FallbackMode, Provider, parse_calls, parse_prompt, prompt_context, qa_context, tool_result, tools,
+    FallbackMode, Provider, ToolSet, parse_calls, parse_prompt, prompt_context, qa_context,
+    tool_result, tools, tools_in,
 };
 use serde_json::{Value, json};
 
@@ -52,30 +53,53 @@ fn every_live_tool_maps_without_schema_loss() {
         Provider::OpenAiResponses,
         Provider::Gemini,
     ] {
-        let mapped = tools(provider);
-        let rows = if provider == Provider::Gemini {
-            mapped[0]["functionDeclarations"]
-                .as_array()
-                .expect("Gemini declarations")
-        } else {
-            &mapped
-        };
-        assert_eq!(rows.len(), live.len(), "{provider:?}");
-        for (source, mapped) in live.iter().zip(rows) {
-            let row = if provider == Provider::OpenAiChat {
-                &mapped["function"]
+        for set in [ToolSet::Full, ToolSet::Core] {
+            let live: Vec<_> = live
+                .iter()
+                .filter(|tool| {
+                    set == ToolSet::Full
+                        || camcraft_app::mcp::provider::CORE_TOOLS
+                            .contains(&tool["name"].as_str().expect("name"))
+                })
+                .collect();
+            for name in ["rename_operation", "edit_tool", "set_work_material"] {
+                assert!(
+                    live.iter().any(|tool| tool["name"] == name),
+                    "{set:?} lacks {name}"
+                );
+            }
+            let mapped = if set == ToolSet::Full {
+                tools(provider)
             } else {
-                mapped
+                tools_in(provider, set)
             };
-            assert_eq!(row["name"], source["name"], "{provider:?}");
-            assert_eq!(row["description"], source["description"], "{provider:?}");
-            match provider {
-                Provider::Anthropic => assert_eq!(row["input_schema"], source["inputSchema"]),
-                Provider::Gemini => assert_eq!(row["parametersJsonSchema"], gemini_schema(&source["inputSchema"])),
-                Provider::OpenAiChat | Provider::OpenAiResponses => {
-                    assert_eq!(mapped["type"], "function");
-                    assert_eq!(row["strict"], false);
-                    assert_eq!(row["parameters"], source["inputSchema"]);
+            let rows = if provider == Provider::Gemini {
+                mapped[0]["functionDeclarations"]
+                    .as_array()
+                    .expect("Gemini declarations")
+            } else {
+                &mapped
+            };
+            assert_eq!(rows.len(), live.len(), "{provider:?}");
+            for (source, mapped) in live.iter().zip(rows) {
+                let row = if provider == Provider::OpenAiChat {
+                    &mapped["function"]
+                } else {
+                    mapped
+                };
+                assert_eq!(row["name"], source["name"], "{provider:?}");
+                assert_eq!(row["description"], source["description"], "{provider:?}");
+                match provider {
+                    Provider::Anthropic => assert_eq!(row["input_schema"], source["inputSchema"]),
+                    Provider::Gemini => assert_eq!(
+                        row["parametersJsonSchema"],
+                        gemini_schema(&source["inputSchema"])
+                    ),
+                    Provider::OpenAiChat | Provider::OpenAiResponses => {
+                        assert_eq!(mapped["type"], "function");
+                        assert_eq!(row["strict"], false);
+                        assert_eq!(row["parameters"], source["inputSchema"]);
+                    }
                 }
             }
         }

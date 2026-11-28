@@ -1,5 +1,5 @@
-//! The zero-step SBL piece script for one group of native works, from Quintin Smits's MIT Agie
-//! Processor and our offline control checks (#2984 closed cycles, #2962 open cuts, #2961 groups).
+//! The zero-step SBL piece script for one group of native works, from our own implementation of the
+//! piece format and our offline control checks (#2984 closed cycles, #2962 open cuts, #2961 groups).
 
 /// The piece: its group name and the stock that all of its works share.
 pub(super) struct Piece<'a> {
@@ -73,7 +73,7 @@ pub(super) fn piece(piece: &Piece<'_>, works: &[Work<'_>]) -> String {
         ("ID_HEIGHT", height.clone()),
         ("ID_NOMEOBJ", stem.into()),
         ("ID_MATERIAL", "0001".into()),
-        ("ID_THREAD", "Berco Cut 0.25".into()),
+        ("ID_THREAD", piece.quality.wire().into()),
         ("ID_POSX", "0".into()),
         ("ID_POSY", "0".into()),
         ("ID_POSZ", "0".into()),
@@ -116,7 +116,7 @@ pub(super) fn piece(piece: &Piece<'_>, works: &[Work<'_>]) -> String {
         format!("  ok=JE_Create(GROUP,je_piece,{group},NULL)"),
     );
     for (index, setup) in works.iter().enumerate() {
-        work(&mut lines, &group, &height, index + 1, setup);
+        work(&mut lines, &group, &height, piece.quality.wire(), index + 1, setup);
     }
     lines.extend([
         "end sub".into(),
@@ -138,12 +138,21 @@ pub(super) fn piece(piece: &Piece<'_>, works: &[Work<'_>]) -> String {
 }
 
 /// The records of one work `CUT<number>`, with zero erosion steps on import.
-fn work(lines: &mut Vec<String>, group: &str, height: &str, number: usize, setup: &Work<'_>) {
+/// The work sets the wire of the piece again (#2986).
+fn work(
+    lines: &mut Vec<String>,
+    group: &str,
+    height: &str,
+    wire: &str,
+    number: usize,
+    setup: &Work<'_>,
+) {
     let open = setup.exit_um.is_some();
     let work = format!("{group},\"CUT{number}\"");
     let work_context = format!("{work},NULL");
     let hole_context = format!("{work},\"stp1\"");
     let work_height = format!("\"{height}\"");
+    let wire = format!("\"{wire}\"");
     checked(lines, format!("  ok=JE_Create(WORK,je_piece,{work})"));
     attribute(
         lines,
@@ -163,7 +172,7 @@ fn work(lines: &mut Vec<String>, group: &str, height: &str, number: usize, setup
     // A closed cycle needs a 1 mm separation. An open cut has none (#2962).
     let separation = if open { "\"0.0\"" } else { "\"1.0\"" };
     for (field, value) in [
-        ("ID_THREAD", "\"Berco Cut 0.25\""),
+        ("ID_THREAD", wire.as_str()),
         ("ID_ENTRYMODE", "c_entper"),
         ("ID_HEIGHT", work_height.as_str()),
         ("ID_POSX", "\"0\""),

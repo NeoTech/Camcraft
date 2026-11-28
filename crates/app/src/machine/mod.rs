@@ -60,10 +60,14 @@ pub mod library;
 // #669: the machine check on a plasma table.
 mod plasma;
 mod waterjet;
+mod laser;
 pub mod wire_edm;
 mod sheet;
 pub mod validate;
 // #383: the machine editor - property grid, draft, user folder and save.
+pub mod chain;
+// #2756: the axis chain's rows, built once per edit (#2238).
+pub mod chain_view;
 pub mod draft;
 pub mod fields;
 pub mod order;
@@ -137,6 +141,9 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
 pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs::prelude::Entity)]) -> Result<MachineCheck, String> {
     if kind(Some(machine)) == Kind::Waterjet {
         return waterjet::check_waterjet_ops(world, machine, program);
+    }
+    if kind(Some(machine)) == Kind::Laser {
+        return Ok(laser::check_laser_ops(machine, program));
     }
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);

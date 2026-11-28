@@ -14,12 +14,6 @@ use camcraft_motion::multiaxis::{rotary_flow, AxisControl};
 
 use crate::fixture::*;
 
-/// A closed ring of `n` corners at radius `r` and height `z`, its
-/// first point repeated at the end (a picked closed edge loop).
-fn ring(n: usize, r: f64, z: f64) -> Vec<Point3> {
-    (0..=n).map(|k| gp(r, TAU * (k % n) as f64 / n as f64, z)).collect()
-}
-
 #[test]
 fn a_closed_guide_pair_flows_the_whole_lap() {
     // The review's reproduction: two closed 12-sided rings on an R8

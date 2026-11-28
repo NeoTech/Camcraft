@@ -14,6 +14,9 @@
 //! parse_default_machine, posted_machine_for, post_mounts, post_per_op),
 //! app::cli.
 
+#[path = "default_machine_missing/disk_recovery.rs"]
+mod disk_recovery;
+
 use camcraft_app::commands::{AddTool, CreateOperation, CreateSetup, History, SetPostOptions, SetSetupMachine, SetStock};
 use camcraft_app::machine::Machine;
 use camcraft_app::operation::{Height, OpParams, SrcRef};

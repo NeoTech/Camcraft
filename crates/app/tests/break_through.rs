@@ -86,6 +86,7 @@ fn drill_from(break_through: Option<f64>, break_through_from: BreakThroughFrom) 
 
 fn bore(break_through: Option<f64>) -> OpParams {
     OpParams::Bore {
+        entry: camcraft_app::machining3d::Entry3D::Plunge,
         pass_start: camcraft_app::machining2d::PassStart::Auto,
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(30.0),

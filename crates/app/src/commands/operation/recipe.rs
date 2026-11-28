@@ -113,6 +113,9 @@ fn has_saved_geometry(params: &OpParams) -> bool {
         | OpParams::MultiAxisRough { .. }
         | OpParams::Flow5D { .. }
         | OpParams::MultiAxisContour { .. }
+        // The flow band's guide chains are entity picks on the op's own
+        // selection law (op.src), not params coordinates (#2826).
+        | OpParams::RotaryFlow { .. }
         | OpParams::Facing { .. }
         | OpParams::ProfileRough { .. }
         | OpParams::ProfileFinish { .. }

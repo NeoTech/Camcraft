@@ -19,7 +19,7 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `serves`, `coolantModes`, `programUnits`, `endUnits`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`, `workOffsetIndex`, `workOffsetMax`, `continuousThreading`, `rotariesBeforeTraverse`, `uprightReturn`. All but `serves` and the last twelve are
+`capabilities`, `serves`, `coolantModes`, `programUnits`, `endUnits`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`, `workOffsetIndex`, `workOffsetMax`, `continuousThreading`, `rotariesBeforeTraverse`, `uprightReturn`, `manualToolChange`. All but `serves` and the last thirteen are
 text the engine reads none of; `serves = ["plasma"];` (#1266; one word or a list of kind words: mill, lathe, mill-turn, plasma, wire_edm, sinker_edm) names the machine kinds a script of the user's own posts to - the app refuses it by name on any other kind, and a script that states none is accepted only on a mill (non-turning dialect), a lathe (turning) or a mill-turn, never on a plasma table or an EDM; shipped posts are judged by registry name and need no `serves`; `programUnits = "mm inch"` (#902) says
 the script writes the program in the document's unit -
 `postOptions.Units`, `"mm"` or `"inch"`, absent = mm: the dialect's
@@ -61,7 +61,7 @@ and tormach-lathe.cps: the LinuxCNC G-code reference's G59.1-G59.3);
 `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
-reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `rotariesBeforeTraverse = true` (#3100) says the script turns the rotaries to each section's pose at the safe Z before its first X/Y traverse - the first-traverse law then reads the work at the operation's own pose, not at every pose the previous program can leave; a script without it is read the strict way, a user's own script that declares it is taken at its word with a note on the path, and each shipped post that declares it has a posting test of the real order (tormach.cps sets it); `uprightReturn = true` (#3477) says the script retracts to a safe height and commands the rotaries to zero at the start of each section that follows a tilted section, before its first X/Y traverse - without it the engine refuses by name a section that opens with no stated angle after a section that left a rotary off zero, and each shipped post that declares it has a posting test of the real order (`crates/post/tests/upright_after_tilt.rs`; fanuc, doosan-dnm, mach4 and tormach set it); `liveTooling = true` (issue #33) says the
+reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `rotariesBeforeTraverse = true` (#3100) says the script turns the rotaries to each section's pose at the safe Z before its first X/Y traverse - the first-traverse law then reads the work at the operation's own pose, not at every pose the previous program can leave; a script without it is read the strict way, a user's own script that declares it is taken at its word with a note on the path, and each shipped post that declares it has a posting test of the real order (tormach.cps sets it); `uprightReturn = true` (#3477) says the script retracts to a safe height and commands the rotaries to zero at the start of each section that follows a tilted section, before its first X/Y traverse - without it the engine refuses by name a section that opens with no stated angle after a section that left a rotary off zero, and each shipped post that declares it has a posting test of the real order (`crates/post/tests/script_rotary/upright_after_tilt.rs`; fanuc, doosan-dnm, mach4 and tormach set it); `manualToolChange = ["manual-retract-top"]` (#4085) lists the manual tool change modes (`tooling.tool_change`: `manual`, `manual-retract-top`) for which the script writes a stop and the operator checks at each tool change - on a machine that states a manual mode the script does not list, the engine refuses by name, with the post and the machine, before any hook runs (`crates/post/src/post/manual_change.rs`; heidenhain.cps and heidenhain-klartext.cps list `manual-retract-top`); a script that lists a mode also refuses by name each installation its sequence was not verified for, because the retract and the stop depend on machine parameters (#4114: both Heidenhain posts accept only the Fehlmann Picomax 55 with iTNC 530 NC 340490-03); `liveTooling = true` (issue #33) says the
 script voices a `PARAM LiveTool` section - C-axis live-tool work, the
 stream's X Y Z the part-frame tip and C the stated spindle angle - and
 without it the engine refuses such a section by name (only
@@ -79,7 +79,7 @@ inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
 axis is refused by name. Each built-in mill post sets it (#2475: the
 other dialects are verified by the trace test
-`crates/post/tests/wcs_flip_dialects.rs` and its goldens). The same flag covers a
+`crates/post/tests/script_wcs/wcs_flip_dialects.rs` and its goldens). The same flag covers a
 flipped WCS axis (#1649, `PARAM WcsFlip`): the engine mirrors that
 section the same way (a helical arc included), and a script that sets
 the flag writes a note that names the flipped axes. `probeAxisInversion =
@@ -152,6 +152,10 @@ A script may define a top-level `declaredOptions` map so the host renders typed 
   record (feeds, plunges, arcs at the quarter points they pass, cycle
   centres) as `{minX, maxX, minY, maxY}` in mm, or `null` when nothing
   is cut. Rapids do not count.
+- `programOffsets` (global, before `onOpen`, #4076): one entry for each
+  section of the stream, `"control"` or `"wear"` when a `COMP` record
+  engages that compensation in it, else `""`. A note that is written
+  before the `COMP` record arrives reads it (`sodick-ln2w.cps`).
 - `machine.travel`: the linear axes' stated strokes, `{X, Y, Z}`, each
   `[min, max]` in mm or `null` when the machine file states none.
 
@@ -185,6 +189,13 @@ write (the gate), so the released program never carries one.
   OUTPUT only when `rtcp === true`; a tilted record on a non-RTCP
   machine is a `message()` refusal — never a reinterpretation), and
   the rate ceilings for anything you pace.
+- **Z goes up before a later tool change's G49 (#4341).** A
+  Fanuc-family control can move Z on a `G49` block with no axis word.
+  A preamble of a section after the first that writes `G49` and `T M6`
+  lifts Z first, by the post's own retract method, unless a Go home or
+  a setup-change stop already lifted it. A `G43.4` that is still armed
+  is cancelled before that lift. Mazak, Fanuc and Doosan DNM do this
+  (`crates/post/tests/script_wcs/setup_change/tool_change_retract.rs`).
 - **Up is the machine's word.** A retract in machine coordinates
   (`G53 G0 Z..`) reads `machine.safeRetractZ` (#495); machine Z0 is the
   top of travel only by convention (Tormach's), and a machine homed
@@ -252,7 +263,7 @@ write (the gate), so the released program never carries one.
   group with `G80` and posts as the stream says. The program never
   moves between holes lower than the verified path, and a cut that
   leaves the hole inside a group is refused by name
-  (`crates/post/tests/cycle_hop.rs` reads every cycle post back).
+  (`crates/post/tests/script_cycles/cycle_hop.rs` reads every cycle post back).
   A cycle read away from its hole with no rapid to it (two cycle
   records back to back, or a cycle straight after probing) is seated
   at the section's own `RetractPlane`: up to it, over the hole, down
@@ -317,10 +328,10 @@ goldens ride under `crates/post/tests/golden/waterjet/`
 (`waterjet_iso_post.rs`); the decision record is
 `docs/decisions/1882-waterjet-post.md`.
 
-## The wire EDM post
+## The wire EDM posts
 
-`wire-iso.cps` (#533, "Generic ISO Wire EDM") is the one
-`posting::WIRE_POSTS` entry: it serves `kind: wire_edm` machines only
+`posting::WIRE_POSTS` has four entries. `wire-iso.cps` (#533, "Generic
+ISO Wire EDM") is the first entry and the default: it serves `kind: wire_edm` machines only
 (`machine.kind`) and declares `wireEdm = true` - the engine refuses a
 wire section (`PARAM EdmCondition`) through any script without it. It
 writes only RS-274 / ISO 6983 motion and program words; every EDM code
@@ -357,6 +368,13 @@ in `docs/decisions/617-sodick-wire-post.md` and
 `docs/decisions/2649-sodick-ln-pass-structure.md`. Its goldens ride
 under `nc/sodick-wire/` (`sodick_wire_post.rs`, `sodick_wire_passes.rs`).
 
+An open run's skims (#3216 over #538) rethread: the wire is cut at each
+pass's run-out, the travel between passes carries no wire, and each pass
+is threaded anew at its own run-in in the air; a closed cut's skims keep
+one threading, as before. The Sodick post refuses an open run's skims by
+name at its rapid guard instead of writing a structure its manual does
+not state.
+
 `g-edm.cps` (#2700, "G-EDM Wire EDM") is the fourth `WIRE_POSTS` entry,
 never the default. It serves G-EDM builds on G-RBLv3 (a Grbl derivative):
 Grbl-family words only (`G21` / `G20 G90 G17`, `G0`, `G1`, `G2` / `G3`
@@ -367,6 +385,75 @@ per program and refuses by name taper, 4-axis, any `COMP` record, skims,
 `edm.awt`, an offset other than G54, and every stop or home ask. It was not
 run on a control; `docs/decisions/2700-g-edm-post.md` lists what is not
 confirmed. Its golden rides under `nc/g-edm/` (`g_edm_post.rs`).
+
+`agie-native.cps` ("Agie Wire EDM (AgieVision)", named in #4000) is the
+third `WIRE_POSTS` entry, never the default. It serves one machine: the
+AGIECUT Classic 2S (`agiecut-classic-2s.mch`, model `AGIECUT CLASSIC 2S`);
+every other machine is refused by name. The `.cps` holds only the
+metadata and the option `separationLengthMm` (group "AgieVision
+technology"); its `onOpen` refuses a plain one-file post. The desktop
+and the CLI write the job through `posting::agie` (`crates/app/src/posting_agie.rs`
+and `crates/post/src/agie/`): One program output to a new job directory
+of AgieVision ISO, SBR and SBL files with zero working steps. Its
+refusals say "The Agie Wire EDM job requires ...". Its old names
+"Agie native wire EDM" (#3537) and "Native wire EDM job files" (#4000)
+are hidden aliases in `posting::aliases` (`posting_aliases.rs`); no list
+shows them. Its job goldens ride under `crates/app/tests/golden/nc/agie-native/`
+and `crates/post/tests/golden/agie-setup/`; its `.cps` refusals under
+`crates/post/tests/recorded/golden/agie-native/`. The user guide is
+`docs/user-guide/agie-wire-edm.md`.
+
+`sodick-ln2w.cps` (#4045, "Sodick Wire EDM (LN2W)") is the fifth
+`WIRE_POSTS` entry, never the default of the kind; `sodick-aq600l.mch`
+names it as its post. It is a file of its own beside `sodick-wire.cps`
+(the engine has no include; the Mark 21 file is not changed). It writes
+each cut in the order that the owner of an AQ600L gave: `G00 X Y U0. V0.`
+(one line), `Z0.`, `T91`, `T84` / `T85`, `T94` / `T89`, the `C` word, then
+`G01`. It writes no `G20` / `G21` (the control alarms on `G21`) and
+declares `programUnits = "mm"`. A constant taper posts as the owner's
+4-axis form (#4075): `TP` / `TN` (the cut's bottom and top above the
+worktable; the post option `partBottomAboveTable` is the `TP` of the
+program's first tapered cut, a later tapered cut gets `TP` = the option +
+(its `WireBottom` - the first `WireBottom`), the section note names the
+work Z of each `TP`, a `TP` below the worktable is refused, and an
+unstated option refuses the taper), `G74`, `G01 X Y U V` on every cut (X Y
+on the part's bottom, U V top minus bottom, moved from the guide planes
+by the stream's `WireGuideLower` / `WireGuideUpper` / `WireBottom` /
+`WireTop`), `G75` before `T90`. It refuses by name the angle form
+(`G51` / `G52` `A`, `G50`: corner motion not confirmed), a two-profile
+4-axis cut, an arc in a taper, the control's wire offset in a taper and
+a taper from a second setup.
+A `COMP` record ("control" or "wear") posts the control's wire offset
+(#4076, the owner's statements): `G41` / `G42 Hnnn` on its own line
+after the pass's C word and before the lead-in, H the pass number from
+`H001`, and `G40` in the block of the lead-out `G01`. No `G29` is
+written. The law is the shared prelude helper
+`crates/post/src/post/wire_offset.rs` (`wireOffsetNew`,
+`wireOffsetRecord`, `wireOffsetMove`, `wireOffsetEnd`), which another
+wire dialect can call; the words stay in the post. The refusals, each by
+name:
+- a lead-in or a lead-out that is an arc, has no length or is shorter
+  than the offset radius;
+- a change of side while the offset is on;
+- a section that ends with the offset on;
+- a first offset pass on a condition other than `C001` (`C001` goes
+  with `H001`);
+- the `C000` approach option together with an offset;
+- a pass above `H999`.
+
+The header and the section notes read `programOffsets` (the engine sets
+it before `onOpen`), so an offset program does not say "NO WIRE OFFSET"
+and a section on the control's offset does not say that the kerf is in
+the path. A program without a `COMP` record is byte-identical to the
+wire-centre form. The post was
+not run on a control in this form;
+`docs/decisions/4045-sodick-ln2w-dialect.md` lists what is confirmed and
+what is inferred, and `docs/decisions/4076-ln2w-wire-offset.md` is the
+decision record of the offset. Its goldens ride under `nc/sodick-ln2w/`
+(`crates/app/tests/wire_post/sodick_aq600l.rs`); its synthetic-stream
+pins are in `crates/post/tests/script_goldens/sodick_ln2w/pins.rs` and, for the offset,
+`crates/post/tests/script_goldens/sodick_ln2w/offset.rs` (test binary
+`script_goldens`, module `script_sodick_ln2w`).
 
 ## Adding a post to the app
 

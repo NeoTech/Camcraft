@@ -96,12 +96,15 @@ mod setup_settings_page;
 mod machine_page;
 mod setup_user_machines;
 mod tool_list_page;
+mod op_page_names;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
+mod pane_fold;
 mod panel_setups;
 mod machines_pane;
 mod machines_edit;
+mod machines_axis_chain;
 mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
@@ -120,8 +123,14 @@ mod lathe_view;
 // #1997: the orbit pivot ignores the work envelope; open frames the part.
 mod camera_target;
 mod structural;
+// #2772 parts 1-2 (PR #3674 item 5): the stated rotation axis group.
+mod rotary_stated_axis;
+// #2827: the Rotary Flow band's Passes tab - axis group, band rows, guide hint.
+mod rotary_flow_page;
 // #2181: the transport row of the calculation before playback.
 mod transport_precalc;
+// #4266: the sim playback's work turn as the scene draws it.
+mod sim_work_turn;
 mod sim_op_steps;
 mod page_layout;
 mod page_layout_windows;
@@ -129,15 +138,34 @@ mod page_layout_windows;
 mod page_layout_tool_library;
 // #3893: the tool editor in the tool library window.
 mod tool_library_editor;
+// #4334: the frame (header and footer) of the tool library window.
+mod tool_library_frame;
 // #3894: the 3D and side preview of the tool library window's editor.
 mod tool_library_preview;
 // #3895: the holder, gauge length and stick-out in the tool library window.
 mod tool_library_assembly;
 // #3896: the Recipes tab of the tool library window's editor.
 mod tool_library_recipes;
+// #4453: the Recipes tab's surface speed and chip load inputs.
+mod tool_library_recipe_speeds;
+// #3898: the copies, the add's undo step and the caches (review of #4271).
+mod tool_library_component_copies;
 // #3897 (U6 of #3663): the Holders page and the mock-up gaps.
 mod tool_library_holders_ui;
+// #4338 (U12 of #3663): the holder search and the holder form.
+mod tool_library_holder_form;
+// #4455: the holder form's largest diameter and an Apply with no edit.
+mod tool_library_holder_largest;
+// #4496: a gauge length edit in the generic component editor.
+mod tool_library_generic_gauge;
+// #3898 (U7 of #3663): My library, the component editor and the stack.
+mod tool_library_components;
+mod tool_library_stack;
+mod tool_library_turning_stack;
 mod tool_library_mockup;
+mod tool_library_search;
+// #4336 (U10 of #3663): the Tool tab, the assembly check and the side drawing.
+mod tool_library_tool_tab;
 mod anchors;
 mod stock_fit;
 mod stock_source_default;
@@ -150,6 +178,7 @@ mod catalog_filters;
 mod cycle_combo;
 mod holes_break_through;
 mod holes_fine_bore;
+mod bore_entry_group;
 mod ma_deburr_page;
 mod radial_step_field;
 mod auto_input_manual;
@@ -236,6 +265,7 @@ mod recent_door;
 mod home_page;
 // #2428: startup update check, Settings dropdown toggle, and title-bar notice.
 mod update_check;
+mod settings_window;
 // #1431: the browser build's Save, Save As and Post as downloads; the rest refused by name.
 mod browser_files;
 mod browser_delete;
@@ -278,6 +308,8 @@ mod setup_post_options_bleed;
 mod import_outward;
 // #1988: painted ribbon cells, tabs, and dropdown rows expose AccessKit nodes.
 mod ribbon_accesskit;
+// #4484: the one command table, the menu bar and its layout test.
+mod command_table;
 // #1946: native AI chat dock panel, worker, Inbox::channel MCP dispatch, and offline UI tests.
 mod ai_chat;
 // #2011: EDM tool visibility matches selectable machine kinds.
@@ -780,7 +812,7 @@ fn post_cell_queues_and_the_file_arm_runs_the_gate() {
     let text = std::fs::read_to_string(&path).expect("a posted program");
     assert!(
         text.starts_with('%')
-            && text.contains("G90 G54")
+            && text.contains("G94 G54")
             && text.contains("T01 M6")
             && text.trim_end().ends_with('%'),
         "one wrapped Fanuc program for the skim: {text}"
@@ -2067,15 +2099,28 @@ fn egui_shell_snapshot_light() {
     harness.run_steps(1); // leave LIVE dark for whatever frame follows.
 }
 
-/// #2397: the settings are edited live in Properties through the real
-/// drain, and the tool shape editor is its own window. A drag stages into
-/// `tool_ui` WITHOUT touching the world (the draft law); `Apply` lands it
-/// through `ChangeTool`; and the dock's `Delete` proves the ghost law -
-/// the named tool is gone, so the shape window is gone the next frame.
+/// #4336: the tool library window's Diameter field - the spin button on
+/// the row of the "Diameter" label.
+fn diameter_spin(win: &egui_kittest::Node<'_>) -> egui::Rect {
+    let row = win.query_all_by_label("Diameter").next().expect("the window has a Diameter row").rect();
+    win.query_all_by_role(egui::accesskit::Role::SpinButton)
+        .map(|n| n.rect())
+        .min_by(|a, b| (a.center().y - row.center().y).abs().total_cmp(&(b.center().y - row.center().y).abs()))
+        .expect("the window owns DragValues")
+}
+
+/// #2397: the settings are edited live through the real drain, and the
+/// tool shape editor is its own window. #3930: the edit is in the tool
+/// library window (Properties shows a summary). A drag stages into the
+/// window's draft WITHOUT touching the world (the draft law); `Apply` lands
+/// it through `ChangeTool`; and the dock's `Delete` proves the ghost law -
+/// the named tool is gone, so the shape window and the window's editor are
+/// gone the next frame.
 #[test]
 fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
-    // A tall shell: the whole tool page, Apply and Delete included, is on
-    // screen without a scroll.
+    use tool_library_editor::{click_window_button, draft, library_window, open_in_window};
+    // A tall shell: the whole tool page, Delete included, is on screen
+    // without a scroll.
     let mut harness = Harness::builder()
         .with_size(Vec2::new(1280.0, 1400.0))
         .build_ui_state(frame, ShellUi::seeded());
@@ -2089,42 +2134,33 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
             .and_then(|e| model::tool_of(&h.state().state.world, &e))
             .map(|t| t.diameter)
     };
-    assert!(harness.query_by_label("Diameter").is_some(), "Properties owns the selected tool's settings");
+    assert!(harness.query_by_label("Diameter").is_some(), "Properties states the selected tool's settings");
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
-    assert!(
-        (harness.state().state.tool_ui.diameter - d0).abs() < 1e-12,
-        "the page must open on the world's diameter"
-    );
-    // The Properties page owns the DragValues now: 30 px at speed 0.1.
-    let c = harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the tool page owns DragValues")
-        .rect()
-        .center();
+    open_in_window(&mut harness, "EM-0600-4FL");
+    assert!((draft(&mut harness).diameter - d0).abs() < 1e-12, "the window must open on the world's diameter");
+    // The window owns the DragValues: 30 px at speed 0.1. #4336: the
+    // Diameter's field, on the row of its label (the tool number's field
+    // now stands above it).
+    let c = diameter_spin(&library_window(&harness)).center();
     harness.drag_at(c);
     harness.run();
     harness.hover_at(c + Vec2::new(30.0, 0.0));
     harness.run();
     harness.drop_at(c + Vec2::new(30.0, 0.0));
     harness.run();
-    assert!(
-        (harness.state().state.tool_ui.diameter - (d0 + 3.0)).abs() < 0.05,
-        "the drag must stage the draft"
-    );
+    assert!((draft(&mut harness).diameter - (d0 + 3.0)).abs() < 0.05, "the drag must stage the draft");
     assert!(
         (world_d(&harness).expect("still there") - d0).abs() < 1e-12,
         "a drag must not touch the world"
     );
-    harness.get_by_label("Apply").click();
-    harness.run();
+    click_window_button(&mut harness, "Apply");
     assert!(
         (world_d(&harness).expect("still there") - (d0 + 3.0)).abs() < 0.05,
         "Apply must land the staged number (status: {})",
         harness.state().state.status
     );
-    // #2397: the shape editor is its own window, with the settings left in
-    // Properties.
+    // #2397: the shape editor is its own window; #3930: without the
+    // holder library, which is the tool library window's.
     crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, "EM-0600-4FL");
     harness.run();
     harness.run();
@@ -2132,8 +2168,9 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
         harness.state().state.tool_shape_editor.as_deref(),
         Some("EM-0600-4FL")
     );
-    assert!(harness.query_by_label("Holder library").is_some(), "the shape window holds the holder library");
-    assert!(harness.query_by_label("Diameter").is_some(), "the settings stay in Properties");
+    assert!(library_window(&harness).query_by_label("Apply holder").is_some(), "the tool library window holds the holder library");
+    assert!(harness.query_all_by_label("Apply holder").count() == 1, "the shape window has none");
+    assert!(harness.query_all_by_label("Diameter").next().is_some(), "the settings stay in view");
     // Ghost law: deleting the tool from the library closes the shape window.
     let pane_top = harness
         .state()
@@ -2148,13 +2185,14 @@ fn tool_settings_edit_live_and_the_shape_editor_follows_its_tool() {
         .expect("Tools page Delete button")
         .click();
     harness.run();
+    harness.run();
     assert!(
         harness.state().state.tool_shape_editor.is_none(),
         "the window must not outlive its tool"
     );
     assert!(
-        harness.query_by_label("Shank diameter").is_none(),
-        "the window's widgets must go with it"
+        harness.state().state.tool_library.as_ref().and_then(|v| v.open_tool()).is_none(),
+        "the tool library window's editor must not outlive its tool"
     );
     assert!(world_d(&harness).is_none(), "Delete must empty the library too");
 }
@@ -3028,22 +3066,16 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
     harness.run();
     assert_eq!(harness.state().state.units(), Unit::Inches);
 
-    harness.state_mut().state.ui_target = UiTarget::Tool("EM-0600-4FL".to_owned());
-    harness.run();
-    harness.run();
+    // #3930: the tool's numbers are edited in the tool library window.
+    tool_library_editor::open_in_window(&mut harness, "EM-0600-4FL");
     let world_d = |h: &Harness<'static, ShellUi>| {
         model::find_by_name(&h.state().state.world, "EM-0600-4FL")
             .and_then(|e| model::tool_of(&h.state().state.world, &e))
             .map(|t| t.diameter)
     };
     let d0 = world_d(&harness).expect("the seed owns EM-0600-4FL");
-
-    let c = harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .expect("the tool page owns DragValues")
-        .rect()
-        .center();
+    let spin = |h: &Harness<'static, ShellUi>| diameter_spin(&tool_library_editor::library_window(h));
+    let c = spin(&harness).center();
     harness.drag_at(c);
     harness.run();
     harness.hover_at(c + Vec2::new(30.0, 0.0));
@@ -3055,40 +3087,35 @@ fn inch_mode_drag_keeps_px_parity_and_types_onto_the_lattice() {
     // the SHOWN unit inside a one-physical-pixel radius, which by the
     // speed-÷25.4 law is the identical ±0.1 mm in both modes (here it
     // pulled 9.000 to 0.355 in = 9.017 mm, 0.017 off).
+    let staged = tool_library_editor::draft(&mut harness).diameter;
     assert!(
-        (harness.state().state.tool_ui.diameter - (d0 + 3.0)).abs() < 0.05,
-        "inch px-parity: 30 px must move 3.0 mm from {d0}, got {}",
-        harness.state().state.tool_ui.diameter
+        (staged - (d0 + 3.0)).abs() < 0.05,
+        "inch px-parity: 30 px must move 3.0 mm from {d0}, got {staged}"
     );
     assert!(
         (world_d(&harness).expect("still there") - d0).abs() < 1e-12,
         "a drag must not touch the world"
     );
 
-    harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .unwrap()
-        .click();
+    // #4336: the Diameter's field (the tool number's stands above it).
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").click();
+    }
     harness.run();
-    harness
-        .get_all_by_role(egui::accesskit::Role::SpinButton)
-        .next()
-        .unwrap()
-        .type_text("0.5");
+    {
+        let win = tool_library_editor::library_window(&harness);
+        let r = diameter_spin(&win);
+        win.query_all_by_role(egui::accesskit::Role::SpinButton).find(|n| n.rect() == r).expect("the Diameter field").type_text("0.5");
+    }
     harness.run();
     assert_eq!(
-        harness.state().state.tool_ui.diameter,
+        tool_library_editor::draft(&mut harness).diameter,
         12.7,
         "a typed half inch must store exactly 12.7 mm"
     );
-    // The tool settings page scrolls: on the default-height shell the
-    // Apply button sits below the fold, so the click needs the settled
-    // scrolled rect (the idiom the op-page draft test carries).
-    harness.get_by_label("Apply").scroll_to_me();
-    harness.run();
-    harness.get_by_label("Apply").click();
-    harness.run();
+    tool_library_editor::click_window_button(&mut harness, "Apply");
     assert_eq!(
         world_d(&harness).expect("still there"),
         12.7,

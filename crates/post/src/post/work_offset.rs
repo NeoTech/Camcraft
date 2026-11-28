@@ -12,6 +12,7 @@
 //! exactly as before, and is refused by setup name for any offset above
 //! 6 - never handed a word it would misread, never posted at offset 1.
 
+use super::cnc::Record;
 use super::js::{is_true, Script};
 use super::PostError;
 use serde_json::{json, Value};
@@ -23,9 +24,8 @@ pub const LEGACY_WORDS: [&str; 6] = ["G54", "G55", "G56", "G57", "G58", "G59"];
 /// The maximum of a script that declares none: the six legacy words.
 pub const DEFAULT_MAX: u32 = 6;
 
-/// The sanity bound on any offset index or declared maximum (the app
-/// keeps a setup's offset in a `u8`).
-pub const MAX_BOUND: u32 = 255;
+/// The sanity bound on any offset index or declared maximum.
+pub const MAX_BOUND: u32 = 1000;
 
 /// The 1-based offset index a `PARAM WorkOffset` value names: a whole
 /// number `1..=MAX_BOUND`, or - so streams written before #931 still
@@ -44,7 +44,7 @@ pub fn index_of(value: &Value) -> Option<u32> {
         _ => return None,
     };
     let whole = n.is_finite() && n.fract() == 0.0 && n >= 1.0 && n <= f64::from(MAX_BOUND);
-    // A whole number in 1..=255 converts exactly.
+    // A whole number in 1..=1000 converts exactly.
     whole.then_some(n as u32)
 }
 
@@ -107,6 +107,29 @@ impl Manifest {
         }
         Ok(json!(n))
     }
+}
+
+/// #4088: the first `PARAM WorkOffset` above the machine's
+/// `controller.work_offset_max` (a Heidenhain preset table with fewer rows
+/// than the post can name), as a refusal naming its setup. The engine
+/// refuses it before any hook runs, so a script error cannot hide it. A
+/// machine that states no maximum keeps the post's own limit.
+pub(super) fn machine_refusal(records: &[Record], mch: &Value) -> Result<Option<String>, String> {
+    let Some(max) = crate::machine::installation::work_offset_max(mch)? else {
+        return Ok(None);
+    };
+    let mut base = BTreeMap::new();
+    for record in records {
+        let Record::Param { name, value } = record else { continue };
+        if let Some(n) = index_of(value).filter(|n| name == "WorkOffset" && *n > max) {
+            return Ok(Some(format!(
+                "{}uses work offset {n}, but this machine's control holds work offsets 1-{max} only (controller.work_offset_max in the machine file) - pick one of those, or state the control's real count in the machine file",
+                who(&base)
+            )));
+        }
+        base.insert(name.clone(), value.clone());
+    }
+    Ok(None)
 }
 
 fn who(base: &BTreeMap<String, Value>) -> String {

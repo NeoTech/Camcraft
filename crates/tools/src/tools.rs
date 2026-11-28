@@ -20,6 +20,7 @@
 pub use crate::cutting::{ToolMaterial, WorkMaterial};
 pub use crate::turning_data::TurningData;
 pub use crate::thread_hand::ThreadHand;
+pub use crate::cutter_hand::CutterHand;
 pub use crate::taper::TaperTip;
 pub use crate::form_mill::{FormPreset, FormSpec};
 
@@ -94,6 +95,11 @@ pub enum ToolKind {
     Torch,
     /// Abrasive waterjet nozzle: diameter is the stream kerf, rpm is zero.
     Waterjet,
+    /// Laser cutting head (#4081): `diameter` is the beam kerf, rpm is
+    /// zero, and it has no corner radius and no cutting data rows (the
+    /// laser operation states the power and the feed). Only the laser
+    /// operations mount it.
+    Laser,
     /// Sinker EDM electrode (#541): a rectangular solid burned straight
     /// down Z. `diameter` is its X size and `width` its Y size (both
     /// across the burning face), `flute_len` its length below the
@@ -161,6 +167,7 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Probe => "touch probe",
             ToolKind::Torch => "plasma torch",
             ToolKind::Waterjet => "waterjet nozzle",
+            ToolKind::Laser => "laser head",
             ToolKind::Electrode => "sinker electrode",
             ToolKind::ThreadMill => "thread mill",
             ToolKind::ThreadMillSingle => "single-form thread mill",
@@ -221,6 +228,12 @@ pub struct Tool {
     pub pitch_min: f64,
     /// Tap thread hand; older tools default to right-hand.
     pub thread_hand: crate::thread_hand::ThreadHand,
+    /// The cutter's hand (#4031): right-hand cutters run M3, left-hand
+    /// ones need the spindle reversed (M4). Separate from `thread_hand`:
+    /// a left-hand tap cuts a left thread while its spindle may still
+    /// turn right, so the two hands are stated apart. Older tools
+    /// default to right-hand.
+    pub cutter_hand: crate::cutter_hand::CutterHand,
     /// Insert nose radius in mm (the ISO corner circle ground into the
     /// tip): 0.8 is common roughing stock. Inert unless kind is
     /// Turning, where it is the circle the facing verdict sweeps, or
@@ -326,6 +339,9 @@ impl Tool {
         // AddTool / ChangeTool / library refusals already call this.
         if self.kind == ToolKind::Waterjet {
             return crate::waterjet::refusal(self);
+        }
+        if self.kind == ToolKind::Laser {
+            return crate::laser::refusal(self);
         }
         if self.kind == ToolKind::Wire {
             return crate::wire::refusal(self);
@@ -440,7 +456,7 @@ impl Tool {
             // not off this cylinder.
             ToolKind::EndMill | ToolKind::Tap | ToolKind::Bore | ToolKind::Turning
             | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch
-            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Wire
+            | ToolKind::Electrode | ToolKind::Waterjet | ToolKind::Laser | ToolKind::Wire
             // A thread mill draws as the cylinder its tooth crests
             // sweep (#894) - the envelope the reach laws read.
             | ToolKind::ThreadMill | ToolKind::ThreadMillSingle
@@ -534,6 +550,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: stylus_len,
@@ -572,6 +589,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         pitch: 0.0,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 10.0,

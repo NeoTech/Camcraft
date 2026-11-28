@@ -67,7 +67,7 @@ impl SetupPostDto {
     pub fn to_ref(&self) -> PostRef {
         match self {
             SetupPostDto::Builtin => PostRef::Builtin,
-            SetupPostDto::Named(n) => crate::posting::agie::current_ref(PostRef::Named(n.clone())),
+            SetupPostDto::Named(n) => crate::posting::aliases::current_ref(PostRef::Named(n.clone())),
             SetupPostDto::File(f) => PostRef::File(f.clone()),
         }
     }

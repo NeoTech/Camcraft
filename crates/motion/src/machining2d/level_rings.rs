@@ -20,12 +20,13 @@
 use crate::geo2d::{Loop, Point2, Region, RingClip};
 
 use super::face::GenError;
-use super::level_order::{Piece, WALL, order};
+use super::level_flanks::Material;
+use super::level_order::{Cut, Piece, WALL, order};
 use super::pass_start::{PassStart, StartSide};
 use super::pocket::PocketParams;
 use super::pocket_plan::plan_passes;
 use super::pocket_strategy::PocketStrategy;
-use super::ring_fill::{Band, RING, closed_walk, fills};
+use super::ring_fill::{Band, RING, clean_walk, closed_walk, fills};
 use super::ring_side::{mirror, share_ends};
 use super::ring::dist;
 
@@ -177,7 +178,7 @@ pub(super) fn level_pieces(
                 }
             }
             if side.around_part {
-                let fill = Band { c: &c, hc: &hc, j: 0, step, tool_r, climb };
+                let fill = Band { c: &c, hc: &hc, stock: side.stock.as_ref(), j: 0, step, tool_r, climb };
                 add_fills(&mut out, first, &fill, last)?;
             }
             if start == PassStart::Outside {
@@ -217,10 +218,13 @@ fn add_fills(out: &mut Vec<Piece>, first: usize, band: &Band<'_>, last: u32) -> 
     let walks = |out: &[Piece], lev: u32| -> Vec<Vec<Point2>> {
         out.iter().skip(first).filter(|p| !p.core && p.level == lev).map(closed_walk).collect()
     };
+    let material = Material::new(band.c, band.stock, band.tool_r)?;
+    let part_wall: Vec<Cut> = walks(out, 0).into_iter().map(Cut::new).collect();
+    let outer_edge: Vec<Cut> = walks(out, WALL).into_iter().map(Cut::new).collect();
     let mut add = Vec::new();
     for j in 1..=last {
         let (inner, outer) = (walks(out, RING.saturating_mul(j - 1)), walks(out, RING.saturating_mul(j)));
-        add.extend(fills(&Band { j, ..*band }, &inner, &outer)?);
+        add.extend(fills(&Band { j, ..*band }, &material, &part_wall, &outer_edge, &inner, &outer)?);
     }
     out.extend(add);
     Ok(())
@@ -272,7 +276,10 @@ fn core_first(c: &Region, step: f64, climb: bool, cap: u32, out: &mut Vec<Piece>
         }
         for l in ring.loops() {
             if l.points().len() >= 2 {
-                rings.push((k, walk(l.points(), !climb)));
+                let pts = clean_walk(walk(l.points(), !climb), true);
+                if pts.len() >= 3 {
+                    rings.push((k, pts));
+                }
             }
         }
     }
@@ -315,10 +322,16 @@ fn walk(pts: &[Point2], reverse: bool) -> Vec<Point2> {
 
 fn push(out: &mut Vec<Piece>, level: u32, ring: &[Point2], clip: RingClip) {
     match clip {
-        RingClip::Whole if ring.len() >= 2 => out.push(Piece { level, pts: ring.to_vec(), closed: true, core: false }),
-        RingClip::Whole => {}
+        RingClip::Whole => {
+            let pts = clean_walk(ring.to_vec(), true);
+            let len: f64 = pts.windows(2).map(|w| dist(w[0], w[1])).sum();
+            if pts.len() >= 3 || (pts.len() == 2 && len >= MIN_PIECE) {
+                out.push(Piece { level, pts, closed: true, core: false });
+            }
+        }
         RingClip::Pieces(ps) => {
             for pts in ps {
+                let pts = clean_walk(pts, false);
                 let len: f64 = pts.windows(2).map(|w| dist(w[0], w[1])).sum();
                 if pts.len() >= 2 && len >= MIN_PIECE {
                     out.push(Piece { level, pts, closed: false, core: false });

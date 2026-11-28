@@ -38,6 +38,7 @@ mod launch_file_tests;
 
 pub mod actions;
 pub mod play_precalc;
+pub mod play_layer;
 pub mod align_pick_viz;
 pub mod avoid_viz;
 pub(crate) mod machine_modes;
@@ -75,6 +76,9 @@ pub mod locate_pick;
 pub mod move_drag;
 pub mod turn_drag;
 pub mod machined;
+// #4266: the playhead's work turn as the display reads it - membership
+// and the one shared transform.
+pub(crate) mod work_turn;
 mod setup_display;
 mod sketch_chip_memo;
 mod sketch_memo;
@@ -132,6 +136,8 @@ mod helix_view_tests;
 mod field_view_tests;
 #[cfg(test)]
 mod play_precalc_tests;
+#[cfg(test)]
+mod play_layer_tests;
 #[cfg(test)]
 mod machined_tests;
 #[cfg(test)]

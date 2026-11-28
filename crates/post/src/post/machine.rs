@@ -146,6 +146,11 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
     {
         o.insert("safeRetractZ".to_owned(), json!(z));
     }
+    if let Some(tol) = m.arc_tolerance
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("arcTolerance".to_owned(), json!(tol));
+    }
     // #671: a declared plasma table says so, for the plasma post's
     // machine check; every other mirror is unchanged.
     if crate::machine::kind(Some(m)) == crate::machine::Kind::Plasma
@@ -158,6 +163,12 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
         && let Some(o) = out.as_object_mut()
     {
         o.insert("kind".to_owned(), json!("waterjet"));
+    }
+    // #4081: a laser keeps its kind through the CLI mirror, as a waterjet does.
+    if crate::machine::kind(Some(m)) == crate::machine::Kind::Laser
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("kind".to_owned(), json!("laser"));
     }
     // #533: a wire or sinker EDM says its kind and its `edm` words (the
     // control's codes, D5, and whether it threads by itself) for the

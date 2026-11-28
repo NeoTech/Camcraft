@@ -49,6 +49,7 @@ pub(crate) fn short_caption(kind: MachineKind) -> &'static str {
         MachineKind::WireEdm => "Wire",
         MachineKind::SinkerEdm => "Sinker",
         MachineKind::Waterjet => "Waterjet",
+        MachineKind::Laser => "Laser",
     }
 }
 

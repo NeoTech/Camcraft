@@ -447,6 +447,9 @@ fn verified_multiaxis(params: &crate::operation::OpParams) -> bool {
             | OpParams::AdvancedSwarf { .. } | OpParams::RotaryContour { .. } | OpParams::RotaryParallel { .. }
             | OpParams::RotaryOffset { .. } | OpParams::MultiAxisRough { .. } | OpParams::Flow5D { .. }
             | OpParams::MultiAxisContour { .. } | OpParams::MultiAxisDeburr { .. }
+            // The flow band verifies under the same radial law
+            // (#2826).
+            | OpParams::RotaryFlow { .. }
     )
 }
 
@@ -471,7 +474,7 @@ fn verified_for_machine(kind: crate::machine::Kind, params: &crate::operation::O
         Kind::Plasma => matches!(params, OpParams::PlasmaProfile(_)),
         Kind::WireEdm => matches!(params, OpParams::WireContour(_)),
         Kind::SinkerEdm => matches!(params, OpParams::SinkerBurn(_)),
-        Kind::Waterjet => false,
+        Kind::Waterjet | Kind::Laser => false,
     }
 }
 

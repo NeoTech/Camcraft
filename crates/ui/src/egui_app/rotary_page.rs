@@ -32,7 +32,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             lead_deg,
             lag_deg,
-            max_tilt_deg, picks: _,
+            max_tilt_deg,
+            stated_axis,
+            picks: _,
         } => rotary_editor(
             ui,
             world,
@@ -51,6 +53,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
+            stated_axis,
         ),
         OpParams::RotaryParallel {
             tolerance,
@@ -64,7 +67,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             lead_deg,
             lag_deg,
-            max_tilt_deg, picks: _,
+            max_tilt_deg,
+            stated_axis,
+            picks: _,
         } => rotary_editor(
             ui,
             world,
@@ -83,6 +88,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             lead_deg,
             lag_deg,
             max_tilt_deg,
+            stated_axis,
         ),
         // The wrap ladder (M5.1 stage E2): the pocket's panel worded
         // for the TURN - stepdown infeeds radii, stepover spaces
@@ -107,10 +113,15 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             optimal_load,
             lead_deg,
             lag_deg,
-            max_tilt_deg, picks: _,
+            max_tilt_deg,
+            stated_axis,
+            picks: _,
         } => {
             if tab == SEC_LEADS {
                 lead_page::leads_tab(ui, u, "ro", Some((entry, helix_radius)), links);
+            }
+            if tab == SEC_PASSES {
+                rotary_stated_axis_editor(ui, stated_axis);
             }
             if tab == SEC_HEIGHTS {
                 height_editor(

@@ -80,8 +80,9 @@ fn native_post_dialog_writes_three_files_and_reports_the_required_work_checks() 
     assert_eq!(name.value().as_deref(), Some("CCSEP20"));
     h.get_by_label_contains("Requested finish: Fine Ra 0.30 µm");
     h.get_by_label(
-        "Check the effective work quality on the control before assigning cutting steps.",
+        "Check the effective work quality on the AgieVision control before assigning cutting steps.",
     );
+    h.get_by_label("A new job folder will contain the AgieVision job files (ISO, SBR, SBL).");
 
     click_post(&mut h);
     let status = &h.state().state.status;
@@ -95,7 +96,7 @@ fn native_post_dialog_writes_three_files_and_reports_the_required_work_checks() 
     ] {
         assert!(status.contains(check), "missing {check}: {status}");
     }
-    h.get_by_label_contains("Native wire EDM job prepared in");
+    h.get_by_label_contains("Agie Wire EDM job prepared in");
     let job = fixture.0.join("jobs/CCSEP20");
     assert_eq!(fs::read_dir(&job).unwrap().count(), 3);
     let goldens = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/tests/golden/nc/agie-native");
@@ -132,6 +133,6 @@ fn native_post_dialog_refuses_per_operation_output_without_writing_files() {
     h.get_by_label("One file per operation").click();
     h.run_steps(2);
     click_post(&mut h);
-    h.get_by_label("Choose One program to create a native wire EDM job directory");
+    h.get_by_label("Choose One program to create an Agie Wire EDM job directory");
     assert_eq!(fs::read_dir(fixture.0.join("jobs")).unwrap().count(), 0);
 }

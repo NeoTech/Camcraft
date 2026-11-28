@@ -280,7 +280,7 @@ pub(crate) fn simulate_field_with(f: &mut SdfField, ops: &[SimOp], drill: bool) 
     for (i, op) in ops.iter().enumerate() {
         let tool = op_sdf_tool(op, flank, true, drill);
         for chunk in op.moves.chunks(super::field_batch::BATCH_MOVES) {
-            f.subtract_batch(chunk, &tool, chord_tol).map_err(|e| named_op(i, e))?;
+            f.subtract_batch_fitted(chunk, &tool, chord_tol).map_err(|e| named_op(i, e))?;
         }
     }
     Ok(())

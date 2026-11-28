@@ -15,6 +15,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
         )));
     }
     super::program_entry_dto::validate(dto, kind)?; // #155
+    super::pattern_dto::validate(dto, kind)?; // #3012
     super::sketch_dto::validate(dto, kind)?; // #1862
     // #1720: a flip rides a WCS row and nothing else.
     if dto.flip.is_some() && !matches!(kind, EntityKind::Wcs) {
@@ -61,7 +62,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
         vouch.check(&dto.name, matches!(kind, EntityKind::Model), flagged).map_err(corrupt)?;
     }
     match kind {
-        EntityKind::Entry | EntityKind::Sketch => {}
+        EntityKind::Entry | EntityKind::Pattern | EntityKind::Sketch => {}
         EntityKind::Model => {
             if dto.stock.is_some()
                 || dto.tool.is_some()

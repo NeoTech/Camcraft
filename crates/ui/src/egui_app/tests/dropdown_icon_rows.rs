@@ -39,8 +39,10 @@ fn icons_and_texts(h: &Harness<'static, ShellUi>) -> (Vec<Rect>, Vec<(String, Po
 /// first row: the row rect, the icon rect in it, the label x.
 fn first_op_row(h: &mut Harness<'static, ShellUi>) -> (Rect, Rect, f32) {
     let pal = theme::current();
-    // `Harness::build_ui_state` wraps the frame in an 8 px CentralPanel margin.
-    let strip = Rect::from_min_size(Pos2::new(8.0, 8.0), Vec2::new(1280.0 - 16.0, theme::ribbon_h(&pal)));
+    // `Harness::build_ui_state` wraps the frame in an 8 px CentralPanel
+    // margin, and the menu bar (#4484) stands over the ribbon.
+    let top = 8.0 + panes::menu_bar_h(&pal);
+    let strip = Rect::from_min_size(Pos2::new(8.0, top), Vec2::new(1280.0 - 16.0, theme::ribbon_h(&pal)));
     let plan = panes::ribbon_plan(camcraft_app::machine::Kind::Mill, &[]);
     let (_, _, _, drops) = panes::ribbon_cells(strip, &pal, &plan);
     let drop = drops.iter().find(|d| d.section == Section::Mill2D).expect("Mill2D drop");

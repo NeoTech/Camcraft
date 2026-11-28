@@ -91,6 +91,23 @@ pub(super) fn leads_tab_with_retract(
     engagement_group(ui, &mut links.approach);
 }
 
+/// The Bore's own Entry group: plunge, ramp or helix (no arc on a ring
+/// ladder), then ONLY that type's fields. The ramp and helix angles are
+/// the links' approach and cap every descent of the hole.
+pub(super) fn bore_entry_group(ui: &mut Ui, u: Unit, entry: &mut Entry3D, links: &mut Links) {
+    group(ui, "Entry", None, |ui| {
+        let mut idx = entry_idx(*entry).min(2);
+        let before = idx;
+        prop_row_hint(ui, "Type", "how the tool first reaches each level's depth in a hole", |ui| {
+            combo(ui, "bore_entry", &mut idx, &ENTRY_KINDS[..3])
+        });
+        if idx != before {
+            *entry = entry_of(idx);
+        }
+        arm_fields(ui, u, *entry, &mut links.approach);
+    });
+}
+
 fn entry_group(ui: &mut Ui, u: Unit, tag: &str, entry: &mut Entry3D, helix_radius: &mut f64, links: &mut Links, start: PassStart) {
     let mut e_idx = entry_idx(*entry);
     let before = e_idx;

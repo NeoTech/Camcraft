@@ -20,6 +20,12 @@ use flecs_ecs::prelude::World;
 
 #[path = "wire_dxf_selection/arcs.rs"]
 mod arcs;
+// #3991: the tangent arc lead on a selected chain.
+#[path = "wire_dxf_selection/arc_lead.rs"]
+mod arc_lead;
+// #3332: the exit pick on a selected chain.
+#[path = "wire_dxf_selection/exit_pick.rs"]
+mod exit_pick;
 
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const DXF: &str = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n\
@@ -37,6 +43,9 @@ fn pick(world: &World, layer: &str) -> GeoSel {
 
 fn wire_op() -> WireContourOp {
     WireContourOp {
+        overlap: 0.0,
+        lead_arc_radius: None,
+        compensation: Default::default(),
         condition: "C110".into(),
         top_z: Height::of(HeightReference::TopOfStock, 0.0),
         bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),

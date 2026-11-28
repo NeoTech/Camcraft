@@ -33,8 +33,9 @@ use super::contour_run_side::{
     LIFT, SectionAt, Words, material_side, offset_run_side, simple,
 };
 use super::chamfer_side::boundary_inside;
+use super::arcs::{ARC_FIT_TOL, fit_arcs_sided};
 use super::face::GenError;
-use super::levels::{Motion, run_levels};
+use super::levels::{Motion, run_level_walks, run_levels};
 
 const CHAMFER_WORDS: Words = Words {
     body: "selected model",
@@ -151,6 +152,15 @@ impl ChamferParams {
 /// cone-tip depth. A positive radius offsets the ride on the selected
 /// air side; zero takes the old path without an offset call.
 pub fn chamfer(region: &crate::geo2d::Region, p: &ChamferParams) -> Result<Toolpath, GenError> {
+    chamfer_with_tolerance(region, p, ARC_FIT_TOL)
+}
+
+/// Chamfer a closed region using the operation's tolerance for fitting circular feed moves.
+pub fn chamfer_with_tolerance(
+    region: &crate::geo2d::Region,
+    p: &ChamferParams,
+    tolerance: f64,
+) -> Result<Toolpath, GenError> {
     p.validate()?;
     if region.is_empty() {
         return Err(GenError::Empty("empty chamfer region".into()));
@@ -238,7 +248,11 @@ pub fn chamfer(region: &crate::geo2d::Region, p: &ChamferParams) -> Result<Toolp
     // The one level the ride owns: not a ladder - the cone's
     // generatrix meets the wall at exactly one depth.
     let motion = Motion::new(p.clearance_z, p.retract_z, p.feed, p.plunge_feed);
-    run_levels(&mut b, &passes, &[z], &motion, None, None, None);
+    let fit_tolerance = tolerance.min(ARC_FIT_TOL);
+    let walks: Vec<_> = passes.iter()
+        .map(|pass| fit_arcs_sided(pass, fit_tolerance, Some(p.climb)))
+        .collect();
+    run_level_walks(&mut b, &passes, &[z], &motion, Some(&walks), None, None);
     let cur = b.at();
     b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
 

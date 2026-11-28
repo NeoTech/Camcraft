@@ -68,6 +68,9 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     // #617: the Sodick 2-axis wire post, its words from Sodick's 1998
     // operation manual (Mark 21 / EX21); not verified on a control.
     ("Sodick Wire EDM (Mark 21)", AssetFile("sodick-wire.cps")),
+    // #4045: the Sodick LN2W dialect (AQ400L / AQ600L): the start sequence
+    // of a machine owner, vertical 2-axis cuts (taper: #4075); not verified on a control.
+    ("Sodick Wire EDM (LN2W)", AssetFile("sodick-ln2w.cps")),
     (super::agie::POST, AssetFile("agie-native.cps")),
     // #2700: the G-EDM 2-axis wire post for G-RBLv3 (Grbl-family words,
     // spark power set at the controller); not verified on a control.
@@ -147,6 +150,14 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #3038: the 1000x1500 frame, the smaller of the owner's and Ooznest's travel; Estlcam control, so no post is
     // named until #3735 (sources in docs/decisions/3038-workbee-estlcam.md).
     ("Ooznest WorkBee 1000x1500 (Estlcam)", AssetFile("ooznest-workbee-1000x1500.mch")),
+    // #3071: hobby router frames from the makers' published figures, on the
+    // "Grbl 1.1" post (sources in docs/decisions/3071-hobby-routers.md).
+    ("Carbide 3D Shapeoko 5 Pro 4x4", AssetFile("carbide3d-shapeoko-5-pro-4x4.mch")),
+    ("Carbide 3D Shapeoko 5 Pro 4x2", AssetFile("carbide3d-shapeoko-5-pro-4x2.mch")),
+    ("Carbide 3D Shapeoko 5 Pro 2x2", AssetFile("carbide3d-shapeoko-5-pro-2x2.mch")),
+    ("Inventables X-Carve 2021 1000 mm", AssetFile("inventables-x-carve-1000.mch")),
+    ("Inventables X-Carve Pro 4x4", AssetFile("inventables-x-carve-pro-4x4.mch")),
+    ("Inventables X-Carve Pro 4x2", AssetFile("inventables-x-carve-pro-4x2.mch")),
     // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF). #1433: the plain 3-axis
     // machine, and the catalog's optional A table as its own entry (no
     // published nose_to_axis, so that one refuses until a setup states it).
@@ -155,6 +166,8 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #1976: public Haas specifications; configurations and sources in docs/decisions/1976-haas-machines.md.
     ("Haas VF-2", AssetFile("haas-vf2.mch")),
     ("Haas VF-2SS", AssetFile("haas-vf2ss.mch")),
+    // #3682: extended Y-axis VF-2SS YT (508 mm Y travel); sources in docs/decisions/3682-haas-vf2ss-yt.md.
+    ("Haas VF-2SS YT", AssetFile("haas-vf2ssyt.mch")),
     ("Haas Mini Mill", AssetFile("haas-mini-mill.mch")),
     ("Haas DT-1", AssetFile("haas-dt1.mch")),
     ("Haas DM-1", AssetFile("haas-dm1.mch")),
@@ -166,6 +179,9 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #1501: a Sodick wire EDM, X Y U V travels and taper from Sodick's published
     // ALC series specifications (docs/decisions/1501-sodick-alc400g.md).
     ("Sodick ALC400G", AssetFile("sodick-alc400g.mch")),
+    // #4045: the Sodick AQ600L with the LN2W control; its default post is
+    // the LN2W dialect (docs/decisions/4045-sodick-ln2w-dialect.md).
+    ("Sodick AQ600L", AssetFile("sodick-aq600l.mch")),
     ("AGIECUT Classic 2S (template)", AssetFile("agiecut-classic-2s.mch")),
 ];
 
@@ -369,6 +385,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "wire-iso.cps") => Some(include_str!("../../../assets/posts/wire-iso.cps")),
         ("posts", "agie-native.cps") => Some(include_str!("../../../assets/posts/agie-native.cps")),
         ("posts", "sodick-wire.cps") => Some(include_str!("../../../assets/posts/sodick-wire.cps")),
+        ("posts", "sodick-ln2w.cps") => Some(include_str!("../../../assets/posts/sodick-ln2w.cps")),
         ("posts", "g-edm.cps") => Some(include_str!("../../../assets/posts/g-edm.cps")),
         ("posts", "sinker-iso.cps") => Some(include_str!("../../../assets/posts/sinker-iso.cps")),
         ("machines", "vmc.mch") => Some(include_str!("../../../assets/machines/vmc.mch")),
@@ -397,6 +414,12 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "mikron-wf3-dcm-linuxcnc.mch") => Some(include_str!("../../../assets/machines/mikron-wf3-dcm-linuxcnc.mch")),
         ("machines", "grbl-3axis.mch") => Some(include_str!("../../../assets/machines/grbl-3axis.mch")),
         ("machines", "ooznest-workbee-1000x1500.mch") => Some(include_str!("../../../assets/machines/ooznest-workbee-1000x1500.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-4x4.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-4x4.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-4x2.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-4x2.mch")),
+        ("machines", "carbide3d-shapeoko-5-pro-2x2.mch") => Some(include_str!("../../../assets/machines/carbide3d-shapeoko-5-pro-2x2.mch")),
+        ("machines", "inventables-x-carve-1000.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-1000.mch")),
+        ("machines", "inventables-x-carve-pro-4x4.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-pro-4x4.mch")),
+        ("machines", "inventables-x-carve-pro-4x2.mch") => Some(include_str!("../../../assets/machines/inventables-x-carve-pro-4x2.mch")),
         ("machines", "tormach-24r.mch") => Some(include_str!("../../../assets/machines/tormach-24r.mch")),
         ("machines", "tormach-xstech-pro.mch") => Some(include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
         ("machines", "tormach-xstech.mch") => Some(include_str!("../../../assets/machines/tormach-xstech.mch")),
@@ -414,12 +437,14 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "doosan-dnm.mch") => Some(include_str!("../../../assets/machines/doosan-dnm.mch")),
         ("machines", "haas-vf2.mch") => Some(include_str!("../../../assets/machines/haas-vf2.mch")),
         ("machines", "haas-vf2ss.mch") => Some(include_str!("../../../assets/machines/haas-vf2ss.mch")),
+        ("machines", "haas-vf2ssyt.mch") => Some(include_str!("../../../assets/machines/haas-vf2ssyt.mch")),
         ("machines", "haas-mini-mill.mch") => Some(include_str!("../../../assets/machines/haas-mini-mill.mch")),
         ("machines", "haas-dt1.mch") => Some(include_str!("../../../assets/machines/haas-dt1.mch")),
         ("machines", "haas-dm1.mch") => Some(include_str!("../../../assets/machines/haas-dm1.mch")),
         ("machines", "emco-vmc-200.mch") => Some(include_str!("../../../assets/machines/emco-vmc-200.mch")),
         ("machines", "sinker-edm.mch") => Some(include_str!("../../../assets/machines/sinker-edm.mch")),
         ("machines", "sodick-alc400g.mch") => Some(include_str!("../../../assets/machines/sodick-alc400g.mch")),
+        ("machines", "sodick-aq600l.mch") => Some(include_str!("../../../assets/machines/sodick-aq600l.mch")),
         ("machines", "agiecut-classic-2s.mch") => Some(include_str!("../../../assets/machines/agiecut-classic-2s.mch")),
         ("machines", "3axis-vmc.mch") => Some(include_str!("../../../assets/machines/3axis-vmc.mch")),
         _ => None,

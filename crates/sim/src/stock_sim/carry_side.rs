@@ -51,7 +51,7 @@
 use super::carried::CarriedStock;
 use super::carry::{unit, Body, LatticeTurn, CARRY_TURN_REFUSAL};
 use super::dexel::Dexel;
-use super::kernel::MAX_CELLS_PER_AXIS;
+use super::kernel::{cells_across, MAX_CELLS_PER_AXIS};
 use crate::geometry::Point3;
 
 /// The field arm's refusal of a side-on turn (the module law).
@@ -228,7 +228,9 @@ impl Body {
         }
         let any = z0.is_finite() && z1.is_finite();
         let (z0, z1) = if any { (z0, z1) } else { (0.0, 0.0) };
-        let slabs_f = ((z1 - z0) / c).ceil().max(1.0);
+        // `cells_across` (#4012): a height a few ulps over a whole number
+        // of cells is that many slabs, as the exact carry counts it.
+        let slabs_f = cells_across(z1 - z0, c).max(1) as f64;
         if !(slabs_f.is_finite() && slabs_f <= MAX_CELLS_PER_AXIS as f64) {
             return Err(format!(
                 "the machined stock is {slabs_f} cells tall - turned side-on its lattice would pass {MAX_CELLS_PER_AXIS} cells on one axis"
@@ -236,7 +238,8 @@ impl Body {
         }
         let nh = slabs_f as usize;
         // The slabs are centred on the range: each end slab's centre is
-        // inside it, and the slabs cover it whole.
+        // inside it, and the slabs cover it whole (to rounding: a range a
+        // few ulps over whole slabs is short by those ulps, never a slab).
         let z0 = z0 - 0.5 * (slabs_f * c - (z1 - z0));
         // Per new column (iu, slab): the first and last old `v` cell whose
         // span reaches into the slab.

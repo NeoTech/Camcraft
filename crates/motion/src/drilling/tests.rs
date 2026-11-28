@@ -72,6 +72,7 @@ pub(super) fn drill_tool(d: f64) -> Tool {
         orientation: None,
         pitch_min: 0.0,
         thread_hand: Default::default(),
+        cutter_hand: Default::default(),
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
         outline: Vec::new(),
@@ -95,6 +96,7 @@ fn hole(xy: (f64, f64), r: f64, entry: f64, floor: f64, through: bool) -> Hole {
 
 fn params<'a>(tool: &'a Tool, holes: &'a [Hole]) -> CycleParams<'a> {
     CycleParams {
+        material_top: &[],
         through_clear: crate::drilling::THROUGH_CLEAR,
         break_through_from: BreakThroughFrom::FullDiameter,
         clearance_z: 15.0,

@@ -50,19 +50,35 @@ pub fn place(model: &[Triangle], place: &LathePlacement) -> Result<Vec<Triangle>
 /// frame: its clearance bands derived (less its insert zone, #396),
 /// refused by name when the mesh is no lathe body or the zone no zone.
 pub fn build(source: &str, place: LathePlacement, zone: Option<InsertZone>, placed: Vec<Triangle>) -> Result<ToolBody, String> {
+    build_padded(source, place, zone, placed, 0.0)
+}
+
+/// [`build`] for steel up to `pad` mm outside the facets (#3643: a
+/// meshed body's chord deviation): the clearance bands grow by `pad`.
+/// Refused by name: a negative or non-finite pad.
+pub fn build_padded(
+    source: &str,
+    place: LathePlacement,
+    zone: Option<InsertZone>,
+    placed: Vec<Triangle>,
+    pad: f64,
+) -> Result<ToolBody, String> {
+    if !(pad.is_finite() && pad >= 0.0) {
+        return Err(format!("the lathe body's pad ({pad} mm) must be a finite number of 0 or more"));
+    }
     place.basis().map_err(|e| e.to_string())?;
     if let Some(z) = &zone {
         z.check([MAX_INSERT_REACH; 3]).map_err(|e| e.to_string())?;
     }
     let tris: Vec<[[f64; 3]; 3]> = placed.iter().map(tri).collect();
-    let clearance = LatheClearance::of_zoned(&tris, zone.as_ref()).map_err(|e| e.to_string())?;
+    let clearance = LatheClearance::of_zoned(&tris, zone.as_ref()).map_err(|e| e.to_string())?.padded(pad);
     let facets: Arc<[Triangle]> = Arc::from(placed);
     let pieces = vec![crate::tool_body_assembly::BodyPiece {
         source: source.to_owned(),
         facets: Arc::clone(&facets),
         csys: Vec::new(),
     }];
-    Ok(ToolBody { source: source.to_owned(), facets, frame: BodyFrame::Lathe { place, zone, clearance: Arc::new(clearance) }, spun: None, machine_default: false, library: None, pieces })
+    Ok(ToolBody { source: source.to_owned(), facets, frame: BodyFrame::Lathe { place, zone, clearance: Arc::new(clearance), pad }, spun: None, machine_default: false, library: None, pieces })
 }
 
 /// Can `tool` carry a lathe body (with insert zone `zone`)? Only a

@@ -50,17 +50,20 @@ fn check_guide_span(world: &World, setup: Option<&str>, lo: f64, hi: f64) -> Res
         let z = guide_z + origin[2];
         z.is_finite().then_some(z).ok_or("the wire guide height in the work frame is not finite")
     };
+    // #4039: work that meets a guide plane is in reach; only a gap past
+    // the guide-reach tolerance refuses, and its heights never read "-0.000".
+    use crate::machine::wire_edm::{above_guide, below_guide, guide_z, reach_z};
     if let Some(lower) = edm.lower_guide_z
-        && lo < world_z(lower)?
+        && below_guide(lo, world_z(lower)?)
     {
-        let bottom = lo - origin[2];
-        return Err(format!("work bottom Z{bottom:.3} is below the lower guide Z{lower:.3}, outside the guides' reach"));
+        let bottom = reach_z(lo - origin[2], lower);
+        return Err(format!("work bottom Z{bottom} is below the lower guide Z{}, outside the guides' reach", guide_z(lower)));
     }
     if let Some(upper) = edm.upper_guide_z
-        && hi > world_z(upper)?
+        && above_guide(hi, world_z(upper)?)
     {
-        let top = hi - origin[2];
-        return Err(format!("work top Z{top:.3} is above the upper guide Z{upper:.3}, outside the guides' reach"));
+        let top = reach_z(hi - origin[2], upper);
+        return Err(format!("work top Z{top} is above the upper guide Z{}, outside the guides' reach", guide_z(upper)));
     }
     Ok(())
 }
@@ -88,7 +91,11 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             return Err("the wire laws judge the kerf against the part, and this cut is taken from the stock - cut it from the part model".into());
         }
         let hs = super::resolve_params(world, setup, Some(&op.src), &op.params)?;
-        let sections = if super::wire_sketch::selected(&op.src, &op.params) {
+        let selected = super::wire_sketch::selected(&op.src, &op.params);
+        // #3215: a vertical cut of a model whose arcs were read back from
+        // the facets is judged under the chord the fit was bounded by.
+        let facet_arcs = !selected && w.four_axis.is_none() && w.taper_deg == 0.0 && cache.path.moves.iter().any(|m| m.arc.is_some());
+        let sections = if selected {
             let name = model::name_of(world, e).ok_or("the selected wire operation has no name")?;
             let sketch = super::wire_sketch::resolve(world, &op, &name, &hs)?;
             let part = crate::geo2d::Region::new(vec![sketch.verify_ring(w)?]).map_err(|e| e.to_string())?;
@@ -105,6 +112,9 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             WireSide::Die => CutSide::Die,
             WireSide::Punch => CutSide::Punch,
             WireSide::Left | WireSide::Right => CutSide::Open,
+            // #3216: the centre slit is judged as an open run whose
+            // kerf burns both sides - the verify's centre reading.
+            WireSide::Centre => CutSide::Centre,
         };
         let start = w.picks.first(crate::path_picks::PickRole::Start).map(|p| p.xy);
         let cutoff_from = cutoff_from(w, &cache.path)?;
@@ -124,8 +134,12 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             burnout: w.burnout.is_some(),
             // #1170: the 4-axis cut's stated verify tolerance; #3210: a
             // constant taper's is the model's chord tolerance.
-            verify_tol: w.four_axis.as_ref().map_or_else(|| taper_chord(world, &op.src, w), |f| f.verify_tolerance),
-            taper_chord: w.four_axis.is_none() && w.taper_deg != 0.0,
+            verify_tol: match &w.four_axis {
+                Some(f) => f.verify_tolerance,
+                None if facet_arcs => arc_chord(world, setup, &op.src)?,
+                None => taper_chord(world, &op.src, w),
+            },
+            taper_chord: w.four_axis.is_none() && (w.taper_deg != 0.0 || facet_arcs),
         }))
     })())
 }
@@ -151,6 +165,15 @@ fn taper_chord(world: &World, src: &SrcRef, w: &super::types::WireContourOp) -> 
         .filter_map(|n| model::find_by_name(world, n))
         .filter_map(|e| crate::model_fidelity::chord_of(world, &e))
         .fold(cap, f64::max)
+}
+
+/// The tolerance a model's read-back arcs are judged under (#3215): the
+/// chord the generator bounded each arc's sagitta by (the importer's
+/// promise plus the model's excess, read as generation reads it,
+/// `judged_material`) plus the fit's vertex tolerance.
+fn arc_chord(world: &World, setup: Option<&str>, src: &SrcRef) -> Result<f64, String> {
+    let m = super::material::judged_material(world, setup, src).map_err(|e| e.to_string())?;
+    Ok(crate::geometry::import::step::CHORD_CAP + m.excess + crate::wire_edm::MODEL_ARC_FIT_TOL)
 }
 
 fn model_sections(world: &World, op: &crate::schema::Operation, hs: &super::ResolvedHeights) -> Result<Vec<WireSection>, String> {

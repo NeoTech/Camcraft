@@ -18,7 +18,7 @@ struct Spec {
     holder: &'static str,
 }
 
-const SPECS: [Spec; 5] = [
+const SPECS: [Spec; 6] = [
     Spec {
         name: "Haas VF-2",
         travel: [762.0, 406.0, 508.0],
@@ -33,6 +33,17 @@ const SPECS: [Spec; 5] = [
     Spec {
         name: "Haas VF-2SS",
         travel: [762.0, 406.0, 508.0],
+        rpm: 12000.0,
+        kw: 22.4,
+        feed: 21158.0,
+        rapid: 35560.0,
+        slots: 30,
+        mount: "CAT40",
+        holder: "CAT40 ER32",
+    },
+    Spec {
+        name: "Haas VF-2SS YT",
+        travel: [762.0, 508.0, 508.0],
         rpm: 12000.0,
         kw: 22.4,
         feed: 21158.0,
@@ -253,6 +264,22 @@ fn haas_travel_feed_and_spindle_limits_are_inclusive_and_enforced() {
             "{}: {:?}",
             s.name,
             past.problems
+        );
+    }
+}
+
+#[test]
+fn vf2ss_yt_admits_extended_y_moves_that_vf2ss_refuses() {
+    let vf2ss = shipped("Haas VF-2SS");
+    let vf2ss_yt = shipped("Haas VF-2SS YT");
+    for y in [-508.0, 508.0] {
+        let on_yt = judged(&vf2ss_yt, [0.0, y, 0.0], 21158.0, 12000.0);
+        assert!(on_yt.is_ok(), "VF-2SS YT at Y={y}: {:?}", on_yt.problems);
+        let on_std = judged(&vf2ss, [0.0, y, 0.0], 21158.0, 12000.0);
+        assert!(
+            on_std.problems.iter().any(|p| p.contains("stroke")),
+            "VF-2SS must refuse Y={y}: {:?}",
+            on_std.problems
         );
     }
 }

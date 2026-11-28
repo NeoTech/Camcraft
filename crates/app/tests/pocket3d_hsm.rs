@@ -76,8 +76,10 @@ fn user_job(params: OpParams) -> (World, Toolpath, Vec<String>) {
     let imp = ImportModel::new(&path).expect("the user's STEP imports");
     // PR #2904 replaces the 952-facet truck mesh with solidcore's mesh.
     // The cutting regions and fitted arcs use this measured mesh.
+    // Issue #3886: the solidcore bump of PR #3802 (df899f029) meshes this
+    // fixture to 5232 facets (6228 at its parent 940cc5d0e).
     if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        assert_eq!(imp.mesh.facets.len(), 6228, "the mesh behind the Linux path pin");
+        assert_eq!(imp.mesh.facets.len(), 5232, "the mesh behind the Linux path pin");
     }
     let name = imp.name.clone();
     h.execute(&world, imp);
@@ -192,16 +194,48 @@ fn the_users_whole_model_bore_roughs_adaptive_on_each_level() {
     assert!(!tp.path.notes.iter().any(|n| n.contains("planning budget")), "{:?}", tp.path.notes);
 }
 
+/// The bore's (moves, planar feeds, arcs) since issue #4010. Each level is
+/// one star cell and takes the morph spiral: Z 15 and Z 5 cut 330.07 mm
+/// (410 planar feeds, 78 arcs), Z 10 and Z 0 cut 334.31 mm (397 planar
+/// feeds, 72 arcs). Before the fix, the opening of the Z 15 and Z 5
+/// outlines (328 vertices) kept edges one Clipper unit long that turned
+/// back about the pole. The star law refused them, and the growth rings
+/// cut those levels in 999.92 mm (1933 planar feeds, 918 arcs) and 0.15 mm
+/// short of the wall in -Y. Every level verifies clean and none falls back.
+const BORE_PIN: (usize, usize, usize) = (1642, 1614, 300);
+/// The reading before issue #4010, after the solidcore bump of PR #3802
+/// (issue #3886): Z 15 and Z 5 on the growth rings.
+#[cfg(any(
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64")
+))]
+const BORE_PIN_BEFORE_4010: (usize, usize, usize) = (4688, 4660, 1980);
+/// The reading before the bump, at 940cc5d0e (the parent of df899f029).
+#[cfg(any(
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64")
+))]
+const BORE_PIN_BEFORE_3802: (usize, usize, usize) = (3158, 3130, 1141);
+
 /// The bore's (moves, planar feeds, arcs) on this platform (issue #980).
 fn bore_path_matches(got: (usize, usize, usize)) -> bool {
     if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        // Issue #3050: measured on Windows x86_64, release, at d66400b78
+        // Issue #4010: NOT measured on Windows after the star-cell fix.
+        // Windows equalled macOS arm64 before it (BORE_PIN_BEFORE_4010),
+        // so the pin follows the macOS reading; measure it at the next
+        // Windows run.
+        // Issue #3886: (4688, 4660, 1980) measured on Windows x86_64,
+        // release, at 6d0381f19 and 2e2d40cb3 (after the solidcore bump of
+        // PR #3802); this platform does not assert the facet count.
+        // Issue #3050: before it, measured on Windows x86_64, release, at d66400b78
         // (upstream main): every level verifies clean, none falls back.
         // The PR #2904 mesh (6228 facets at the same chord cap) moved the
         // counts; they now equal the Linux and macOS arm64 triple. Before:
         // (4716, 4688, 549), issue #2004 (PR #2013), 7c46c4d4c; and before
         // that (16017, 15360, 1427), issue #1402, main 5eeb0370e.
-        got == (3158, 3130, 1141)
+        got == BORE_PIN
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         // PR #2904 (bac4a96c7) changes this fixture's mesh from 952 to
         // 6228 facets at the same chord cap (decision #917). The fixture
@@ -209,18 +243,57 @@ fn bore_path_matches(got: (usize, usize, usize)) -> bool {
         // regions and their proved arc fits. The old truck-mesh reading
         // was (4726, 4698, 549), issue #2004 (PR #2013). Every cutting
         // level still verifies clean, with no fallback or planning-budget
-        // stop.
-        got == (3158, 3130, 1141)
+        // stop. Issue #3886: the solidcore bump of PR #3802 makes the mesh
+        // 5232 facets; measured in release at df899f029 and baad348f1, and
+        // (3158, 3130, 1141) with 6228 facets at its parent 940cc5d0e.
+        // Issue #4010: NOT measured on Linux after the star-cell fix.
+        // Linux equalled macOS arm64 before it (BORE_PIN_BEFORE_4010), so
+        // the pin follows the macOS reading; measure it at the next Linux
+        // run.
+        got == BORE_PIN
     } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         // Issue #2371: measured in release on PR #2934 at 48071efd4 and
         // unmodified main 61a817bed. Every level verifies clean, none
-        // falls back, and no planning budget is reached.
-        got == (3158, 3130, 1141)
+        // falls back, and no planning budget is reached. Issue #4010:
+        // measured in release on upstream main 498382c8e as
+        // BORE_PIN_BEFORE_4010 (the Windows and Linux triple), and as
+        // BORE_PIN with the star-cell fix on top of it.
+        got == BORE_PIN
     } else {
         // Not measured here yet. Measure this platform and add its exact
-        // triple above. Until then use the existing fallback band.
-        let (moves, planar, arcs) = got;
-        (4706..=4736).contains(&moves) && (4678..=4708).contains(&planar) && (539..=559).contains(&arcs)
+        // triple above. Until then use the fallback band.
+        unmeasured_bore_path_matches(got)
+    }
+}
+
+// Issue #3085: center the unmeasured-platform band on the current reading
+// (issue #4010: BORE_PIN), not an old one. Keep the previous half-widths
+// (15 moves/planar feeds, 10 arcs); this is not a measurement.
+fn unmeasured_bore_path_matches(got: (usize, usize, usize)) -> bool {
+    let (moves, planar, arcs) = got;
+    (1627..=1657).contains(&moves) && (1599..=1629).contains(&planar) && (290..=310).contains(&arcs)
+}
+
+#[test]
+fn the_unmeasured_bore_band_accepts_the_current_pin() {
+    assert!(unmeasured_bore_path_matches(BORE_PIN));
+}
+
+#[test]
+fn the_unmeasured_bore_band_checks_each_boundary() {
+    let (m, p, a) = BORE_PIN;
+    for got in [(m - 15, p, a), (m + 15, p, a), (m, p - 15, a), (m, p + 15, a), (m, p, a - 10), (m, p, a + 10)] {
+        assert!(unmeasured_bore_path_matches(got), "the band must include {got:?}");
+    }
+    for got in [(m - 16, p, a), (m + 16, p, a), (m, p - 16, a), (m, p + 16, a), (m, p, a - 11), (m, p, a + 11)] {
+        assert!(!unmeasured_bore_path_matches(got), "the band must reject {got:?}");
+    }
+}
+
+#[test]
+fn the_unmeasured_bore_band_rejects_the_old_mesh_readings() {
+    for got in [(4716, 4688, 549), (4726, 4698, 549), (3158, 3130, 1141), (4688, 4660, 1980)] {
+        assert!(!unmeasured_bore_path_matches(got), "the band must reject the old mesh reading {got:?}");
     }
 }
 
@@ -241,21 +314,27 @@ fn assert_bore_pin_is_exact(pin: (usize, usize, usize)) {
 #[test]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn the_linux_x86_64_bore_count_pin_is_exact() {
-    assert_bore_pin_is_exact((3158, 3130, 1141));
+    assert_bore_pin_is_exact(BORE_PIN);
     assert!(!bore_path_matches((4726, 4698, 549)), "the count pin must reject the old truck-mesh reading");
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_3802), "the count pin must reject the reading before the solidcore bump");
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_4010), "the count pin must reject the growth-ring reading before #4010");
 }
 
 #[test]
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 fn the_windows_x86_64_bore_count_pin_is_exact() {
-    assert_bore_pin_is_exact((3158, 3130, 1141));
+    assert_bore_pin_is_exact(BORE_PIN);
     assert!(!bore_path_matches((4716, 4688, 549)), "the count pin must reject the old truck-mesh reading");
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_3802), "the count pin must reject the reading before the solidcore bump");
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_4010), "the count pin must reject the growth-ring reading before #4010");
 }
 
 #[test]
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn the_macos_arm64_bore_count_pin_is_exact() {
-    assert_bore_pin_is_exact((3158, 3130, 1141));
+    assert_bore_pin_is_exact(BORE_PIN);
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_3802), "the count pin must reject the reading before the solidcore bump");
+    assert!(!bore_path_matches(BORE_PIN_BEFORE_4010), "the count pin must reject the growth-ring reading before #4010");
 }
 
 #[test]

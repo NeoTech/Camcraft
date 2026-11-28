@@ -180,6 +180,12 @@ pub(super) fn get_job(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
     });
+    // #3012: pattern folders, only when the document has one (a document
+    // without folders reads exactly as before).
+    let folders = super::pattern_tools::folders_view(w);
+    if !folders.is_empty() {
+        job["pattern_folders"] = json!(folders);
+    }
     if summary {
         super::compact::summarize_job(&mut job);
     }
@@ -253,6 +259,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                         ("skims", "array", json!([])),
                         ("four_axis", "object", Value::Null),
                         ("sharp_corners", "boolean", json!(false)),
+                        ("overlap", "number", json!(0.0)),
+                        ("lead_arc_radius", "number", Value::Null),
+                        ("compensation", "string", json!("computer")),
                     ],
                 );
             }
@@ -273,6 +282,8 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 }));
                 fields.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
             }
+            // #3449: every accepted field, optional ones and enum values too.
+            let traced = super::kind_fields::complete(&key, &defaults, &mut fields);
             let mut kind = json!({
                 "label": k.label,
                 "key": key,
@@ -282,6 +293,9 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
                 "fields": fields,
                 "start_exit": start_exit(k),
             });
+            if !traced {
+                kind["fields_incomplete"] = json!(true);
+            }
             if !k.mounts_tool() {
                 kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind");
             }
@@ -292,7 +306,7 @@ pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Re
     let kinds = super::compact::filter_kinds(kinds, a)?;
     Ok(json!({
         "kinds": kinds,
-        "note": "Fields absent from the defaults are optional and off; set them in a params patch to turn them on.",
+        "note": "Each kind lists every field it accepts. \"optional\": true marks a field absent from the defaults: it is off until a params patch sets it. \"values\" lists the words of an enum field; \"shape\" spells an object or array field (key? is optional). Type \"any\" is a value that reads itself, such as a height: a number or {reference, offset}.",
     }))
 }
 
@@ -303,6 +317,11 @@ fn start_exit(k: &KindInfo) -> Value {
     let mut out = json!({ "start": cap.takes(PickRole::Start), "exit": cap.takes(PickRole::Exit) });
     match cap {
         operation::PickCapability::NotTaken(why) => out["why_not"] = json!(why),
+        // #3331: a turning pick is [x, y, z] - the lathe (Z, X) plane needs the z.
+        operation::PickCapability::Meridian => {
+            out["field"] = json!("picks");
+            out["plane"] = json!("lathe (Z, X): each pick states its z; the radius is read about the turning axis");
+        }
         _ => out["field"] = json!("picks"),
     }
     out
@@ -345,6 +364,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::EntryNotRecommended { at, .. } => ("entry_not_recommended", *at),
         Warning::EntryStandIn { at, .. } => ("entry_stand_in", *at),
         Warning::PlungeIntoStock { at } => ("plunge_into_stock", *at),
+        Warning::EngagementExceeded { at, .. } => ("engagement_exceeded", *at),
     };
     json!({
         "op": op,

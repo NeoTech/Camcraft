@@ -284,6 +284,7 @@ fn rotary(coarse: Option<f64>, clearance: f64) -> World {
         lead_deg: 0.0,
         lag_deg: 0.0,
         max_tilt_deg: 60.0,
+        stated_axis: None,
         picks: Default::default(),
     };
     create(&world, &mut h, "OP", "BN-0600", params);

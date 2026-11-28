@@ -28,6 +28,21 @@ use camcraft_app::stock::StockShape;
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
 
+// #2756: the file editor's axis chain and its rows, in this suite's
+// directory (#3187).
+#[path = "machine/axis_support.rs"]
+mod axis_support;
+#[path = "machine/axis_chain.rs"]
+mod axis_chain;
+#[path = "machine/axis_rows.rs"]
+mod axis_rows;
+// #3071: the hobby router frames on the Grbl 1.1 post.
+#[path = "machine/hobby_routers.rs"]
+mod hobby_routers;
+// #4081: the laser machine kind and the laser head at the app doors.
+#[path = "machine/laser_kind.rs"]
+mod laser_kind;
+
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()
         .into_iter()
@@ -764,16 +779,24 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Sienci AltMill 4x4", Kind::Mill),
         ("Sienci AltMill 4x8", Kind::Mill),
         ("Ooznest WorkBee 1000x1500 (Estlcam)", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 4x4", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 4x2", Kind::Mill),
+        ("Carbide 3D Shapeoko 5 Pro 2x2", Kind::Mill),
+        ("Inventables X-Carve 2021 1000 mm", Kind::Mill),
+        ("Inventables X-Carve Pro 4x4", Kind::Mill),
+        ("Inventables X-Carve Pro 4x2", Kind::Mill),
         ("Doosan DNM 5700", Kind::Mill),
         ("Doosan DNM 5700 + rotary table", Kind::Mill),
         ("Haas VF-2", Kind::Mill),
         ("Haas VF-2SS", Kind::Mill),
+        ("Haas VF-2SS YT", Kind::Mill),
         ("Haas Mini Mill", Kind::Mill),
         ("Haas DT-1", Kind::Mill),
         ("Haas DM-1", Kind::Mill),
         ("EMCO VMC-200", Kind::Mill),
         ("Sinker EDM 3-axis (template)", Kind::SinkerEdm),
         ("Sodick ALC400G", Kind::WireEdm),
+        ("Sodick AQ600L", Kind::WireEdm),
         ("AGIECUT Classic 2S (template)", Kind::WireEdm),
     ];
     assert_eq!(camcraft_app::posting::shipped_machines().expect("the shipped machines read").len(), expectations.len(), "the pane offers what the tests pin");

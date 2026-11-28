@@ -27,7 +27,7 @@ pub(super) fn seed(kind: usize) -> OpParams {
 }
 
 /// A kind by its label ("Pocket", any case) or its file key ("pocket").
-fn kind_index(name: &str) -> Result<usize, String> {
+pub(super) fn kind_index(name: &str) -> Result<usize, String> {
     let want = name.trim().to_ascii_lowercase();
     (0..KindInfo::ALL.len())
         .find(|&i| {
@@ -50,7 +50,7 @@ pub(super) fn find_op(env: &Env, name: &str) -> Result<String, String> {
 /// field object) and read the result back as domain params. A key the
 /// kind does not have is refused by name - serde would drop it, and a
 /// silently dropped edit reads as "done as asked".
-fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
+pub(super) fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
     let Value::Object(patch) = patch else {
         return Err("\"params\" must be an object of fields".into());
     };
@@ -281,9 +281,8 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         Some(h) => (HolderPick::Named(h.to_owned()), "stated"),
     };
     let cmd = AddTool::with_holder(&env.world, &name, tool, pick).map_err(cmd_err)?;
-    let number = cmd.number();
-    let holder = cmd.holder().map(str::to_owned);
-    let note = cmd.note();
+    let (number, holder) = (cmd.number(), cmd.holder().map(str::to_owned));
+    let (note, warning) = (cmd.note(), cmd.warning());
     env.history.execute(&env.world, cmd);
     Ok(json!({
         "tool": name,
@@ -292,6 +291,7 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         "holder": holder,
         "holder_from": holder.as_ref().map(|_| from),
         "note": note,
+        "warning": warning,
     }))
 }
 
@@ -336,12 +336,27 @@ pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Val
 }
 
 pub(super) fn edit_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let key = find_op(env, req_str(a, "name")?)?;
+    let name = req_str(a, "name")?;
+    let key = find_op(env, name)?;
     let patch = a.get("params").ok_or("\"params\" is required")?;
     let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
     let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
     let named_entry = patch.as_object().is_some_and(|p| p.contains_key("entry"));
-    let next = patched(&op.params, patch)?;
+    let next = patched(&op.params, patch).map_err(|error| {
+        // #3476: suggest only a lossless, matching-kind patch that the edit door accepts.
+        // Constructing the command validates it; only history.execute changes the job.
+        let tagged = project::params_to_json(&op.params);
+        let Some(fields) = tagged.as_object().and_then(|t| t.keys().next())
+            .and_then(|kind| patch.as_object().filter(|p| p.len() == 1)?.get(kind))
+            .filter(|fields| fields.is_object()) else { return error; };
+        let Ok(next) = patched(&op.params, fields) else { return error; };
+        let explicit_entry = fields.as_object().is_some_and(|p| p.contains_key("entry"));
+        if EditOperationParams::with_named_entry(&env.world, &key, next, explicit_entry).is_err() {
+            return error;
+        }
+        let call = json!({ "name": name, "params": fields });
+        format!("{error}. Use flat parameter fields without the kind wrapper. Corrected call: edit_operation {call}")
+    })?;
     let cmd = EditOperationParams::with_named_entry(&env.world, &key, next, named_entry).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     let params = model::operation_of(&env.world, &e).map(|o| project::params_to_json(&o.params));

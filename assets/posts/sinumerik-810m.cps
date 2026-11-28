@@ -6,7 +6,7 @@
 // settable zero offsets vs G58/G59 programmable shifts, G53 non-modal
 // suppression, T/D/M6, G04 F seconds dwell, L81-L89 R-parameter cycles);
 // published EMCO WinNC Sinumerik 810M/820M cycle parameter docs (L84 R08
-// -3 encoder vs -4 compensating chuck); hook contract from Autodesk's
+// -3 with encoder vs -4 without encoder; both use a compensating chuck); hook contract from Autodesk's
 // published post docs (behavior only) under Camcraft's Clean-Room Protocol.
 // Original clean-room implementation; no vendor post or Fusion output used.
 description = "Siemens 810M (3-axis mill, G71 mm, L81-L89 R-param cycles, G2/G3 I/J/K)";
@@ -23,7 +23,7 @@ axisInversion = true;
 workOffsetIndex = true;
 workOffsetMax = 4; // 810M settable frames are G54-G57 only; G58/G59 are programmable shifts
 millSpindleReverse = true;
-floatingTapping = true; // L84 R08=-3 (with encoder) and R08=-4 (floating holder, no encoder)
+floatingTapping = true; // L84 uses a compensating chuck (floating tap holder); R08=-3 with encoder, R08=-4 without encoder
 programUnits = "mm"; // 810M G70/G71 converts geometry only, leaving F feedrate unchanged
 endUnits = "note"; // refuse silent unit switch where F feedrate stays metric
 
@@ -632,6 +632,30 @@ function planeOf(p) {
   return p.CircularPlane === "XZ" ? 18 : (p.CircularPlane === "YZ" ? 19 : 17);
 }
 
+// On Sinumerik 810M, the control reads the first two axes in the block as
+// the plane. Write the two plane axes first (G18: X Z, G19: Y Z), and
+// write the third axis last only when helical motion occurs (#4146).
+function axisMoved(letter, endVal, startVal, curVal, org) {
+  if (!has(endVal)) return false;
+  var from = has(startVal) ? Number(startVal) : (has(curVal) ? curVal : null);
+  if (from === null) return true;
+  return wo(letter, endVal, org) !== wo(letter, from, org);
+}
+
+function arcAxes(p, pl) {
+  if (pl === 18) {
+    var words = [wo("X", p.X, orgX), wo("Z", p.Z, orgZ)];
+    if (axisMoved("Y", p.Y, p.StartY, curY, orgY)) words.push(wo("Y", p.Y, orgY));
+    return words;
+  }
+  if (pl === 19) {
+    var words = [wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)];
+    if (axisMoved("X", p.X, p.StartX, curX, orgX)) words.push(wo("X", p.X, orgX));
+    return words;
+  }
+  return xyz(p);
+}
+
 function centerWords(p, pl) {
   var c = p.IJKIncrement || {};
   var dx = has(c.I) && has(p.StartX) ? c.I - p.StartX : c.I;
@@ -659,7 +683,7 @@ function onCircular() {
     pw = "G" + pl;
     planeG = pl;
   }
-  block([pw, g].concat(xyz(properties), centerWords(properties, pl), [fw(properties.FeedRate)]));
+  block([pw, g].concat(arcAxes(properties, pl), centerWords(properties, pl), [fw(properties.FeedRate)]));
   trackPos(properties.X, properties.Y, properties.Z);
 }
 
@@ -747,6 +771,11 @@ function onCycle() {
     block(["R05=0", rRet, "R11=" + chipMode, fw(feed)]);
     block(["L83", "P1"]);
   } else if (lCode === "L84") {
+    // Siemens SINUMERIK 810M / EMCO WinNC: L84 is the tapping cycle with
+    // a compensating chuck (floating tap holder). R08=-3 taps with spindle
+    // encoder (pitch derived from feed and RPM in R09); R08=-4 taps without
+    // encoder (feed F, spindle reversal via R06/R07). Both modes use a
+    // floating tap holder (neither is rigid tapping).
     var m = typeof machine !== "undefined" ? machine : null;
     var floating = String(p.TappingMode || "") === "floating" || String(type) === "FLOATINGTAP" || (m && m.rigidTapping === false);
     if (!floating) {

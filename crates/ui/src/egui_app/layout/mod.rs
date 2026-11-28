@@ -12,6 +12,10 @@
 //! here: one layout module for the dock and the pages alike.
 
 mod controls;
+/// #4483: side panes fold to title chips; the fold law and its chips.
+pub(crate) mod fold;
+mod fold_state;
+mod row_name;
 mod form;
 mod scroll_gutter;
 /// #2339: the saved panel arrangements - the dock's JSON, the start load.
@@ -20,6 +24,7 @@ pub(crate) mod setups;
 pub mod field_ring;
 pub(crate) use controls::*;
 pub(crate) use form::*;
+pub(crate) use row_name::*;
 pub(crate) use scroll_gutter::keep_scroll_gutter;
 #[cfg(test)]
 mod banner_tests;
@@ -140,6 +145,11 @@ fn show(dock: &mut DockState<Tab>, tab: Tab) {
     {
         leaf.active = path.tab;
         leaf.collapsed = false;
+        // #4483: the parents' fold counts follow the flag; the fold law
+        // puts a side pane's open share back on the next frame.
+        if path.surface == SurfaceIndex::main() {
+            fold::fix_counts(dock.main_surface_mut(), path.node);
+        }
     }
 }
 
@@ -171,6 +181,11 @@ pub(crate) fn apply(dock: &mut DockState<Tab>, req: LayoutRequest) {
 /// lays out this same frame).
 pub(crate) fn settle(state: &mut State, dock: &mut DockState<Tab>) {
     if let Some(req) = state.layout_request.take() {
+        // #4483: the default layout folds nothing, so no stored share
+        // may outlive it.
+        if req == LayoutRequest::Reset {
+            state.pane_folds.clear();
+        }
         apply(dock, req);
     }
     // #2339: the Panel setups window files one ask; the dock is read or

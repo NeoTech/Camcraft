@@ -2,8 +2,8 @@
 //! holder as a spun (revolved) half-outline - Parametric (the cylinder its
 //! numbers state) or Custom (a table of points with optional arcs), the
 //! live refusal by name, and Apply profile, which queues the one command.
-//! The holder library stands above the tabs (`tool_holder_picker`), so a
-//! holder is the first thing the user sees. #2007: the tool has one
+//! #3930: the holder library left this window: the tool library window's
+//! assembly group picks the holder (`tool_holder_picker`). #2007: the tool has one
 //! preview - the to-scale one beside the fields (`tool_preview`), which
 //! draws the draft of this tab through `tool_preview_inputs`. The shape
 //! window draws the flat side view itself (`profile_view`). #93 slice 2:
@@ -24,23 +24,26 @@ use crate::state::{State, ToolColumn, is_spun_kind};
 
 /// The side view's size, logical px.
 const VIEW: Vec2 = Vec2::new(260.0, 230.0);
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const HOLDER: Color32 = Color32::from_rgb(230, 160, 60);
-pub(super) const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+fn note_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_note
+}
+fn holder_ink() -> Color32 {
+    crate::egui_app::theme::current().tool_holder
+}
+pub(super) fn bad_ink() -> Color32 {
+    crate::egui_app::theme::current().bad_ink
+}
 /// #2007: the points table's height. It is also its least height, so a
 /// table low on a scrolled page does not shrink to a few rows.
 const TABLE_H: f32 = 150.0;
 
-/// #2397: the tool shape editor's body - the holder library first (a
-/// holder is the first thing the user looks for, not a row under the
-/// profile table), then the Body / Profile tabs for a milling tool, the
-/// Body section alone for a turning tool.
+/// #2397: the tool shape editor's body - the Body / Profile tabs for a
+/// milling tool, the Body section alone for a turning tool. #3930: the
+/// holder pick is the tool library window's (its assembly group).
 pub(super) fn editor(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     let milling = is_spun_kind(state.tool_ui.tool_kind());
     if milling {
         state.sync_tool_profile_ui();
-        super::tool_holder_picker::holder_picker(ui, state, u);
-        ui.separator();
         // #2007: the tab row wraps in a narrow pane.
         ui.horizontal_wrapped(|ui| {
             let c = state.tool_profile_ui.column;
@@ -212,7 +215,7 @@ fn profile_view(ui: &mut Ui, state: &mut State, u: Unit) {
             ));
         }
         Err(e) => {
-            ui.colored_label(BAD, e);
+            ui.colored_label(bad_ink(), e);
         }
     }
 }
@@ -303,13 +306,14 @@ pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool),
     const PAD: f32 = 16.0;
     let (resp, painter) = ui.allocate_painter(VIEW, Sense::hover());
     let rect = resp.rect;
-    painter.rect_filled(rect, 4.0, Color32::from_rgb(24, 26, 31));
+    let pal = crate::egui_app::theme::current();
+    painter.rect_filled(rect, 4.0, pal.tool_ground);
     let ((cutter, cutter_ok), (holder, ok)) = (cutter, holder);
     let all = || cutter.iter().chain(holder.iter()).filter(|q| q.0.is_finite() && q.1.is_finite());
     let r_max = all().fold(0.0f64, |a, q| a.max(q.1));
     let z_max = all().fold(0.0f64, |a, q| a.max(q.0));
     if r_max <= 0.0 || z_max <= 0.0 {
-        painter.text(rect.center(), Align2::CENTER_CENTER, "enter dimensions", FontId::proportional(11.0), NOTE);
+        painter.text(rect.center(), Align2::CENTER_CENTER, "enter dimensions", FontId::proportional(11.0), note_ink());
         return;
     }
     // The tool sits left of centre; the right margin holds the labels.
@@ -317,7 +321,7 @@ pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool),
     let base_y = rect.max.y - PAD;
     let scale = ((rect.width() * 0.34) / r_max as f32).min((rect.height() - 2.0 * PAD) / z_max as f32).max(f32::EPSILON);
     let at = |z: f64, r: f64| Pos2::new(axis_x + r as f32 * scale, base_y - z as f32 * scale);
-    painter.line_segment([Pos2::new(axis_x, rect.min.y + 4.0), Pos2::new(axis_x, rect.max.y - 4.0)], Stroke::new(1.0, Color32::from_rgb(70, 74, 84)));
+    painter.line_segment([Pos2::new(axis_x, rect.min.y + 4.0), Pos2::new(axis_x, rect.max.y - 4.0)], Stroke::new(1.0, pal.tool_axis));
     let zc = tool.flute_len.max(0.0);
     let slices = |o: &[(f64, f64)], fill: &dyn Fn(f64) -> Color32| {
         for w in o.windows(2) {
@@ -328,10 +332,10 @@ pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool),
         }
     };
     if cutter_ok {
-        slices(cutter, &|zm| if zm < zc { Color32::from_rgb(168, 178, 192) } else { Color32::from_rgb(122, 130, 142) });
+        slices(cutter, &|zm| if zm < zc { pal.tool_flute } else { pal.tool_shank });
     }
     if ok {
-        slices(holder, &|_| Color32::from_rgba_unmultiplied(230, 160, 60, 90));
+        slices(holder, &|_| crate::egui_app::theme::with_alpha(pal.tool_holder, 90));
     }
     let outline = |o: &[(f64, f64)], ink: Color32| {
         let mut pts: Vec<Pos2> = o.iter().map(|&(z, r)| at(z, r)).collect();
@@ -340,15 +344,15 @@ pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool),
             painter.add(Shape::closed_line(pts, Stroke::new(1.0, ink)));
         }
     };
-    outline(cutter, if cutter_ok { Color32::from_rgb(214, 220, 228) } else { BAD });
-    outline(holder, if ok { HOLDER } else { BAD });
+    outline(cutter, if cutter_ok { pal.tool_edge } else { pal.bad_ink });
+    outline(holder, if ok { holder_ink() } else { bad_ink() });
     // Heights: flute top, the holder's foot (stickout) and top (gauge).
     let small = FontId::proportional(10.0);
     let tick = |z: f64, what: &str| {
         if z.is_finite() && z > 0.0 {
             let y = base_y - z as f32 * scale;
-            painter.line_segment([Pos2::new(axis_x + 4.0, y), Pos2::new(rect.max.x - 4.0, y)], Stroke::new(0.5, Color32::from_rgb(80, 86, 98)));
-            painter.text(Pos2::new(rect.max.x - 4.0, y - 1.0), Align2::RIGHT_BOTTOM, format!("{what} {}", units::len(z, u, 1)), small.clone(), NOTE);
+            painter.line_segment([Pos2::new(axis_x + 4.0, y), Pos2::new(rect.max.x - 4.0, y)], Stroke::new(0.5, pal.tool_grid));
+            painter.text(Pos2::new(rect.max.x - 4.0, y - 1.0), Align2::RIGHT_BOTTOM, format!("{what} {}", units::len(z, u, 1)), small.clone(), note_ink());
         }
     };
     tick(zc, "flutes");
@@ -358,13 +362,13 @@ pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool),
     } else {
         tick(zc + tool.shank_len.max(0.0), "shank");
     }
-    painter.text(Pos2::new(axis_x, rect.max.y - 2.0), Align2::CENTER_BOTTOM, format!("Ø {}", units::len(tool.diameter, u, 2)), small.clone(), NOTE);
+    painter.text(Pos2::new(axis_x, rect.max.y - 2.0), Align2::CENTER_BOTTOM, format!("Ø {}", units::len(tool.diameter, u, 2)), small.clone(), note_ink());
     painter.text(
         rect.min + Vec2::new(6.0, 4.0),
         Align2::LEFT_TOP,
         format!("shank Ø {} {}", units::len(tool.shank_d, u, 2), u.suffix()),
         small,
-        NOTE,
+        note_ink(),
     );
 }
 

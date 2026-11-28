@@ -86,6 +86,7 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
             picks: Default::default(),
         },
         // The crown and upper flanks: a laid bar's passes stay on the
@@ -103,6 +104,7 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
             picks: Default::default(),
         },
         Kind::Offset => OpParams::RotaryOffset {
@@ -124,6 +126,7 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             lead_deg: 0.0,
             lag_deg: 0.0,
             max_tilt_deg: 60.0,
+            stated_axis: None,
             picks: Default::default(),
         },
     }
@@ -274,7 +277,7 @@ fn a_full_turn_rotary_parallel_refuses_on_a_head_that_cannot_reach_under() {
     else {
         unreachable!("the parallel params")
     };
-    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, picks: Default::default() };
+    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis: None, picks: Default::default() };
     let world = world_with(Kind::Parallel, 12.4, op);
     let report = posting::verification_report(&world);
     let text = format!("{:?}", report.problems);

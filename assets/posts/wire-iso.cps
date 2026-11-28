@@ -7,7 +7,10 @@
 // disposal - is the machine's own text from its `.mch` `edm.codes`
 // (D5): no vendor dialect, manual table or post was read or copied,
 // and nothing here invents an EDM code. Skim passes (#538) select
-// their own condition mid-section, the wire left threaded. Behaviour only, per this repo's
+// their own condition mid-section, the wire left threaded; an open
+// run's skims (#3216 over #538) rethread: the wire is cut at each
+// pass's run-out, the travel between passes carries no wire, and each
+// pass is threaded anew at its own run-in. Behaviour only, per this repo's
 // Clean-Room Protocol. The decision record is
 // docs/decisions/533-wire-iso-post.md; the goldens lock this file.
 // A constant taper (#536): the app hands each leaning move's X Y at the
@@ -243,7 +246,9 @@ function onSection() {
   }
   note(opName + (opKind ? " - " + opKind : ""));
   if (setupName) note("SETUP " + setupName);
-  if (side) note("SIDE " + side.toUpperCase() + " - KERF IN THE PATH");
+  if (side) note(side === "centre"
+    ? "SIDE CENTRE - CENTRE-LINE SLIT THROUGH THE AIR, NO KERF IN THE PATH (THE KERF LAW IS SKIPPED)"
+    : "SIDE " + side.toUpperCase() + " - KERF IN THE PATH");
   taperOk = true;
   if (dialect === "angle" && (taper === 0 || fourAxis !== "")) {
     refuse("angle4" + opName, who() + "an angle-word taper needs one stated angle - refused");
@@ -281,12 +286,13 @@ function onSection() {
 
 // The first motion of a section: go to the start hole with the wire
 // cut, thread there, select the condition, cancel compensation. An open
-// run (#1109, side left / right of travel) has no start hole: its path
+// run (#1109, side left / right of travel, or the centre-line slit)
+// has no start hole: its path
 // starts at its run-in point in the air outside the stock, and it is
 // threaded there; it ends at its run-out point past the stock's far
 // edge, where onSectionEnd cuts the wire - the post writes the path's
 // moves only, so no return to the threading point is ever written.
-function openRun() { return side === "left" || side === "right"; }
+function openRun() { return side === "left" || side === "right" || side === "centre"; }
 function startCut(p) {
   if (threaded) return skimPending ? startSkim() : true;
   if (!codesOk || condition === "") return false;
@@ -345,7 +351,32 @@ function cutOk(p) {
 function onRapid() {
   var p = properties;
   if (threaded) {
-    refuse("rapid" + opName, who() + "a rapid with the wire threaded through the work - refused");
+    if (!openRun()) {
+      refuse("rapid" + opName, who() + "a rapid with the wire threaded through the work - refused");
+      return;
+    }
+    // #3216 over #538: an open run's pass boundary. The pass before
+    // ended at its run-out in the air - cut the wire there, travel to
+    // the next pass's run-in with no wire through the work, and thread
+    // anew. The skim's own condition arrives after the travel and is
+    // selected at its first move, as for any skim.
+    if (!has(p.X) || !has(p.Y)) {
+      refuse("rapidxy" + opName, who() + "a pass boundary travel move states no X Y - regenerate the path");
+      return;
+    }
+    if (awt) {
+      block([code("cut")], true);
+      block([code("tip_disposal")], true);
+    } else {
+      note("CUT THE WIRE AT THE RUN-OUT POINT");
+      block(["M00"]);
+    }
+    block(["G0", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
+    if (awt) block([code("thread")], true);
+    else {
+      note("THREAD THE WIRE AT THE RUN-IN POINT OUTSIDE THE STOCK");
+      block(["M00"]);
+    }
     return;
   }
   // Before the first cut the wire is not threaded: the G0 to the first

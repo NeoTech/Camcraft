@@ -45,10 +45,11 @@ fn reach_follows_the_crate_dependencies() {
     assert_eq!(reach["app"], set(&["app", "ui"]));
     assert_eq!(reach["motion"], set(&["app", "motion", "ui"]));
     assert_eq!(reach["geometry"], set(&["app", "cl", "gcode", "geometry", "motion", "post", "sim", "tools", "ui"]));
-    // gpu (#2620) has no camcraft-* dependency: the kernel reaches every crate but it.
-    let all_but_gpu = plan::ALL_CRATES.iter().filter(|d| **d != "gpu").map(|d| (*d).to_string());
+    // gpu (#2620) and ui-kit (#4394) have no camcraft-* dependency: the kernel reaches every crate but them.
+    let all_but_gpu = plan::ALL_CRATES.iter().filter(|d| !matches!(**d, "gpu" | "ui-kit")).map(|d| (*d).to_string());
     assert_eq!(reach["kernel"], all_but_gpu.collect::<BTreeSet<_>>());
     assert_eq!(reach["gpu"], set(&["gpu", "ui"]));
+    assert_eq!(reach["ui-kit"], set(&["ui", "ui-kit"]));
 }
 
 #[test]
@@ -178,6 +179,26 @@ fn review_requires_targeted_heavy_tests_on_both_paths() {
         "A red reached\n   heavy test is a blocker",
     ] {
         assert!(!common.contains(retired), "the retired full-lane demand must not return: {retired}");
+    }
+}
+
+#[test]
+fn review_report_always_has_a_light_lane_result_row() {
+    // #3846: mentioning the light lane in prose did not keep it in reports.
+    let policy = include_str!("../../.claude/agents/PR-reviewer.md");
+    let report = policy
+        .split("7. **Post the review**")
+        .nth(1)
+        .and_then(|s| s.split("8. **Label**").next())
+        .expect("review report template");
+    for required in [
+        "| Step | Result | Head | Evidence |",
+        "| Light lane (`cargo xtask gate light`) | <PASS / FAIL / Not run> | `<headRefOid>` | <where; counts and log/run URL, or reason not run> |",
+        "Include this fixed row in every review comment, also when not built.",
+        "never leave the result blank",
+        "A red light run stays a note, not a blocker by itself.",
+    ] {
+        assert!(report.contains(required), "review report must keep: {required}");
     }
 }
 

@@ -80,7 +80,7 @@ pub fn collecting(state: &State) -> bool {
         && state.panels_open.properties
         && state.properties_shown
         && state.op_tab == crate::egui_app::op_tabs::SEC_LEADS
-        && matches!(state.op_ui.params, OpParams::Contour { .. })
+        && matches!(state.op_ui.params, OpParams::Contour { .. } | OpParams::Slot { .. })
         && state.pane_target() == UiTarget::Operation(state.op_ui.name.clone())
 }
 
@@ -105,12 +105,14 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         state.status = format!("that pick on '{}' has no finite position", found.entity);
         return;
     }
-    let OpParams::Contour { picks, tilt, .. } = &mut state.op_ui.params else {
+    // #3325: the Slot takes the same pick as the 2D Contour.
+    let kind = state.op_ui.params.kind().info().label;
+    let (OpParams::Contour { picks, tilt, .. } | OpParams::Slot { picks, tilt, .. }) = &mut state.op_ui.params else {
         state.op_ui.start_exit_pick = None;
         return;
     };
     if tilt.is_some() {
-        state.status = format!("2D Contour: clear tilt before picking the {}", role.label());
+        state.status = format!("{kind}: clear tilt before picking the {}", role.label());
         return;
     }
     let pick = camcraft_app::path_picks::PathPick::xy(Point2::new(x, y));
@@ -125,7 +127,7 @@ pub fn take(state: &mut State, found: &FeaturePick) {
     }
     let u = state.units();
     state.status = format!(
-        "2D Contour {}: ({} {}, {} {}) on '{}' - Apply or Generate to commit",
+        "{kind} {}: ({} {}, {} {}) on '{}' - Apply or Generate to commit",
         role.label(),
         units::len(x, u, 3),
         u.as_str(),
@@ -153,7 +155,7 @@ pub(crate) fn marks(state: &State, aspect: f64) -> (Vec<Seg>, Vec<Seg>) {
     {
         return (start_segs, exit_segs);
     }
-    let OpParams::Contour { picks, top_z, tilt: None, .. } = &state.op_ui.params else {
+    let (OpParams::Contour { picks, top_z, tilt: None, .. } | OpParams::Slot { picks, top_z, tilt: None, .. }) = &state.op_ui.params else {
         return (start_segs, exit_segs);
     };
     let Some(op) = model::find_by_name(&state.world, &state.op_ui.name)
@@ -249,6 +251,23 @@ mod tests {
         if let OpParams::Contour { picks, .. } = &st.op_ui.params {
             assert!(picks.start.is_empty());
         }
+    }
+
+    #[test]
+    fn a_slot_takes_the_viewport_pick_and_shows_its_marks() {
+        // #3325: the Slot's Lead tab collects the same pick as the contour's.
+        let mut st = contour_state();
+        let slot = operation::KindInfo::ALL.iter().position(|k| k.label == "Slot").expect("the Slot");
+        st.op_ui.params = crate::operations::retype(&st.op_ui.params, slot);
+        assert!(matches!(st.op_ui.params, OpParams::Slot { .. }));
+        arm(&mut st, StartExitRole::Exit);
+        assert!(collecting(&st), "an armed Slot page collects the click");
+        take(&mut st, &wall_hit("Block", [60.0, 18.0, 15.0]));
+        assert!(st.status.starts_with("Slot exit point"), "{}", st.status);
+        let picks = st.op_ui.params.path_picks();
+        assert!(picks.start.is_empty());
+        assert_eq!(picks.exit, vec![camcraft_app::path_picks::PathPick::xy(Point2::new(60.0, 18.0))]);
+        assert_eq!(marks(&st, 1.5).1.len(), 2, "the exit point renders its X-cross");
     }
 
     #[test]
