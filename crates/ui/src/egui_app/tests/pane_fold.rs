@@ -359,6 +359,7 @@ fn a_blocked_operation_shows_on_both_folded_chips() {
     let w = &h.state().state.world;
     let mut tool = model::tool_of(w, &model::find_by_name(w, &name).expect("tool")).expect("a tool");
     tool.kind = camcraft_app::tools::ToolKind::Drill;
+    tool.tip_angle = 118.0;
     h.state_mut().state.pending.push_back(CommandKind::ChangeTool { name, tool });
     h.run_steps(3);
     crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
