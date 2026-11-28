@@ -62,5 +62,20 @@ new one without a change to the setups file format in `camcraft-app`.
 - An envelope object around the dock JSON: an older build would refuse a
   new setup by name instead of loading it.
 
+**Follow-up #4503.**
+- A chip whose pane is too short for the state text paints the glyph alone
+  (check or warning), so that it never looks clean by accident. The text
+  stays in the tooltip. A pane too short even for the glyph keeps the
+  folded mark.
+- The Browser chip counts the warnings of the cached toolpaths ("4 warnings"),
+  read as the tree row reads them. An operation with warnings is therefore
+  not "Up to date" on the chip: the chip says what the tree says.
+- A folded leaf with several tabs shows the state of its ACTIVE tab only,
+  because the chip is titled for that tab and a state of another pane
+  under that title would mislead. Limit: with Properties active in a leaf
+  that also holds Browser, the chip says nothing about stale operations.
+  The tooltip and the tab bar still reach the other tab with one click.
+  The default layout has one pane in each side leaf.
+
 **Cost to change.** Small. The chip look is one kit function. A different
 fold control only calls `layout::fold::fold` and `unfold`.
