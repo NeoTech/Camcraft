@@ -48,6 +48,13 @@ pub type SectionAt<'a> = dyn Fn(f64) -> Result<Option<Region>, GenError> + 'a;
 pub fn contour_open_run(pts: &[Point2], p: &ContourParams, section: &SectionAt) -> Result<Toolpath, GenError> {
     p.validate()?;
     let run = simple(pts)?;
+    if let Some(q) = p.picks.start.first().map(|k| k.xy) {
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): the part open run has no proved source endpoint mapping; \
+             clear the start point",
+            q.x, q.y
+        )));
+    }
     let zs = p.levels()?;
     let mut levels: Vec<(f64, Region)> = Vec::with_capacity(zs.len());
     for &z in &zs {

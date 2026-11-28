@@ -214,6 +214,12 @@ pub(super) fn generate_plan(
 ) -> Result<(Region, Toolpath, Option<f64>), GenError> {
     let control_comp = cp.links.approach.compensation.in_control();
     validate_plan(&plan, control_comp, comp_name)?;
+    if !cp.picks.start.is_empty() && plan.items.iter().any(|item| !item.closed) && plan.items.len() != 1 {
+        return Err(GenError::Invalid(
+            "start point: a picked start on an open sketch chain requires exactly one sketch chain; \
+             select one chain or clear the start point".into(),
+        ));
+    }
     if plan.region_loops.is_empty() && area.is_some() {
         return Err(GenError::Invalid(
             "the Boundary settings shape an area, and these picks are open sketch chains the cutter rides - reset them, or pick closed chains".into(),

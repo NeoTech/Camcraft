@@ -227,6 +227,17 @@ impl WcsYaw {
         area: &mut Option<Result<AreaCtx, GenError>>,
         params: &mut OpParams,
     ) -> Result<SavedS, GenError> {
+        if let Some(Ok(plan)) = sketch_contour
+            && plan.items.iter().any(|item| !item.closed)
+            && let OpParams::Contour { picks, .. } = params
+            && let Some(q) = picks.start.first().map(|k| k.xy)
+        {
+            return Err(GenError::Invalid(format!(
+                "start point ({:.3}, {:.3}): an open sketch chain under WCS yaw has no proved pick frame mapping; \
+                 clear the start point",
+                q.x, q.y
+            )));
+        }
         let saved = SavedS {
             material_facets: material.facets.clone(),
             stock_facets: stock_facets.clone(),

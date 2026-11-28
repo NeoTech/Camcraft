@@ -92,6 +92,13 @@ pub fn contour_open_run_sided(
         ride.reverse();
     }
     clear_of_part(&ride, p.tool_diameter * 0.5, &part_levels)?;
+    if let Some(q) = p.picks.start.first().map(|k| k.xy) {
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): the offset open run has no proved source endpoint mapping; \
+             clear the start point",
+            q.x, q.y
+        )));
+    }
     let mut path = contour_along_chain(&ride, p)?;
     path.notes.push(format!(
         "contour: the open run on the stock is cut to its {said} side - the tool centre {d:.3} mm off it (tool radius plus stock to leave)"
