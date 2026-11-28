@@ -114,6 +114,11 @@ pub(crate) fn shell_layout(
     // The View door's checkmarks read the dock as it stands; a toggle the
     // door files lands right after the ribbon, before the dock lays out.
     layout::settle(state, dock);
+    // #4484: the menu bar over the ribbon, read from the same command table.
+    egui::Panel::top("menu_bar")
+        .frame(egui::Frame::NONE)
+        .exact_size(panes::menu_bar_h(&pal))
+        .show(ui, |ui| panes::menu_bar(ui, &mut *state, &pal));
     egui::Panel::top("ribbon")
         .frame(egui::Frame::NONE)
         .exact_size(theme::ribbon_h(&pal))
