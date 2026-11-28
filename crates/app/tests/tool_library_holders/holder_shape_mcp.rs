@@ -98,10 +98,10 @@ fn mcp_edits_a_user_holder_by_its_shape_in_one_undo_step() {
     let mut m = shop();
     let before_row = row(&mut m);
     let before_gauge = gauge(&mut m);
-    let r = m.ok("edit_user_holder", json!({ "id": ID, "gauge_len": 130.0, "largest_d": 48.0 }));
+    let r = m.ok("edit_user_holder", json!({ "id": ID, "gauge_len": 130.0, "largest_d": 46.0 }));
     assert_eq!(r["updated_tools"], json!([A]), "the tool on the holder is derived again: {r}");
-    assert_eq!(r["shape"], json!({ "taper": "BT40", "clamp": "shrink", "bore": 20.0, "gauge_len": 130.0, "nose_d": 32.0, "largest_d": 48.0 }));
-    let want = HolderShape { gauge_len: 130.0, largest_d: 48.0, ..shrink20() };
+    assert_eq!(r["shape"], json!({ "taper": "BT40", "clamp": "shrink", "bore": 20.0, "gauge_len": 130.0, "nose_d": 32.0, "largest_d": 46.0 }));
+    let want = HolderShape { gauge_len: 130.0, largest_d: 46.0, ..shrink20() };
     assert_eq!(row(&mut m), shaped(&want), "the outline is HolderShape::geometry of the stated shape");
     assert!((gauge(&mut m) - before_gauge - 10.0).abs() < 1e-9, "the tool follows the holder's gauge length");
 
