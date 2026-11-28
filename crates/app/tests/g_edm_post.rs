@@ -31,6 +31,8 @@ use camcraft_app::world::new_world;
 const FIXTURE: &str = include_str!("edm/g-edm-fixture.mch");
 const GEDM: &str = "G-EDM Wire EDM";
 const GOLDEN: &str = "tests/golden/nc/g-edm/wire_slug_punch.nc";
+/// #2701: the shipped template's library name.
+const TEMPLATE: &str = "G-EDM Wire EDM (template)";
 
 fn cps() -> &'static str {
     posting::builtin_post_text(GEDM).expect("registered")
@@ -51,12 +53,18 @@ fn slug() -> Mesh {
     Mesh::from_facets(f)
 }
 
-/// The machine mounted, a punch cut around the slug on condition R1 from
+/// The fixture mounted, a punch cut around the slug on condition R1 from
 /// a start point outside it, with `skims` after the rough cut, generated.
 fn punch_doc(skims: Vec<WireSkim>) -> World {
+    punch_on(FIXTURE, skims).expect("the punch is created")
+}
+
+/// [`punch_doc`] on the machine file `machine_text`; the refusal of the
+/// operation's door when the machine does not take it.
+fn punch_on(machine_text: &str, skims: Vec<WireSkim>) -> Result<World, String> {
     let world = new_world();
     let mut h = History::default();
-    let m = parse_mch(FIXTURE).expect("the fixture parses");
+    let m = parse_mch(machine_text).expect("the machine file parses");
     h.execute(&world, LoadMachine::new(&world, "g-edm.mch".into(), Some(m)).expect("mount"));
     h.execute(
         &world,
@@ -84,10 +92,11 @@ fn punch_doc(skims: Vec<WireSkim>) -> World {
         sharp_corners: false,
         overlap: 0.0,
     };
-    let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
+    let c = CreateOperation::new(&world, "Punch1", "EDM-W025", SrcRef::Entity("slug".into()), OpParams::WireContour(op))
+        .map_err(|e| e.to_string())?;
     h.execute(&world, c);
     h.execute(&world, GenerateOperation::new(&world, "Punch1").expect("generates"));
-    world
+    Ok(world)
 }
 
 fn records() -> Vec<cnc::Record> {
@@ -338,4 +347,50 @@ fn g_edm_refuses_what_the_controller_cannot_be_told() {
     twice.extend(body);
     let out = run(&twice);
     assert!(out.warnings.iter().any(|w| w.contains("one wire section")), "{:?}", out.warnings);
+}
+
+/// #2701: the shipped G-EDM template - a 2-axis wire EDM that names the
+/// G-EDM post and states no limit and no condition that a public G-EDM
+/// page does not give (`assets/machines/AGENTS.md`, unstated limits).
+#[test]
+fn the_g_edm_template_validates_and_states_no_invented_limit() {
+    use camcraft_app::machine::{library, validate::validate_text};
+    let entry = library::builtins().into_iter().find(|e| e.name == TEMPLATE).expect("the template is in the library");
+    assert_eq!(entry.kind, Some(Kind::WireEdm));
+    assert_eq!(entry.units, "mm");
+    let text = posting::builtin_machine_text(TEMPLATE).expect("the template reads");
+    assert_eq!(validate_text(text), vec![], "the template validates clean");
+    let m = parse_mch(text).expect("the template parses");
+    let axes: Vec<_> = m.axes.iter().map(|a| (a.name.as_str(), a.travel, a.rapid)).collect();
+    assert_eq!(axes, [("X", None, None), ("Y", None, None)], "no invented travel or rapid");
+    let edm = m.edm.as_ref().expect("an EDM section");
+    assert_eq!((edm.lower_guide_z, edm.upper_guide_z, edm.max_taper_deg), (None, None, None));
+    assert!(edm.conditions.is_empty() && edm.wire_diameters.is_empty(), "{edm:?}");
+    let raw: serde_json::Value = serde_json::from_str(text).expect("json");
+    assert!(raw["edm"]["codes"].is_null(), "no edm.codes: the G-EDM post writes Grbl words only");
+    assert_eq!(edm.awt, Some(false));
+    assert_eq!(m.post.as_deref(), Some(GEDM), "the template names the G-EDM post");
+    assert!(posting::post_serves(GEDM, Kind::WireEdm));
+    let about = raw["general"]["description"].as_str().unwrap_or_default();
+    assert!(about.contains("gedm.org") && about.contains("Machine editor"), "{about}");
+}
+
+/// #2701 with #531: the template as shipped refuses a Wire Contour by
+/// the condition's name; with one measured condition added it posts.
+#[test]
+fn the_g_edm_template_refuses_a_cut_until_a_condition_is_stated() {
+    let text = posting::builtin_machine_text(TEMPLATE).expect("the template reads");
+    let Err(why) = punch_on(text, Vec::new()) else { panic!("no condition, no Wire Contour") };
+    assert!(why.contains("R1"), "the refusal names the condition: {why}");
+
+    let mut v: serde_json::Value = serde_json::from_str(text).expect("json");
+    v["edm"]["conditions"] = json!([
+        { "id": "R1", "name": "synthetic rough", "gap": 0.04, "wire_diameter": 0.25, "role": "rough", "notes": "SYNTHETIC - a test number" }
+    ]);
+    let world = punch_on(&v.to_string(), Vec::new()).expect("with a condition the cut is created");
+    let out = std::env::temp_dir().join(format!("camcraft-g-edm-template-{}.nc", std::process::id()));
+    let posted = posting::post_script(&world, &out, cps());
+    let _ = std::fs::remove_file(&out);
+    let program = posted.expect("the template posts with a stated condition").program;
+    assert!(code_words(&program).iter().any(|w| w == "G1"), "{program}");
 }

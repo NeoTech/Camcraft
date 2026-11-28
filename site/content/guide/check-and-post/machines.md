@@ -24,7 +24,7 @@ both sit between CAD and the machine, see
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn (live tooling) | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), Sodick Wire EDM (LN2W), Agie Wire EDM (AgieVision), G-EDM Wire EDM; Sinker EDM (ISO) | Sodick ALC400G, Sodick AQ600L (complete their EDM data), AGIECUT Classic 2S (template, for the Agie Wire EDM (AgieVision) post only); supply a sinker machine file |
+| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21), Sodick Wire EDM (LN2W), Agie Wire EDM (AgieVision), G-EDM Wire EDM; Sinker EDM (ISO) | Sodick ALC400G, Sodick AQ600L (complete their EDM data), AGIECUT Classic 2S (template, for the Agie Wire EDM (AgieVision) post only), G-EDM Wire EDM (template, for the G-EDM Wire EDM post; enter your travels and conditions); supply a sinker machine file |
 
 A **waterjet** machine file needs linear X and Y axes; Z is optional. It
 is refused by name if it states a spindle, live tooling, a rotary axis or

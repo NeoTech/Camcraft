@@ -384,7 +384,9 @@ the condition id is a comment). It writes one vertical 2-axis wire section
 per program and refuses by name taper, 4-axis, any `COMP` record, skims,
 `edm.awt`, an offset other than G54, and every stop or home ask. It was not
 run on a control; `docs/decisions/2700-g-edm-post.md` lists what is not
-confirmed. Its golden rides under `nc/g-edm/` (`g_edm_post.rs`).
+confirmed. Its golden rides under `nc/g-edm/` (`g_edm_post.rs`). The shipped template
+`G-EDM Wire EDM (template)` (`g-edm.mch`, #2701) names it as its post
+(`controller.post`) and states no travel, guide height or condition.
 
 `agie-native.cps` ("Agie Wire EDM (AgieVision)", named in #4000) is the
 third `WIRE_POSTS` entry, never the default. It serves one machine: the
