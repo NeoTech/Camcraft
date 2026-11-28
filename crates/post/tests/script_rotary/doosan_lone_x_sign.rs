@@ -1,21 +1,14 @@
 //! #4513: the `doosan-dnm` post's non-RTCP indexing path writes the A
-//! word with the sign the machine travel check judged. The check signs a
-//! lone rotary's angle by its stated direction - a rotary stated along
-//! -X commands the negated angle (`judge.rs` `x_rotary_problem`) - so on
-//! such a table the stream's pose A20 is machine word A-20. The indexing
-//! arm used to write the stream's letter as it came: the check passed
-//! (the judged -20 sat inside the stated travel) and the program
-//! commanded A20, outside the approved travel, with no warning. The
-//! G43.4 arm cannot re-express its RTCP stream and refuses such a table;
-//! the indexing arm owns the word and writes the judged sign.
+//! word with the sign the machine travel check judges. The indexing
+//! arm used to ignore a lone rotary's stated direction. On a -X
+//! `tool_rh` rotary, the check approved A-20 but the program commanded
+//! A20. The G43.4 arm still refuses a reversed lone-X rotary.
 //!
 //! The four pins pair each direction (+1 and -1) with each sign
-//! convention (`tool_rh` and `table_rh`). The convention changes no
-//! sign on this path - the check and the post both read the stated
-//! direction - so every case must post the judged word, inside the
-//! stated travel, with no refusal. A future "fix" that negates by
-//! `signConvention` instead of the direction fails the -1 cases; one
-//! that drops the negation fails them again.
+//! convention (`tool_rh` and `table_rh`). The check and the post first
+//! account for the stated axis direction. An inherited `table_rh`
+//! convention reverses the sign again because the work turns relative
+//! to the tool. Each fixture's travel includes only the expected sign.
 //!
 //! Provenance: RS-274 / ISO 841 rotary lettering and our own pose law
 //! (`cl::pose`); our own synthetic streams and machine JSON.
@@ -58,17 +51,19 @@ fn rotary_part(v: &mut serde_json::Value) -> Option<&mut serde_json::Value> {
 
 /// The parsed machine, the script's mirror of it, and the stated A
 /// travel. `direction` states the rotary's direction sense along X,
-/// `conv` the machine's rotary sign convention. The travel holds only
-/// the judged word of a +20 degree tilt (+20 for a +X table, -20 for a
-/// -X table), so a posted word of the wrong sign fails the assertions
-/// below.
-fn machine(direction: f64, conv: &str) -> (camcraft_post::machine::Machine, serde_json::Value, (f64, f64)) {
+/// `conv` the machine's rotary sign convention. Center the travel on
+/// the fixture's expected controller A word for the +20 degree tilt.
+fn machine(
+    direction: f64,
+    conv: &str,
+    expected_a: f64,
+) -> (camcraft_post::machine::Machine, serde_json::Value, (f64, f64)) {
     let mut raw: serde_json::Value = serde_json::from_str(&read(MCH)).expect("doosan machine json");
     // The one rotary part of the shipped tree (table > X > Y > A).
     let rot = rotary_part(&mut raw["kinematics"]["default"]["parts"]).expect("the shipped file's rotary moved");
     assert_eq!(rot["name"], json!("A"));
     rot["axis"] = json!([direction, 0.0, 0.0]);
-    let (lo, hi) = if direction < 0.0 { (-25.0, -15.0) } else { (15.0, 25.0) };
+    let (lo, hi) = (expected_a - 5.0, expected_a + 5.0);
     rot["travel"] = json!({ "min": lo, "max": hi });
     raw["kinematics"]["default"]["sign_convention"] = json!(conv);
     raw["controller"]["rtcp"] = json!(false);
@@ -93,14 +88,11 @@ fn tilted_path() -> Toolpath {
     ])
 }
 
-/// The checked machine, the posted program and the judged A word.
-fn post_case(direction: f64, conv: &str) -> (engine::PostOutput, f64, (f64, f64)) {
-    let (machine, mirror, travel) = machine(direction, conv);
+/// Check the fixture's travel and post its program.
+fn post_case(direction: f64, conv: &str, expected_a: f64) -> (engine::PostOutput, (f64, f64)) {
+    let (machine, mirror, travel) = machine(direction, conv, expected_a);
     let path = tilted_path();
 
-    // The travel check judges the pose: the machine word is the tool
-    // angle signed by the stated direction, and it sits inside travel.
-    let judged = direction * 20.0;
     let mut check = MachineCheck::default();
     check.check_path(&machine, None, &path, [0.0; 3], [false; 3], true);
     assert!(check.problems.is_empty(), "the check passes: {:?}", check.problems);
@@ -125,7 +117,7 @@ fn post_case(direction: f64, conv: &str) -> (engine::PostOutput, f64, (f64, f64)
     );
     let out = engine::run_with(&read(POST), &mirror, &cnc::serialize(&dump), &json!({ "rotaryBrake": true }))
         .unwrap_or_else(|e| panic!("the stream posts or refuses by warning: {e}"));
-    (out, judged, travel)
+    (out, travel)
 }
 
 /// The program's A words, comments dropped.
@@ -146,16 +138,16 @@ fn a_words(program: &str) -> Vec<f64> {
         .collect()
 }
 
-fn assert_judged_sign_is_posted(direction: f64, conv: &str) {
-    let (out, judged, travel) = post_case(direction, conv);
+fn assert_judged_sign_is_posted(direction: f64, conv: &str, expected_a: f64) {
+    let (out, travel) = post_case(direction, conv, expected_a);
     let prog = &out.program;
     assert!(out.warnings.is_empty(), "{conv} direction {direction}: no refusal: {:?}\n{prog}", out.warnings);
     let tilt_words: Vec<f64> = a_words(prog).into_iter().filter(|a| a.abs() > 1e-9).collect();
     assert_eq!(tilt_words.len(), 1, "one tilt word:\n{prog}");
     let a = tilt_words[0];
     assert!(
-        (a - judged).abs() < 1e-9,
-        "{conv} direction {direction}: the posted A{a} must be the judged A{judged}:\n{prog}"
+        (a - expected_a).abs() < 1e-9,
+        "{conv} direction {direction}: the posted A{a} must be the expected A{expected_a}:\n{prog}"
     );
     assert!(
         a >= travel.0 - 1e-9 && a <= travel.1 + 1e-9,
@@ -167,20 +159,20 @@ fn assert_judged_sign_is_posted(direction: f64, conv: &str) {
 
 #[test]
 fn lone_x_along_plus_x_tool_rh_posts_the_judged_sign() {
-    assert_judged_sign_is_posted(1.0, "tool_rh");
+    assert_judged_sign_is_posted(1.0, "tool_rh", 20.0);
 }
 
 #[test]
 fn lone_x_along_plus_x_table_rh_posts_the_judged_sign() {
-    assert_judged_sign_is_posted(1.0, "table_rh");
+    assert_judged_sign_is_posted(1.0, "table_rh", -20.0);
 }
 
 #[test]
 fn lone_x_along_minus_x_tool_rh_posts_the_judged_sign() {
-    assert_judged_sign_is_posted(-1.0, "tool_rh");
+    assert_judged_sign_is_posted(-1.0, "tool_rh", -20.0);
 }
 
 #[test]
 fn lone_x_along_minus_x_table_rh_posts_the_judged_sign() {
-    assert_judged_sign_is_posted(-1.0, "table_rh");
+    assert_judged_sign_is_posted(-1.0, "table_rh", 20.0);
 }
