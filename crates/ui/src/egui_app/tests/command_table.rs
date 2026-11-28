@@ -101,8 +101,8 @@ fn no_two_commands_share_a_shortcut() {
 fn disabled_menu_rows_give_the_reason() {
     let h = shell_harness();
     let state = &h.state().state;
-    assert!(!panes::enabled(Cmd::Undo, state));
-    assert_eq!(panes::disabled_reason(Cmd::Undo, state), Some("Nothing to undo"));
+    assert!(!panes::enabled(Cmd::Redo, state));
+    assert_eq!(panes::disabled_reason(Cmd::Redo, state), Some("Nothing to redo"));
     assert!(!panes::enabled(Cmd::Paste, state));
     assert_eq!(panes::disabled_reason(Cmd::Paste, state), Some("Copy an operation first"));
     assert_eq!(panes::disabled_reason(Cmd::Post, state), None, "a live command has no reason");
@@ -167,21 +167,32 @@ fn operation_menu_creates_a_kind() {
 }
 
 /// #1953: the menu bar's coarse layout. The six menus sit in one row at
-/// the top of the window, in bar order, and the ribbon starts below them.
+/// the top of the window, in bar order, and the ribbon (its workspace tabs
+/// and its cells) starts below them.
 #[test]
 fn layout_window_menu_bar() {
     let mut h = shell_harness();
     h.run_steps(3);
     let bar_h = panes::menu_bar_h(&theme::current());
     let mut last_x = f32::NEG_INFINITY;
+    let mut row: Option<f32> = None;
+    let mut bottom = f32::NEG_INFINITY;
     for m in panes::Menu::ALL {
         let r = h.get_by_role_and_label(Role::Button, &format!("{} menu", m.title())).rect();
-        assert!(r.top() >= -1.0 && r.bottom() <= bar_h + 1.0, "{} menu {r:?} leaves the bar", m.title());
+        // The harness wraps the frame in an 8 px margin.
+        assert!(r.top() >= 0.0 && r.bottom() <= 8.0 + bar_h + 1.0, "{} menu {r:?} leaves the bar", m.title());
         assert!(r.left() > last_x, "{} menu is out of bar order", m.title());
+        if let Some(y) = row {
+            assert!((r.top() - y).abs() < 1.0, "{} menu leaves the row", m.title());
+        }
+        row = Some(r.top());
         last_x = r.left();
+        bottom = bottom.max(r.bottom());
     }
     for cell in ["New", "Save", "Undo", "Simulate"] {
         let r = h.get_by_role_and_label(Role::Button, cell).rect();
-        assert!(r.top() >= bar_h - 1.0, "ribbon cell {cell} {r:?} must sit under the menu bar");
+        assert!(r.top() >= bottom, "ribbon cell {cell} {r:?} must sit under the menu bar");
     }
+    let tab = h.get_by_role_and_label(Role::Tab, "Milling").rect();
+    assert!(tab.top() >= bottom - 1.0, "the workspace tabs {tab:?} sit under the menu bar");
 }

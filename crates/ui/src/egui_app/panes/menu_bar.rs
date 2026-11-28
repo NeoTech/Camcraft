@@ -47,11 +47,14 @@ pub fn menu_bar(ui: &mut Ui, state: &mut State, pal: &Tokens) {
 fn menu_body(ui: &mut Ui, state: &mut State, m: Menu, machine: Kind) {
     if m == Menu::Operation {
         for (s, kinds) in sections(machine) {
-            ui.menu_button(s.label(), |ui| {
+            let r = ui.menu_button(s.label(), |ui| {
                 for i in kinds {
                     item(ui, state, Cmd::Create(i));
                 }
             });
+            // The submenu arrow is not part of the name.
+            let name = s.label();
+            ui.ctx().accesskit_node_builder(r.response.id, |b| b.set_label(name));
         }
         ui.separator();
     }
@@ -79,7 +82,8 @@ fn item(ui: &mut Ui, state: &mut State, c: Cmd) {
         Some(why) => why.to_owned(),
         None => tip.split('\t').next().unwrap_or_default().to_owned(),
     };
-    let mut button = egui::Button::new(text_of(c, state));
+    let text = text_of(c, state);
+    let mut button = egui::Button::new(text.as_str());
     if let Some(k) = table::key_hint(c) {
         button = button.shortcut_text(k);
     }
@@ -87,6 +91,8 @@ fn item(ui: &mut Ui, state: &mut State, c: Cmd) {
         .add_enabled(live, button)
         .on_hover_text(&hover)
         .on_disabled_hover_text(&hover);
+    // The row's name is its label alone; the shortcut hint is the tip's.
+    ui.ctx().accesskit_node_builder(resp.id, |b| b.set_label(text));
     if resp.clicked() {
         run_direct(c, state);
     }

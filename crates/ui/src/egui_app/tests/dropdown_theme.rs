@@ -208,8 +208,10 @@ fn all_dropdown_drawers_follow_theme_tokens() {
     let pal = theme::current();
     assert_eq!(pal, custom_pal, "custom dropdown theme is active");
 
-    // `Harness::build_ui_state` wraps the frame in an 8 px CentralPanel margin.
-    let strip = Rect::from_min_size(Pos2::new(8.0, 8.0), Vec2::new(1280.0 - 16.0, theme::ribbon_h(&pal)));
+    // `Harness::build_ui_state` wraps the frame in an 8 px CentralPanel
+    // margin, and the menu bar (#4484) stands over the ribbon.
+    let top = 8.0 + panes::menu_bar_h(&pal);
+    let strip = Rect::from_min_size(Pos2::new(8.0, top), Vec2::new(1280.0 - 16.0, theme::ribbon_h(&pal)));
     let plan = panes::ribbon_plan(MachineKind::Mill, &[]);
     let (cells, _, _, drops) = panes::ribbon_cells(strip, &pal, &plan);
     let btn = |cmd: Cmd| cells.iter().find(|c| c.cmd == cmd).expect("ribbon button").rect;
