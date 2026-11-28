@@ -3,7 +3,8 @@
 //! take the new name, the editor follows the tool, and one undo restores
 //! the old name (the editor follows it back). A refused name changes
 //! nothing and keeps the typed text; Cancel drops it; a typed name makes
-//! the draft dirty, so Duplicate waits for Apply.
+//! the draft dirty, so Duplicate waits for Apply. A rename of another
+//! tool (with its undo and redo) leaves the open editor on its tool.
 //! Gate map: covers ui::egui_app::tool_library_dialog, ui::state.
 //! Provenance: our own structural tests over the AccessKit tree and the
 //! command history; no HSMWorks material involved.
@@ -89,6 +90,33 @@ fn apply_renames_the_tool_and_its_operations_in_one_undo_step() {
     assert_eq!(tool(&h, &name), before, "one undo restores the old name");
     assert_eq!(users(&h, &name), ops, "and every operation's reference");
     assert_eq!(open_tool(&h).as_deref(), Some(name.as_str()), "the editor follows the tool back");
+}
+
+/// A rename of another tool (an agent's `rename_tool`, its undo and its
+/// redo) leaves the open editor on its own tool: a view follows only the
+/// tool that it shows.
+#[test]
+fn a_rename_of_another_tool_leaves_the_open_editor_alone() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    let name = first_tool(&h);
+    open_in_window(&mut h, &name);
+    click_window_button(&mut h, frame::DUPLICATE);
+    h.run_steps(2);
+    let copy = format!("{name} (2)");
+    assert_eq!(open_tool(&h).as_deref(), Some(copy.as_str()), "Duplicate opens the copy and stays on it");
+    open_in_window(&mut h, &name);
+    let other = format!("{name} other");
+    h.state_mut().state.pending.push_back(crate::state::CommandKind::RenameTool { from: copy.clone(), to: other.clone() });
+    h.run_steps(2);
+    assert!(h.state().state.tool_names().contains(&other), "the copy is renamed");
+    assert_eq!(open_tool(&h).as_deref(), Some(name.as_str()), "the editor stays on its tool");
+    for (step, kind) in [("undo", crate::state::CommandKind::Undo), ("redo", crate::state::CommandKind::Redo)] {
+        h.state_mut().state.pending.push_back(kind);
+        h.run_steps(3);
+        assert_eq!(open_tool(&h).as_deref(), Some(name.as_str()), "after {step} the editor stays on its tool");
+    }
+    assert!(h.state().state.tool_names().contains(&other), "redo lands the rename again");
 }
 
 /// An empty name is refused by name: nothing lands, the typed text stays
