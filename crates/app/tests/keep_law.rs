@@ -297,6 +297,9 @@ mod a_legal_whole_model_clearing_stays_clean_and_posts_on_both_stocks {
 #[path = "keep_law/stock_source.rs"]
 mod stock_source;
 
+#[path = "keep_law/incoming_stock_deficits.rs"]
+mod incoming_stock_deficits;
+
 // ---- MCP parity -----------------------------------------------------
 
 #[path = "keep_law/mcp.rs"]

@@ -27,6 +27,23 @@ impl SetStockSourceOnly {
     /// mark. Turning it on needs a from-model stock - any other stock has
     /// no source model, and the refusal says so.
     pub fn new(world: &World, on: bool) -> Result<Self, CommandError> {
+        Self::with_inherited_deficits(world, on, false)
+    }
+
+    /// [`Self::new`], and with `report_inherited_deficits` the post reports
+    /// cells of this stock already below the part, and left at their
+    /// incoming heights, as a note instead of gouges. Needs `on`. For this
+    /// session only: opening the project clears it.
+    pub fn with_inherited_deficits(
+        world: &World,
+        on: bool,
+        report_inherited_deficits: bool,
+    ) -> Result<Self, CommandError> {
+        if report_inherited_deficits && !on {
+            return Err(CommandError::Invalid(
+                "reporting inherited deficits requires marking the model as incoming stock".into(),
+            ));
+        }
         let active = crate::setup::active(world);
         let stock_name = crate::setup::stock_entity_name(world, active.as_deref());
         let entity = model::find_by_name(world, &stock_name)
@@ -46,7 +63,14 @@ impl SetStockSourceOnly {
                         .ok_or_else(|| CommandError::Invalid(format!(
                             "the stock's source model '{source}' is not in the document or has no geometry"
                         )))?;
-                    Some(StockSourceOnly { source, print })
+                    let incoming_stock_print = if report_inherited_deficits {
+                        Some(crate::stock_print::print_of(world, &entity).ok_or_else(|| {
+                            CommandError::Invalid("the incoming stock has no geometry to acknowledge".into())
+                        })?)
+                    } else {
+                        None
+                    };
+                    Some(StockSourceOnly { source, print, incoming_stock_print })
                 }
                 _ => {
                     return Err(CommandError::Invalid(format!(

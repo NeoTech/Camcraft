@@ -252,3 +252,21 @@ pub fn raw_stock_only_of(world: &World, setup: Option<&str>) -> Option<bool> {
     let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))?;
     source_of(world, &stock).map(|(_, marked)| marked)
 }
+
+/// The acknowledged source of one setup's incoming stock. The same
+/// geometry check that excludes the blank from the part verdict still
+/// has to hold, with a separate part left to judge.
+pub(crate) fn incoming_stock_source(world: &World, setup: Option<&str>) -> Option<String> {
+    let source_entity = stock_only_model(world)?;
+    let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))?;
+    let (source, Mark::Holds) = mark_of(world, &stock)? else {
+        return None;
+    };
+    if model::find_by_name(world, &source) != Some(source_entity) {
+        return None;
+    }
+    let acknowledged = stock.entity_view(world)
+        .try_get::<&StockSourceOnly>(|mark| mark.incoming_stock_print)
+        .flatten()?;
+    (crate::stock_print::print_of(world, &stock) == Some(acknowledged)).then_some(source)
+}

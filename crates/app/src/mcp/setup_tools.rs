@@ -28,7 +28,7 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
     Tool { name: "set_work_offset", description: "Set the work offset the post uses for a declared setup's WCS: index is 1-based (G54-G59 accepted as aliases of 1-6), bounded by the setup's own post - an offset it cannot express is refused by setup name. null clears it (offset 1). Returns index and the post's name for it (word is an alias of name). Moves no origin.", schema: s_work_offset, run: set_work_offset },
     Tool { name: "set_program", description: "State the document's program number (1 to 9999: the O-word O0001-O9999) and program comment (the program's name on Heidenhain and SINUMERIK). An omitted key keeps its value; null clears it (O0001 and the machine's name). One undo step.", schema: s_set_program, run: set_program },
-    Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
+    Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. With report_inherited_deficits also on, the post reports the stock's deficits that the program leaves at their incoming heights as a located note instead of gouges; it resets when the project is opened. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
     Tool { name: "set_setup_post", description: "Give a declared setup its own post: a built-in post name or a .cps path; null clears it (the setup follows the document's post again). One undo step. This sets the field only - posting judges whether the post serves the setup's machine.", schema: s_setup_post, run: set_setup_post },
 ];
@@ -343,15 +343,27 @@ fn s_add_setup() -> Value {
 }
 
 fn s_raw_stock_only() -> Value {
-    obj(json!({ "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." } }), &["on"])
+    obj(json!({
+        "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." },
+        "report_inherited_deficits": { "type": "boolean", "description": "For a single upright setup on a model of previously cut stock, report unchanged deficits separately from gouges introduced by this program. Defaults to false and resets when the project is opened." }
+    }), &["on"])
 }
 
 /// #1094: the stock page's checkbox, through the same command.
 fn set_raw_stock_only(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let on = a.get("on").and_then(Value::as_bool).ok_or("\"on\" must be true or false")?;
-    let cmd = SetStockSourceOnly::new(&env.world, on).map_err(cmd_err)?;
+    let report_inherited_deficits = match a.get("report_inherited_deficits") {
+        Some(v) => v.as_bool().ok_or("\"report_inherited_deficits\" must be true or false")?,
+        None => false,
+    };
+    let cmd = SetStockSourceOnly::with_inherited_deficits(&env.world, on, report_inherited_deficits)
+        .map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
-    Ok(json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) }))
+    let mut reply = json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) });
+    if a.contains_key("report_inherited_deficits") {
+        reply["report_inherited_deficits"] = json!(report_inherited_deficits);
+    }
+    Ok(reply)
 }
 
 fn s_setup_name() -> Value {

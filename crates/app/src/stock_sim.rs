@@ -50,6 +50,8 @@ use crate::geometry::Triangle;
 
 #[path = "stock_grid.rs"]
 mod grid;
+#[path = "stock_sim_incoming.rs"]
+mod incoming;
 pub use grid::stock_grid;
 
 /// Simulate the whole document's program: the operations in posting
@@ -64,6 +66,24 @@ pub use grid::stock_grid;
 pub fn simulate_document(
     world: &flecs_ecs::prelude::World,
 ) -> Result<ProgramSim, String> {
+    let (dev, display, _) = simulate_program(world, false)?;
+    let surface = display.surface(&color_classes(&dev));
+    Ok(ProgramSim { dev, surface })
+}
+
+/// Check the program against the part, reporting explicitly acknowledged
+/// incoming stock deficits separately when their columns are unchanged.
+pub(crate) fn simulate_for_post(
+    world: &flecs_ecs::prelude::World,
+) -> Result<(Deviation, Option<String>), String> {
+    let (dev, _, inherited) = simulate_program(world, true)?;
+    Ok((dev, inherited))
+}
+
+fn simulate_program(
+    world: &flecs_ecs::prelude::World,
+    for_post: bool,
+) -> Result<(Deviation, Dexel, Option<String>), String> {
     let planned = plan_program(world)?;
     wire::refuse_wire_cuts(world)?;
     waterjet::refuse_waterjet_cuts(world)?;
@@ -99,9 +119,12 @@ pub fn simulate_document(
     if let Some(left) = &walked.left {
         carry::fold_left(&mut dev, left);
     }
-    let classes = color_classes(&dev);
-    let surface = display.surface(&classes);
-    Ok(ProgramSim { dev, surface })
+    let inherited = if for_post && !walked.spanned && carry_engine() == Backend::Column {
+        incoming::report(world, walked.frame.as_deref(), &planned, &display, &mut dev)
+    } else {
+        None
+    };
+    Ok((dev, display, inherited))
 }
 
 /// The kinds the column verdict cannot judge, refused by name before
