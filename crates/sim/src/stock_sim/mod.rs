@@ -113,6 +113,9 @@ mod field_gen;
 mod field_lathe;
 mod field_ray;
 mod field_rotary;
+// #2268: the eye's rotary slice and the lathe plan, which playback reads.
+mod lathe_plan;
+mod rotary_slice;
 mod field_shell;
 mod field_solid;
 mod field_sweep;
@@ -175,6 +178,8 @@ pub use field_batch::CutStats;
 pub use field_blade::{LatheProfile, CROWN_SAG_TOL};
 pub use field_cut::SdfTool;
 pub use field_lathe::{LatheAxis, MERIDIAN_TOL};
+pub use lathe_plan::LathePlan;
+pub use rotary_slice::{rotary_pose_tol, simulate_rotary_slice};
 pub use field_rotary::{rotary_chords, rotary_chords_law, ChordLaw, RotaryChordStats, MAX_SUBCHORDS, ROTARY_COLUMN_REFUSAL};
 pub use gouge::dist_seg_tri;
 pub use kernel::{cells_across, measure, part_surface, StockError, StockReport};

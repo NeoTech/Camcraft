@@ -12,7 +12,7 @@
 //! picture within the twin's claim margin, and a layer fault falls back
 //! to the field picture.
 //!
-//! Gate map (M4.4): covers app::stock_play, app::stock_play_cut, app::stock_play_worker, app::stock_play_worker_frame, app::stock_play_worker_precalc, app::stock_view.
+//! Gate map (M4.4): covers app::stock_play, app::stock_play_worker, camcraft_sim::play, camcraft_sim::play_cut, camcraft_sim::play_worker, camcraft_sim::play_worker_frame, camcraft_sim::play_worker_precalc, camcraft_sim::field_view, app::stock_view.
 
 use std::time::{Duration, Instant};
 

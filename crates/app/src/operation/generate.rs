@@ -3134,10 +3134,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 };
                 // Spot stops at the entry dimple, regardless of a through floor.
                 if hl.bottom.is_none() && !lathe_axial && *cycle != drilling::CycleChoice::Spot {
+                    // #2528: the note names the field's run and the drill point apart.
                     broke = super::break_through::deepest(
                         holes.iter().filter(|h| h.through).map(|h| (h.xy, h.floor_z - tip_run)),
                         tip_run,
-                    );
+                    )
+                    .map(|b| b.with_point(tip_run - run));
                 }
                 drilling::drill(&drilling::CycleParams {
                     through_clear: run,

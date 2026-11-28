@@ -8,7 +8,7 @@
 //! nothing from vendor binaries.
 //!
 //! Gate map: covers app::stock_play (PlaySeed::gather, PlayIndex::position_at,
-//! stock_play_head::progress), camcraft_sim::sim (Script::next_op_start, prev_op_start)
+//! camcraft_sim::play_head::progress), camcraft_sim::play_index, camcraft_sim::sim (Script::next_op_start, prev_op_start)
 //! through app::setup::operation_order and app::posting::machine_value.
 
 use flecs_ecs::prelude::World;

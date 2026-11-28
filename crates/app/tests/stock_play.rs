@@ -6,7 +6,7 @@
 //! name. Provenance: our own fixtures over the M7.1 field engine;
 //! nothing from vendor binaries.
 //!
-//! Gate map (M4.4): covers app::stock_play, app::stock_play_head, app::stock_play_worker, app::stock_view (display_parts, display_target), sim::sim seam.
+//! Gate map (M4.4): covers app::stock_play, app::stock_play_worker, camcraft_sim::play, camcraft_sim::play_index, camcraft_sim::play_head, camcraft_sim::play_worker, camcraft_sim::field_view, app::stock_view (display_parts, display_target), sim::sim seam.
 
 use std::time::{Duration, Instant};
 
@@ -19,7 +19,7 @@ use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::Location;
 use camcraft_app::sim;
 use camcraft_app::stock::StockShape;
-use camcraft_app::stock_play::{progress, FieldPlay, PlaySeed, Progress, MAX_CHECKPOINTS};
+use camcraft_app::stock_play::{progress, FieldPlay, FieldPlayWorld, PlaySeed, Progress, MAX_CHECKPOINTS};
 use camcraft_app::stock_play_worker::{PlayFrame, PlayWorker};
 use camcraft_app::stock_sim::{Preview, PreviewCamera, Stock, DEV_TOL};
 use camcraft_app::stock_sim::preview::pack_cut;

@@ -1,15 +1,14 @@
-//! `FieldPlay` as the sim crate's `Playback` (#2181): the accessors and
-//! the cut, rewind and store bindings that `camcraft_sim::play_precalc`
-//! drives. The keyframe store, its budget and thinning, the stride, the
-//! begin/step orchestration and the loop are the sim crate's
-//! (`play_keys`, `play_precalc`); only the bindings of this app type
-//! stay here, since `FieldPlay` itself is app's until #2268 (#2192
-//! review). Provenance: our own seam; nothing from vendor binaries.
+//! `FieldPlay` as `play_precalc`'s `Playback` (#2181): the accessors and
+//! the cut, rewind and store bindings that `play_precalc` drives. The
+//! keyframe store, its budget and thinning, the stride, the begin/step
+//! orchestration and the loop are `play_keys` and `play_precalc`; these
+//! are the bindings of `FieldPlay` (moved from app with it, #2268).
+//! Provenance: our own seam; nothing from vendor binaries.
 
 use super::FieldPlay;
+use crate::play_keys::Keyframes;
+use crate::play_precalc::{self, Playback};
 use crate::stock_sim::Stock;
-use camcraft_sim::play_keys::Keyframes;
-use camcraft_sim::play_precalc::{self, Playback};
 
 impl FieldPlay {
     /// The checkpoint stride, in moves.
@@ -38,12 +37,12 @@ impl FieldPlay {
         &self.keys
     }
 
-    /// `camcraft_sim::play_precalc::begin` on this playback.
+    /// `play_precalc::begin` on this playback.
     pub fn begin_precalc(&mut self, keys: usize, min_stride: usize, budget: usize) -> Result<(), String> {
         play_precalc::begin(self, keys, min_stride, budget)
     }
 
-    /// `camcraft_sim::play_precalc::step` on this playback.
+    /// `play_precalc::step` on this playback.
     pub fn precalc_step(&mut self) -> Result<bool, String> {
         play_precalc::step(self)
     }

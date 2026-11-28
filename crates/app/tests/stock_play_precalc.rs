@@ -7,7 +7,7 @@
 //! Provenance: our own fixtures over the M7.1 field engine; nothing
 //! from vendor binaries.
 //!
-//! Gate map (M4.4): covers app::stock_play_precalc, app::stock_play_worker_precalc, app::stock_play, app::stock_play_worker, camcraft_sim::play_keys, camcraft_sim::play_precalc.
+//! Gate map (M4.4): covers app::stock_play, app::stock_play_worker, camcraft_sim::play, camcraft_sim::play_bind, camcraft_sim::play_worker, camcraft_sim::play_worker_precalc, camcraft_sim::play_keys, camcraft_sim::play_precalc.
 
 use std::time::{Duration, Instant};
 

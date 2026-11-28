@@ -80,26 +80,8 @@ fn arcs_about(axis: &LatheAxis, m: &crate::cl::Move) -> bool {
     (n.x * d[0] + n.y * d[1] + n.z * d[2]).abs() > 1e-9
 }
 
-/// What a turning op's plan carries into the field: the footprint
-/// its moves sweep and the spindle line it revolves about.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LathePlan {
-    pub profile: LatheProfile,
-    pub axis: LatheAxis,
-}
-
-impl LathePlan {
-    /// The footprint's finest cutting feature, the radius the display
-    /// cell law (`auto_cell`) sizes the picture by: the nose, or half
-    /// a blade's band.
-    #[must_use]
-    pub fn feature(&self) -> f64 {
-        match self.profile {
-            LatheProfile::Nose { radius } => radius,
-            LatheProfile::Blade { width, .. } | LatheProfile::Thread { width, .. } | LatheProfile::Form { width, .. } => 0.5 * width,
-        }
-    }
-}
+// #2268: the plan is plain data the playback in camcraft-sim holds.
+pub use camcraft_sim::stock_sim::LathePlan;
 
 /// The footprint `tool` cuts with: `None` for a tool that is no
 /// turning steel. `pub(crate)`: #369's holder law credits the same cut.
