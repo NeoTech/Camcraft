@@ -7,6 +7,7 @@ mod ac_trunnion_support;
 
 mod ac_trunnion_ik;
 mod ac_trunnion_path_safety;
+mod doosan_lone_x_sign;
 mod g93_feed;
 mod mach4_trunnion;
 mod opening_rotary_pose;
