@@ -568,7 +568,18 @@ function tilt(p) {  // words to append, [] if none, null if refused
     var rotWords = [];
     var aChanged = !has(lastA) || p.A !== lastA;
     if (aChanged) {
-      rotWords.push(angleWord("A", p.A));
+      // #4513: the machine check signs a lone rotary's angle by the
+      // stated direction - a [-1,0,0] table commands the negated angle
+      // (`judge.rs` x_rotary_problem), so the judged pose A20 reads
+      // A-20 on the machine. This path owns the word, so it writes the
+      // judged sign: the stream's A negated on a lone rotary stated
+      // along -X. (The G43.4 arm cannot re-express its RTCP stream and
+      // refuses such a table instead.) rotAt keeps the stream's letter;
+      // its readers want the magnitude only. A0 is the same word on
+      // either sign.
+      var rev = reversedLoneXRotary();
+      var aVal = rev === "A" && Math.abs(p.A) > 1e-9 ? -Number(p.A) : Number(p.A);
+      rotWords.push(angleWord("A", aVal));
     }
     return rotWords;
   }
