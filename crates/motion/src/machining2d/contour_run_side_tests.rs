@@ -56,6 +56,80 @@ fn plunges(path: &Toolpath) -> Vec<crate::geometry::Point3> {
 }
 
 #[test]
+fn an_open_chain_accepts_a_start_pick_at_its_natural_end() {
+    let run = [Point2::new(0.0, 0.0), Point2::new(20.0, 0.0)];
+    for climb in [true, false] {
+        let mut p = params();
+        p.climb = climb;
+        let automatic = contour_along_chain(&run, &p).expect("automatic chain");
+        let start = if climb { run[0] } else { run[1] };
+        p.picks.start = vec![crate::path_picks::PathPick::xy(start)];
+        let picked = contour_along_chain(&run, &p).expect("natural end is a valid start");
+        assert_eq!(picked.moves, automatic.moves, "pick preserves the natural cut and climb");
+    }
+}
+
+#[test]
+fn a_natural_end_pick_keeps_the_lead_on_every_level() {
+    let run = [Point2::new(0.0, 0.0), Point2::new(20.0, 0.0)];
+    for climb in [true, false] {
+        let mut p = params();
+        p.climb = climb;
+        p.lead = Lead::Perpendicular { length: 3.0 };
+        let automatic = contour_along_chain(&run, &p).expect("automatic lead");
+        let start = if climb { run[0] } else { run[1] };
+        p.picks.start = vec![crate::path_picks::PathPick::xy(start)];
+        let picked = contour_along_chain(&run, &p).expect("picked lead");
+        assert_eq!(picked.moves, automatic.moves);
+        for z in p.levels().expect("levels") {
+            assert!(picked.moves.iter().any(|m| m.kind == MoveKind::Feed
+                && m.to.x == start.x && m.to.y == start.y && m.to.z == z
+                && (m.from.x != start.x || m.from.y != start.y)), "lead lands at {start:?}, z={z}");
+        }
+    }
+}
+
+#[test]
+fn an_open_chain_refuses_starts_other_than_its_exact_natural_end() {
+    let run = [Point2::new(0.0, 0.0), Point2::new(20.0, 0.0)];
+    for climb in [true, false] {
+        let mut p = params();
+        p.climb = climb;
+        let (start, wrong_end) = if climb { (run[0], run[1]) } else { (run[1], run[0]) };
+        for q in [wrong_end, Point2::new(10.0, 0.0), Point2::new(start.x, 1e-12)] {
+            p.picks.start = vec![crate::path_picks::PathPick::xy(q)];
+            let e = contour_along_chain(&run, &p).expect_err("must not reverse or project");
+            let msg = e.to_string();
+            assert!(msg.contains("start point") && msg.contains("endpoint chosen by climb"), "{msg}");
+        }
+        p.picks.start = vec![crate::path_picks::PathPick::xy(start)];
+        p.picks.exit = vec![crate::path_picks::PathPick::xy(wrong_end)];
+        let e = contour_along_chain(&run, &p).expect_err("exit mapping remains unsupported");
+        assert!(e.to_string().contains("exit point"), "{e}");
+    }
+}
+
+#[test]
+fn an_offset_part_run_refuses_unproved_source_start_picks() {
+    for climb in [true, false] {
+        let mut p = params();
+        p.climb = climb;
+        let automatic = contour_open_run(&north(), &p, &block).expect("offset run");
+        let cutter = plunges(&automatic)[0];
+        for q in [north()[0], Point2::new(cutter.x, cutter.y)] {
+            p.picks.start = vec![crate::path_picks::PathPick::xy(q)];
+            let e = contour_open_run(&north(), &p, &block).expect_err("source mapping is not proved");
+            let msg = e.to_string();
+            assert!(msg.contains("start point") && msg.contains("source endpoint mapping"), "{msg}");
+        }
+    }
+    let mut p = params();
+    p.picks.start = vec![crate::path_picks::PathPick::xy(north()[0])];
+    let e = contour_open_run(&north(), &p, &|_| Ok(None)).expect_err("unproved source frame without material");
+    assert!(e.to_string().contains("source endpoint mapping"), "{e}");
+}
+
+#[test]
 fn an_open_edge_is_cut_one_radius_off_on_its_air_side() {
     for run in [north(), north().into_iter().rev().collect()] {
         let path = contour_open_run(&run, &params(), &block).expect("air side");
@@ -205,6 +279,11 @@ fn an_open_run_with_a_short_leg_at_an_inside_corner_stops_clear() {
         f.iter().all(|q| q.x >= 5.0 - 1e-3 && (q.x - 3.0).hypot(q.y) >= 5.0 - 0.01),
         "{f:?}"
     );
+    let cutter = plunges(&path)[0];
+    let mut picked = params();
+    picked.picks.start = vec![crate::path_picks::PathPick::xy(Point2::new(cutter.x, cutter.y))];
+    let e = contour_open_run(&run, &picked, &l_part).expect_err("swallowed end has no pick mapping");
+    assert!(e.to_string().contains("source endpoint mapping"), "{e}");
 
     // 45-degree acute inside corner with a 7.07 mm end leg (needs
     // r * tan(67.5 deg) = 12.07 mm from the apex).
