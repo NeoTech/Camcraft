@@ -354,11 +354,11 @@ fn a_never_generated_operation_shows_on_both_folded_chips() {
 #[test]
 fn a_blocked_operation_shows_on_both_folded_chips() {
     let mut h = seeded();
-    // A tap is no tool for a contour: the operation is blocked.
+    // A drill is no tool for a contour: the operation is blocked.
     let name = contour_tool(&h);
     let w = &h.state().state.world;
     let mut tool = model::tool_of(w, &model::find_by_name(w, &name).expect("tool")).expect("a tool");
-    tool.kind = camcraft_app::tools::ToolKind::Tap;
+    tool.kind = camcraft_app::tools::ToolKind::Drill;
     h.state_mut().state.pending.push_back(CommandKind::ChangeTool { name, tool });
     h.run_steps(3);
     crate::actions::target(&mut h.state_mut().state, UiTarget::Operation("Contour1".into()));
@@ -367,7 +367,7 @@ fn a_blocked_operation_shows_on_both_folded_chips() {
     }
     h.run_steps(3);
     let browser = chip_texts(&h, &Tab::Browser);
-    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 blocked")), "Browser: {browser:?}");
+    assert!(browser.iter().any(|t| t.starts_with("\u{26A0} 1 blocked")), "Browser: {browser:?} ({})", h.state().state.status);
     let props = chip_texts(&h, &Tab::Properties);
     assert!(props.iter().any(|t| t == "\u{26A0} Blocked"), "Properties: {props:?}");
 }
