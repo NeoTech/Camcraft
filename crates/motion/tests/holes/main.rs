@@ -3,6 +3,7 @@
 //! header and coverage paragraph, which the gate reads through this file.
 
 mod bore_carried_ramp;
+mod bore_helix;
 mod bore_pass_start;
 mod bore_ramp_angle;
 mod break_through;
