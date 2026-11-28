@@ -14,7 +14,7 @@
 //! Provenance: our own fixtures, specced from the turning kernel's
 //! design notes and ISO insert sizes; no vendor material consulted.
 
-mod common;
+use crate::common;
 
 use flecs_ecs::prelude::World;
 

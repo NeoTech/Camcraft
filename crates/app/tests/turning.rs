@@ -18,8 +18,48 @@
 //! generate/heights/material, the seed), camcraft_app::posting-free
 //! generation path.
 //! Lane shape (M4.4): all tests here run in seconds.
+//!
+//! Directory suite (#3190): the turned kinds' other suites are submodules
+//! in `turning/`. Each keeps its own Gate map and its old binary name as
+//! its module name, so `turning_bore::x` names the same test as before.
 
 mod common;
+#[path = "turning/axial_rapids.rs"]
+mod turning_axial_rapids;
+#[path = "turning/blade.rs"]
+mod turning_blade;
+#[path = "turning/bore.rs"]
+mod turning_bore;
+#[path = "turning/bore_feeds.rs"]
+mod turning_bore_feeds;
+#[path = "turning/contour.rs"]
+mod turning_contour;
+#[path = "turning/contour_stock.rs"]
+mod turning_contour_stock;
+#[path = "turning/face_approach.rs"]
+mod turning_face_approach;
+#[path = "turning/face_seed.rs"]
+mod turning_face_seed;
+#[path = "turning/form.rs"]
+mod turning_form;
+#[path = "turning/hidden_floor.rs"]
+mod turning_hidden_floor;
+#[path = "turning/holder.rs"]
+mod turning_holder;
+#[path = "turning/holder_steel.rs"]
+mod turning_holder_steel;
+#[path = "turning/insert_zone.rs"]
+mod turning_insert_zone;
+#[path = "turning/profile.rs"]
+mod turning_profile;
+#[path = "turning/stock_approach.rs"]
+mod turning_stock_approach;
+#[path = "turning/thread.rs"]
+mod turning_thread;
+#[path = "turning/thread_helical.rs"]
+mod turning_thread_helical;
+#[path = "turning/thread_infeed.rs"]
+mod turning_thread_infeed;
 
 use flecs_ecs::prelude::World;
 

@@ -19,7 +19,7 @@
 //! turning_bore_feeds.rs.
 //! Lane shape (M4.4): all tests here run in seconds.
 
-mod common;
+use crate::common;
 
 use camcraft_app::commands::{AddTool, ChangeTool, CreateOperation, DeleteOperation, EditOperationParams, GenerateOperation, ImportModel};
 use camcraft_app::drilling::{CycleChoice, Hole};

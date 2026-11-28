@@ -9,8 +9,6 @@
 //! app::posting (the verification gate on a lathe document).
 //! Lane shape (M4.4): all tests here run in seconds.
 
-mod common;
-
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::MoveKind;
