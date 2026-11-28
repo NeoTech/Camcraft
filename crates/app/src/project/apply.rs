@@ -569,6 +569,12 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // v83 -> v84 (#3645): the tool component table and the tool
         // stacks arrive; no v83 file holds them, so nothing moves - pure
         // step-up.
+        // v84 -> v85 (#2774): a rotary op may state its heights as radii
+        // about the fitted axis (`clearance_r`, `retract_r`, `top_r`,
+        // `bottom_r`); absent is the Z-plane law a v84 file ran, so it
+        // steps up unchanged. A v84 reader would silently drop the stated
+        // radii and post a clearance shape that does not match the stored
+        // ones, so the ladder steps.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {

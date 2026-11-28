@@ -133,3 +133,96 @@ impl Height {
         matches!(self.reference, HeightReference::Fixed)
     }
 }
+
+/// What a rotary height is measured from (#2774). A rotary tool must keep
+/// its distance from the fitted axis all the way round, so its heights are
+/// RADII about that axis, never world-Z planes. The two geometry sources
+/// are world truths re-read at resolve time - so a radius that follows the
+/// moved stock or a re-imported model is expressed, never stale - exactly
+/// the law [`Height`] keeps for its Z references.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadialSource {
+    /// The setup stock's largest radius about the fitted axis.
+    StockOd,
+    /// The operation's own model's largest radius about the fitted axis.
+    ModelMaxRadius,
+    /// The offset IS the radius, in mm from the axis.
+    Absolute,
+}
+
+impl RadialSource {
+    /// Panel combo entries, in this order.
+    pub const KIND_LABELS: [&'static str; 3] = ["stock OD", "model max radius", "absolute radius"];
+
+    /// Which entry of [`Self::KIND_LABELS`] this source is.
+    #[must_use]
+    pub fn kind_index(&self) -> usize {
+        match self {
+            RadialSource::StockOd => 0,
+            RadialSource::ModelMaxRadius => 1,
+            RadialSource::Absolute => 2,
+        }
+    }
+
+    /// The source that a combo entry selects.
+    #[must_use]
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => RadialSource::StockOd,
+            1 => RadialSource::ModelMaxRadius,
+            _ => RadialSource::Absolute,
+        }
+    }
+}
+
+impl core::fmt::Display for RadialSource {
+    /// Chip text for a radius label: short.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            RadialSource::StockOd => f.write_str("stock OD"),
+            RadialSource::ModelMaxRadius => f.write_str("model max radius"),
+            RadialSource::Absolute => f.write_str("absolute"),
+        }
+    }
+}
+
+/// One rotary height (#2774): a From-source plus offset in mm, read as a
+/// RADIUS about the fitted rotary axis. The stored truth is the expression,
+/// never a resolved radius - so a radius cannot disagree with the bar it
+/// references. For [`RadialSource::Absolute`] the offset IS the radius; for
+/// the two relative sources the radius is the source's own radius plus the
+/// offset (a negative offset is legal - it names a radius inside the skin,
+/// which the gate refuses by name when it is not safe).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RadialHeight {
+    pub source: RadialSource,
+    pub offset: f64,
+}
+
+impl RadialHeight {
+    /// A radius that stands on its own: the value is the mm from the axis.
+    #[must_use]
+    pub fn absolute(r: f64) -> Self {
+        RadialHeight { source: RadialSource::Absolute, offset: r }
+    }
+
+    #[must_use]
+    pub fn of(source: RadialSource, offset: f64) -> Self {
+        RadialHeight { source, offset }
+    }
+
+    /// Structural sanity, no world: a finite offset, and an ABSOLUTE
+    /// radius that is a distance above the axis (a negative absolute
+    /// radius is no radius at all - the stored expression is the radius
+    /// there). Ordering lives on resolved radii
+    /// ([`crate::operation::radial_gate`]).
+    #[must_use]
+    pub fn is_sane(&self) -> bool {
+        self.offset.is_finite() && (!self.is_absolute() || self.offset >= 0.0)
+    }
+
+    #[must_use]
+    pub fn is_absolute(&self) -> bool {
+        matches!(self.source, RadialSource::Absolute)
+    }
+}

@@ -108,11 +108,23 @@ pub fn axis_lines(
     setup: Option<&str>,
     params: &OpParams,
 ) -> Option<Result<Vec<(String, Axis)>, GenError>> {
+    axis_lines_of(world, setup, op_stated(params))
+}
+
+/// [`axis_lines`] from the op's own statement alone (the display reads it
+/// of the open draft; the machine and the work offset come from the
+/// world).
+#[must_use]
+pub fn axis_lines_of(
+    world: &World,
+    setup: Option<&str>,
+    op: Option<[f64; 3]>,
+) -> Option<Result<Vec<(String, Axis)>, GenError>> {
     let rotaries: Option<Vec<AxisLimits>> = crate::machine::of_setup(world, setup)
         .1
         .map(|m| m.axes.iter().filter(|a| a.rotary).cloned().collect());
     lines_of(
-        op_stated(params),
+        op,
         rotaries.as_deref(),
         crate::posting::wcs_context(world, setup).1,
     )

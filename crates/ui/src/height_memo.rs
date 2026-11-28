@@ -88,6 +88,18 @@ impl Key {
 }
 type HeightRead = (Option<SrcRef>, Height, Result<f64, &'static str>);
 
+/// The line a rotary op's radii stand about, and the two radii they read
+/// (#2774): the fitted axis as a point and a unit direction in world
+/// coordinates, the source's largest radius about it, and the setup stock's.
+/// A display read only: generation and verification fit their own.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct RadialView {
+    pub origin: [f64; 3],
+    pub dir: [f64; 3],
+    pub part_rho: f64,
+    pub stock_rho: Option<f64>,
+}
+
 #[derive(PartialEq)]
 struct AdviceKey {
     geometry: Key,
@@ -118,6 +130,8 @@ thread_local! {
     static ADVICE_BUILDS: Cell<u64> = const { Cell::new(0) };
     static UNRESOLVED: RefCell<Vec<(UnresolvedKey, Option<String>)>> = const { RefCell::new(Vec::new()) };
     static UNRESOLVED_BUILDS: Cell<u64> = const { Cell::new(0) };
+    static RADIAL: RefCell<Option<(RadialKey, Option<RadialView>)>> = const { RefCell::new(None) };
+    static RADIAL_BUILDS: Cell<u64> = const { Cell::new(0) };
 }
 
 /// The pane-wide unresolved-heights note, cached by geometry, source and params.
@@ -278,6 +292,72 @@ pub(crate) fn height(
 #[cfg(test)]
 pub(crate) fn builds() -> u64 {
     BUILDS.with(Cell::get)
+}
+
+#[derive(PartialEq)]
+struct RadialKey {
+    geometry: Key,
+    src: SrcRef,
+    /// The stated-axis inputs the judged axis reads (#2772, review of
+    /// #3490): the op's own direction, the work-turning rotaries' lines
+    /// (name and stated vector - the letter law's two reads), and the
+    /// work offset origin every line anchors through. A change in any of
+    /// them can turn the work about a different line, so each is part of
+    /// the key; the free fit stays keyed by the geometry alone.
+    stated: Option<[f64; 3]>,
+    rotaries: Vec<(String, Option<[f64; 3]>)>,
+    wcs: [f64; 3],
+}
+
+/// The axis and the two radii one source reads for the rotary kinds' radial
+/// heights (#2774). The facet fit is the expensive part, so it is retained
+/// while the geometry, the source and the axis inputs stay equal: a still
+/// frame fits nothing, and a new source, a new mesh or a new axis statement
+/// fits once (#2238). The fit reads WORLD facets, so no tilt enters the
+/// key: a 3+2 index change keeps the ring. `stated` is the op's own stated
+/// rotation axis (#2772) - the judged axis reads it, so it is in the key.
+pub(crate) fn radial_axis(world: &World, setup: Option<&str>, src: &SrcRef, stated: Option<[f64; 3]>) -> Option<RadialView> {
+    let rotaries = camcraft_app::machine::of_setup(world, setup)
+        .1
+        .map(|m| {
+            m.axes
+                .iter()
+                .filter(|a| a.rotary && (a.turns_part == Some(true) || a.name.trim().eq_ignore_ascii_case("C")))
+                .map(|a| (a.name.clone(), a.axis))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let key = RadialKey {
+        geometry: Key::of(world, setup, None),
+        src: src.clone(),
+        stated,
+        rotaries,
+        wcs: camcraft_app::posting::wcs_context(world, setup).1,
+    };
+    RADIAL.with(|memo| {
+        let mut memo = memo.borrow_mut();
+        if let Some((old, view)) = memo.as_ref()
+            && *old == key
+        {
+            return *view;
+        }
+        let _span = crate::frame_cost::span("display/heights.radial_axis");
+        RADIAL_BUILDS.with(|n| n.set(n.get().saturating_add(1)));
+        let view =
+            operation::radial_context_about(world, setup, src, stated).ok().map(|c| RadialView {
+            origin: [c.axis.origin.x, c.axis.origin.y, c.axis.origin.z],
+            dir: [c.axis.dir.x, c.axis.dir.y, c.axis.dir.z],
+            part_rho: c.part_rho,
+            stock_rho: c.stock_rho,
+        });
+        *memo = Some((key, view));
+        view
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn radial_builds() -> u64 {
+    RADIAL_BUILDS.with(Cell::get)
 }
 
 #[cfg(test)]

@@ -141,6 +141,38 @@ pub(crate) fn height_echo(
     }
 }
 
+/// What a radial row echoes after its offset box: the radius it resolves
+/// to about the judged axis, or - never a stale or guessed number - what
+/// is missing. The twin of [`height_echo`] for the rotary kinds' radial
+/// heights (#2774); the same axis the generators pose about (a stated axis
+/// first, the free fit otherwise, #2772 - `stated` is the open draft's own
+/// statement). `name` is the slot's name: a field that permits a zero
+/// radius (the band's Bottom floor, the checkbox default) displays the
+/// resolved zero - a valid radius, not an unresolved one.
+pub(crate) fn radial_echo(
+    world: &World,
+    setup: Option<&str>,
+    src: Option<&camcraft_app::operation::SrcRef>,
+    stated: Option<[f64; 3]>,
+    name: &str,
+    h: &camcraft_app::operation::RadialHeight,
+) -> String {
+    let Some(src) = src else {
+        return "(unresolved: the operation has no source to read its radii about)".to_string();
+    };
+    let permits_zero = name.eq_ignore_ascii_case("Bottom");
+    match crate::height_memo::radial_axis(world, setup, src, stated) {
+        Some(v) => match operation::resolve_one(name, *h, v.part_rho, v.stock_rho) {
+            Ok(r) if r.is_finite() && (r > 0.0 || (permits_zero && r == 0.0)) => {
+                format!("(= R {})", units::len(r, units::of(world), 3))
+            }
+            Ok(r) => format!("(unresolved: the radius {r:.3} is not one the {name} slot permits)"),
+            Err(reason) => format!("(unresolved: {reason})"),
+        },
+        None => "(unresolved: the model gives no rotation axis to read about)".to_string(),
+    }
+}
+
 /// The first unresolved reason of a set of heights, phrased for a note:
 /// `Err(reason)` when any fails, else every Z in order.
 fn resolve_all<const N: usize>(

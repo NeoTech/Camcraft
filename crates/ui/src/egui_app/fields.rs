@@ -22,7 +22,7 @@ pub(super) use crate::operations::{
 };
 pub(super) use crate::state::State;
 
-pub(super) use super::heights_page::{HEIGHT_SRC_ID, LEVELS, corner_note, height_editor, retract_hop, retract_radius_hop, retract_note};
+pub(super) use super::heights_page::{HEIGHT_SRC_ID, LEVELS, corner_note, height_editor, radial_row, radial_rows, retract_hop, retract_note, retract_radius_hop};
 pub(super) use super::kind_editors::*;
 pub(super) use super::layout::{
     CTRL_W, auto_opt, auto_value, button, button_enabled, check_row, consequence, drag_row, drag_sized_row, group,

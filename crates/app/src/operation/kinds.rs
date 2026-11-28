@@ -24,7 +24,7 @@ use crate::tools::ToolKind;
 use crate::verify::Mode;
 
 use super::tool_law as tk;
-use super::types::{Height, HeightReference, OpParams, OpType, Tilt};
+use super::types::{Height, HeightReference, OpParams, OpType, RadialHeight, RadialSource, Tilt};
 
 /// The numbers that ride a retype: every kind stores them under the same
 /// name, so the draft rule is one carry, then the row's seed (M1.5.2's
@@ -1635,6 +1635,15 @@ fn seed_rotary_contour(c: &Carried) -> OpParams {
         retract_z: None,
         top_z: c.top,
         bottom_z: c.bottom,
+        // #2774: a new rotary contour stands its rapid planes off the bar's
+        // axis as radii: clearance five mm outside the stock OD, retract ten
+        // mm (the twins hop between passes just as high). The cut band keeps
+        // the author's Z stations: a standing contour's ladder runs along the
+        // axis, so its Top/Bottom stay planes.
+        clearance_r: Some(RadialHeight::of(RadialSource::StockOd, 5.0)),
+        retract_r: Some(RadialHeight::of(RadialSource::StockOd, 10.0)),
+        top_r: None,
+        bottom_r: None,
         feed: c.feed,
         plunge_feed: c.plunge,
         climb: c.climb,
@@ -1654,6 +1663,14 @@ fn seed_rotary_parallel(c: &Carried) -> OpParams {
         retract_z: None,
         top_z: c.top,
         bottom_z: c.bottom,
+        // #2774: the same radial rapids as the contour twin. The band's
+        // Top/Bottom stay the author's planes: a stated radius there moves
+        // the raster's radial window, and that is the author's choice, not
+        // a seed's.
+        clearance_r: Some(RadialHeight::of(RadialSource::StockOd, 5.0)),
+        retract_r: Some(RadialHeight::of(RadialSource::StockOd, 10.0)),
+        top_r: None,
+        bottom_r: None,
         feed: c.feed,
         plunge_feed: c.plunge,
         climb: c.climb,
@@ -1735,6 +1752,14 @@ fn seed_rotary_offset(c: &Carried) -> OpParams {
         clearance_z: c.clearance,
         top_z: c.top,
         bottom_z: c.bottom,
+        // #2774: the wrap ladder's rapids stand five mm outside the stock
+        // OD, about the bar's axis. No retract radius (the kernel names its
+        // own rapids) and no bottom radius (the rho ladder's floor is the
+        // part's own skin). The band's top stays the kernel's stock radius:
+        // the roughing ladder starts at the stock skin, and a stated top
+        // radius there is the author's choice, not a seed's.
+        clearance_r: Some(RadialHeight::of(RadialSource::StockOd, 5.0)),
+        top_r: None,
         stepdown: c.stepdown,
         feed: c.feed,
         plunge_feed: c.plunge,

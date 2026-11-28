@@ -68,6 +68,8 @@ use crate::verify::{self, VerifyContext, Warning};
 
 mod heights;
 pub use heights::*;
+mod radial_heights;
+pub use radial_heights::{RadialContext, ResolvedRadial, radial_context, radial_context_about, radial_fields, radial_gate, resolve_one, resolve_radial};
 mod heights_sel;
 pub use heights_sel::*;
 mod kinds;

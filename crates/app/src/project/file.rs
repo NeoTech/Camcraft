@@ -210,7 +210,16 @@ use super::*;
 /// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
 /// A v83 reader would drop the table and the stacks, and the next
 /// component edit could not update the tools built from them.
-pub const PROJECT_VERSION: u32 = 84;
+/// v85 (#2774): a rotary operation may state its heights as radii about
+/// the fitted axis (`clearance_r`, `retract_r`, `top_r`, `bottom_r`).
+/// Absent is the Z-plane law every older file ran, so a v84 file steps
+/// up unchanged. This step is a compatibility break: every file this
+/// build writes says v85, and a v84 reader refuses the new files (see
+/// the `BREAKING CHANGE` footer of the commit that stepped the ladder).
+/// An old reader must refuse a v85 file rather than read only the Z
+/// fields and post a clearance shape that does not match the stored
+/// radii.
+pub const PROJECT_VERSION: u32 = 85;
 
 /// v79 (#3368), a conditional step of the release it shipped in: only
 /// a file that held a flat or ball taper tip said 79, and an older

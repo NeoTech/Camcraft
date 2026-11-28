@@ -345,6 +345,23 @@ pub(super) fn heights_gate(
     Ok(())
 }
 
+/// The rotary radial door (#2774): a clearance or retract radius that stands
+/// inside the stock's or the part's own radius about the fitted axis is
+/// refused when the parameters are made or edited, in the generator's own
+/// words. Open for every other kind and for a rotary op that still uses the
+/// Z planes; the generator's own law stays the backstop.
+pub(super) fn rotary_radial_gate(
+    world: &World,
+    setup: Option<&str>,
+    src: &SrcRef,
+    params: &OpParams,
+) -> Result<(), CommandError> {
+    match operation::radial_gate(world, setup, src, params) {
+        Some(why) => Err(CommandError::Invalid(why)),
+        None => Ok(()),
+    }
+}
+
 /// The flat-area door: a pocket-family selection that collapses to a
 /// line seen from above (a vertical wall's rim, a non-horizontal face)
 /// is refused when it is picked or the kind is set, with the fix, not

@@ -796,6 +796,22 @@ impl OpParams {
                         }
                         _ => true,
                     })
+                    // #2774 review: the radial fields are part of the
+                    // door - a radius whose offset is not finite (or an
+                    // absolute one under the axis) is refused before it
+                    // is stored, on create, edit, paste and retype alike.
+                    && (match self {
+                        OpParams::RotaryContour { clearance_r, retract_r, top_r, bottom_r, .. }
+                        | OpParams::RotaryParallel { clearance_r, retract_r, top_r, bottom_r, .. } => {
+                            let radial = |h: &Option<crate::operation::RadialHeight>| h.as_ref().is_none_or(crate::operation::RadialHeight::is_sane);
+                            radial(clearance_r) && radial(retract_r) && radial(top_r) && radial(bottom_r)
+                        }
+                        OpParams::RotaryOffset { clearance_r, top_r, .. } => {
+                            clearance_r.as_ref().is_none_or(crate::operation::RadialHeight::is_sane)
+                                && top_r.as_ref().is_none_or(crate::operation::RadialHeight::is_sane)
+                        }
+                        _ => true,
+                    })
                     && (match self {
                         OpParams::Parallel5D { stepover, .. }
                         | OpParams::Swarf { stepover, .. }

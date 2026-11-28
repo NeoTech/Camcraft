@@ -933,6 +933,16 @@ pub enum ParamsDto {
         clearance_z: HeightDto,
         top_z: HeightDto,
         bottom_z: HeightDto,
+        /// #2774 (v85): the radial heights about the fitted axis. Absent
+        /// is the Z-plane law every older file ran.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clearance_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retract_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bottom_r: Option<RadialHeightDto>,
         feed: f64,
         plunge_feed: f64,
         climb: bool,
@@ -961,6 +971,15 @@ pub enum ParamsDto {
         clearance_z: HeightDto,
         top_z: HeightDto,
         bottom_z: HeightDto,
+        /// #2774 (v85): the radial heights, absent on every older file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clearance_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retract_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bottom_r: Option<RadialHeightDto>,
         feed: f64,
         plunge_feed: f64,
         climb: bool,
@@ -994,6 +1013,14 @@ pub enum ParamsDto {
         clearance_z: HeightDto,
         top_z: HeightDto,
         bottom_z: HeightDto,
+        /// #2774 (v85): the clearance cylinder and the cut band's top,
+        /// absent on every older file. No `retract_r` (the kernel names
+        /// its own rapids plane) and no `bottom_r` (the rho ladder's floor
+        /// is the part's skin).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clearance_r: Option<RadialHeightDto>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_r: Option<RadialHeightDto>,
         /// Radial infeed per wrap level.
         stepdown: f64,
         feed: f64,
@@ -1925,6 +1952,59 @@ impl From<HeightDto> for crate::operation::Height {
         crate::operation::Height {
             reference: d.reference.into(),
             offset: d.offset,
+        }
+    }
+}
+
+/// A rotary height on the wire (#2774): a source word plus an offset in mm,
+/// read as a radius about the fitted axis. Declared at v85; absent on every
+/// older file, which runs the Z-plane law unchanged.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct RadialHeightDto {
+    pub source: RadialSourceDto,
+    #[serde(default)]
+    pub offset: f64,
+}
+
+/// The source part of a [`RadialHeightDto`], serialized as a plain
+/// snake_case string - the same discipline as `HeightRefDto`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RadialSourceDto {
+    StockOd,
+    ModelMaxRadius,
+    Absolute,
+}
+
+impl From<crate::operation::RadialHeight> for RadialHeightDto {
+    fn from(h: crate::operation::RadialHeight) -> Self {
+        RadialHeightDto { source: h.source.into(), offset: h.offset }
+    }
+}
+
+impl From<RadialHeightDto> for crate::operation::RadialHeight {
+    fn from(d: RadialHeightDto) -> Self {
+        crate::operation::RadialHeight { source: d.source.into(), offset: d.offset }
+    }
+}
+
+impl From<crate::operation::RadialSource> for RadialSourceDto {
+    fn from(s: crate::operation::RadialSource) -> Self {
+        use crate::operation::RadialSource as R;
+        match s {
+            R::StockOd => RadialSourceDto::StockOd,
+            R::ModelMaxRadius => RadialSourceDto::ModelMaxRadius,
+            R::Absolute => RadialSourceDto::Absolute,
+        }
+    }
+}
+
+impl From<RadialSourceDto> for crate::operation::RadialSource {
+    fn from(s: RadialSourceDto) -> Self {
+        match s {
+            RadialSourceDto::StockOd => crate::operation::RadialSource::StockOd,
+            RadialSourceDto::ModelMaxRadius => crate::operation::RadialSource::ModelMaxRadius,
+            RadialSourceDto::Absolute => crate::operation::RadialSource::Absolute,
         }
     }
 }

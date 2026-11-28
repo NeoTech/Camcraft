@@ -71,6 +71,7 @@ use crate::machining2d::GenError;
 use crate::machining3d::{self, Pocket3DParams};
 
 use super::axis;
+use super::radial::RadialHeights;
 use super::rotary_seam;
 use super::rotary_seam_angle;
 use super::rotary_sheet::{self, Basis, Sheet};
@@ -122,7 +123,22 @@ pub fn rotary_offset_in(
     p: &Pocket3DParams,
     c: &AxisControl,
 ) -> Result<Toolpath, GenError> {
-    let (base, d) = develop(facets, stock, p)?;
+    rotary_offset_radial(facets, stock, p, c, RadialHeights::NONE)
+}
+
+/// [`rotary_offset_in`] with #2774's radial heights: `clearance` is the tip
+/// radius of the rapids cylinder, and `top` caps the rho ladder's start
+/// (never past the stock's own radius). The kernel names its own retract and
+/// the ladder's floor is the part's skin, so neither is a field here. All
+/// `None` keeps the kernel's own numbers, byte for byte.
+pub fn rotary_offset_radial(
+    facets: &[Triangle],
+    stock: Option<&[Triangle]>,
+    p: &Pocket3DParams,
+    c: &AxisControl,
+    radial: RadialHeights,
+) -> Result<Toolpath, GenError> {
+    let (base, d) = develop(facets, stock, p, radial)?;
     // Adaptive's in-cut kink law holds on the posted chords too; the
     // other strategies keep the sagitta-only chords they always had.
     let cap = (p.strategy == crate::machining2d::PocketStrategy::Adaptive)
@@ -134,15 +150,18 @@ pub fn rotary_offset_in(
 /// (#2772 parts 1-2, `axis_stated::judged_any`) - the machine's rotary
 /// line or the operation's own direction, anchored through the work
 /// offset's origin. The same development the plain entry wraps about
-/// its fit; the fit stays inside the plain entry.
+/// its fit; the fit stays inside the plain entry. `radial` is #2774's
+/// clearance radius and top cap about that axis (see
+/// [`rotary_offset_radial`]).
 pub fn rotary_offset_stated(
     facets: &[Triangle],
     stock: Option<&[Triangle]>,
     ax: axis::Axis,
     p: &Pocket3DParams,
     c: &AxisControl,
+    radial: RadialHeights,
 ) -> Result<Toolpath, GenError> {
-    let (base, d) = develop_about(facets, stock, ax, p)?;
+    let (base, d) = develop_about(facets, stock, ax, p, radial)?;
     let cap = (p.strategy == crate::machining2d::PocketStrategy::Adaptive)
         .then(|| wrap_exit::ADAPTIVE_TURN_DEG.to_radians());
     wrap_exit::wrap_exit(&base, &d.ax, &d.e1, &d.e2, d.rho_ref, d.r, c, cap)
@@ -157,7 +176,7 @@ pub fn rotary_offset_developed(
     stock: Option<&[Triangle]>,
     p: &Pocket3DParams,
 ) -> Result<Toolpath, GenError> {
-    develop(facets, stock, p).map(|(base, _)| base)
+    develop(facets, stock, p, RadialHeights::NONE).map(|(base, _)| base)
 }
 
 /// What the world exit needs of the development.
@@ -173,13 +192,14 @@ fn develop(
     facets: &[Triangle],
     stock: Option<&[Triangle]>,
     p: &Pocket3DParams,
+    radial: RadialHeights,
 ) -> Result<(Toolpath, Developed), GenError> {
     if facets.is_empty() {
         return Err(GenError::Invalid("no facets to wrap".into()));
     }
     rotary_seam::refuse_open(facets)?;
     let ax = axis::fit(facets)?;
-    develop_about(facets, stock, ax, p)
+    develop_about(facets, stock, ax, p, radial)
 }
 
 /// The development about a stated axis: the fit's own body, the axis
@@ -189,6 +209,7 @@ fn develop_about(
     stock: Option<&[Triangle]>,
     ax: axis::Axis,
     p: &Pocket3DParams,
+    radial: RadialHeights,
 ) -> Result<(Toolpath, Developed), GenError> {
     if facets.is_empty() {
         return Err(GenError::Invalid("no facets to wrap".into()));
@@ -295,10 +316,25 @@ fn develop_about(
 
     // The ladder in wrap space, run by pocket3d's own entry guards.
     let mut q = *p;
-    q.top_z = rho_ref;
-    q.bottom_z = rho_min.max(0.0);
-    q.clearance_z = rho_ref + p.stepdown + r;
+    // #2774: the band of the two stated cylinders: the top radius caps the
+    // ladder's start, the bottom radius floors it; the clearance radius is
+    // the rapids cylinder (the kernel's own number when the op states none).
+    let band = super::radial_band::band_window(&radial, "Rotary Offset")?;
+    q.top_z = radial.top.map_or(rho_ref, |t| t.min(rho_ref));
+    q.bottom_z = match band {
+        Some((lo, _)) => lo.max(rho_min.max(0.0)),
+        None => rho_min.max(0.0),
+    };
+    q.clearance_z = radial.clearance.unwrap_or(rho_ref + p.stepdown + r);
     q.retract_z = None;
+    if let Some(clear) = radial.clearance
+        && !(clear.is_finite() && clear > q.top_z)
+    {
+        return Err(GenError::Invalid(format!(
+            "Rotary Offset reads its clearance height as a radius about the bar's axis: {clear:.3} mm does not clear the work's {:.3} mm radius - raise it",
+            q.top_z
+        )));
+    }
     if q.top_z < q.bottom_z {
         return Err(GenError::Empty(
             "the wrapped work has no radial extent to rough".into(),

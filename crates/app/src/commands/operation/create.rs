@@ -13,7 +13,7 @@ use crate::schema::{Location, Operation, OperationMeta, Toolpath};
 use crate::setup;
 use crate::verify::Warning;
 
-use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, sinker_gate, slot_gate, tool_door, tool_gate, valid_src, wire_gate};
+use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, rotary_radial_gate, sinker_gate, slot_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Create an operation entity. Deliberately does not generate: a new
 /// operation reads "never generated" until `GenerateOperation` runs, the
@@ -175,6 +175,8 @@ impl CreateOperation {
         // (AGENTS.md: validate early), not deep in the generator - and
         // so is a From: Selection height its source cannot answer.
         heights_gate(world, setup.as_deref(), &src, &params)?;
+        // #2774: a rotary height read as a radius must clear the bar.
+        rotary_radial_gate(world, setup.as_deref(), &src, &params)?;
         if let Some(msg) = crate::operation::side_sane(world, &params, &src) {
             return Err(CommandError::Invalid(msg));
         }
@@ -271,6 +273,8 @@ impl PasteOperation {
             return Err(CommandError::Invalid("copied operation parameters are not usable".into()));
         }
         heights_gate(world, context, &operation.src, &operation.params)?;
+        // #2774: a rotary height read as a radius must clear the bar.
+        rotary_radial_gate(world, context, &operation.src, &operation.params)?;
         if let Some(msg) = crate::operation::side_sane(world, &operation.params, &operation.src) {
             return Err(CommandError::Invalid(msg));
         }

@@ -94,6 +94,10 @@ fn op() -> Operation {
             retract_z: None,
             top_z: Height::fixed(6.0),
             bottom_z: Height::fixed(-8.0),
+            clearance_r: None,
+            retract_r: None,
+            top_r: None,
+            bottom_r: None,
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
@@ -135,7 +139,7 @@ fn the_mill_turn_spindle_as_c_axis_answers_c_and_stamps_it() {
     let w = world(2, Some(machine("mill-turn", vec![rotary("C", [0.0, 0.0, 1.0])])));
     let mut o = op();
     if let OpParams::RotaryParallel { tolerance, clearance_z, retract_z, top_z, bottom_z, feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis, .. } = o.params.clone() {
-        o.params = OpParams::RotaryContour { tolerance, clearance_z, retract_z, top_z, bottom_z, feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis, picks: Default::default() };
+        o.params = OpParams::RotaryContour { tolerance, clearance_z, retract_z, top_z, bottom_z, clearance_r: None, retract_r: None, top_r: None, bottom_r: None, feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis, picks: Default::default() };
     }
     let (path, _) = operation::generate(&w, &o, "").expect("the spindle's C holds the standing bar");
     assert!(path.moves.iter().all(|m| m.rotary.is_some()), "every move states its C");

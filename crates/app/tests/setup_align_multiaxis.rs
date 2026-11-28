@@ -360,13 +360,13 @@ fn prove_rotary(kind: &str, raw: Vec<Triangle>, stock: &(StockShape, Location), 
 
 #[test]
 fn turned_rotary_contour_cuts_posts_and_fits_axis_like_the_baked_part() {
-    let rc = OpParams::RotaryContour { tolerance: 0.1, clearance_z: Height::fixed(25.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(-6.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, stated_axis: None, picks: Default::default() };
+    let rc = OpParams::RotaryContour { tolerance: 0.1, clearance_z: Height::fixed(25.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(-6.0), clearance_r: None, retract_r: None, top_r: None, bottom_r: None, feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, stated_axis: None, picks: Default::default() };
     prove_rotary("RotaryContour", unturn_xz(bar_facets()), &cyl_stock(12.4, 32.0, Point3::new(0.0, 0.0, -16.0), IDENTITY_Q), rc, [0.0, 0.0, 1.0], (false, true, OnModelled::CutsAbout([0.0, 1.0, 0.0])));
 }
 
 #[test]
 fn turned_rotary_parallel_cuts_posts_and_fits_axis_like_the_baked_part() {
-    let rp = OpParams::RotaryParallel { tolerance: 0.1, stepover: Some(4.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(1.0), feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, stated_axis: None, picks: Default::default() };
+    let rp = OpParams::RotaryParallel { tolerance: 0.1, stepover: Some(4.0), clearance_z: Height::fixed(20.0), retract_z: None, top_z: Height::fixed(6.0), bottom_z: Height::fixed(1.0), clearance_r: None, retract_r: None, top_r: None, bottom_r: None, feed: 500.0, plunge_feed: 100.0, climb: true, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, stated_axis: None, picks: Default::default() };
     prove_rotary("RotaryParallel", bar_facets(), &cyl_stock(12.4, 32.0, Point3::new(-16.0, 0.0, 0.0), quat_from_axis_angle(1, std::f64::consts::FRAC_PI_2)), rp, [1.0, 0.0, 0.0], (true, false, OnModelled::Refuses));
 }
 
@@ -375,6 +375,8 @@ fn turned_rotary_offset_cuts_posts_and_fits_axis_like_the_baked_part() {
     let ro = OpParams::RotaryOffset {
         links: Links::ROUGH3D, tolerance: 0.1, stepover: 4.0, stock_to_leave: 0.5,
         clearance_z: Height::fixed(20.0), top_z: Height::fixed(14.0), bottom_z: Height::fixed(4.0),
+        clearance_r: None,
+        top_r: None,
         stepdown: 2.0, feed: 500.0, plunge_feed: 100.0, climb: true,
         strategy: PocketStrategy::Auto, entry: Entry3D::Plunge, helix_radius: 1.0,
         optimal_load: DEFAULT_OPTIMAL_LOAD, lead_deg: 0.0, lag_deg: 0.0, max_tilt_deg: 60.0, stated_axis: None,

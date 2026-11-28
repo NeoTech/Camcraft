@@ -8,7 +8,9 @@
 //! every program opens on its clearance pose, and Rotary Parallel's
 //! links are radial. And the pose law the verdicts stand on: the ball the stream
 //! puts at the tip-plus-r-along-the-axis is the ball the ladder
-//! planned, tangent to the skin - not one radius off it.
+//! planned, tangent to the skin - not one radius off it. The radial door
+//! (#2774): a clearance, retract or band radius the bar would drive the
+//! tool through is refused by name when the command is made.
 //! Provenance: our own fixtures (the operations suite's turned bar);
 //! the law is the Prime Directive's "correct, or visibly refused".
 //!
@@ -18,12 +20,12 @@ use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::MoveKind;
 use camcraft_app::commands::{
-    AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock,
-    SetWcsOrigin,
+    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel,
+    LoadMachine, SetStock, SetWcsOrigin,
 };
 use camcraft_app::geometry::{quat_from_axis_angle, Mesh, Point3, Triangle, IDENTITY_Q};
 use camcraft_app::model;
-use camcraft_app::operation::{self, Height, OpParams, OpStatus, SrcRef};
+use camcraft_app::operation::{self, Height, OpParams, OpStatus, RadialHeight, RadialSource, SrcRef};
 use camcraft_app::posting;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
@@ -80,6 +82,10 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             retract_z: None,
             top_z: Height::fixed(14.0),
             bottom_z: Height::fixed(-14.0),
+            clearance_r: None,
+            retract_r: None,
+            top_r: None,
+            bottom_r: None,
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
@@ -98,6 +104,10 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             retract_z: None,
             top_z: Height::fixed(6.0),
             bottom_z: Height::fixed(1.0),
+            clearance_r: None,
+            retract_r: None,
+            top_r: None,
+            bottom_r: None,
             feed: 500.0,
             plunge_feed: 100.0,
             climb: true,
@@ -115,6 +125,8 @@ fn params(kind: Kind, clearance: f64) -> OpParams {
             clearance_z: Height::fixed(clearance),
             top_z: Height::fixed(14.0),
             bottom_z: Height::fixed(-14.0),
+            clearance_r: None,
+            top_r: None,
             stepdown: 0.5,
             feed: 500.0,
             plunge_feed: 100.0,
@@ -277,7 +289,7 @@ fn a_full_turn_rotary_parallel_refuses_on_a_head_that_cannot_reach_under() {
     else {
         unreachable!("the parallel params")
     };
-    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis: None, picks: Default::default() };
+    let op = OpParams::RotaryParallel { tolerance, stepover, clearance_z, retract_z, top_z, bottom_z: Height::fixed(-6.2), clearance_r: None, retract_r: None, top_r: None, bottom_r: None, feed, plunge_feed, climb, lead_deg, lag_deg, max_tilt_deg, stated_axis: None, picks: Default::default() };
     let world = world_with(Kind::Parallel, 12.4, op);
     let report = posting::verification_report(&world);
     let text = format!("{:?}", report.problems);
@@ -427,4 +439,401 @@ fn rotary_parallel_retracts_along_the_radius_and_verifies_clean() {
         }
     }
     assert!(retracts > 3, "passes retract, got {retracts}");
+}
+
+/// A standing bar with one clean rotary contour on it, for the radial
+/// door's tests (#2774). The bar: part r6, stock d12.4, so the work floor
+/// about the axis is 6.2 mm.
+fn bar_with_contour(radial: [Option<RadialHeight>; 4]) -> World {
+    let world = new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    let loc = Location { pos: Point3::new(0.0, 0.0, -16.0), rot: IDENTITY_Q };
+    h.execute(&world, SetStock::new(&world, StockShape::Cylinder { diameter: 12.4, height: 32.0 }, loc).expect("bar stock"));
+    h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(revolve(16))));
+    let mut params = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, retract_r, top_r, bottom_r, .. } = &mut params {
+        *clearance_r = radial[0];
+        *retract_r = radial[1];
+        *top_r = radial[2];
+        *bottom_r = radial[3];
+    }
+    let op = CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), params).expect("create");
+    h.execute(&world, op);
+    world
+}
+
+#[test]
+fn a_radial_clearance_inside_the_work_is_refused_by_name() {
+    // #2774: a rapid cylinder at r5.9 about the axis - 0.3 mm inside the
+    // d12.4 bar's own skin - would drive the tool through metal on every
+    // hop. The door refuses it when the command is made, not at Generate.
+    let world = bar_with_contour([None, None, None, None]);
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, .. } = &mut p {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, -0.3));
+    }
+    let e = CreateOperation::new(&world, "OP2", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("a clearance radius inside the bar must refuse the command");
+    let msg = e.to_string();
+    assert!(msg.contains("Clearance radius") && msg.contains("stands inside"), "{msg}");
+}
+
+#[test]
+fn a_radial_edit_inside_the_work_keeps_the_stored_heights() {
+    // The edit path answers the same door: the bad retract radius is
+    // refused at the command, and the op keeps the heights it stored.
+    let world = bar_with_contour([
+        Some(RadialHeight::of(RadialSource::StockOd, 5.0)),
+        Some(RadialHeight::of(RadialSource::StockOd, 10.0)),
+        None,
+        None,
+    ]);
+    let mut bad = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, retract_r, .. } = &mut bad {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, 5.0));
+        *retract_r = Some(RadialHeight::of(RadialSource::StockOd, -0.3));
+    }
+    let e = EditOperationParams::new(&world, "OP", bad).map(|_| ()).expect_err("a retract radius inside the bar must refuse the edit");
+    let msg = e.to_string();
+    assert!(msg.contains("Retract radius") && msg.contains("stands inside"), "{msg}");
+    let op = model::operation_of(&world, &model::find_by_name(&world, "OP").expect("op")).expect("params");
+    if let OpParams::RotaryContour { retract_r, .. } = op.params {
+        assert_eq!(retract_r, Some(RadialHeight::of(RadialSource::StockOd, 10.0)), "the refused edit must not touch the stored heights");
+    }
+}
+
+#[test]
+fn a_radial_band_crossed_is_refused_by_name() {
+    // #2774: Top r8 under Bottom r9 - the rho window empty - is refused
+    // at the command, with the two names in the words.
+    let world = bar_with_contour([None, None, None, None]);
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { top_r, bottom_r, .. } = &mut p {
+        *top_r = Some(RadialHeight::absolute(8.0));
+        *bottom_r = Some(RadialHeight::absolute(9.0));
+    }
+    let e = CreateOperation::new(&world, "OP2", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("a top radius under the bottom radius must refuse the command");
+    let msg = e.to_string();
+    assert!(msg.contains("Top radius") && msg.contains("Bottom radius"), "{msg}");
+}
+
+#[test]
+fn a_band_at_the_clearance_cylinder_is_refused_by_name() {
+    // #2774: the rapids ride the clearance cylinder. A top radius at or
+    // above it puts a cut where the hop travels - refused when the
+    // command is made.
+    let world = bar_with_contour([None, None, None, None]);
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, top_r, .. } = &mut p {
+        *clearance_r = Some(RadialHeight::absolute(8.0));
+        *top_r = Some(RadialHeight::absolute(8.0));
+    }
+    let e = CreateOperation::new(&world, "OP2", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("a band at the rapids cylinder must refuse the command");
+    let msg = e.to_string();
+    assert!(msg.contains("Top radius") && msg.contains("Clearance radius"), "{msg}");
+}
+
+#[test]
+fn a_stated_axis_resolves_the_radii_generation_judges() {
+    // #2774 review: the resolver must read the radii about the SAME axis
+    // generation turns about - a stated axis judged against the model's
+    // faces (`axis_stated::judged_any`), never the free fit alone. On the
+    // R5 sphere (12 latitudes, 24 longitudes) the fit refuses - every
+    // axis fits the model equally - but the op's stated Z axis is judged
+    // fine by the very law generation runs, so a stated clearance radius
+    // must resolve (and store), not refuse on a fit the generator never
+    // runs.
+    let world = new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    h.execute(&world, ImportModel::from_mesh("ball", Mesh::from_facets(sphere(5.0, 24, 12))));
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { stated_axis, clearance_r, .. } = &mut p {
+        *stated_axis = Some([0.0, 0.0, 1.0]);
+        *clearance_r = Some(RadialHeight::absolute(8.0));
+    }
+    CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("ball".into()), p)
+        .expect("the stated axis carries the radial resolution");
+}
+
+/// A UV sphere of radius `r` about the origin, `nlon` x `nlat` quads - the
+/// model whose free fit refuses ("every axis fits this model equally")
+/// while a stated axis through its centre is judged fine.
+fn sphere(r: f64, nlon: usize, nlat: usize) -> Vec<Triangle> {
+    let pt = |i: usize, j: usize| {
+        let ph = std::f64::consts::PI * (i as f64 / nlat as f64 - 0.5);
+        let th = std::f64::consts::TAU * j as f64 / nlon as f64;
+        Point3::new(r * ph.cos() * th.cos(), r * ph.cos() * th.sin(), r * ph.sin())
+    };
+    let mut s = Vec::new();
+    for i in 0..nlat {
+        for j in 0..nlon {
+            if i > 0 {
+                s.push(Triangle::new(pt(i, j), pt(i + 1, j), pt(i + 1, j + 1)));
+            }
+            if i + 1 < nlat {
+                s.push(Triangle::new(pt(i, j), pt(i + 1, j + 1), pt(i, j + 1)));
+            }
+        }
+    }
+    s
+}
+
+#[test]
+fn a_radial_radius_that_is_no_radius_is_refused_at_the_command() {
+    // #2774 review: every set radial field is validated before it is
+    // stored - on create, edit, paste and retype through the same
+    // `is_sane` door. A NaN offset and an absolute radius under the axis
+    // are no radius at all: refused here, never stored for Generate to
+    // trip over.
+    let world = bar_with_contour([None, None, None, None]);
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, .. } = &mut p {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, f64::NAN));
+    }
+    let e = CreateOperation::new(&world, "OP2", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("a NaN radial offset must refuse the command");
+    assert!(e.to_string().contains("not usable"), "{e}");
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { bottom_r, .. } = &mut p {
+        *bottom_r = Some(RadialHeight::absolute(-1.0));
+    }
+    let e = CreateOperation::new(&world, "OP2", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("an absolute Bottom radius under the axis must refuse the command");
+    assert!(e.to_string().contains("not usable"), "{e}");
+}
+
+#[test]
+fn a_radial_radius_its_source_cannot_answer_is_refused_by_name() {
+    // #2774 review: the gate no longer discards a resolution failure - a
+    // stock-Od radius with no stock names the setup page at the command,
+    // never passes silent for the generator to refuse later.
+    let world = new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(revolve(16))));
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, .. } = &mut p {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, 5.0));
+    }
+    let e = CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), p)
+        .map(|_| ())
+        .expect_err("a stock-Od radius with no stock must refuse the command");
+    let msg = e.to_string();
+    assert!(msg.contains("Clearance radius") && msg.contains("no stock is set"), "{msg}");
+}
+
+#[test]
+fn a_band_that_crosses_no_skin_is_refused_by_name() {
+    // #2774's Prime Directive door at the generator: the tool ball's
+    // reach about this bar's axis spans 0..6.0 mm - its skin stands at
+    // r5..r6. A band r6.05..r6.5 above that reach cuts nothing: the
+    // generate refuses with both radii in the words, never an empty
+    // path and never the uncut one.
+    let e = parallel_generate([None, None, Some(RadialHeight::absolute(6.5)), Some(RadialHeight::absolute(6.05))])
+        .expect_err("a band that crosses no skin must refuse the generate");
+    assert!(e.contains("6.05") && e.contains("6.5") && e.contains("crosses no part skin"), "{e}");
+}
+
+#[test]
+fn the_radial_heights_survive_the_project_round_trip() {
+    // #2774: the file stores the expression, never a resolved radius. The
+    // read-back is equal field for field, and a v84 writer (no radial
+    // keys) reads back as the Z-plane law - every v84 op's byte-identical
+    // behaviour, the no-op step the v85 rung records.
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, retract_r, top_r, bottom_r, .. } = &mut p {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, 5.0));
+        *retract_r = Some(RadialHeight::of(RadialSource::StockOd, 10.0));
+        *top_r = Some(RadialHeight::of(RadialSource::ModelMaxRadius, -0.5));
+        *bottom_r = Some(RadialHeight::absolute(2.5));
+    }
+    let saved = camcraft_app::project::params_to_json(&p);
+    assert_eq!(camcraft_app::project::params_from_json(&saved).expect("round trip"), p);
+    let mut v73 = saved.clone();
+    let obj = v73.get_mut("rotary_contour").and_then(serde_json::Value::as_object_mut).expect("rotary contour fields");
+    for k in ["clearance_r", "retract_r", "top_r", "bottom_r"] {
+        assert!(obj.remove(k).is_some(), "the save names {k}");
+    }
+    let mut plain = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, .. } = &mut plain {
+        *clearance_r = Some(RadialHeight::of(RadialSource::StockOd, 5.0));
+    }
+    let mut half = v73.clone();
+    let obj = half.get_mut("rotary_contour").and_then(serde_json::Value::as_object_mut).expect("rotary contour fields");
+    obj.insert("clearance_r".to_string(), saved["rotary_contour"]["clearance_r"].clone());
+    assert_eq!(camcraft_app::project::params_from_json(&half).expect("a v73 file plus one radial key"), plain);
+    assert_eq!(camcraft_app::project::params_from_json(&v73).expect("a v73 file"), params(Kind::Contour, 25.0));
+}
+
+/// The bar laid along x with one Rotary Parallel that STATES its radial
+/// heights (#2774): clearance r8, retract r6.5, band r4.0..r5.5. The Z
+/// fields stay at the plain fixture's numbers (clearance 25, band
+/// 1.0..6.0) - the test reads which numbers the path actually moved to.
+fn parallel_world(radii: [Option<RadialHeight>; 4]) -> World {
+    parallel_generate(radii).expect("generate")
+}
+
+/// The same build, with the generator's answer in hand instead of a panic:
+/// a band that crosses no skin must refuse there.
+fn parallel_generate(radii: [Option<RadialHeight>; 4]) -> Result<World, String> {
+    let world = new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    let loc = Location { pos: Point3::new(-16.0, 0.0, 0.0), rot: quat_from_axis_angle(1, std::f64::consts::FRAC_PI_2) };
+    h.execute(&world, SetStock::new(&world, StockShape::Cylinder { diameter: 12.4, height: 32.0 }, loc).expect("bar stock"));
+    h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(laid())));
+    let mut p = params(Kind::Parallel, 25.0);
+    if let OpParams::RotaryParallel { stepover, clearance_r, retract_r, top_r, bottom_r, .. } = &mut p {
+        *stepover = Some(0.5);
+        *clearance_r = radii[0];
+        *retract_r = radii[1];
+        *top_r = radii[2];
+        *bottom_r = radii[3];
+    }
+    h.execute(&world, CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), p).expect("create"));
+    let g = GenerateOperation::new(&world, "OP").map_err(|e| e.to_string())?;
+    h.execute(&world, g);
+    Ok(world)
+}
+
+/// The standing bar with one Rotary Contour that STATES its radial
+/// heights (#2774), generated: the contour's link law is the one that
+/// converts stated TIP radii to the planning centers, so its envelope
+/// answers the reviewer's probe.
+fn contour_generate(radii: [Option<RadialHeight>; 4]) -> Result<World, String> {
+    let world = new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    let loc = Location { pos: Point3::new(0.0, 0.0, -16.0), rot: IDENTITY_Q };
+    h.execute(&world, SetStock::new(&world, StockShape::Cylinder { diameter: 12.4, height: 32.0 }, loc).expect("bar stock"));
+    h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(revolve(16))));
+    let mut p = params(Kind::Contour, 25.0);
+    if let OpParams::RotaryContour { clearance_r, retract_r, top_r, bottom_r, .. } = &mut p {
+        *clearance_r = radii[0];
+        *retract_r = radii[1];
+        *top_r = radii[2];
+        *bottom_r = radii[3];
+    }
+    h.execute(&world, CreateOperation::new(&world, "OP", "BN-0600", SrcRef::Entity("bar".into()), p).expect("create"));
+    let g = GenerateOperation::new(&world, "OP").map_err(|e| e.to_string())?;
+    h.execute(&world, g);
+    Ok(world)
+}
+
+#[test]
+fn the_stated_contour_radii_clear_the_work() {
+    // #2774 review probe (the P1-class one): stated clearance R8 and
+    // retract R6.5 on the d12.4 bar used to emit the exit at
+    // R6.5 - one ball radius (the 3 mm BN-0600 ball): the verifier read
+    // `Envelope { gouge_mm: 2.5 }` into the r6 wall and RapidInStock
+    // warnings, and blocked the post. The link law converts each stated
+    // TIP radius to the planning center one ball OUTSIDE it, so the
+    // posed tips stand at the stated radii and the program verifies
+    // silent - the exit at R8, every rapid at or over R6.5.
+    let radii = [Some(RadialHeight::absolute(8.0)), Some(RadialHeight::absolute(6.5)), None, None];
+    let world = contour_generate(radii).expect("generate");
+    let c = cache(&world);
+    assert!(blocking(&c).is_empty(), "{:?}", blocking(&c));
+    let rho = |q: Point3| (q.x * q.x + q.y * q.y).sqrt();
+    for (i, m) in c.path.moves.iter().enumerate() {
+        if m.kind == MoveKind::Rapid {
+            assert!(rho(m.to) >= 6.5 - 1e-6, "rapid {i} ends at {}, under the stated hop 6.5", rho(m.to));
+        }
+    }
+    let last = c.path.moves.last().expect("the exit rapid");
+    assert_eq!(last.kind, MoveKind::Rapid);
+    assert!((rho(last.to) - 8.0).abs() < 1e-6, "the exit stands at the stated clearance radius 8, got {}", rho(last.to));
+    let opens = rho(c.path.moves.first().expect("the opening record").from);
+    assert!((opens - 8.0).abs() < 0.02, "the program opens at the stated clearance radius 8, got {opens:.3}");
+}
+
+#[test]
+fn the_stated_radial_heights_move_the_generated_path() {
+    // #2774's Done-means at the document level: the radii the operation
+    // states are the radii the generator moves to, not the Z numbers.
+    // Clearance 8 and retract 6.5 replace the plane's 25; the band
+    // 4.0..5.5 cuts a shell off the r6 bar's crown and leaves its
+    // bottom. The Z-plane twin answers with its own numbers.
+    let radii = [
+        Some(RadialHeight::absolute(8.0)),
+        Some(RadialHeight::absolute(6.5)),
+        Some(RadialHeight::absolute(5.5)),
+        Some(RadialHeight::absolute(4.0)),
+    ];
+    let c = cache(&parallel_world(radii));
+    assert!(blocking(&c).is_empty(), "{:?}", blocking(&c));
+    let rho = |q: Point3| (q.y * q.y + q.z * q.z).sqrt();
+    // The rapids ride the cylinders, never the Z-plane's 25.
+    let mut rapid_max = 0.0_f64;
+    let mut on_hop = 0usize;
+    for m in c.path.moves.iter() {
+        if m.kind == MoveKind::Rapid {
+            let r = rho(m.to);
+            assert!(r >= 6.5 - 1e-6, "a rapid drops under the hop radius: {r:.3}");
+            rapid_max = rapid_max.max(r);
+        } else if m.kind == MoveKind::Feed && (rho(m.to) - 6.5).abs() < 0.02 && rho(m.from) < 6.4 {
+            on_hop += 1; // a pass retracts to the hop 6.5, not to 25
+        }
+    }
+    let opens = rho(c.path.moves.first().expect("the opening record").from);
+    assert!((opens - 8.0).abs() < 0.02, "the program opens at the clearance radius 8, got {opens:.3}");
+    assert!(rapid_max < 20.0, "the rapids still ride the Z-plane's 25: {rapid_max:.3}");
+    assert!(on_hop > 3, "passes retract to the hop cylinder, got {on_hop}");
+    // #2774's band law: the cut tips stand BETWEEN the two cylinders about
+    // the axis (rho), not under a Z plane. The r5 neck's skin sits inside
+    // the band 4.0..5.5 and stays finished; the r6 wall's crown (rho ~6)
+    // and the lower flank rows (rho ~1) stand left.
+    let band = |r: f64| (4.0 - 0.05..=5.5 + 0.05).contains(&r);
+    let (mut cut_max, mut cut_min) = (f64::NEG_INFINITY, f64::INFINITY);
+    let mut cut_tips = 0usize;
+    for m in c.path.moves.iter() {
+        match m.kind {
+            MoveKind::Plunge => {
+                let r = rho(m.to);
+                assert!(band(r), "a plunge lands off the band: {r:.3}");
+                cut_tips += 1;
+            }
+            MoveKind::Feed => {
+                let (a, b) = (rho(m.from), rho(m.to));
+                if a < 6.4 && b < 6.4 {
+                    assert!(band(a) && band(b), "a cut tip leaves the band: {a:.3} -> {b:.3}");
+                    cut_max = cut_max.max(a.max(b));
+                    cut_min = cut_min.min(a.min(b));
+                    cut_tips += 1;
+                }
+            }
+            MoveKind::Rapid => {}
+        }
+    }
+    assert!(cut_tips > 50, "the band left no cut at all, got {cut_tips}");
+    assert!(cut_max <= 5.5 + 0.05, "a cut crosses the top cylinder: rho {cut_max:.3}");
+    assert!(cut_min >= 4.0 - 0.05, "a cut drops under the bottom cylinder: rho {cut_min:.3}");
+    assert!(cut_max >= 4.95, "the band must still finish the r5 neck skin: {cut_max:.3}");
+    // The Z-plane twin cuts its window on down to rho ~1 - the band's
+    // floor at 4.0 left those flank rows standing.
+    let plain = cache(&world_for(Kind::Parallel, 12.4, 25.0));
+    let twin_max = plain.path.moves.iter().filter(|m| m.kind == MoveKind::Rapid).map(|m| rho(m.to)).fold(0.0_f64, f64::max);
+    assert!(twin_max >= 25.0 - 1e-6, "the twin lost its Z clearance: {twin_max:.3}");
+    let twin_min = plain
+        .path
+        .moves
+        .iter()
+        .filter(|m| m.kind != MoveKind::Rapid && rho(m.to) < 6.4 && rho(m.to) > 0.1)
+        .map(|m| rho(m.to))
+        .fold(f64::INFINITY, f64::min);
+    assert!(twin_min < 3.0, "the twin does not cut the lower flank to rho ~1: {twin_min:.3}");
 }

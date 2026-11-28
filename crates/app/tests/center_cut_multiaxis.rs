@@ -235,6 +235,8 @@ fn rotary_offset_on_the_bar() -> (World, OpParams) {
         clearance_z: Height::fixed(20.0),
         top_z: Height::fixed(14.0),
         bottom_z: Height::fixed(-14.0),
+        clearance_r: None,
+        top_r: None,
         stepdown: 0.5,
         feed: 500.0,
         plunge_feed: 100.0,

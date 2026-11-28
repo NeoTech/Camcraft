@@ -305,6 +305,8 @@ mod tests;
 #[cfg(test)]
 mod heights_tests;
 #[cfg(test)]
+mod radial_rows_tests;
+#[cfg(test)]
 mod fixture_tests;
 #[cfg(test)]
 mod fixture_ux_tests;

@@ -14,6 +14,10 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let _ = (u, tab, op_ctx);
     #[allow(unused_variables)]
     let (side_note, auto_note, cycle_note, engrave) = (cx.side_note, cx.auto_note, cx.cycle_note, cx.engrave);
+    // The open draft's own stated rotation axis (#2772): the radial rows'
+    // echo resolves about the same judged axis the generators turn about.
+    // Read before the match - the arms borrow the draft's fields mutably.
+    let stated = camcraft_app::rotary_stated::op_stated(params);
     match params {
         // The rotary twins (M5.1 stage E): the swarf family's panel
         // worded for the TURN - the axis is a reading of the model, so
@@ -27,6 +31,10 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             retract_z,
             top_z,
             bottom_z,
+            clearance_r,
+            retract_r,
+            top_r,
+            bottom_r,
             feed,
             plunge_feed,
             climb,
@@ -35,26 +43,37 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             max_tilt_deg,
             stated_axis,
             picks: _,
-        } => rotary_editor(
-            ui,
-            world,
-            op_ctx.as_deref(),
-            u,
-            tab,
-            tolerance,
-            None,
-            clearance_z,
-            retract_z,
-            top_z,
-            bottom_z,
-            feed,
-            plunge_feed,
-            climb,
-            lead_deg,
-            lag_deg,
-            max_tilt_deg,
-            stated_axis,
-        ),
+        } => {
+            rotary_editor(
+                ui,
+                world,
+                op_ctx.as_deref(),
+                u,
+                tab,
+                tolerance,
+                None,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                feed,
+                plunge_feed,
+                climb,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            );
+            if tab == SEC_HEIGHTS {
+                radial_rows(
+                    ui, world, op_ctx.as_deref(), stated,
+                    [("Clearance", clearance_r, camcraft_app::operation::RadialSource::StockOd, 5.0),
+                     ("Retract", retract_r, camcraft_app::operation::RadialSource::StockOd, 10.0),
+                     ("Top", top_r, camcraft_app::operation::RadialSource::ModelMaxRadius, 0.0),
+                     ("Bottom", bottom_r, camcraft_app::operation::RadialSource::Absolute, 0.0)],
+                );
+            }
+        }
         OpParams::RotaryParallel {
             tolerance,
             stepover,
@@ -62,6 +81,10 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             retract_z,
             top_z,
             bottom_z,
+            clearance_r,
+            retract_r,
+            top_r,
+            bottom_r,
             feed,
             plunge_feed,
             climb,
@@ -70,26 +93,37 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             max_tilt_deg,
             stated_axis,
             picks: _,
-        } => rotary_editor(
-            ui,
-            world,
-            op_ctx.as_deref(),
-            u,
-            tab,
-            tolerance,
-            Some(stepover),
-            clearance_z,
-            retract_z,
-            top_z,
-            bottom_z,
-            feed,
-            plunge_feed,
-            climb,
-            lead_deg,
-            lag_deg,
-            max_tilt_deg,
-            stated_axis,
-        ),
+        } => {
+            rotary_editor(
+                ui,
+                world,
+                op_ctx.as_deref(),
+                u,
+                tab,
+                tolerance,
+                Some(stepover),
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                feed,
+                plunge_feed,
+                climb,
+                lead_deg,
+                lag_deg,
+                max_tilt_deg,
+                stated_axis,
+            );
+            if tab == SEC_HEIGHTS {
+                radial_rows(
+                    ui, world, op_ctx.as_deref(), stated,
+                    [("Clearance", clearance_r, camcraft_app::operation::RadialSource::StockOd, 5.0),
+                     ("Retract", retract_r, camcraft_app::operation::RadialSource::StockOd, 10.0),
+                     ("Top", top_r, camcraft_app::operation::RadialSource::ModelMaxRadius, 0.0),
+                     ("Bottom", bottom_r, camcraft_app::operation::RadialSource::Absolute, 0.0)],
+                );
+            }
+        }
         // The wrap ladder (M5.1 stage E2): the pocket's panel worded
         // for the TURN - stepdown infeeds radii, stepover spaces
         // arc-length around the bar - and the twins' pose trio. No
@@ -103,6 +137,8 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             clearance_z,
             top_z,
             bottom_z,
+            clearance_r,
+            top_r,
             stepdown,
             feed,
             plunge_feed,
@@ -149,6 +185,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                     "rotary_offset.bottom",
                 );
                 hint(ui, "the world planes map onto stations along the fitted axis - the ladder roughs the bar only between them (inert on a bar lying flat)");
+                radial_row(ui, world, op_ctx.as_deref(), stated, "Clearance", clearance_r, camcraft_app::operation::RadialSource::StockOd, 5.0);
+                radial_row(ui, world, op_ctx.as_deref(), stated, "Top", top_r, camcraft_app::operation::RadialSource::StockOd, 0.0);
+                hint(ui, "no retract radius anywhere: the kernel's rapids ride the skin by law");
                 group(ui, LEVELS, None, |ui| prop_row(ui, "Stepdown (radial)", |ui| num(ui, u, stepdown)));
                 hint(ui, "the radial infeed: what one wrap level peels off the skin");
             }

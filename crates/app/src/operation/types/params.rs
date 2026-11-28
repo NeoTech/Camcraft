@@ -7,7 +7,7 @@ use crate::links::Links;
 use crate::machining2d::{FaceHoles, Lead, PocketStrategy, RestParams, Side};
 use crate::machining3d::Entry3D;
 
-use super::height::Height;
+use super::height::{Height, RadialHeight};
 use super::sel::{GeoSel, OpType};
 
 /// The 3+2 index of a planar operation (M5.1 stage B): the tool holds
@@ -1003,6 +1003,15 @@ pub enum OpParams {
         retract_z: Option<Height>,
         top_z: Height,
         bottom_z: Height,
+        /// #2774: radii about the fitted axis. `Some` makes the rotary
+        /// heights cylinders - the tool keeps its distance from the axis
+        /// all the way round - and the axial `*_z` fields stay inert for
+        /// the rapid planes. `None` in every one keeps the Z-plane law,
+        /// byte for byte.
+        clearance_r: Option<RadialHeight>,
+        retract_r: Option<RadialHeight>,
+        top_r: Option<RadialHeight>,
+        bottom_r: Option<RadialHeight>,
         feed: f64,
         plunge_feed: f64,
         climb: bool,
@@ -1036,6 +1045,13 @@ pub enum OpParams {
         retract_z: Option<Height>,
         top_z: Height,
         bottom_z: Height,
+        /// #2774: radii about the fitted axis, read as the clearance and
+        /// retract cylinders and the cut band when `Some`. `None` keeps
+        /// the Z-plane law exactly.
+        clearance_r: Option<RadialHeight>,
+        retract_r: Option<RadialHeight>,
+        top_r: Option<RadialHeight>,
+        bottom_r: Option<RadialHeight>,
         feed: f64,
         plunge_feed: f64,
         climb: bool,
@@ -1067,6 +1083,12 @@ pub enum OpParams {
         clearance_z: Height,
         top_z: Height,
         bottom_z: Height,
+        /// #2774: the clearance cylinder and the cut band's top about
+        /// the fitted axis, when `Some`. No `retract_r`: the kernel
+        /// names its own rapids plane by design. No `bottom_r`: the
+        /// rho ladder's floor is the part's own skin.
+        clearance_r: Option<RadialHeight>,
+        top_r: Option<RadialHeight>,
         /// Radial infeed per wrap level, mm.
         stepdown: f64,
         feed: f64,

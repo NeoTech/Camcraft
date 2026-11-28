@@ -1370,15 +1370,16 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
 /// The work offset an operation of the `setup` context posts to: the
 /// setup's 1-based offset index (#196, #342, #931: its label, else 1)
 /// and the setup's one WCS origin as the machine would measure it.
-/// `pub(crate)` so the machine-limit travel check (M2.3 C) reads program
-/// coordinates by exactly this law, not by a second copy of it.
+/// `pub` so the document's readers (the machine-limit travel check, M2.3
+/// C; the display's judged-axis key, #2774) read program coordinates by
+/// exactly this law, not by a second copy of it.
 ///
 /// The stream carries the INDEX; the post writes its own word for it. An
 /// index the post cannot express is never read as offset 1 here - the
 /// gate refuses it by setup name ([`crate::setup_offsets::range_problems`]).
 /// The ENTITY the origin is measured from is the setup's WCS (M3.2 A,
 /// #342), whatever offset it is labelled.
-pub(crate) fn wcs_context(world: &World, setup: Option<&str>) -> (u32, [f64; 3]) {
+pub fn wcs_context(world: &World, setup: Option<&str>) -> (u32, [f64; 3]) {
     let index = crate::setup_offsets::index(world, setup);
     let origin = crate::setup::wcs_entity(world, setup)
         .and_then(|e| model::transform_of(world, &e))

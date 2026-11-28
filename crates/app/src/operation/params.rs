@@ -380,6 +380,7 @@ mod digest;
 mod mill2d;
 mod mill3d;
 mod multiaxis;
+mod multiaxis_pocket;
 mod turning;
 mod holes;
 mod cutting;

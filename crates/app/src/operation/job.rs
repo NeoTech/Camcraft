@@ -47,6 +47,9 @@ pub struct GenJob {
     /// arithmetic and belongs to `run_job`. A tilted op's reference
     /// heights are read along its tool axis (`fold_height`, #2389).
     pub(super) hs: ResolvedHeights,
+    /// #2774: the rotary kinds' radial heights, resolved against the same
+    /// world (all `None` for every other kind and every Z-plane rotary op).
+    pub(super) radial: super::radial_heights::ResolvedRadial,
     pub(super) stock_facets: Option<Vec<Triangle>>,
     pub(super) stock_aabb: Option<(Point3, Point3)>,
     // Sampled mesh stock can miss narrow features; only analytic stock credits this advisory.
@@ -250,6 +253,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // setup resolve here and is refused by `checked_frame` just below.
     let fold_frame = opframe.checked_frame().ok().flatten();
     let hs = resolve_params_folded(world, setup, Some(&op.src), &op.params, fold_frame.as_ref())
+        .map_err(GenError::Invalid)?;
+    // #2774: the rotary kinds' radial heights, resolved against the same
+    // world so the generator reads numbers, never a source.
+    let radial = super::radial_heights::resolve_radial(world, setup, Some(&op.src), &op.params)
         .map_err(GenError::Invalid)?;
 
     // The 3+2 wrap (M5.1 B), read through the seam: the same refusal,
@@ -513,6 +520,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         material,
         frame,
         hs,
+        radial,
         stock_facets,
         stock_aabb,
         analytic_stock,

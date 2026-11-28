@@ -158,6 +158,26 @@ pub(super) fn wp2(h: &mut std::hash::DefaultHasher, p: Point2) {
     w(h, p.y);
 }
 
+/// #2774: a radial height - a source word plus an offset; the digest
+/// carries both so a change to either regenerates once.
+pub(super) fn wr_opt(
+    h: &mut std::hash::DefaultHasher,
+    v: Option<RadialHeight>,
+) {
+    match v {
+        None => h.write_u8(0),
+        Some(r) => {
+            h.write_u8(1);
+            h.write_u8(match r.source {
+                crate::operation::RadialSource::StockOd => 0,
+                crate::operation::RadialSource::ModelMaxRadius => 1,
+                crate::operation::RadialSource::Absolute => 2,
+            });
+            w(h, r.offset);
+        }
+    }
+}
+
 /// The 3+2 index (M5.1 stage B): a tilt changes every move the
 /// generator makes, so it changes the digest. Presence first, then the
 /// basis version (omitted for legacy version 0), then the two letters

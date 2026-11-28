@@ -88,6 +88,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut material,
         frame,
         hs,
+        radial,
         mut stock_facets,
         mut stock_aabb,
         analytic_stock,
@@ -2123,9 +2124,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             };
             let picked = super::rotary_picks::usable(rotary_picks.take(), &material.facets, &ax)?;
             let run = |q: &Finish3DParams| if is_contour {
-                crate::multiaxis::rotary_contour_stated(&material.facets, ax, q, &axis)
+                crate::multiaxis::rotary_contour_stated(&material.facets, ax, q, &axis, radial.into())
             } else {
-                crate::multiaxis::rotary_parallel_over_stated(&material.facets, stock_facets.as_deref(), picked.as_deref(), ax, q, &axis)
+                crate::multiaxis::rotary_parallel_over_stated(&material.facets, stock_facets.as_deref(), picked.as_deref(), ax, q, &axis, radial.into())
             };
             // M13.5 B: the letter is the machine's. The line the
             // kernel will turn about - stated (#2772) or fitted - must
@@ -2253,6 +2254,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 ax,
                 &pp,
                 &axis,
+                radial.into(),
             )?;
             // Issue #33: on the spindle's C the path states its angle,
             // split to the verify budget so the machine's C-linear

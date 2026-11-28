@@ -10,7 +10,7 @@ use crate::model;
 use crate::operation::{self, OpParams, SrcRef};
 use crate::schema::Operation;
 
-use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, sinker_gate, slot_gate, tool_door, tool_gate, valid_src, wire_gate};
+use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, rotary_radial_gate, sinker_gate, slot_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Replace an operation's parameters. The cache is left alone and the
 /// stamp is dropped, so the operation reads Stale immediately: the old
@@ -137,6 +137,8 @@ impl EditOperationParams {
             return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
+        // #2774: a rotary height read as a radius must clear the bar.
+        rotary_radial_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         // #894: a thread's pitch, infeed and holes against the mounted thread mill.
         super::gates::thread_gate(world, &params, &prev.tool)?;
         // #1489: the rest group's previous tool against the mounted one.
@@ -254,6 +256,8 @@ impl ChangeOperationKind {
             return Err(CommandError::Invalid(super::field_refusal::unusable(&params)));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
+        // #2774: a rotary height read as a radius must clear the bar.
+        rotary_radial_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
         if let Some(msg) = crate::operation::side_sane(world, &params, &prev.src) {
             return Err(CommandError::Invalid(msg));
         }
@@ -361,6 +365,7 @@ impl EditOperationLinks {
             if reads_sel {
                 heights_gate(world, prev.setup.as_deref(), &src, &next.params)?;
             }
+            rotary_radial_gate(world, prev.setup.as_deref(), &src, &next.params)?;
             area_gate(world, prev.setup.as_deref(), &src, &next.params)?;
             if !next.area.do_not_touch.is_empty()
                 && let Some(why) = crate::operation::avoid_overlap_issue(

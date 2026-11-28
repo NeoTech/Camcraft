@@ -13,10 +13,10 @@
 
 use egui::{Label, RichText, Ui};
 
-use camcraft_app::operation::{Height, HeightReference, SrcRef};
+use camcraft_app::operation::{Height, HeightReference, RadialHeight, RadialSource, SrcRef};
 use camcraft_app::units;
 
-use crate::operations::{height_echo, offset_label};
+use crate::operations::{height_echo, offset_label, radial_echo};
 
 use super::fields::{combo, num};
 use super::layout::{check_row, consequence, group, hint, prop_row};
@@ -194,9 +194,69 @@ fn height_rows(ui: &mut Ui, world: &flecs_ecs::prelude::World, setup: Option<&st
     });
 }
 
+/// One rotary radial height's rows (#2774): the check turns the slot from
+/// the kind's Z plane into a RADIUS about the fitted axis; on, the From
+/// combo picks what the radius reads (stock OD, model max radius, or a
+/// stated radius), and the offset box carries the resolved radius as its
+/// dimmed echo - the same resolve the gate and the generators use, about
+/// the same judged axis (`stated` is the open draft's own statement,
+/// #2772).
+#[allow(clippy::too_many_arguments)] // one row's flat read
+pub(super) fn radial_row(
+    ui: &mut Ui,
+    world: &flecs_ecs::prelude::World,
+    setup: Option<&str>,
+    stated: Option<[f64; 3]>,
+    title: &str,
+    h: &mut Option<RadialHeight>,
+    dsrc: RadialSource,
+    doff: f64,
+) {
+    let u = units::of(world);
+    let src = op_src(ui);
+    let mut on = h.is_some();
+    if check_row(ui, &format!("{title} radius"), &mut on).changed() {
+        *h = on.then(|| RadialHeight::of(dsrc, doff));
+    }
+    let Some(h) = h.as_mut() else { return };
+    // Scope the row's fields by title, the way `height_editor` scopes by
+    // its tag: the four radial slots share the same helper ids, and two
+    // enabled slots would otherwise collide into one egui id (one combo
+    // node, the last row's state - found by `radial_rows_tests`).
+    ui.push_id(title, |ui| {
+        let mut idx = h.source.kind_index().min(RadialSource::KIND_LABELS.len() - 1);
+        let before = idx;
+        prop_row(ui, "From radius", |ui| combo(ui, "r_kind", &mut idx, &RadialSource::KIND_LABELS));
+        if idx != before {
+            h.source = RadialSource::from_index(idx);
+        }
+        // The echo first, then the box: operations.rs's law, as the Z rows lay
+        // it out. The box holds the offset; under `Absolute` the number IS the
+        // radius, and the row says so - never call it an offset.
+        let echo = radial_echo(world, setup, src.as_ref(), stated, title, h);
+        let label = if h.source == RadialSource::Absolute { "Radius" } else { "Offset" };
+        prop_row(ui, label, |ui| {
+            ui.add(Label::new(RichText::new(echo).weak()).selectable(false));
+            num(ui, u, &mut h.offset);
+        });
+    });
+}
+
+/// The four radial slots of a rotary twin, in the panel's order.
+pub(super) fn radial_rows(
+    ui: &mut Ui,
+    world: &flecs_ecs::prelude::World,
+    setup: Option<&str>,
+    stated: Option<[f64; 3]>,
+    rows: [(&str, &mut Option<RadialHeight>, RadialSource, f64); 4],
+) {
+    for (title, h, dsrc, doff) in rows {
+        radial_row(ui, world, setup, stated, title, h, dsrc, doff);
+    }
+}
+
 #[cfg(test)]
-mod offset_hint_tests {
-    use super::SETUP_OFFSET_HINT;
+mod offset_hint_tests {    use super::SETUP_OFFSET_HINT;
 
     /// #876: the hint names the two pages that really draw the work-offset
     /// dropdown (the WCS page, #343, and the Setups page), and uses plain

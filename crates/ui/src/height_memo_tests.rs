@@ -4,7 +4,7 @@ use camcraft_app::commands::{
     AddTool, AlignPartToSetup, CreateOperation, CreateSetup, DeleteEntity, ImportModel, MoveModel,
     SetStock, SetStockSourceOnly, SetWcsOrigin, TagFixture, UpdateModel,
 };
-use camcraft_app::geometry::{Point3, cube};
+use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
 use camcraft_app::operation::{Height, HeightReference as R, OpParams, SrcRef, Tilt};
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
@@ -265,6 +265,110 @@ fn missing_geometry_and_raw_stock_membership_update_cached_heights() {
         "(= 4.000 along tool axis)",
         "raw stock source is not the model"
     );
+}
+
+/// A standing turned bar: radius `r`, z from 0 to 16, swept at `n` turns.
+fn turned_bar(n: usize, r: f64) -> Vec<Triangle> {
+    let v = |j: usize, rho: f64, z: f64| {
+        let th = std::f64::consts::TAU * j as f64 / n as f64;
+        Point3::new(rho * th.cos(), rho * th.sin(), z)
+    };
+    let mut t = Vec::new();
+    for (seg, next) in [((0.0, 0.0), (r, 0.0)), ((r, 0.0), (r, 16.0)), ((r, 16.0), (0.0, 16.0))] {
+        for j in 0..n {
+            let k = (j + 1) % n;
+            if seg.0 <= 1e-12 {
+                t.push(Triangle::new(v(j, seg.0, seg.1), v(k, next.0, next.1), v(j, next.0, next.1)));
+            } else if next.0 <= 1e-12 {
+                t.push(Triangle::new(v(j, seg.0, seg.1), v(j + 1, seg.0, seg.1), v(k, next.0, next.1)));
+            } else {
+                t.push(Triangle::new(v(j, seg.0, seg.1), v(j + 1, seg.0, seg.1), v(k, next.0, next.1)));
+                t.push(Triangle::new(v(j, seg.0, seg.1), v(k, next.0, next.1), v(j, next.0, next.1)));
+            }
+        }
+    }
+    t
+}
+
+#[test]
+fn the_radial_axis_cache_keeps_still_frames_and_follows_the_bar() {
+    // #2774 (frame-cost law): the radius rows and the viewport rings read
+    // ONE cache. A still frame refits nothing; moved geometry refits once;
+    // a bar replaced by a cube fits no axis, and that answer is cached too.
+    let mut state = State::new();
+    state.history.execute(
+        &state.world,
+        SetStock::new(
+            &state.world,
+            StockShape::Cylinder { diameter: 6.4, height: 16.0 },
+            placed(0.0, 0.0, 0.0),
+        )
+        .expect("bar stock"),
+    );
+    state.history.execute(
+        &state.world,
+        ImportModel::from_mesh("bar", Mesh::from_facets(turned_bar(16, 3.0))),
+    );
+    let setup = crate::interact::shown_setup(&state);
+    let src = SrcRef::Entity("bar".into());
+    let read = || crate::height_memo::radial_axis(&state.world, setup.as_deref(), &src, None);
+    let v = read().expect("a turned bar has an axis");
+    assert!((v.part_rho - 3.0).abs() < 1e-9, "the part's rho: {}", v.part_rho);
+    assert!((v.stock_rho.expect("round stock") - 3.2).abs() < 1e-9, "the stock's rho");
+    let builds = super::radial_builds();
+    for _ in 0..3 {
+        assert!(read().is_some(), "the same frame keeps its axis");
+        assert_eq!(super::radial_builds(), builds, "a still frame refits nothing");
+    }
+    state.history.execute(
+        &state.world,
+        MoveModel::new(&state.world, "bar", placed(4.0, 0.0, 0.0)).expect("move"),
+    );
+    let moved = read().expect("the moved bar is still turned");
+    assert!(super::radial_builds() > builds, "moved geometry refits the axis");
+    assert!((moved.part_rho - 3.0).abs() < 1e-9, "the rho is about the bar's OWN axis");
+    state.history.execute(
+        &state.world,
+        UpdateModel::new(&state.world, "bar", cube(Point3::ZERO, Point3::new(2.0, 2.0, 2.0))).expect("cube"),
+    );
+    assert!(read().is_none(), "a cube fits no rotation axis");
+    let after = super::radial_builds();
+    assert!(after > builds, "the cube refits (and refuses) once");
+    assert!(read().is_none(), "the refusal is cached");
+    assert_eq!(super::radial_builds(), after, "a still frame keeps the refusal too");
+}
+
+#[test]
+fn the_radial_axis_cache_follows_a_new_axis_statement() {
+    // #2774 review (item 4): the judged axis reads the op's own stated
+    // axis and the machine's rotary lines, so those inputs are part of
+    // the display key - a new statement refits the axis once and then a
+    // still frame keeps it.
+    let mut state = State::new();
+    state.history.execute(
+        &state.world,
+        SetStock::new(
+            &state.world,
+            StockShape::Cylinder { diameter: 6.4, height: 16.0 },
+            placed(0.0, 0.0, 0.0),
+        )
+        .expect("bar stock"),
+    );
+    state.history.execute(
+        &state.world,
+        ImportModel::from_mesh("bar", Mesh::from_facets(turned_bar(16, 3.0))),
+    );
+    let setup = crate::interact::shown_setup(&state);
+    let src = SrcRef::Entity("bar".into());
+    let unstated = crate::height_memo::radial_axis(&state.world, setup.as_deref(), &src, None).expect("the fit");
+    let builds = super::radial_builds();
+    let stated = crate::height_memo::radial_axis(&state.world, setup.as_deref(), &src, Some([0.0, 0.0, 1.0]))
+        .expect("the stated axis is judged");
+    assert!(super::radial_builds() > builds, "a new axis statement is a new key: it refits");
+    assert_eq!(stated.dir, unstated.dir, "the statement and the fit answer the same line here");
+    let again = crate::height_memo::radial_axis(&state.world, setup.as_deref(), &src, Some([0.0, 0.0, 1.0]));
+    assert_eq!(super::radial_builds(), builds + 1, "a still frame keeps the stated axis too");
+    assert_eq!(again.map(|v| v.dir), Some(stated.dir), "the stated-axis answer is cached");
 }
 
 #[test]
