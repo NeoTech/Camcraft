@@ -135,6 +135,8 @@ const REFUSED: &[(&str, &str, &str)] = &[
     // so LinuxCNC's G33.1 rigid tap is refused by name there.
     ("linuxcnc", "tap_plate", "rigid tapping (G33.1)"),
     ("grbl", "tap_plate", "tapping"),
+    // #3192: FluidNC has no canned cycles either; a tap cannot be plain moves.
+    ("fluidnc", "tap_plate", "tapping"),
     // #1914: the RichAuto A11 post expands drilling to plain moves; a
     // tap cannot be plain moves.
     ("richauto", "tap_plate", "tapping"),
@@ -397,7 +399,7 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
             "carvera" => synth_stream_with("G55", false),
             // #1914: one work origin (the pendant zero), no tap.
             "richauto" => synth_stream_with("G54", false),
-            "grblhal" | "tinyg" | "linuxcnc" | "grbl" | "mach3" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" | "linuxcnc" | "grbl" | "fluidnc" | "mach3" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));

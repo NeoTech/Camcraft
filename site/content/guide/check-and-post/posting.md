@@ -32,6 +32,7 @@ or machine configuration. Check its travel, tools and clearance before use.
 | TinyG | `tinyg.cps` | Synthetos TinyG | `tinyg-3axis.mch` |
 | LinuxCNC | `linuxcnc.cps` | LinuxCNC RS274NGC | `linuxcnc-3axis.mch` |
 | Grbl 1.1 | `grbl.cps` | Grbl 1.1 | `grbl-3axis.mch` |
+| FluidNC | `fluidnc.cps` | FluidNC; not verified on a machine | `fluidnc-3040.mch` (typical 3040 router values; confirm them for your machine) |
 | Doosan DNM | `doosan-dnm.cps` | Fanuc 0i/31i-M on Doosan DNM | `doosan-dnm-3axis.mch`, `doosan-dnm.mch` |
 | Makera Carvera | `carvera.cps` | Makera Carvera | `makera-carvera.mch`, `makera-carvera-air.mch`, `makera-z1.mch` |
 | Mach4 | `mach4.cps` | Mach4 Mill | None dedicated |

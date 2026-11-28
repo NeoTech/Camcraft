@@ -322,12 +322,15 @@ fn a_machine_that_names_its_post_is_offered_it_and_the_choice_rides_undo() {
 
 /// #2374 with #2303 and #2481: the generic LinuxCNC and Grbl machines that
 /// main shipped after this branch name their posts, as `MACHINES` pairs them.
+/// #3192: the 3040 router names the FluidNC post.
 #[test]
 fn the_linuxcnc_machine_is_offered_the_linuxcnc_post() {
     use camcraft_app::commands::{History, LoadMachine};
     use camcraft_app::posting::OfferWhy;
     use camcraft_app::schema::PostRef;
-    for (machine, post) in [("LinuxCNC 3-axis", "LinuxCNC"), ("Grbl 3-axis", "Grbl 1.1")] {
+    for (machine, post) in
+        [("LinuxCNC 3-axis", "LinuxCNC"), ("Grbl 3-axis", "Grbl 1.1"), ("3040 router (FluidNC)", "FluidNC")]
+    {
         let world = camcraft_app::world::new_world();
         let mut h = History::default();
         h.execute(&world, LoadMachine::builtin(&world, machine).expect("mount"));
