@@ -37,7 +37,10 @@
   notice, as the dropdown row did.
 - "Reset to defaults" uses the defaults of the file types
   (`prefs::ViewPrefs::default()`, `LineWidth::default()`,
-  `Antialias::default()`, check for updates on).
+  `Antialias::default()`, check for updates on). If the device does not
+  offer the default anti-aliasing count, Graphics reset uses the highest
+  count it offers among the Settings choices. This restores both settings
+  through the existing setters without requesting an unsupported count.
 - The per-user file formats do not change, so an old `prefs.json` and
   `view.json` load with the same values.
 
@@ -49,7 +52,10 @@
 - A "Settings…" row in the Theme door: optional on #3025; it can come with
   F2.
 - An MCP tool or a CLI flag: none now (answer 4 on #3025).
+- Always requesting 4x on Graphics reset: this can leave anti-aliasing
+  unchanged when the device does not offer 4x.
 
 **Cost to change later.** A new section is one `Section` variant, its
 label and one draw function. A menu move of the row is one field in
-`panes/table.rs`.
+`panes/table.rs`. A different anti-aliasing reset policy changes the
+Graphics reset and its tests.

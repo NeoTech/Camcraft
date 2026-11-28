@@ -230,12 +230,24 @@ fn graphics(ui: &mut Ui, state: &mut State) {
             }
         },
     );
-    if reset_button(ui, "Use a 1.5 pt line width and 4x anti-aliasing.") {
+    if reset_button(
+        ui,
+        "Use a 1.5 pt line width and 4x anti-aliasing. If 4x is unavailable, use the highest offered count.",
+    ) {
         if state.line_width != LineWidth::default() {
             state.select_line_width(LineWidth::default());
         }
-        if state.antialias != Antialias::default() {
-            state.select_antialias(Antialias::default());
+        let default = Antialias::default();
+        let reset_antialias = if state.samples_offered.contains(&default.samples()) {
+            Some(default)
+        } else {
+            Antialias::ALL
+                .into_iter()
+                .filter(|a| state.samples_offered.contains(&a.samples()))
+                .max_by_key(|a| a.samples())
+        };
+        if let Some(next) = reset_antialias.filter(|&a| a != state.antialias) {
+            state.select_antialias(next);
         }
     }
 }

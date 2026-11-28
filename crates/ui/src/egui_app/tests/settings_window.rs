@@ -155,6 +155,26 @@ fn graphics_reset_restores_the_line_width_and_the_antialiasing() {
 }
 
 #[test]
+fn graphics_reset_uses_the_highest_offered_count_without_4x() {
+    let dir = temp_dir("gfx-no-4x");
+    let file = dir.join(view::FILE_NAME);
+    let mut h = open_on(&dir, Section::Graphics);
+    h.state_mut().state.samples_offered = vec![1, 2];
+    h.run_steps(2);
+    h.get_by_label("3 pt").click();
+    h.run_steps(2);
+    h.get_by_label("Off").click();
+    h.run_steps(2);
+    assert_eq!((h.state().state.line_width, h.state().state.antialias), (LineWidth::Heavy, Antialias::Off));
+
+    h.get_by_label(settings::RESET).click();
+    h.run_steps(2);
+    assert_eq!((h.state().state.line_width, h.state().state.antialias), (LineWidth::Normal, Antialias::X2));
+    let saved = view::load(&file).0;
+    assert_eq!((saved.line_width, saved.antialias), (LineWidth::Normal, Antialias::X2), "the reset is kept");
+}
+
+#[test]
 fn the_graphics_device_section_is_read_only() {
     let dir = temp_dir("device");
     let mut h = open_on(&dir, Section::Device);
