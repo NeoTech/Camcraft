@@ -229,6 +229,15 @@ pub const ROWS: &[Row] = &[
         import: "disagree: volume, area",
         mesh: "watertight, within tolerance",
     },
+    // #2578: the STEP export of the SolidCraft 0.48.1 release fixture
+    // (filleted_block.sc), pinned against its .sc in solidcraft_import.
+    Row {
+        file: "filleted_block.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
     Row {
         file: "hole_on_pocket_wall.step",
         mm_per_unit: 1.0,

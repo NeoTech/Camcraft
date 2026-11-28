@@ -39,6 +39,12 @@ impl ToolRecords {
         })
     }
 
+    /// The same records under another tool number (#4340: a copy's own).
+    pub(crate) fn renumbered(mut self, number: u32) -> Self {
+        self.number = Some(number);
+        self
+    }
+
     /// Writes every record back onto a respawned `entity`.
     pub(crate) fn land(&self, world: &World, entity: &Entity) {
         entity

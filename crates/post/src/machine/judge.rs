@@ -11,7 +11,7 @@
 //! the tap gate; the 4th-axis pose reading from RS-274's A as a rotation
 //! about X and our `cl::pose` law.
 
-use super::{AxisLimits, Machine, MachineCheck, REPORT_CAP};
+use super::{AxisLimits, Machine, MachineCheck, REPORT_CAP, RotarySignConvention};
 use crate::geometry::Point3;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
@@ -116,6 +116,13 @@ pub(super) fn pose_problems(machine: &Machine, i: usize, axis: [f64; 3]) -> Vec<
                 machine.model
             )),
             Some(ax) => {
+                let ang = if machine.effective_sign_convention(Some(ax))
+                    == RotarySignConvention::TableRh
+                {
+                    -ang
+                } else {
+                    ang
+                };
                 if let Some((lo, hi)) = ax.travel
                     && (ang < lo - 1e-9 || ang > hi + 1e-9)
                 {
@@ -150,9 +157,9 @@ fn only_x_rotary(machine: &Machine) -> Option<&AxisLimits> {
 /// way the PathPilot post reads its stream (`tormach.cps` `toolAngle`),
 /// with the same tolerances, so the check and that post agree on every
 /// pose. The G43.4 dialects (`fanuc.cps`, `doosan-dnm.cps`) write the
-/// letters as they come, unnegated, so the check's pass is not their
-/// word: each refuses by name the B of A0 B180 and a non-zero A on a
-/// lone rotary stated along -X.
+/// letters with their sign conventions but do not re-express the pose
+/// about a reversed X axis: each refuses by name the B of A0 B180 and
+/// a non-zero A on a lone rotary stated along -X.
 fn x_tool_angle([a, b, c]: [f64; 3]) -> Option<f64> {
     if !(a.is_finite() && b.is_finite() && c.is_finite()) || c.abs() > 1e-6 {
         return None;
@@ -172,9 +179,9 @@ fn x_tool_angle([a, b, c]: [f64; 3]) -> Option<f64> {
 
 /// [`pose_problems`] on a machine whose one rotary `ax` turns about X:
 /// the pose is judged as the angle that rotary must hold, signed by the
-/// stated direction (a [-1,0,0] table commands the negated angle, as the
-/// post writes it) and checked against its travel. A pose leaning along
-/// X - any B or C a turn about X cannot make - is refused by name.
+/// stated direction and its resolved sign convention, then checked
+/// against its travel. A pose leaning along X - any B or C a turn about
+/// X cannot make - is refused by name.
 fn x_rotary_problem(machine: &Machine, ax: &AxisLimits, i: usize, letters: [f64; 3]) -> Option<String> {
     // Dust-free for the sentence (an asin of -0.0 reads "-0.000").
     let [da, db, dc] = letters.map(|v| if v.abs() < 1e-9 { 0.0 } else { v });
@@ -186,6 +193,11 @@ fn x_rotary_problem(machine: &Machine, ax: &AxisLimits, i: usize, letters: [f64;
     };
     let sign = ax.axis.map_or(1.0, |d| if d[0] < 0.0 { -1.0 } else { 1.0 });
     let word = sign * t;
+    let word = if machine.effective_sign_convention(Some(ax)) == RotarySignConvention::TableRh {
+        -word
+    } else {
+        word
+    };
     let (lo, hi) = ax.travel?;
     (word < lo - 1e-6 || word > hi + 1e-6).then(|| {
         format!(

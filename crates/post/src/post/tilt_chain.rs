@@ -32,7 +32,9 @@ function _tiltWrap(v) { var x = v % 360; if (x > 180) x -= 360; else if (x <= -1
 function _tiltIn(r, v) {
   var t = r.travel;
   if (!t || t.length !== 2 || !isFinite(Number(t[0])) || !isFinite(Number(t[1]))) return true;
-  return v >= Number(t[0]) - 1e-6 && v <= Number(t[1]) + 1e-6;
+  // Test the signed word; angleWord applies the convention when it writes.
+  var word = r.signConvention === "table_rh" ? -v : v;
+  return word >= Number(t[0]) - 1e-6 && word <= Number(t[1]) + 1e-6;
 }
 // "letters" (B is the outer factor, the pose law), "aOuter", or
 // "unstated" (the file does not say which rotary carries the other).

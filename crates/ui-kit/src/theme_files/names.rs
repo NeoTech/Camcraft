@@ -70,6 +70,9 @@ pub const TOOL_HOLDER: &str = "tool_holder";
 pub const TOOL_NOTE: &str = "tool_note";
 pub const TOOL_DIM: &str = "tool_dim";
 pub const THUMB_FLUTE: &str = "thumb_flute";
+pub const TOOL_MODEL_FLUTE: &str = "tool_model_flute";
+pub const TOOL_MODEL_SHANK: &str = "tool_model_shank";
+pub const TOOL_MODEL_HOLDER: &str = "tool_model_holder";
 pub const BAD_INK: &str = "bad_ink";
 pub const WARN_INK: &str = "warn_ink";
 pub const MOUNT_AXIS: &str = "mount_axis";
@@ -122,7 +125,8 @@ pub const COLOR_NAMES: &[&str] = &[
     OVERLAY_PANEL, OVERLAY_EDGE, OVERLAY_TEXT, OVERLAY_TRACK, DROP_VEIL,
     EMPTY_HINT, PICK_HALO, PLATE_HOLE, PLATE_DOWEL, GCODE_LINE,
     TOOL_GROUND, TOOL_AXIS, TOOL_GRID, TOOL_FLUTE, TOOL_SHANK, TOOL_BODY,
-    TOOL_EDGE, TOOL_HOLDER, TOOL_NOTE, TOOL_DIM, THUMB_FLUTE, BAD_INK,
+    TOOL_EDGE, TOOL_HOLDER, TOOL_NOTE, TOOL_DIM, THUMB_FLUTE, TOOL_MODEL_FLUTE,
+    TOOL_MODEL_SHANK, TOOL_MODEL_HOLDER, BAD_INK,
     WARN_INK, MOUNT_AXIS, MOUNT_RADIAL, MOUNT_TIP, MOUNT_ORIGIN, MOUNT_HINT,
     CLOSE_HOVER, CLOSE_INK,
 ];

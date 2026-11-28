@@ -1,5 +1,5 @@
 {
-  "version": 83,
+  "version": 84,
   "machine": {
     "path": "built-in: Lathe",
     "machine": {
@@ -119,7 +119,7 @@
             "plunge_feed": 40.0
           }
         },
-        "stamp": 13113883527142982225,
+        "stamp": 16798876823099108056,
         "cache": {
           "moves": [
             {
@@ -314,7 +314,7 @@
             "plunge_feed": 20.0
           }
         },
-        "stamp": 14728881153842789710,
+        "stamp": 3350780999126405211,
         "cache": {
           "moves": [
             {

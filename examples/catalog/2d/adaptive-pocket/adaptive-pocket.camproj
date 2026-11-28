@@ -1,5 +1,5 @@
 {
-  "version": 83,
+  "version": 84,
   "entities": [
     {
       "name": "Adaptive rough",
@@ -60,7 +60,7 @@
             "return": "auto"
           }
         },
-        "stamp": 14175041230759019768,
+        "stamp": 12394801309195300045,
         "cache": {
           "moves": [
             {
@@ -210803,7 +210803,7 @@
             "optimal_load": 0.1464466094067262
           }
         },
-        "stamp": 780017326380358187,
+        "stamp": 12859817168950662223,
         "cache": {
           "moves": [
             {

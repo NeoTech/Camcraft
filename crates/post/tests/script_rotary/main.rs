@@ -7,9 +7,11 @@ mod ac_trunnion_support;
 
 mod ac_trunnion_ik;
 mod ac_trunnion_path_safety;
+mod doosan_lone_x_sign;
 mod g93_feed;
 mod mach4_trunnion;
 mod opening_rotary_pose;
+mod rotary_sign;
 mod tilt_chain_joints;
 mod tormach_no_a_word;
 mod tormach_rotary_travel;

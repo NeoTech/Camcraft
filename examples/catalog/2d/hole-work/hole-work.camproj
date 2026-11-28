@@ -1,5 +1,5 @@
 {
-  "version": 83,
+  "version": 84,
   "entities": [
     {
       "name": "Bolt circle",
@@ -87,7 +87,7 @@
             "break_through_from": "full_diameter"
           }
         },
-        "stamp": 12445989737154027527,
+        "stamp": 8598151948151969817,
         "cache": {
           "moves": [
             {
@@ -457,7 +457,7 @@
             ]
           }
         },
-        "stamp": 12062599799919181905,
+        "stamp": 8229947970640151072,
         "cache": {
           "moves": [
             {
@@ -2391,7 +2391,7 @@
             "helix_radius": 1.0
           }
         },
-        "stamp": 18364794512715635465,
+        "stamp": 6389912797116614390,
         "cache": {
           "moves": [
             {
@@ -3702,7 +3702,7 @@
             "break_through_from": "full_diameter"
           }
         },
-        "stamp": 8306993456175393314,
+        "stamp": 7075251275667143342,
         "cache": {
           "moves": [
             {
@@ -3831,7 +3831,7 @@
             "hand": "right"
           }
         },
-        "stamp": 3979156940671048159,
+        "stamp": 8140887539737738465,
         "cache": {
           "moves": [
             {

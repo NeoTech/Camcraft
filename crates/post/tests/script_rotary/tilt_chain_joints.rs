@@ -11,7 +11,7 @@
 
 use camcraft_post::cl::{Move, MoveKind, Toolpath};
 use camcraft_post::geometry::Point3;
-use camcraft_post::machine::{parse_mch, tilt_chain, Machine, MachineCheck};
+use camcraft_post::machine::{parse_mch, tilt_chain, Machine, MachineCheck, RotarySignConvention};
 use camcraft_post::post::{engine, machine::mirror};
 use serde_json::Value;
 use std::path::Path;
@@ -196,4 +196,43 @@ fn a_pose_past_ninety_takes_the_second_solution_inside_the_travel() {
     let want = pose_axis(10.0, 110.0);
     let have = chain_axis(j[0], j[1], true);
     assert!((0..3).all(|k| (want[k] - have[k]).abs() < 1e-9), "{have:?} vs {want:?}");
+}
+
+#[test]
+fn both_g43_4_posts_and_machine_check_choose_the_solution_that_fits_signed_travel() {
+    let mut mch = parse_mch(&read("assets/machines/tilthead.mch")).expect("tilthead parses");
+    mch.sign_convention = Some(RotarySignConvention::TableRh);
+    let a = mch.axes.iter_mut().find(|ax| ax.name == "A").expect("A rotary");
+    a.travel = Some((-40.0, 160.0));
+    let b = mch.axes.iter_mut().find(|ax| ax.name == "B").expect("B rotary");
+    b.sign_convention = Some(RotarySignConvention::ToolRh);
+    b.travel = Some((0.0, 120.0));
+
+    // Unsigned principal A is about +153°, but its posted value is -153°.
+    // Only the second solution fits the travel after applying the sign.
+    let mut check = MachineCheck::default();
+    check.check_path(&mch, None, &leaning(10.0, 110.0), [0.0; 3], [false; 3], false);
+    assert!(check.is_ok(), "{:?}", check.problems);
+
+    let stream = "\
+PARAM ClearancePlane 20
+TOOL 1 T1
+PARAM SpindleSpeed 6000
+SECTION
+Rapid X 0 Y 0 Z 20000 A 30000 B 0 C 0
+Feed X 10000 Y 0 Z 0 F 300000 A 10000 B 110000 C 0
+ENDSECTION
+";
+    let want = pose_axis(10.0, 110.0);
+    let options = serde_json::json!({ "rotaryBrake": true });
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        let out = engine::run_with(&read(cps), &mirror(&mch), stream, &options).expect("post");
+        assert!(out.warnings.is_empty(), "{cps}: {:?}\n{}", out.warnings, out.program);
+        assert!(out.program.contains("G43.4"), "{cps}: {}", out.program);
+        let angles = posted_angles(&out.program);
+        let &(a, b) = angles.last().expect("the feed writes both rotary words");
+        assert!((0.0..=160.0).contains(&a) && (90.0..=120.0).contains(&b), "{cps}: {angles:?}");
+        let have = chain_axis(-a, b, true);
+        assert!((0..3).all(|k| (want[k] - have[k]).abs() < 1e-4), "{cps}: {have:?} vs {want:?}");
+    }
 }

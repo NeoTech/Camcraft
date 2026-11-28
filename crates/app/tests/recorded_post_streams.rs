@@ -128,6 +128,7 @@ fn drill_retract() -> String {
     };
     let holes = [hole(10.0, -20.0), hole(30.0, -15.0)];
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: Default::default(),
         clearance_z: 10.0,

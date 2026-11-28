@@ -293,7 +293,11 @@ fn layout_window_panel_setups() {
 /// button, inside the viewport, with its groups from top to bottom.
 #[test]
 fn layout_window_display_menu() {
-    let mut h = shell_harness();
+    // The plan's smallest screen (#4245, 1366 x 768): at 720 px high the
+    // menu bar (#4484) leaves too little room above the Display button.
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1366.0, 768.0))
+        .build_ui_state(frame, ShellUi::seeded());
     h.run();
     let pane = super::layout::leaf_rect(&h.state().dock, &Tab::Viewport).expect("viewport leaf");
     let button = hud(h.state()).nav_rect(viewcube::Nav::Display);
@@ -314,13 +318,11 @@ fn layout_window_display_menu() {
             "Look at",
             "Look at a face",
             "Look at a work plane",
-            "Graphics",
+            "View options",
             "Grid",
             "Origin axes",
             "Perspective view",
             "Orthographic view",
-            "Line width",
-            "Anti-aliasing",
             "Performance",
             "Quality",
             "Ground shadow",
@@ -329,4 +331,29 @@ fn layout_window_display_menu() {
     );
     let last = h.get_by_label("Ambient occlusion").rect();
     assert!(last.bottom() <= button.top(), "the menu stands above the Display button");
+}
+
+/// #4493: the Settings window at the plan's smallest screen (1366 x 768).
+/// The section list stands top to bottom, and each section's rows stand
+/// top to bottom inside the window.
+#[test]
+fn layout_window_settings() {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1366.0, 768.0))
+        .build_ui_state(frame, ShellUi::seeded());
+    h.run();
+    crate::egui_app::settings_window::open(&mut h.state_mut().state);
+    h.run_steps(3);
+    let title = crate::egui_app::settings_window::TITLE;
+    assert_window_layout(&h, title, &["Appearance", "Graphics", "Graphics device", "Updates"]);
+    assert_window_layout(&h, title, &["Colour theme", "Colour vision", "Reset to defaults"]);
+    h.get_by_label("Graphics").click();
+    h.run_steps(2);
+    assert_window_layout(&h, title, &["Line width", "Anti-aliasing", "Reset to defaults"]);
+    h.get_by_label("Graphics device").click();
+    h.run_steps(2);
+    assert_window_layout(&h, title, &["Adapter", "Backend", "Sample counts"]);
+    h.get_by_label("Updates").click();
+    h.run_steps(2);
+    assert_window_layout(&h, title, &["Check for updates", "Reset to defaults"]);
 }

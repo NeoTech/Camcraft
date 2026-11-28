@@ -12,7 +12,7 @@
 //! mirrored in the post prelude (`post::tilt_chain`): the machine check
 //! judges the same joint angles that a G43.4 post writes.
 
-use super::{AxisLimits, Machine};
+use super::{AxisLimits, Machine, RotarySignConvention};
 
 /// Below this, an angle (degrees) or a component is zero.
 const DUST: f64 = 1e-9;
@@ -79,16 +79,20 @@ fn wrap(v: f64) -> f64 {
     x
 }
 
-fn in_travel(ax: &AxisLimits, v: f64) -> bool {
-    ax.travel.is_none_or(|(lo, hi)| v >= lo - 1e-6 && v <= hi + 1e-6)
+fn in_travel(machine: &Machine, ax: &AxisLimits, angle: f64) -> bool {
+    let word = match machine.effective_sign_convention(Some(ax)) {
+        RotarySignConvention::ToolRh => angle,
+        RotarySignConvention::TableRh => -angle,
+    };
+    ax.travel
+        .is_none_or(|(lo, hi)| word >= lo - 1e-6 && word <= hi + 1e-6)
 }
 
 /// The angles [A, B] of the chain `Rx(A)·Ry(B)·Z` that give the axis of
 /// the pose-law letters `a`, `b` (degrees). Two solutions exist away
-/// from B = ±90; the first that both travels hold is taken, else the
-/// principal one (B in -90..90), which the travel check then refuses.
-#[must_use]
-pub fn solve_a_outer(a: f64, b: f64, ta: &AxisLimits, tb: &AxisLimits) -> [f64; 2] {
+/// from B = ±90. Use the first whose signed words fit both travels, or
+/// the principal one (B in -90..90), which the travel check then refuses.
+fn solve_a_outer(machine: &Machine, a: f64, b: f64, ta: &AxisLimits, tb: &AxisLimits) -> [f64; 2] {
     let (sa, ca) = a.to_radians().sin_cos();
     let (sb, cb) = b.to_radians().sin_cos();
     let v = [sb * ca, -sa, cb * ca];
@@ -96,7 +100,10 @@ pub fn solve_a_outer(a: f64, b: f64, ta: &AxisLimits, tb: &AxisLimits) -> [f64; 
     let a1 = if b1.cos() < 1e-12 { 0.0 } else { (-v[1]).atan2(v[2]) };
     let (a1, b1) = (snap(a1.to_degrees()), snap(b1.to_degrees()));
     let (a2, b2) = (snap(wrap(a1 + 180.0)), snap(wrap(180.0 - b1)));
-    if !(in_travel(ta, a1) && in_travel(tb, b1)) && in_travel(ta, a2) && in_travel(tb, b2) {
+    if !(in_travel(machine, ta, a1) && in_travel(machine, tb, b1))
+        && in_travel(machine, ta, a2)
+        && in_travel(machine, tb, b2)
+    {
         return [a2, b2];
     }
     [a1, b1]
@@ -135,7 +142,7 @@ pub fn joint_angles(m: &Machine, letters: [f64; 3]) -> Result<[f64; 3], String> 
                 .to_owned(),
         ),
         TiltNest::AOuter => {
-            let [ja, jb] = solve_a_outer(a, b, ta, tb);
+            let [ja, jb] = solve_a_outer(m, a, b, ta, tb);
             Ok([ja, jb, c])
         }
     }

@@ -18,9 +18,12 @@ The rule:
 - The outer factor of the tool-axis product is the parent rotary in a head
   chain, the rotary nearest the work in a table chain, and the table in a
   table-and-head machine. B outer: the letters. A outer: solved again.
-- A outer: two solutions exist away from B = 90 deg. The first one that both
-  travels hold is taken, else the principal one (B in -90..90), which the
-  travel check then refuses by name.
+- A outer: two solutions exist away from B = ±90 deg. Use the first whose
+  signed words fit both travels, or the principal one (B in -90..90),
+  which the travel check then refuses by name. After #4436, this choice
+  uses each axis's resolved sign convention. The solver still returns
+  tool-relative angles; the post applies the sign when it writes the
+  words, and the machine check applies it before checking travel.
 
 **Refused by name** (post and check):
 

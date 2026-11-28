@@ -9,6 +9,9 @@ rust-version.workspace = true
 flecs_ecs = { workspace = true }
 camcraft-geometry = { workspace = true }
 camcraft-cl = { workspace = true }
+# #2218: external NC programs are parsed by camcraft-gcode and simulated here
+# (docs/decisions/2218-nc-sim-runner.md).
+camcraft-gcode = { workspace = true }
 camcraft-tools = { workspace = true }
 camcraft-post = { workspace = true }
 camcraft-sim = { workspace = true }

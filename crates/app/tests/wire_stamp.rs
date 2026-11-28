@@ -309,8 +309,9 @@ fn four(pairing: WirePairingRule, sync: &[(Pt, Pt)], tolerance: f64) -> WireCont
 /// checking the arm still writes nothing for `four_axis: None`.
 /// Re-pinned for the v3 stamp salt and the mounted wire tool digest,
 /// and again for the v4 salt (#2901), and again for the #3704
-/// generator-output term (that term moves every stamp once).
-const ONE_PROFILE_STAMP: u64 = 10_966_340_153_851_473_914;
+/// generator-output term (that term moves every stamp once), and again
+/// for the #2443 bump of GENERATOR_OUTPUT_VERSION (1 -> 2).
+const ONE_PROFILE_STAMP: u64 = 9_019_942_623_529_899_882;
 
 /// Done means (M3, PR #1181 item 2): the pairing rule, each sync point
 /// on each side of each pair, and the tolerance each move the stamp, so
