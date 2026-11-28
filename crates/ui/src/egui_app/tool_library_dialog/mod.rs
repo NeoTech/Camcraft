@@ -41,6 +41,8 @@
 //! user holder opens in the holder form (`holder_form`): each field an
 //! input, the drawing, the tools that use it; Apply is one undoable
 //! `EditDocumentComponent` that derives each of those tools again.
+//! #4339: "Convert to components…" opens a preview in place of the tool
+//! list (`convert`); its ticked rows convert in one undo step.
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
@@ -49,6 +51,7 @@ pub(crate) mod assembly_group;
 pub(crate) mod categories;
 pub(crate) mod component_edit;
 pub(crate) mod components;
+pub(crate) mod convert;
 mod details_tab;
 pub(crate) mod frame;
 pub(crate) mod holder_drawing;
@@ -263,7 +266,11 @@ fn apply_tool(state: &mut State) {
 /// The full list, or the rail beside the editor when a tool is open.
 fn tools_page(ui: &mut Ui, state: &mut State) {
     if state.tool_library.as_ref().and_then(|v| v.open_tool()).is_none() {
-        list::draw(ui, state);
+        if state.tool_library.as_ref().is_some_and(|v| v.convert.is_some()) {
+            convert::draw(ui, state);
+        } else {
+            list::draw(ui, state);
+        }
         return;
     }
     let rail = rail_w(ui.available_width());

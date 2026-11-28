@@ -1,6 +1,6 @@
 //! #4335 (U9 of #3663): the one header row of the tool list - the source
 //! tabs (Document, My library, Catalog), the one search box, then New
-//! tool…, Import… and Export… at the right. Import… opens a small menu
+//! tool…, Import…, Export… and (#4339) Convert to components… at the right. Import… opens a small menu
 //! with the import mode (#899), the "Import tool holders" choice (#889)
 //! and the file button, so the row stays one row. Esc in the box clears
 //! it. All of it is view state; the import and New tool are the commands.
@@ -29,7 +29,7 @@ pub(crate) const HOLDERS: &str = "Import tool holders";
 pub(crate) const DOCUMENT: &str = "Document";
 pub(crate) const CATALOG: &str = "Catalog";
 /// The width the three buttons need at the row's right.
-const BUTTONS_W: f32 = 230.0;
+const BUTTONS_W: f32 = 390.0;
 
 /// The header row, then the Tool refusal (if any).
 pub(super) fn draw(ui: &mut Ui, state: &mut State) {
@@ -37,7 +37,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         return;
     };
     let mut picked = source;
-    let (mut new, mut export, mut import) = (false, false, false);
+    let (mut new, mut export, mut import, mut convert) = (false, false, false, false);
     ui.horizontal(|ui| {
         ui.selectable_value(&mut picked, ToolSource::Document, DOCUMENT).on_hover_text("the tools of this document");
         ui.selectable_value(&mut picked, ToolSource::Library, super::components::SOURCE)
@@ -48,6 +48,10 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         let w = (ui.available_width() - BUTTONS_W).max(120.0);
         search_box(ui, &mut state.tool_search, w);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            convert = ui
+                .button(super::convert::OPEN)
+                .on_hover_text("give the standalone tools of this document component stacks: a preview first, then one undo step")
+                .clicked();
             export = browser_files::button(
                 ui,
                 state.in_browser(NO_EXPORT),
@@ -62,6 +66,9 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         && let Some(view) = state.tool_library.as_mut()
     {
         view.source = picked;
+    }
+    if convert {
+        state.open_convert();
     }
     if new {
         actions::begin_new_tool(state);

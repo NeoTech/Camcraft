@@ -60,6 +60,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::assembly_tools::TOOLS)
         .chain(super::component_library_tools::TOOLS)
         .chain(super::holder_shape_tools::TOOLS)
+        .chain(super::convert_tools::TOOLS)
 }
 
 const KINDS: &[&str] = &["insert", "solid", "tool_item", "adaptive"];

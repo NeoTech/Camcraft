@@ -52,8 +52,9 @@ fn said(e: CommandError) -> String {
     }
 }
 
-/// One tool's derived records, before and after.
-struct ToolUpdate {
+/// One tool's derived records, before and after (#4339: the batch
+/// conversion folds one for each tool).
+pub(crate) struct ToolUpdate {
     name: String,
     change: ChangeTool,
     prev_body: Option<ToolBody>,
@@ -63,7 +64,7 @@ struct ToolUpdate {
 impl ToolUpdate {
     /// Derive tool `name` from `links` over `table` and judge it with
     /// every `ChangeTool` law against the body it lands with.
-    fn new(world: &World, name: &str, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<Self, CommandError> {
+    pub(crate) fn new(world: &World, name: &str, links: &[AssemblyLink], table: &[DocumentComponent]) -> Result<Self, CommandError> {
         let Some(entity) = model::find_by_name(world, name) else {
             return Err(CommandError::NotFound(name.to_owned()));
         };
@@ -73,14 +74,14 @@ impl ToolUpdate {
         Ok(Self { name: name.to_owned(), change, prev_body: tool_body::body_of(world, &entity), next_body: derived.body })
     }
 
-    fn apply(&self, world: &World) {
+    pub(crate) fn apply(&self, world: &World) {
         self.change.apply(world);
         if let Some(entity) = model::find_by_name(world, &self.name) {
             tool_body::set_body(world, &entity, self.next_body.as_ref());
         }
     }
 
-    fn invert(&self, world: &World) {
+    pub(crate) fn invert(&self, world: &World) {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             tool_body::set_body(world, &entity, self.prev_body.as_ref());
         }

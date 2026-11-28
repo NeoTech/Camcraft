@@ -183,6 +183,8 @@ pub struct ToolLibraryView {
     pub stack: Option<StackDraft>,
     /// #4337: the Recipes tab's derived lines.
     pub recipes: RecipesView,
+    /// #4339: the "Convert to components" preview, while it is open.
+    pub convert: Option<super::ConvertView>,
 }
 
 /// #4337: the Recipes tab's derived lines (surface speed and chip load of
