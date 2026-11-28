@@ -25,28 +25,34 @@
 //! domain seams (the 400-line law); this file keeps the keyboard layer and
 //! re-exports the old names, so callers keep the `panes::` paths.
 
-use egui::{Key, Ui};
+use egui::Ui;
 
-use crate::actions;
 use crate::state::State;
 
 mod cmd;
 mod gates;
+mod menu_bar;
 mod mode_tabs;
 mod ribbon_layout;
 mod ribbon_strip;
 mod run;
 mod section_drop;
 mod status_bar;
+mod table;
 
+pub use menu_bar::{menu_bar, menu_bar_h};
 pub use ribbon_strip::ribbon;
 pub use status_bar::status;
 pub(super) use cmd::Cmd;
 pub(super) use ribbon_layout::Cell;
 #[cfg(test)]
-pub(super) use cmd::{ribbon_plan, text_of, tip_of};
+pub(super) use cmd::{label_of, ribbon_plan, text_of, tip_of};
 #[cfg(test)]
-pub(super) use gates::{GateRoute, browser_refusal, enabled, follow_gate, gate_route, icon_of, toggled};
+pub(super) use menu_bar::{menu_cmds, ribbon_cmds};
+#[cfg(test)]
+pub(super) use table::{Menu, TABLE, id_of};
+#[cfg(test)]
+pub(super) use gates::{GateRoute, browser_refusal, disabled_reason, enabled, follow_gate, gate_route, icon_of, toggled};
 #[cfg(test)]
 pub(super) use ribbon_layout::{Drop, machine_menu_width, machine_rows, ribbon_cells, view_rows_of};
 #[cfg(test)]
@@ -62,83 +68,20 @@ pub(crate) const TYPES: [&str; camcraft_app::operation::KIND_COUNT] =
 
 /// The shell's keyboard layer: history keys always, destructive and file
 /// keys only while no text field owns focus (imgui's io.WantTextInput
-/// guard - a dialog must never spawn mid-type). Every arm fires through
-/// `crate::actions`, the same entry the ribbon uses.
+/// guard - a dialog must never spawn mid-type). The keys are declared once,
+/// in the command table (#4484), and fire the menu bar's path, the same
+/// `crate::actions` entry the ribbon uses.
 pub fn shortcuts(ui: &mut Ui, state: &mut State) {
     let typing = ui.memory(|m| m.focused().is_some());
-    let (modifiers, n, o, s, p, q, z, y, del, f, c, v) = ui.input(|i| {
-        (
-            i.modifiers,
-            i.key_pressed(Key::N),
-            i.key_pressed(Key::O),
-            i.key_pressed(Key::S),
-            i.key_pressed(Key::P),
-            i.key_pressed(Key::Q),
-            i.key_pressed(Key::Z),
-            i.key_pressed(Key::Y),
-            i.key_pressed(Key::Delete),
-            i.key_pressed(Key::F),
-            i.key_pressed(Key::C),
-            i.key_pressed(Key::V),
-        )
+    let fired: Vec<Cmd> = ui.input(|i| {
+        table::TABLE
+            .iter()
+            .filter(|r| r.key.is_some_and(|k| k.fires(i, typing)))
+            .map(|r| r.cmd)
+            .collect()
     });
-    let cmd = modifiers.command;
-    if cmd && z && !modifiers.shift && !modifiers.alt {
-        actions::undo(state);
-    }
-    if cmd && y {
-        // Ctrl+Y and Ctrl+Shift+Y both redo (imgui law).
-        actions::redo(state);
-    }
-    if cmd && !typing {
-        if c && let Some(name) = state.selected_operation() {
-            actions::copy_operation(state, &name);
-        }
-        if v {
-            actions::paste_operation(state);
-        }
-        // The File tips' keys (ribbon.rs strings): N new, O a model,
-        // Shift+O a project, S save, Shift+S save as.
-        if n {
-            actions::new_document(state);
-        }
-        if o && !modifiers.shift {
-            actions::open_model_dialog(state);
-        }
-        if o && modifiers.shift {
-            actions::open_project(state);
-        }
-        if s {
-            if modifiers.shift {
-                actions::save_project_as(state);
-            } else {
-                actions::save_project(state);
-            }
-        }
-        if p {
-            // M1.7b: posting joins the file lane - the same dialog law
-            // as Save (the gate's refusals arrive through the queue arm).
-            actions::post_program(state);
-        }
-        if q {
-            // The window close button (CloseRequested) always quit; since
-            // M-g it has a keyboard sibling. imgui's only quit surface was
-            // its File menu, which retired with the imgui shell - Ctrl+Q
-            // keeps that capability on the shared law (Quit -> request_quit
-            // -> exit_requested -> el.exit()).
-            actions::quit(state);
-        }
-    }
-    if del && !typing {
-        actions::delete_selected(state);
-    }
-    if f && !typing && !cmd && !modifiers.alt {
-        actions::frame_all(state);
-    }
-    if p && !typing && !cmd && !modifiers.alt {
-        // #434: bare P flips perspective/ortho - a viewport-layer key
-        // like F (Ctrl+P is the post lane above).
-        actions::toggle_projection(state);
+    for c in fired {
+        run::run_direct(c, state);
     }
 }
 

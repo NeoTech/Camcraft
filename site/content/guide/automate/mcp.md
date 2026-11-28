@@ -280,10 +280,10 @@ time. The current, authoritative tool list is whatever the client's
 | Outline-font text (closed shapes) | `insert_outline_text` |
 | Setups and work offsets | `add_setup`, `activate_setup`, `set_wcs`, `set_wcs_from_features`, `set_wcs_circle_centre`, `place_setup_origin`, `set_work_offset`, `load_machine`, `set_workholding_max_rpm`, `set_sheet_job`, `set_stock`, `fit_stock`, `set_raw_stock_only`, `set_operation_setup`, `delete_setup`, `set_program`, `set_setup_post`, `set_wcs_flip`, `edit_machine`, `get_rotary_stack`, `set_setup_nose_to_axis` |
 | Fixtures and workholding | `add_fixture`, `remove_fixture`, `move_fixture`, `locate_part`, `get_fixture_findings`, `add_builtin_vise`, `set_vise`, `add_mod_vise_pair`, `set_mod_jaw`, `refit_mod_vise`, `add_accessory`, `set_accessory`, `add_fixture_plate`, `set_fixture_plate`, `place_on_plate`, `detect_plate_grid`, `get_plate_grid`, `turn_fixture`, `import_dxf_fixture`, `set_fixture_profile`, `derive_fixture_profile`, `get_fixture_profile`, `export_fixture_dxf` |
-| Tools and holders | `list_tool_catalog`, `add_tool`, `set_tool`, `import_tool_library`, `export_tool_library`, `list_holder_library`, `set_tool_holder`, `get_tool_cutter_profile`, `set_tool_cutter_profile`, `set_tool_cutter_params`, `edit_tool`, `delete_tool`, `import_tool_holder_dxf`, `export_tool_holder_dxf`, `convert_tool_step_to_profile` |
+| Tools and holders | `list_tool_catalog`, `add_tool`, `set_tool`, `import_tool_library`, `export_tool_library`, `list_holder_library`, `set_tool_holder`, `get_tool_cutter_profile`, `set_tool_cutter_profile`, `set_tool_cutter_params`, `edit_tool`, `delete_tool`, `duplicate_tool`, `import_tool_holder_dxf`, `export_tool_holder_dxf`, `convert_tool_step_to_profile` |
 | Materials and cutting data | `set_work_material`, `set_stock_material`, `suggest_cutting_data`, `apply_cutting_data` |
 | Tool bodies and numbers | `set_tool_number`, `get_tool_body`, `set_tool_body`, `set_lathe_tool_body`, `attach_tool_body_piece`, `remove_tool_body_piece`, `set_lathe_insert_zone`, `clear_tool_body` |
-| Tool components and assemblies | `list_tool_components`, `get_tool_assembly`, `set_tool_assembly`, `upsert_tool_component`, `delete_tool_component`, `sync_tool_component`, `save_library_component`, `delete_library_component` |
+| Tool components and assemblies | `list_tool_components`, `get_tool_assembly`, `set_tool_assembly`, `upsert_tool_component`, `delete_tool_component`, `sync_tool_component`, `save_library_component`, `delete_library_component`, `edit_user_holder` |
 | Operations | `list_operation_types`, `add_operation`, `edit_operation`, `delete_operation`, `rename_operation`, `reorder_operation`, `set_operation_coolant`, `get_thread_infeed`, `set_thread_infeed`, `mark_operation_reviewed`, `electrode_from_faces`, `save_cut_recipe`, `list_cut_recipes`, `apply_cut_recipe` |
 | Pattern folders | `create_pattern_folder`, `edit_pattern_folder`, `set_pattern_members`, `set_pattern_instance_enabled`, `delete_pattern_folder` |
 | Hole patterns from numbers (no model) | `add_hole_pattern` |
@@ -366,7 +366,10 @@ take an insert. `set_tool_assembly` stacks document components on a
 tool, and the tool's diameter, corner radius and holder body follow
 from the stack. `get_tool_assembly` reads the stack back.
 `upsert_tool_component` edits a shared component, and every tool built
-from it changes in the same undo step. `sync_tool_component` takes the
+from it changes in the same undo step. `edit_user_holder` edits a
+holder by its shape (taper, clamp, bore, gauge length, nose and largest
+diameter), as the holder form does, in one undo step.
+`sync_tool_component` takes the
 library copy of a component into the document.
 `save_library_component` and `delete_library_component` change your
 component library file. They are file edits and have no undo. Built-in

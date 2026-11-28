@@ -76,7 +76,7 @@ fn list_operation_types_names_the_optional_fields_and_enum_words() {
 
     // An enum field lists its words.
     let cycle = values(field(&kinds, "drill", "cycle"));
-    for word in ["auto", "spot", "peck", "tap", "back_bore", "fine_bore"] {
+    for word in ["auto", "spot", "peck", "deep", "tap", "back_bore", "fine_bore"] {
         assert!(cycle.contains(&word), "drill cycle {word}: {cycle:?}");
     }
 

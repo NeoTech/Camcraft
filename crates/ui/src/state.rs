@@ -386,6 +386,9 @@ pub enum CommandKind {
         number: Option<u32>,
     },
     DeleteTool(String),
+    /// #4340: copy a stored tool with its holder and component stack
+    /// (`DuplicateTool`) and open the copy in the tool library's editor.
+    DuplicateTool(String),
     /// #371: set (`Some`) or clear (`None`) a tool's modelled body - the
     /// tool editor's Apply body / Clear body, one `SetToolBody`.
     SetToolBody {
@@ -2016,8 +2019,10 @@ pub struct State {
     pub last_update_check_utc: Option<u64>,
     /// #2428: strictly newer release discovered by the startup check (or test injection).
     pub update_available: Option<camcraft_app::update_check::ReleaseInfo>,
-    /// #2428: top-band Settings dropdown open flag.
-    pub ribbon_settings_open: bool,
+    /// #4493: the Settings window is open (view state, closed on a fresh State).
+    pub settings_open: bool,
+    /// #4493: the Settings window's shown section.
+    pub settings_section: crate::egui_app::settings_window::Section,
     /// #2428: non-blocking watcher for the one-shot startup update check.
     pub(crate) update_watcher: crate::update_check::UpdateWatcher,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
@@ -2036,6 +2041,9 @@ pub struct State {
     pub setup_name_draft: String,
     /// The window's pending dock ask (see [`PanelSetupAsk`]).
     pub panel_setup_ask: Option<PanelSetupAsk>,
+    /// #4483: each folded side pane, its open share and its split width
+    /// (`layout::fold::PaneFolds`). View state, like the dock it belongs to.
+    pub(crate) pane_folds: Vec<(crate::egui_app::shell::Tab, f32, f32)>,
     /// The browser row whose retype menu stands open (M9.1): the op's
     /// name, anchored to its row and recomputed per frame like the
     /// ribbon's dropdowns - a frame fact, not a document fact; the
@@ -2509,7 +2517,8 @@ impl State {
             ribbon_mode_open: false,
             ribbon_view_open: false,
             ribbon_theme_open: false,
-            ribbon_settings_open: false,
+            settings_open: false,
+            settings_section: crate::egui_app::settings_window::Section::Appearance,
             home_page: None,
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
@@ -2528,6 +2537,7 @@ impl State {
             panel_setups_open: false,
             setup_name_draft: String::new(),
             panel_setup_ask: None,
+            pane_folds: Vec::new(),
             tree_menu: None,
             retype_confirm: None,
             rename_draft: None,
@@ -3865,6 +3875,7 @@ impl State {
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not deleted: {err}")),
             },
+            CommandKind::DuplicateTool(name) => self.run_duplicate_tool(&name),
             CommandKind::CreateOperation {
                 name,
                 tool,

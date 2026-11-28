@@ -22,7 +22,7 @@ use crate::machining2d::GenError;
 /// is the surface the setup's earlier operations left over the same
 /// disk (issue #89, read conservatively by the caller): the stock
 /// stands no higher than it. `None` is the raw stock.
-pub(super) fn top_over(
+pub(in crate::operation) fn top_over(
     part: &[Triangle],
     stock: &[Triangle],
     cx: f64,

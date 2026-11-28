@@ -38,7 +38,7 @@ pub fn undersize_holes<'a>(tool: &Tool, params: &'a OpParams) -> Vec<&'a Hole> {
     let OpParams::Drill { holes, cross, cycle, .. } = params else {
         return Vec::new();
     };
-    let sizes = matches!(cycle, CycleChoice::Auto | CycleChoice::Drill | CycleChoice::Peck | CycleChoice::Ream);
+    let sizes = matches!(cycle, CycleChoice::Auto | CycleChoice::Drill | CycleChoice::Peck | CycleChoice::Deep | CycleChoice::Ream);
     let d = tool.diameter;
     if tool.kind != ToolKind::Drill || !sizes || !cross.is_empty() || !(d.is_finite() && d > 0.0) {
         return Vec::new();

@@ -137,6 +137,7 @@ fn drilling_timeline_carries_every_cycle_dwell() {
     let tool = tool("DR-0600");
     let holes = holes_at(&[(0.0, 0.0), (20.0, 0.0)], -12.0, false);
     let p = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: Default::default(),
         clearance_z: 10.0,
@@ -186,6 +187,7 @@ fn two_operations_form_one_continuous_timeline() {
     let tool = tool("DR-0600");
     let holes = holes_at(&[(60.0, 60.0)], -8.0, false);
     let dp = CycleParams {
+        material_top: &[],
         through_clear: camcraft_app::drilling::THROUGH_CLEAR,
         break_through_from: Default::default(),
         clearance_z: 10.0,

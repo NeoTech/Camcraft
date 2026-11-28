@@ -88,7 +88,8 @@ fn helix_zero_cuts_straight_grooves_and_a_helix_twists_them() {
 
 #[test]
 fn the_fluted_steel_stays_inside_the_revolved_envelope() {
-    for name in ["EM-1000-4FL", "BB-1000-R1", "CM-0600-90", "TN-1600-0R8", "EM-0200-2FL"] {
+    let names = ["EM-1000-4FL", "BB-1000-R1", "CM-0600-90", "TN-1600-0R8", "EM-0200-2FL"];
+    for name in names.into_iter().chain(FLUTED.iter().map(|(n, _)| *n)) {
         let t = with(name, Some(3), Some(40.0));
         let prof = steel(&t);
         let Some(m) = fluted(&t, &prof) else { continue };
@@ -106,7 +107,9 @@ fn the_fluted_steel_stays_inside_the_revolved_envelope() {
 
 #[test]
 fn tools_without_flutes_draw_the_plain_model() {
-    for name in ["TD-1732-60", "TM-0600-P125", "FG-0600-04", "TS-2000-0600", "DT-2000-60"] {
+    // #4452: the thread mill, the T-slot and the dovetail cutter draw
+    // flutes now (`each_fluted_kind_shows_its_flutes`).
+    for name in ["TD-1732-60", "FG-0600-04", "TN-1600-0R8", "BR-1000", "PRB-0400", "EDM-E10X6", "GT-0200"] {
         let t = with(name, Some(4), Some(30.0));
         assert_eq!(fluted(&t, &steel(&t)), None, "{name} ({:?}) draws no flutes", t.kind);
     }
@@ -118,7 +121,8 @@ fn tools_without_flutes_draw_the_plain_model() {
 
 #[test]
 fn the_fluted_steel_keeps_to_its_facet_bound() {
-    for name in ["EM-1000-4FL", "BB-1000-R1", "CM-0600-90", "EM-0200-2FL"] {
+    let names = ["EM-1000-4FL", "BB-1000-R1", "CM-0600-90", "EM-0200-2FL"];
+    for name in names.into_iter().chain(FLUTED.iter().map(|(n, _)| *n)) {
         let t = with(name, Some(MAX_FLUTES), Some(80.0));
         let n = fluted(&t, &steel(&t)).map_or(0, |m| m.len());
         assert!(n > 0 && n <= MAX_TRIS, "{name}: {n} facets, bound {MAX_TRIS}");
@@ -147,4 +151,86 @@ fn side_flute_lines_stay_on_the_cutter() {
     let many = with("EM-1000-4FL", Some(MAX_FLUTES), Some(60.0));
     let n: usize = side_lines(&many, &steel(&many)).unwrap_or_default().iter().map(Vec::len).sum();
     assert!(n <= MAX_FLUTES as usize * (SIDE_STEPS + 1), "the lines keep their bound: {n} points");
+}
+
+/// #4452: one shipped tool of each kind that has flutes, and the flute
+/// count its preview draws (its stated count, or the kind's default).
+const FLUTED: [(&str, u32); 13] = [
+    ("EM-1000-4FL", 4),
+    ("BN-0600", 2),
+    ("BB-1000-R1", 2),
+    ("DR-0600", 2),
+    ("CM-0600-90", 1),
+    ("TAP-M6", 3),
+    ("TM-0600-P125", 3),
+    ("TMS-0600-P050-150", 3),
+    ("TS-2000-0600", 6),
+    ("KS-1600-0300", 8),
+    ("DT-2000-60", 6),
+    ("LP-1000", 2),
+    ("FM-CV-R6", 2),
+];
+
+/// #4452: each kind with a flute length shows its flutes in the 3D
+/// preview - the grooves take radius away somewhere on the cutting part,
+/// and never above it.
+#[test]
+fn each_fluted_kind_shows_its_flutes() {
+    for (name, n) in FLUTED {
+        let t = shipped(name);
+        assert!(fluted_kind(t.kind), "{name} ({:?}) is a fluted kind", t.kind);
+        let g = Grooves::of(&t).unwrap_or_else(|| panic!("{name} ({:?}) has grooves", t.kind));
+        assert_eq!(g.n, n, "{name}: the flute count");
+        let prof = steel(&t);
+        let Some(m) = fluted(&t, &prof) else { panic!("{name} ({:?}) draws a flute mesh", t.kind) };
+        let land = |z: f64| radius_at(&prof, z).unwrap_or(0.0);
+        let cut = m.iter().flat_map(|q| [q.a, q.b, q.c]).any(|p| p.z < t.flute_len && p.x.hypot(p.y) < land(p.z) * 0.9);
+        assert!(cut, "{name}: a groove cuts into the cutting part");
+        let above = m.iter().flat_map(|q| [q.a, q.b, q.c]).filter(|p| p.z > t.flute_len + 1e-9);
+        for p in above {
+            assert!(on_meridian(&prof, p.z, p.x.hypot(p.y)), "{name}: {p:?} above the cutting part is plain");
+        }
+    }
+}
+
+/// `(z, r)` lies on the meridian polyline `prof`.
+fn on_meridian(prof: &[(f64, f64)], z: f64, r: f64) -> bool {
+    prof.windows(2).any(|w| {
+        let ((z0, r0), (z1, r1)) = (w[0], w[1]);
+        let (dz, dr) = (z1 - z0, r1 - r0);
+        let len2 = dz * dz + dr * dr;
+        let s = if len2 > 1e-18 { (((z - z0) * dz + (r - r0) * dr) / len2).clamp(0.0, 1.0) } else { 0.0 };
+        (z0 + dz * s - z).hypot(r0 + dr * s - r) < 1e-6
+    })
+}
+
+/// #4452: a twist drill or a tap that states no count draws the kind's
+/// own (2 helical, 3 straight); a stated count wins; a milling cutter
+/// still draws none without a count.
+#[test]
+fn a_drill_and_a_tap_without_a_count_draw_their_kinds_flutes() {
+    let d = shipped("DR-0600");
+    assert_eq!(d.flutes, None, "the shipped drill states no count");
+    let g = Grooves::of(&d).unwrap_or_else(|| panic!("a drill has grooves"));
+    assert_eq!(g.n, 2, "a twist drill has two flutes");
+    assert!((g.twist - 30f64.to_radians().tan() / (d.diameter * 0.5)).abs() < 1e-12, "a 30-degree helix");
+    let tap = shipped("TAP-M6");
+    let g = Grooves::of(&tap).unwrap_or_else(|| panic!("a tap has grooves"));
+    assert_eq!((g.n, g.twist), (3, 0.0), "a tap has three straight flutes");
+    let mut stated = d.clone();
+    stated.flutes = Some(3);
+    assert_eq!(Grooves::of(&stated).map(|g| g.n), Some(3), "a stated count wins");
+    assert_eq!(Grooves::of(&with("KS-1600-0300", None, None)), None, "a keyseat cutter without a count draws none");
+}
+
+/// #4452: the thread mill's toothed steel (#4451) takes its flutes too.
+#[test]
+fn a_thread_mill_cuts_its_flutes_into_its_teeth() {
+    for name in ["TM-0600-P125", "TMS-0600-P050-150"] {
+        let t = shipped(name);
+        let plain = steel(&t);
+        let teeth = super::super::thread_form::toothed(&t, &plain).unwrap_or_else(|| panic!("{name} has teeth"));
+        let m = fluted(&t, &teeth).unwrap_or_else(|| panic!("{name}: the teeth take flutes"));
+        assert!(!m.is_empty() && m.len() <= MAX_TRIS, "{name}: {} facets", m.len());
+    }
 }

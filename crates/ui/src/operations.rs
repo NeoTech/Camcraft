@@ -56,7 +56,7 @@ pub fn side_names() -> &'static [&'static str] {
 pub fn cycle_names() -> &'static [&'static str] {
     &[
         "Auto", "Spot", "Drill", "Peck", "Tap (rigid)", "Bore", "Back bore", "Tap (floating holder)",
-        "Ream (feed in, feed out)", "Fine bore (oriented stop, shift)",
+        "Ream (feed in, feed out)", "Fine bore (oriented stop, shift)", "Deep peck (full retract)",
     ]
 }
 
@@ -74,6 +74,7 @@ pub(crate) fn cycle_index(c: &camcraft_app::drilling::CycleChoice) -> usize {
         C::BackBore => 6,
         C::Ream => 8,
         C::FineBore { .. } => 9,
+        C::Deep => 10,
     }
 }
 
@@ -94,6 +95,8 @@ pub(crate) fn cycle_from_index(i: usize) -> camcraft_app::drilling::CycleChoice 
         // (zero); the page's two shift fields state it, and Apply refuses
         // the cycle by name while it is zero.
         9 => C::FineBore { shift_x_um: 0, shift_y_um: 0 },
+        // #2443: full-retract pecking, appended so older indices stay.
+        10 => C::Deep,
         _ => C::Auto,
     }
 }

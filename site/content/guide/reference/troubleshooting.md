@@ -152,6 +152,13 @@ that runs at generation, so nothing judged it.
 
 **Fix.** Regenerate the operation.
 
+## Operations go stale after an update
+
+A new build can fix a defect in a toolpath generator. When such a fix
+changes the toolpath, each cached toolpath that a project saved before the
+fix reads stale once. Generate those operations again before you post. An
+old wrong move can then never post silently.
+
 ## Verify warnings (collisions)
 
 These show on the operation page and in the viewport, and block the post.
@@ -499,6 +506,8 @@ The same button asks for a screenshot of the whole application window
 and copies it to the clipboard. Paste the image into the GitHub issue
 description. The status line confirms the copy or reports that no
 screenshot arrived. Check the open issues first to avoid a duplicate.
+If CamCraft cannot read back the window picture, the status line says so
+and does not stay at copying. The complete text report is kept.
 
 ## AI Chat connection settings
 

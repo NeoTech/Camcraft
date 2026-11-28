@@ -635,7 +635,8 @@ fn an_open_run_with_a_skim_generates_verifies_and_posts() {
     let skim_cuts: Vec<&str> = lines[comp2 + 1..last_cut].iter().filter(|l| l.starts_with("G1 X")).copied().collect();
     assert!(skim_cuts.len() >= 2 && skim_cuts.iter().all(|l| l.contains("X60.145")), "{text}");
     // The rough-only open golden stands byte for byte beside it.
-    let rough = posting::post_script(&cutoff_doc(false), &std::env::temp_dir().join("rough-only"), cps(WIRE)).expect("the rough-only open run posts").program;
+    let rough_dir = tempfile::tempdir().expect("a temp folder");
+    let rough = posting::post_script(&cutoff_doc(false), &rough_dir.path().join("rough-only"), cps(WIRE)).expect("the rough-only open run posts").program;
     assert_eq!(rough, std::fs::read_to_string(OPEN_GOLDEN).expect("golden present"));
 }
 
@@ -697,7 +698,8 @@ fn a_centre_slit_with_a_skim_generates_verifies_and_posts() {
     let cuts: Vec<&str> = lines[first_cut..last_cut].iter().filter(|l| l.starts_with("G1 X")).copied().collect();
     assert!(cuts.iter().all(|l| l.contains("X60.")), "every cut rides the run itself: {text}");
     // The right-hand open golden stands byte for byte beside it.
-    let right = posting::post_script(&cutoff_doc(false), &std::env::temp_dir().join("right-only"), cps(WIRE)).expect("the right open run posts").program;
+    let right_dir = tempfile::tempdir().expect("a temp folder");
+    let right = posting::post_script(&cutoff_doc(false), &right_dir.path().join("right-only"), cps(WIRE)).expect("the right open run posts").program;
     assert_eq!(right, std::fs::read_to_string(OPEN_GOLDEN).expect("golden present"));
 }
 

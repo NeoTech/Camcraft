@@ -24,6 +24,10 @@
 //! A still frame reads the inputs and builds nothing (`builds`).
 //! #4336: the side view's flute lines and the holder's name are built
 //! with the rest.
+//! #4451: a thread mill's steel carries its teeth (`thread_form`).
+//! #4452: the revolve takes [`RING`] facets around (display only; the
+//! collision meshes keep their own), and each facet carries its part
+//! (flute, shank, holder) for the 3D view's inks, built with the rest.
 //! Provenance: our own display model over `app::tool_body` and
 //! `app::spun`; the revolve follows `app::tool_body_view::revolve`
 //! (general surface-of-revolution practice). No vendor material consulted.
@@ -43,10 +47,14 @@ use camcraft_app::tool_body;
 use camcraft_app::tool_cutter;
 use camcraft_app::tools::Tool;
 
+use crate::egui_app::tool_model_view::Part;
+
 use crate::state::{State, is_spun_kind};
 
-/// Facets around the axis per revolved ring (as `tool_body_view`).
-const RING: usize = 32;
+/// Facets around the axis per revolved ring of the preview. #4452: as
+/// many as the fluted steel (`flutes::SEGS`), so the round edges look
+/// smooth; display only - `tool_body_view` and the laws keep theirs.
+pub(crate) const RING: usize = super::flutes::SEGS;
 
 /// The numbers the side view's dimension lines read, model units.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -84,6 +92,10 @@ pub(crate) struct ToolModel {
     /// inside the plain meshes' envelope, so the plain boxes fit them.
     pub fluted: Option<Arc<[Triangle]>>,
     pub fluted_bare: Option<Arc<[Triangle]>>,
+    /// #4452: the part of each facet of `mesh` (and of `bare`, its steel
+    /// prefix), and of `fluted` (and `fluted_bare`).
+    pub parts: Arc<[Part]>,
+    pub fluted_parts: Option<Arc<[Part]>>,
     /// The landed body's source, when the holder is a body.
     pub body: Option<String>,
     pub dims: Dims,
@@ -194,17 +206,20 @@ pub(crate) type Bounds = ([f64; 3], [f64; 3]);
 
 impl ToolModel {
     /// #3908: the mesh the 3D view paints for the Holder and the Flutes
-    /// toggles, and the box it is fitted by. The box is the plain mesh's
-    /// box (the flutes only take radius away), so a toggle never jumps
-    /// the view.
-    pub(crate) fn shown(&self, holder: bool, flutes: bool) -> (&Arc<[Triangle]>, Bounds) {
+    /// toggles, the part of each facet (#4452) and the box it is fitted
+    /// by. The box is the plain mesh's box (the flutes only take radius
+    /// away), so a toggle never jumps the view. A bare mesh is the steel
+    /// prefix of its whole mesh, so it reads the same parts.
+    pub(crate) fn shown(&self, holder: bool, flutes: bool) -> (&Arc<[Triangle]>, &Arc<[Part]>, Bounds) {
         let (plain, fluted, bounds) = if holder {
             (&self.mesh, &self.fluted, self.bounds)
         } else {
             (&self.bare, &self.fluted_bare, self.bare_bounds)
         };
-        let mesh = fluted.as_ref().filter(|_| flutes).unwrap_or(plain);
-        (mesh, bounds)
+        match (fluted.as_ref().filter(|_| flutes), &self.fluted_parts) {
+            (Some(m), Some(p)) => (m, p, bounds),
+            _ => (plain, &self.parts, bounds),
+        }
     }
 }
 
@@ -236,6 +251,8 @@ fn build(k: &Key) -> ToolModel {
         cutter_profile::check(t, points).ok().map(|s| s.outline())
     });
     let steel = drawn.unwrap_or_else(|| Tool { holder_len: 0.0, ..t.clone() }.profile());
+    // #4451: a thread mill shows its teeth on the cutting length.
+    let steel = super::thread_form::toothed(t, &steel).unwrap_or(steel);
     let profile = body.as_ref().and_then(|b| b.profile());
     let bands = match &body {
         Some(b) => tool_body::checked_bands(t, b).unwrap_or_default(),
@@ -263,15 +280,17 @@ fn build(k: &Key) -> ToolModel {
             (t.holder_d, t.holder_len)
         }),
     };
+    let parts = parts_of(&mesh, holder_tris.len(), t.flute_len);
     mesh.extend(holder_tris.iter().copied());
-    let (fluted, fluted_bare) = match fluted_steel {
+    let (fluted, fluted_bare, fluted_parts) = match fluted_steel {
         Some(f) => {
             let alone: Arc<[Triangle]> = Arc::from(f.clone());
+            let p = parts_of(&f, holder_tris.len(), t.flute_len);
             let mut all = f;
             all.extend(holder_tris);
-            (Some(Arc::from(all)), Some(alone))
+            (Some(Arc::from(all)), Some(alone), Some(p))
         }
-        None => (None, None),
+        None => (None, None, None),
     };
     let gauge = match (profile, holder) {
         (Some(p), _) => p.top().max(top),
@@ -299,6 +318,8 @@ fn build(k: &Key) -> ToolModel {
         bare_bounds,
         fluted,
         fluted_bare,
+        parts,
+        fluted_parts,
         body: body.as_ref().map(|b| b.source.clone()),
         dims,
         holder_err,
@@ -306,6 +327,15 @@ fn build(k: &Key) -> ToolModel {
         holder_name: body.as_ref().and_then(|b| b.library.as_ref()).map(|r| r.entry.clone()),
         flute_lines,
     }
+}
+
+/// #4452: the parts of a mesh made of the facets `steel`, then `holder`
+/// holder facets: a steel facet below the flute length (by its centre)
+/// is the cutting part, the rest of the steel the shank.
+fn parts_of(steel: &[Triangle], holder: usize, flute_len: f64) -> Arc<[Part]> {
+    let cut = |t: &Triangle| (t.a.z + t.b.z + t.c.z) / 3.0 < flute_len;
+    let steel = steel.iter().map(|t| if cut(t) { Part::Flute } else { Part::Shank });
+    steel.chain(std::iter::repeat_n(Part::Holder, holder)).collect()
 }
 
 /// A `(z, r)` meridian spun about +Z into triangles; rings at r = 0 close
@@ -334,3 +364,7 @@ fn revolve(prof: &[(f64, f64)]) -> Vec<Triangle> {
     }
     out
 }
+
+#[cfg(test)]
+#[path = "model_tests.rs"]
+mod tests;

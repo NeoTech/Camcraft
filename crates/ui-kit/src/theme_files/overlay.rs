@@ -37,7 +37,7 @@ pub(super) fn apply_overlay(
         tree_header_boost, highlight_stroke_px,
         menu_width, recent_width, menu_gap, menu_pad_x,
         overlay_panel, overlay_edge, overlay_text, overlay_track, drop_veil, empty_hint, pick_halo, plate_hole, plate_dowel, gcode_line,
-        tool_ground, tool_axis, tool_grid, tool_flute, tool_shank, tool_body, tool_edge, tool_holder, tool_note, tool_dim, thumb_flute, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
+        tool_ground, tool_axis, tool_grid, tool_flute, tool_shank, tool_body, tool_edge, tool_holder, tool_note, tool_dim, thumb_flute, tool_model_flute, tool_model_shank, tool_model_holder, bad_ink, warn_ink, mount_axis, mount_radial, mount_tip, mount_origin, mount_hint,
         close_hover, close_ink,
         // The viewport furniture reads `ground` below, not `base`.
         cube_edge: _, cube_label: _, cube_glyph_on: _, cube_glyph_off: _, viewport_hint: _, marker_stem: _, marker_ring: _, marker_dot: _, axis_x: _, axis_y: _, axis_z: _, viewport_hover: _,
@@ -117,6 +117,9 @@ pub(super) fn apply_overlay(
         tool_note: c(names::TOOL_NOTE, tool_note),
         tool_dim: c(names::TOOL_DIM, tool_dim),
         thumb_flute: c(names::THUMB_FLUTE, thumb_flute),
+        tool_model_flute: c(names::TOOL_MODEL_FLUTE, tool_model_flute),
+        tool_model_shank: c(names::TOOL_MODEL_SHANK, tool_model_shank),
+        tool_model_holder: c(names::TOOL_MODEL_HOLDER, tool_model_holder),
         bad_ink: c(names::BAD_INK, bad_ink),
         warn_ink: c(names::WARN_INK, warn_ink),
         mount_axis: c(names::MOUNT_AXIS, mount_axis),
