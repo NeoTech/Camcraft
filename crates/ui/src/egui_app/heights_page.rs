@@ -11,7 +11,7 @@
 //! Provenance: our own port of the M-c height rows (the wording is
 //! `crate::operations`' law); no vendor material consulted.
 
-use egui::{Label, RichText, Ui};
+use egui::{RichText, Ui};
 
 use camcraft_app::operation::{Height, HeightReference, SrcRef};
 use camcraft_app::units;
@@ -19,7 +19,7 @@ use camcraft_app::units;
 use crate::operations::{height_echo, offset_label};
 
 use super::fields::{combo, num};
-use super::layout::{check_row, consequence, group, hint, prop_row};
+use super::layout::{check_row, consequence, group, hint, prop_row, readout};
 
 /// Draft tilt for every height row in the current panel pass.
 pub(super) const HEIGHT_TILT_ID: &str = "camcraft.height_tilt";
@@ -179,7 +179,7 @@ fn height_rows(ui: &mut Ui, world: &flecs_ecs::prelude::World, setup: Option<&st
     if matches!(h.reference, HeightReference::WorkOffset) {
         // #329: no slot choice here - the setup's offset, read-only.
         prop_row(ui, "Work offset", |ui| {
-            ui.add(Label::new(setup_offset_text(world, setup)).selectable(false))
+            readout(ui, setup_offset_text(world, setup))
                 .on_hover_text(SETUP_OFFSET_HINT);
         });
     }
@@ -189,7 +189,7 @@ fn height_rows(ui: &mut Ui, world: &flecs_ecs::prelude::World, setup: Option<&st
     let tilt = op_tilt(ui);
     let echo = height_echo(world, setup, src.as_ref(), tilt, h);
     prop_row(ui, offset_label(h.reference), |ui| {
-        ui.add(Label::new(RichText::new(echo).weak()).selectable(false));
+        readout(ui, RichText::new(echo).weak());
         num(ui, u, &mut h.offset);
     });
 }

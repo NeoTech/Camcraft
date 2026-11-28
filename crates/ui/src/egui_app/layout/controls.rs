@@ -88,3 +88,19 @@ pub fn radio_pair<V: PartialEq>(ui: &mut Ui, current: &mut V, first: (V, &str), 
     radio_value(ui, current, first.0, first.1);
     radio_value(ui, current, second.0, second.1);
 }
+
+/// [`list_row`] that wraps at the width it has (a long reason line).
+pub fn list_row_wrapped(ui: &mut Ui, text: impl Into<WidgetText>) -> Response {
+    ui.add(Label::new(text).wrap())
+}
+
+/// A read-out that the user cannot select (an echo of a derived value).
+pub fn readout(ui: &mut Ui, text: impl Into<WidgetText>) -> Response {
+    ui.add(Label::new(text).selectable(false))
+}
+
+/// A compact button that shows if its choice is `selected` and is greyed
+/// out while `enabled` is false (a role choice in a list row).
+pub fn choice_button_enabled(ui: &mut Ui, enabled: bool, selected: bool, label: impl Into<WidgetText>) -> Response {
+    ui.add_enabled(enabled, Button::selectable(selected, label))
+}

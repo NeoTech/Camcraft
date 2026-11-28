@@ -15,7 +15,7 @@ use crate::shortcut_keys::{chord, command_key};
 use crate::state::{CommandKind, ErrorScope, GeoPick, State};
 
 use super::colorvision::text_inks;
-use super::layout::group;
+use super::layout::{group, list_row, list_row_truncated, radio_value, small_button, small_button_enabled};
 use super::theme::{Tokens, clamp};
 
 /// The Edge mode's one-line hint: how a loop gets closed. The add key is
@@ -39,9 +39,9 @@ pub fn click_selects_hint() -> String {
 /// armed). Off: every other tab - the selection is locked, clicks do nothing.
 pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
     if crate::interact::op_pick_locked(state) {
-        ui.label(RichText::new("Picking off - selection locked").weak());
+        list_row(ui, RichText::new("Picking off - selection locked").weak());
     } else {
-        ui.label(RichText::new("Picking on - clicks edit the selection").strong());
+        list_row(ui, RichText::new("Picking on - clicks edit the selection").strong());
     }
 }
 
@@ -53,17 +53,17 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
     // Viewport pick mode - transient view state: the mode itself is not
     // undoable; what a Face/Edge click changes is.
     ui.horizontal_wrapped(|ui| {
-        ui.label("Click selects:").on_hover_text(click_selects_hint());
+        list_row(ui, "Click selects:").on_hover_text(click_selects_hint());
         let mut pick_mode = match state.geo_pick {
             GeoPick::Model => 0,
             GeoPick::Face => 1,
             GeoPick::Edge => 2,
             GeoPick::Vertex => 3,
         };
-        ui.radio_value(&mut pick_mode, 0, "Models");
-        ui.radio_value(&mut pick_mode, 1, "Faces");
-        ui.radio_value(&mut pick_mode, 2, "Edges");
-        ui.radio_value(&mut pick_mode, 3, "Vertices");
+        radio_value(ui, &mut pick_mode, 0, "Models");
+        radio_value(ui, &mut pick_mode, 1, "Faces");
+        radio_value(ui, &mut pick_mode, 2, "Edges");
+        radio_value(ui, &mut pick_mode, 3, "Vertices");
         state.geo_pick = match pick_mode {
             1 => GeoPick::Face,
             2 => GeoPick::Edge,
@@ -74,7 +74,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
     if state.geo_pick == GeoPick::Edge {
         // Multi-select was there but nobody could find it (user hand
         // test 2026-11-06): say it where the mode is chosen.
-        ui.label(RichText::new(edge_hint()).weak());
+        list_row(ui, RichText::new(edge_hint()).weak());
     }
     if state.op_ui.src_kind == 2 {
         crate::frame_cost::time("ui/properties.op.picks.chips", || chips(ui, state, target, pal));
@@ -90,7 +90,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
                 .to_owned(),
             Err(why) => format!("3-2-1 alignment: {why}"),
         };
-        if ui.add_enabled(aligned.is_ok(), egui::Button::new("Align WCS (3-2-1)").small())
+        if small_button_enabled(ui, aligned.is_ok(), "Align WCS (3-2-1)")
             .on_hover_text(&tip)
             .on_disabled_hover_text(&tip)
             .clicked()
@@ -102,7 +102,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
         operation::selection_account(&state.world, live_setup, &state.op_ui.geo.clone(), &state.op_ui.params.clone())
     });
     for note in notes {
-        ui.label(RichText::new(note).weak());
+        list_row(ui, RichText::new(note).weak());
     }
     // The pick's own refusal, under the picks it is about: the stored
     // selection's (the walk Generate would refuse), else the pick door's
@@ -116,9 +116,9 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
     }
     if state.op_ui.src_kind == 1 && !state.op_ui.src_name.is_empty() {
         let n = state.op_ui.src_name.clone();
-        ui.label(format!("Whole of '{n}' - the first pick replaces this."));
+        list_row(ui, format!("Whole of '{n}' - the first pick replaces this."));
     } else if state.op_ui.src_kind != 2 {
-        ui.label("Whole stock contour (default) - picks bound the operation.");
+        list_row(ui, "Whole stock contour (default) - picks bound the operation.");
     }
     let sketches = camcraft_app::sketch::placed_in(&state.world, live_setup);
     if !sketches.is_empty() {
@@ -136,7 +136,7 @@ fn sketch_layer_picks(ui: &mut Ui, state: &mut State, target: &str, sketches: &[
     ui.add_space(4.0);
     for group in groups.iter() {
         ui.horizontal_wrapped(|ui| {
-            ui.label(format!("Sketch '{}' layers:", group.entity));
+            list_row(ui, format!("Sketch '{}' layers:", group.entity));
             for entry in &group.layers {
                 let sel = GeoSel {
                     entity: group.entity.clone(),
@@ -207,11 +207,11 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
             .horizontal(|ui| {
                 // #1688: the remove button comes first, so it stays in reach
                 // however long the label is or however narrow the panel.
-                let x = ui.small_button("×").on_hover_text("remove this pick");
+                let x = small_button(ui, "×").on_hover_text("remove this pick");
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
                 if let Some((entity, id)) = &vertex
-                    && ui.small_button("Set origin").on_hover_text("set the work origin at this vertex").clicked()
+                    && small_button(ui, "Set origin").on_hover_text("set the work origin at this vertex").clicked()
                 {
                     crate::vertex_pick::queue_origin_at_vertex(state, entity, *id);
                 }
@@ -221,12 +221,11 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                     } else {
                         "set the work origin at this curved face's centroid (a full bore: its axis at mid-height)"
                     };
-                    if ui.small_button("Set origin").on_hover_text(tip).clicked() {
+                    if small_button(ui, "Set origin").on_hover_text(tip).clicked() {
                         crate::vertex_pick::queue_origin_at_face(state, entity, feat.clone(), false);
                     }
                     if t.plane_z.is_some()
-                        && ui
-                            .small_button("Set origin (Z only)")
+                        && small_button(ui, "Set origin (Z only)")
                             .on_hover_text("keep the origin's X and Y; move Z to this flat face")
                             .clicked()
                     {
@@ -240,7 +239,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                 } else {
                     RichText::new(&label)
                 };
-                let resp = ui.add(egui::Label::new(text).truncate());
+                let resp = list_row_truncated(ui, text);
                 // #1507: the label, the remove button and the row's other
                 // buttons all light the pick: "which one am I removing?".
                 if resp.hovered() || x.hovered() {
@@ -280,7 +279,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
             }
         }
     }
-    if ui.small_button("Clear").on_hover_text("drop every pick - the stock bounds the operation again").clicked() {
+    if small_button(ui, "Clear").on_hover_text("drop every pick - the stock bounds the operation again").clicked() {
         state.pending.push_back(CommandKind::EditOperationLinks {
             name: target.to_owned(),
             tool: None,

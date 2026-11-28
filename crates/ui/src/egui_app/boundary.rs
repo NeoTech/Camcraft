@@ -33,7 +33,7 @@ use crate::state::{BoundaryPick, GeoPick, State};
 
 use super::colorvision::{ink, palette_of, text_inks};
 use super::fields::{combo, num};
-use super::layout::{auto_value, consequence, group, group_open, hint, prop_row, prop_row_hint};
+use super::layout::{auto_value, choice_button_enabled, consequence, group, group_open, hint, list_row, list_row_wrapped, prop_row, prop_row_hint, small_button, small_button_enabled};
 
 /// One line each: what the roles do and how to pick (the user's "very
 /// unclear how the open boundary selection works") - the hover of the
@@ -64,7 +64,7 @@ const EXTEND_HINT: &str = "Carries the area past its exterior edges - edges with
 pub(super) fn boundary_group(ui: &mut Ui, state: &mut State) {
     if let Some(why) = area_unsupported(state.op_ui.params.kind()) {
         state.boundary_pick = None;
-        ui.label(RichText::new(format!("Boundary settings do not apply to it: {why}.")).weak());
+        list_row(ui, RichText::new(format!("Boundary settings do not apply to it: {why}.")).weak());
         return;
     }
     let u = state.units();
@@ -84,7 +84,7 @@ fn body(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     let inks = text_inks(ui, &state.world);
     for (k, line) in s.lines.iter().enumerate() {
         let t = RichText::new(line);
-        ui.add(egui::Label::new(if k == 0 { t.strong() } else { t }).wrap());
+        list_row_wrapped(ui, if k == 0 { t.strong() } else { t });
     }
     for n in &s.notices {
         ui.colored_label(inks.warn, n);
@@ -128,7 +128,7 @@ fn body(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     group(ui, "Boundaries", None, |ui| {
         let entries = crate::frame_cost::time("ui/properties.boundary.entries", || boundary_draft::entries(state));
         if entries.is_empty() {
-            ui.label("None - the selection bounds the area.");
+            list_row(ui, "None - the selection bounds the area.");
             hint(ui, &hints()[0]);
         }
         for (n, e) in entries.iter().enumerate() {
@@ -138,11 +138,11 @@ fn body(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
         collecting_line(ui, state, &mut acts);
         do_not_touch_ui(ui, state, u, &mut acts);
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("(i) roles, picking and the fill").small().weak())
+            list_row(ui, RichText::new("(i) roles, picking and the fill").small().weak())
                 .on_hover_text(hints().join("\n\n"));
         });
     });
-    if ui.small_button("Reset boundary").on_hover_text("every Boundary setting back to the kind's own law (Apply commits it)").clicked() {
+    if small_button(ui, "Reset boundary").on_hover_text("every Boundary setting back to the kind's own law (Apply commits it)").clicked() {
         acts.push(Act::Reset);
     }
     for act in acts {
@@ -211,11 +211,11 @@ fn role_rgb(state: &State, role: Role) -> egui::Color32 {
 fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act>) {
     let col = role_rgb(state, e.role);
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(format!("{}.", n + 1)).color(col).strong());
+        list_row(ui, RichText::new(format!("{}.", n + 1)).color(col).strong());
         egui::ComboBox::from_id_salt(("area_role", n)).selected_text(RichText::new(e.role.label()).color(col)).show_ui(ui, |ui| {
             for role in Role::ALL {
                 let block = boundary_draft::role_block(state, e, role);
-                let r = ui.add_enabled(block.is_none(), egui::Button::selectable(role == e.role, role.label()));
+                let r = choice_button_enabled(ui, block.is_none(), role == e.role, role.label());
                 if let Some(why) = block {
                     r.on_disabled_hover_text(why);
                 } else if r.clicked() && role != e.role {
@@ -223,7 +223,7 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
                 }
             }
         });
-        ui.label(&e.summary);
+        list_row(ui, &e.summary);
     });
     if e.role.is_open() {
         // The side is the user's choice: said in viewport words, with the
@@ -231,10 +231,10 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
         consequence(ui, &boundary_summary::side_caption(state, e.role));
         let other = if e.role == Role::OpenA { Role::OpenB } else { Role::OpenA };
         prop_row(ui, "Machined side", |ui| {
-            if ui.small_button("Machine the other side").on_hover_text(format!("switch to {}", other.label())).clicked() {
+            if small_button(ui, "Machine the other side").on_hover_text(format!("switch to {}", other.label())).clicked() {
                 acts.push(Act::Role(e.at, other));
             }
-            ui.label(if e.role == Role::OpenA { "A" } else { "B" });
+            list_row(ui, if e.role == Role::OpenA { "A" } else { "B" });
         });
     }
     ui.horizontal_wrapped(|ui| {
@@ -245,19 +245,19 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
                 acts.push(Act::Pick(if on { None } else { Some(target) }));
             }
         }
-        if matches!(e.shape, Some(PickShape::Open { .. })) && ui.small_button("Extend to loop").on_hover_text("close the picked edges around their face loop").clicked() {
+        if matches!(e.shape, Some(PickShape::Open { .. })) && small_button(ui, "Extend to loop").on_hover_text("close the picked edges around their face loop").clicked() {
             acts.push(Act::Extend(e.at));
         }
         if !e.role.is_open() && matches!(e.shape, Some(PickShape::Open { .. })) {
             let block = boundary_draft::role_block(state, e, Role::OpenA);
-            let r = ui.add_enabled(block.is_none(), egui::Button::new("Use as open boundary").small());
+            let r = small_button_enabled(ui, block.is_none(), "Use as open boundary");
             if let Some(why) = block {
                 r.on_disabled_hover_text(why);
             } else if r.clicked() {
                 acts.push(Act::Role(e.at, Role::OpenA));
             }
         }
-        if ui.small_button("Remove").clicked() {
+        if small_button(ui, "Remove").clicked() {
             acts.push(Act::Remove(e.at));
         }
     });
@@ -268,20 +268,20 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
 
 fn add_row(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
     ui.horizontal_wrapped(|ui| {
-        if ui.small_button("+ Pick a boundary").on_hover_text("starts an Include entry - change its role after picking").clicked() {
+        if small_button(ui, "+ Pick a boundary").on_hover_text("starts an Include entry - change its role after picking").clicked() {
             acts.push(Act::Pick(Some(BoundaryPick::Include)));
         }
         let has_open = state.op_ui.area.open.is_some();
-        let r = ui.add_enabled(!has_open, egui::Button::new("+ Pick an open boundary").small());
+        let r = small_button_enabled(ui, !has_open, "+ Pick an open boundary");
         if has_open {
             r.on_disabled_hover_text("an operation has one open boundary - use its Pick button to re-pick it");
         } else if r.on_hover_text("pick the edge chain the operation machines up to").clicked() {
             acts.push(Act::Pick(Some(BoundaryPick::Open)));
         }
-        if ui.small_button("+ Stock outline").on_hover_text("include the setup stock's outline").clicked() {
+        if small_button(ui, "+ Stock outline").on_hover_text("include the setup stock's outline").clicked() {
             acts.push(Act::Add(ExtraBoundary { mode: BoundaryMode::Include, shape: BoundaryShape::Stock }));
         }
-        if ui.small_button("+ Part silhouette").on_hover_text("keep the tool out of the part's silhouette").clicked() {
+        if small_button(ui, "+ Part silhouette").on_hover_text("keep the tool out of the part's silhouette").clicked() {
             acts.push(Act::Add(ExtraBoundary { mode: BoundaryMode::Exclude, shape: BoundaryShape::Silhouette }));
         }
     });
@@ -297,8 +297,8 @@ fn collecting_line(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
         BoundaryPick::DoNotTouch => "Do not touch".to_owned(),
     };
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(format!("Picking into {what} - viewport clicks fill it, not the selection.")).strong());
-        if ui.small_button("Done").clicked() {
+        list_row(ui, RichText::new(format!("Picking into {what} - viewport clicks fill it, not the selection.")).strong());
+        if small_button(ui, "Done").clicked() {
             acts.push(Act::Pick(None));
         }
     });
@@ -306,16 +306,16 @@ fn collecting_line(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
 
 fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Vec<Act>) {
     ui.separator();
-    ui.label(RichText::new("Do not touch").strong());
+    list_row(ui, RichText::new("Do not touch").strong());
     if let Some(why) = operation::do_not_touch_unsupported(state.op_ui.params.kind()) {
         if state.boundary_pick == Some(BoundaryPick::DoNotTouch) {
             state.boundary_pick = None;
         }
-        ui.label(RichText::new(why).small().weak());
+        list_row(ui, RichText::new(why).small().weak());
         return;
     }
     ui.horizontal(|ui| {
-        ui.label("Clearance");
+        list_row(ui, "Clearance");
         num(ui, u, &mut state.op_ui.area.do_not_touch.clearance);
         if state.op_ui.area.do_not_touch.clearance < 0.0 || !state.op_ui.area.do_not_touch.clearance.is_finite() {
             state.op_ui.area.do_not_touch.clearance = 0.0;
@@ -332,13 +332,13 @@ fn do_not_touch_ui(ui: &mut Ui, state: &mut State, u: units::Unit, acts: &mut Ve
     });
     let picks = state.op_ui.area.do_not_touch.picks.clone();
     if picks.is_empty() {
-        ui.label(RichText::new("None - pick faces or edges the tool assembly must never touch.").small().weak());
+        list_row(ui, RichText::new("None - pick faces or edges the tool assembly must never touch.").small().weak());
     } else {
         for (i, pick) in picks.iter().enumerate() {
             let row = ui
                 .horizontal(|ui| {
-                    ui.label(operation::describe_sel(pick));
-                    if ui.small_button("×").on_hover_text("remove from Do not touch").clicked() {
+                    list_row(ui, operation::describe_sel(pick));
+                    if small_button(ui, "×").on_hover_text("remove from Do not touch").clicked() {
                         acts.push(Act::RemoveDoNotTouch(i));
                     }
                 })
