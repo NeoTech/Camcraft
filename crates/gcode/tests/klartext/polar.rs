@@ -201,7 +201,9 @@ fn klartext_lp_keeps_the_last_polar_coordinates_where_they_are_known() {
         "M8",
         "LP PA+90",
     ]));
-    assert_to(moves(&p)[3], 0.0, 10.0, -2.0);
+    // (The first LP ends where the tool is: it adds no move.)
+    let m = moves(&p);
+    assert_to(m[m.len() - 1], 0.0, 10.0, -2.0);
     // CP keeps PR; CP PA sets PA, and CP IPA adds to a known PA.
     let p = ok(&pgm(&[
         "CC X+0 Y+0",
@@ -213,8 +215,9 @@ fn klartext_lp_keeps_the_last_polar_coordinates_where_they_are_known() {
         "LP PR+5",
     ]));
     let m = moves(&p);
-    assert_to(m[4], 0.0, -10.0, -1.0);
-    assert_to(m[5], 0.0, -5.0, -1.0);
+    let n = m.len();
+    assert_to(m[n - 2], 0.0, -10.0, -1.0);
+    assert_to(m[n - 1], 0.0, -5.0, -1.0);
     // After a Cartesian move, CP PA sets the angle, but the radius stays unknown.
     let after_l = ["CC X+0 Y+0", "L X+10 Y+0 Z-1 R0 F100", "CP PA+90 DR+"];
     let body: Vec<&str> = after_l.iter().copied().chain(["LP PR+5"]).collect();
