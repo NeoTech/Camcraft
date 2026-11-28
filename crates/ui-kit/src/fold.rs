@@ -138,10 +138,12 @@ mod tests {
         let mut clicked = false;
         let mut run = |events: Vec<egui::Event>| {
             let input = egui::RawInput { events, ..Default::default() };
-            let _ = ctx.run_ui(input, |ui| {
+            let mut out = ctx.run_ui(input, |ui| {
                 let resp = fold_chip(ui, rect, egui::Id::new("chip"), "Browser", &Tokens::DARK);
                 clicked |= resp.clicked();
             });
+            // The font atlas delta must be taken, or epaint refuses the drop.
+            out.textures_delta.clear();
         };
         let at = rect.center();
         run(vec![egui::Event::PointerMoved(at)]);

@@ -27,9 +27,10 @@ use super::{BROWSER_FRAC, REOPEN_PROPS_FRAC};
 use crate::egui_app::shell::Tab;
 use crate::egui_app::theme::Tokens;
 
-/// The open share of each folded side pane, keyed by the first tab of its
-/// leaf: the split fraction to put back on unfold.
-pub(crate) type PaneFolds = Vec<(Tab, f32)>;
+/// Each folded side pane, keyed by the first tab of its leaf: the open
+/// split fraction to put back on unfold, and the split's width when the
+/// fold law last held it (a change asks for one more frame).
+pub(crate) type PaneFolds = Vec<(Tab, f32, f32)>;
 
 /// The key marker of a saved setup that carries fold state (#4483). A
 /// setup without it is from an older build, and loads with every pane
@@ -127,8 +128,8 @@ pub(crate) fn unfold(dock: &mut DockState<Tab>, folds: &mut PaneFolds, tab: &Tab
 /// Put the stored open share of leaf `i` back, and forget it.
 fn restore(tree: &mut Tree<Tab>, folds: &mut PaneFolds, i: NodeIndex) -> bool {
     let Some(k) = key(tree, i) else { return false };
-    let Some(at) = folds.iter().position(|(t, _)| *t == k) else { return false };
-    let (_, stored) = folds.remove(at);
+    let Some(at) = folds.iter().position(|(t, _, _)| *t == k) else { return false };
+    let (_, stored, _) = folds.remove(at);
     if let Some((p, side)) = side_of(tree, i)
         && let Some(s) = split_mut(tree, p)
     {
@@ -147,11 +148,14 @@ pub(crate) fn is_folded(dock: &DockState<Tab>, tab: &Tab) -> bool {
 /// The fold law, once a frame before the dock lays out: the viewport is
 /// unfolded, each folded side pane is held at chip width (its open share
 /// stored first), and each pane unfolded by the dock's arrow gets its share
-/// back. Returns whether a fraction moved, so the shell asks for one more
-/// frame.
+/// back. egui_dock clamps a split fraction to its separator minimum AFTER
+/// the layout of each frame, so the hold is written again on every frame
+/// and is not a change by itself. Returns whether a fold started or ended,
+/// or a folded split changed width (a window resize), so the shell asks for
+/// one more frame.
 pub(crate) fn settle(dock: &mut DockState<Tab>, folds: &mut PaneFolds) -> bool {
     // A closed pane forgets its fold: a reopened one starts open.
-    folds.retain(|(t, _)| dock.find_tab(t).is_some());
+    folds.retain(|(t, _, _)| dock.find_tab(t).is_some());
     let tree = dock.main_surface_mut();
     let mut moved = false;
     for i in leaves(tree) {
@@ -167,15 +171,21 @@ pub(crate) fn settle(dock: &mut DockState<Tab>, folds: &mut PaneFolds) -> bool {
         let Some((p, side)) = side_of(tree, i) else { continue };
         let Some(k) = key(tree, i) else { continue };
         let Some(s) = split_mut(tree, p) else { continue };
-        if !folds.iter().any(|(t, _)| *t == k) {
-            folds.push((k, s.fraction));
-        }
         let span = s.rect.width();
-        if let Some(target) = kit::chip_fraction(side, kit::CHIP_WIDTH, span)
-            && !kit::holds(s.fraction, target, span)
-        {
+        match folds.iter_mut().find(|(t, _, _)| *t == k) {
+            Some(entry) => {
+                if (entry.2 - span).abs() >= 0.5 || entry.2.is_finite() != span.is_finite() {
+                    entry.2 = span;
+                    moved = true;
+                }
+            }
+            None => {
+                folds.push((k, s.fraction, span));
+                moved = true;
+            }
+        }
+        if let Some(target) = kit::chip_fraction(side, kit::CHIP_WIDTH, span) {
             s.fraction = target;
-            moved = true;
         }
     }
     moved
@@ -220,7 +230,7 @@ pub(crate) fn write_open_shares(copy: &mut DockState<Tab>, folds: &PaneFolds) {
             continue;
         }
         let Some(k) = key(tree, i) else { continue };
-        let Some(&(_, stored)) = folds.iter().find(|(t, _)| *t == k) else { continue };
+        let Some(&(_, stored, _)) = folds.iter().find(|(t, _, _)| *t == k) else { continue };
         if let Some((p, side)) = side_of(tree, i)
             && let Some(s) = split_mut(tree, p)
         {

@@ -2036,9 +2036,9 @@ pub struct State {
     pub setup_name_draft: String,
     /// The window's pending dock ask (see [`PanelSetupAsk`]).
     pub panel_setup_ask: Option<PanelSetupAsk>,
-    /// #4483: the open share of each folded side pane (`layout::fold`).
-    /// View state, like the dock it belongs to.
-    pub(crate) pane_folds: Vec<(crate::egui_app::shell::Tab, f32)>,
+    /// #4483: each folded side pane, its open share and its split width
+    /// (`layout::fold::PaneFolds`). View state, like the dock it belongs to.
+    pub(crate) pane_folds: Vec<(crate::egui_app::shell::Tab, f32, f32)>,
     /// The browser row whose retype menu stands open (M9.1): the op's
     /// name, anchored to its row and recomputed per frame like the
     /// ribbon's dropdowns - a frame fact, not a document fact; the
