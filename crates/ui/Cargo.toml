@@ -16,6 +16,9 @@ camcraft-app = { workspace = true }
 # #2620: the headless device policy (`headless_gpu`) lives in the compute
 # seam crate, so the renderer and the GPU kernels share one adapter choice.
 camcraft-gpu = { workspace = true }
+# #4394: the design system (theme tokens, theme files, contrast checks);
+# egui + serde_json only. docs/decisions/4394-ui-kit-crate.md.
+camcraft-ui-kit = { workspace = true }
 flecs_ecs = { workspace = true }
 winit = { workspace = true }
 image = { workspace = true }

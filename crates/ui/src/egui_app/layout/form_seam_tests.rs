@@ -1,5 +1,6 @@
-//! #1122: form-seam guard tests — migrated holes pages stay at zero raw
-//! egui control calls. Unmigrated families are outside this PR’s guard.
+//! #1122: form-seam guard tests — the migrated page families (holes,
+//! turning, multi-axis, 2D, 3D) stay at zero raw egui control calls. Unmigrated families are
+//! outside the guard until their own PR adds them.
 //! Provenance: our own source-level guard over `crates/ui/src/egui_app`.
 
 const RAW_PATTERNS: &[&str] = &[
@@ -13,16 +14,29 @@ const RAW_PATTERNS: &[&str] = &[
     "ui.radio_value(",
 ];
 
+/// The code lines of `src`, trimmed, with a line that starts a method
+/// call (`.add_enabled(`) joined to the line before it, so a call that
+/// rustfmt splits after `ui` still counts.
+fn joined_code(src: &str) -> String {
+    let mut out = String::new();
+    for line in src.lines().map(str::trim).filter(|line| !line.starts_with("//")) {
+        if !line.starts_with('.') {
+            out.push('\n');
+        }
+        out.push_str(line);
+    }
+    out
+}
+
 fn count_raw_calls(src: &str) -> usize {
-    src.lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .map(|line| {
-            RAW_PATTERNS
-                .iter()
-                .map(|pat| line.matches(pat).count())
-                .sum::<usize>()
-        })
-        .sum()
+    let code = joined_code(src);
+    RAW_PATTERNS.iter().map(|pat| code.matches(pat).count()).sum()
+}
+
+#[test]
+fn the_guard_counts_a_raw_call_split_over_two_lines() {
+    assert_eq!(count_raw_calls("if ui\n    .add_enabled(on, b)\n    .clicked() {}"), 1);
+    assert_eq!(count_raw_calls("ui.label(a);\n// ui.button(b)\nlist_row(ui, c);"), 1);
 }
 
 struct Family<'a> {
@@ -40,16 +54,72 @@ const FAMILIES: &[Family<'_>] = &[
             ("thread_page.rs", include_str!("../thread_page.rs")),
         ],
     },
-
+    Family {
+        name: "turning",
+        max_raw: 0,
+        sources: &[
+            ("turning_page.rs", include_str!("../turning_page.rs")),
+            ("turning_more_page.rs", include_str!("../turning_more_page.rs")),
+            ("turning_start_exit_rows.rs", include_str!("../turning_start_exit_rows.rs")),
+            ("thread_infeed_page.rs", include_str!("../thread_infeed_page.rs")),
+        ],
+    },
+    Family {
+        name: "multi-axis",
+        max_raw: 0,
+        sources: &[
+            ("multiaxis_page.rs", include_str!("../multiaxis_page.rs")),
+            ("rotary_page.rs", include_str!("../rotary_page.rs")),
+            ("multiaxis_deburr_page.rs", include_str!("../multiaxis_deburr_page.rs")),
+        ],
+    },
+    Family {
+        name: "2D",
+        max_raw: 0,
+        sources: &[
+            ("mill2d_page.rs", include_str!("../mill2d_page.rs")),
+            ("mill2d_more_page.rs", include_str!("../mill2d_more_page.rs")),
+            ("trochoid_page.rs", include_str!("../trochoid_page.rs")),
+            ("vcarve_page.rs", include_str!("../vcarve_page.rs")),
+            ("probe_page.rs", include_str!("../probe_page.rs")),
+            ("plasma_page.rs", include_str!("../plasma_page.rs")),
+            ("waterjet_page.rs", include_str!("../waterjet_page.rs")),
+            ("wire_page.rs", include_str!("../wire_page.rs")),
+            ("sinker_page.rs", include_str!("../sinker_page.rs")),
+            ("sinker_pick_rows.rs", include_str!("../sinker_pick_rows.rs")),
+            ("deburr_page.rs", include_str!("../deburr_page.rs")),
+            ("pockets_page.rs", include_str!("../pockets_page.rs")),
+            ("approach_page.rs", include_str!("../approach_page.rs")),
+            ("predrilled_page.rs", include_str!("../predrilled_page.rs")),
+            ("rest_pocket_page.rs", include_str!("../rest_pocket_page.rs")),
+            ("start_exit_rows.rs", include_str!("../start_exit_rows.rs")),
+            ("pass_start_row.rs", include_str!("../pass_start_row.rs")),
+            ("load_field.rs", include_str!("../load_field.rs")),
+            ("lead_page.rs", include_str!("../lead_page.rs")),
+            ("kind_editors.rs", include_str!("../kind_editors.rs")),
+        ],
+    },
+    Family {
+        name: "3D",
+        max_raw: 0,
+        sources: &[
+            ("mill3d_page.rs", include_str!("../mill3d_page.rs")),
+            ("undercut_page.rs", include_str!("../undercut_page.rs")),
+        ],
+    },
 ];
 
 #[test]
-fn form_seam_guard_covers_only_the_migrated_holes_family() {
-    assert_eq!(FAMILIES.len(), 1, "unmigrated families must not block the holes migration");
-    assert_eq!(FAMILIES[0].name, "holes");
-    assert_eq!(FAMILIES[0].max_raw, 0);
-    let files: Vec<_> = FAMILIES[0].sources.iter().map(|(name, _)| *name).collect();
-    assert_eq!(files, ["holes_page.rs", "thread_page.rs"]);
+fn form_seam_guard_covers_only_the_migrated_families() {
+    let names: Vec<_> = FAMILIES.iter().map(|f| f.name).collect();
+    assert_eq!(names, ["holes", "turning", "multi-axis", "2D", "3D"], "unmigrated families must not block a migration");
+    assert!(FAMILIES.iter().all(|f| f.max_raw == 0), "a migrated family has no raw call");
+    let files = |i: usize| FAMILIES[i].sources.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+    assert_eq!(files(0), ["holes_page.rs", "thread_page.rs"]);
+    assert_eq!(files(1), ["turning_page.rs", "turning_more_page.rs", "turning_start_exit_rows.rs", "thread_infeed_page.rs"]);
+    assert_eq!(files(2), ["multiaxis_page.rs", "rotary_page.rs", "multiaxis_deburr_page.rs"]);
+    assert_eq!(files(3).len(), 20, "the 2D family: {:?}", files(3));
+    assert_eq!(files(4), ["mill3d_page.rs", "undercut_page.rs"]);
 }
 
 #[test]
@@ -243,4 +313,68 @@ fn truncated_property_label_shows_full_name_on_hover() {
         h.output().shapes.iter().any(|clipped| has_full_label(&clipped.shape)),
         "hover must show the full name when the label must be cut off"
     );
+}
+
+#[derive(Default)]
+struct MoreProbe {
+    off_hits: usize,
+    on_hits: usize,
+    small_off_hits: usize,
+    on: bool,
+    count: u32,
+    pct: f64,
+}
+
+/// #1122: the helpers the 2D family added keep what the raw calls did:
+/// a greyed-out button takes no click, a check box toggles, a note and a
+/// cut list row keep their text, and a number field in a row is named by
+/// the row.
+#[test]
+fn the_2d_seam_helpers_keep_clicks_text_and_names() {
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    let mut h = Harness::builder().with_size(egui::Vec2::new(480.0, 300.0)).build_ui_state(
+        |ui, p: &mut MoreProbe| {
+            if super::button_enabled(ui, false, "Add skim").clicked() {
+                p.off_hits += 1;
+            }
+            if super::button_enabled(ui, true, "Add sync pair").clicked() {
+                p.on_hits += 1;
+            }
+            if super::small_button_enabled(ui, false, "Exclude the picked edges").clicked() {
+                p.small_off_hits += 1;
+            }
+            super::checkbox(ui, &mut p.on, "Use the start point");
+            super::note(ui, "Not taken - the kind has no exit");
+            super::list_row_truncated(ui, "Edge 12 of body 3");
+            super::prop_row(ui, "Tab count", |ui| super::drag_row(ui, egui::DragValue::new(&mut p.count)));
+            super::prop_row(ui, "Optimal load", |ui| super::drag_sized_row(ui, egui::DragValue::new(&mut p.pct).suffix(" %")));
+        },
+        MoreProbe::default(),
+    );
+    h.run();
+
+    for text in ["Not taken - the kind has no exit", "Edge 12 of body 3"] {
+        assert!(h.query_by_label(text).is_some(), "{text} is on the page");
+    }
+    for row in ["Tab count", "Optimal load"] {
+        let named = h.root().children_recursive().any(|n| {
+            let node = n.accesskit_node();
+            node.role() == Role::SpinButton && node.label().as_deref() == Some(row)
+        });
+        assert!(named, "the {row} field is named by its row");
+    }
+
+    h.get_by_label("Add skim").click();
+    h.get_by_label("Add sync pair").click();
+    h.get_by_label("Exclude the picked edges").click();
+    h.get_by_label("Use the start point").click();
+    h.run();
+
+    assert_eq!(h.state().off_hits, 0, "a greyed-out button takes no click");
+    assert_eq!(h.state().small_off_hits, 0, "a greyed-out small button takes no click");
+    assert_eq!(h.state().on_hits, 1);
+    assert!(h.state().on, "the check box toggles");
 }

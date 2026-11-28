@@ -109,7 +109,7 @@ impl MachineDraft {
                 vec![lin("X"), lin("Y"), lin("Z")]
             }
             // #530: lower guide X/Y and upper guide U/V.
-            Kind::Waterjet => vec![lin("X"), lin("Y")],
+            Kind::Waterjet | Kind::Laser => vec![lin("X"), lin("Y")],
             Kind::WireEdm => vec![lin("X"), lin("Y"), lin("U"), lin("V")],
         };
         if kind == Kind::MillTurn {
@@ -117,7 +117,9 @@ impl MachineDraft {
         }
         // #669: a plasma table's head is the torch - no spindle, no
         // coolant (the plasma rules refuse both by name).
-        parts.push(if matches!(kind, Kind::Plasma | Kind::Waterjet) { json!({ "id": "torch", "name": "torch", "type": "head" }) } else { head });
+        // #4081: a laser's head is the beam - no spindle, no coolant either.
+        parts.push(if matches!(kind, Kind::Plasma | Kind::Waterjet) { json!({ "id": "torch", "name": "torch", "type": "head" }) }
+            else if kind == Kind::Laser { json!({ "id": "beam", "name": "laser head", "type": "head" }) } else { head });
         let value = json!({
             "general": { "model": format!("New {}", kind.word()), "kind": kind.word() },
             "kinematics": { "default": {

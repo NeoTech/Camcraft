@@ -350,3 +350,37 @@ fn circular_refuses_no_room_and_the_uncut_core() {
     p.stock_to_leave = 2.5;
     assert!(err(circular(&rect(-1.0, -1.0, 1.0, 1.0), &p)).contains("the cutter has no room inside the circle"));
 }
+
+#[test]
+fn closed_model_chamfer_preserves_circular_interpolation() {
+    let points = (0..256)
+        .map(|index| {
+            let angle = f64::from(index) * std::f64::consts::TAU / 256.0;
+            Point2::new(10.0 * angle.cos(), 10.0 * angle.sin())
+        })
+        .collect::<Vec<_>>();
+    let region = Region::new(vec![Loop::new(points).expect("closed circle")]).expect("region");
+    for inside in [false, true] {
+        for climb in [false, true] {
+            for offset in [0.0, 0.6] {
+                let p = ChamferParams {
+                    inside,
+                    climb,
+                    minimum_cone_radius: offset,
+                    ..chamfer_params()
+                };
+                let result = chamfer(&region, &p).expect("chamfer on the model boundary");
+                let feeds: Vec<_> = result.moves.iter().filter(|m| m.kind == MoveKind::Feed).collect();
+                let arc_count = feeds.iter().filter(|m| m.arc.is_some()).count();
+                assert!(arc_count > 0, "the sampled model circle stayed linear");
+                assert!(feeds.len() < 64);
+                assert!(result.is_chained() && result.all_finite());
+                assert!(feeds.iter().all(|m| {
+                    (m.from.z - p.tip_z()).abs() < 1e-9 && (m.to.z - p.tip_z()).abs() < 1e-9
+                        && m.feed == Some(p.feed)
+                        && m.arc.is_none_or(|arc| arc.ccw == (inside == climb))
+                }));
+            }
+        }
+    }
+}

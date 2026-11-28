@@ -32,6 +32,15 @@
 //! of the document; the Tool tab's assembly group has the tool's
 //! component stack (`stack`). Each document change is one undoable
 //! command.
+//! #4334 (U8): one frame around the pages (`frame`): a header with the
+//! way back, the name and the Cutting tools | Holders tabs, and one footer
+//! with a hint and the page's buttons (Close; Duplicate, Cancel, Apply).
+//! #4335 (U9): the tool list has one header row and one search box
+//! (`list_header`, `search`).
+//! #4338 (U12): the Holders page has one header row with a search, and a
+//! user holder opens in the holder form (`holder_form`): each field an
+//! input, the drawing, the tools that use it; Apply is one undoable
+//! `EditDocumentComponent` that derives each of those tools again.
 //! Provenance: our own window, after the tool shape window pattern
 //! (`pages::tool_shape_editor_window`) and the egui `Window` docs; no
 //! HSMWorks material involved.
@@ -41,25 +50,33 @@ pub(crate) mod categories;
 pub(crate) mod component_edit;
 pub(crate) mod components;
 mod details_tab;
+pub(crate) mod frame;
+pub(crate) mod holder_drawing;
+pub(crate) mod holder_form;
 /// #3908: display only - private to this window, so no law can read it.
 mod flutes;
 pub(crate) mod holder_view;
 pub(crate) mod holders;
 pub(crate) mod list;
+pub(crate) mod list_header;
+mod list_rows;
 pub(crate) mod model;
 pub(crate) mod preview;
 mod rail;
+pub(crate) mod recipes_actions;
+mod recipes_derived;
 mod recipes_fill;
 pub(crate) mod recipes_tab;
+pub(crate) mod search;
 pub(crate) mod side_view;
 pub(crate) mod stack;
 pub(crate) mod thumbs;
-mod tool_tab;
+pub(crate) mod tool_tab;
 
 use egui::{Id, Ui, Window};
 
 use crate::actions;
-use crate::state::{ErrorScope, LibraryPage, State, ToolEditorTab, UiTarget};
+use crate::state::{LibraryPage, State, ToolEditorTab, UiTarget};
 
 /// The window's title, and its AccessKit name.
 pub(crate) const TITLE: &str = "Tool library";
@@ -118,17 +135,23 @@ pub(crate) fn width(screen: egui::Rect) -> (f32, f32) {
 }
 
 /// Draw the window when it is open (`state.tool_library` is `Some`).
-/// Its ✕ closes it; closing is view state, nothing is queued.
+/// #4334: the window has no egui title bar; the frame's header holds the
+/// title and the close button (the AccessKit name stays [`TITLE`]), and
+/// the window moves by a drag on its background. Closing is view state,
+/// nothing is queued.
 pub(crate) fn tool_library_window(ctx: &egui::Context, state: &mut State) {
     if state.tool_library.is_none() {
         return;
     }
     let screen = ctx.viewport_rect();
     let (w, left) = width(screen);
-    let mut open = true;
+    // Flat, docked look (#4245): the theme's window fill and hairline, a
+    // small radius, no shadow; the panels give their own margins.
+    let frame = egui::Frame::window(&ctx.global_style()).shadow(egui::Shadow::NONE).inner_margin(0.0);
     Window::new(TITLE)
         .id(Id::new("tool-library"))
-        .open(&mut open)
+        .title_bar(false)
+        .frame(frame)
         .collapsible(false)
         .resizable(true)
         // Left of the Properties pane, so the two can be used at the same
@@ -137,35 +160,55 @@ pub(crate) fn tool_library_window(ctx: &egui::Context, state: &mut State) {
         .default_size([w, (screen.height() * 0.7).max(320.0)])
         .min_width(w)
         .show(ctx, |ui| body(ui, state));
-    if !open {
-        state.close_tool_library();
+}
+
+/// #4334: the header, the footer, then the page between them.
+fn body(ui: &mut Ui, state: &mut State) {
+    // The tool editor's draft follows the document before the header and
+    // the footer read it (a cheap swap; the rows read it again later).
+    let gone = state.with_library_draft(|state, _| !state.tool_ui.exists).unwrap_or(false);
+    if gone {
+        state.close_tool_in_library();
+    }
+    let Some(mut face) = frame::face(state) else {
+        return;
+    };
+    let draft = frame::Draft { changed: component_edit::changed(state), holder_refusal: holder_form::refusal(state) };
+    if let frame::Face::UserHolder { users, .. } = &mut face {
+        *users = holder_form::users(state).len();
+    }
+    let band = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 6));
+    let head = egui::Panel::top("tool_library_head")
+        .frame(band)
+        .show(ui, |ui| frame::header(ui, state, &face))
+        .inner;
+    let foot = egui::Panel::bottom("tool_library_foot")
+        .frame(band)
+        .show(ui, |ui| frame::footer(ui, state, &face, &draft))
+        .inner;
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 6)))
+        .show(ui, |ui| page(ui, state));
+    if let Some(ask) = head.or(foot) {
+        act(state, &face, ask);
     }
 }
 
-/// #3897: the page switch, then the page.
-fn body(ui: &mut Ui, state: &mut State) {
+/// The page the window shows: the component editor stands in for the
+/// page while it is open (#3898).
+fn page(ui: &mut Ui, state: &mut State) {
     let Some(page) = state.tool_library.as_ref().map(|v| v.page) else {
         return;
     };
-    let mut picked = page;
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut picked, LibraryPage::Tools, TOOLS_PAGE).on_hover_text("the tools: the document's and the catalog's");
-        ui.selectable_value(&mut picked, LibraryPage::Holders, HOLDERS_PAGE)
-            .on_hover_text("the built-in holders by spindle taper, with the tools that use each one");
-    });
-    ui.separator();
-    if picked != page {
-        state.show_library_page(picked);
-        if let Some(v) = state.tool_library.as_mut() {
-            v.component_edit = None;
+    if let Some(d) = state.tool_library.as_ref().and_then(|v| v.component_edit.as_ref()) {
+        if d.shape.is_some() {
+            holder_form::draw(ui, state);
+        } else {
+            component_edit::draw(ui, state);
         }
-    }
-    // #3898: the component editor stands in for the page while it is open.
-    if state.tool_library.as_ref().is_some_and(|v| v.component_edit.is_some()) {
-        component_edit::draw(ui, state);
         return;
     }
-    match picked {
+    match page {
         LibraryPage::Tools => tools_page(ui, state),
         LibraryPage::Holders => {
             if state.tool_library.as_ref().is_some_and(|v| v.holders.open.is_some()) {
@@ -175,6 +218,43 @@ fn body(ui: &mut Ui, state: &mut State) {
             }
         }
     }
+}
+
+/// Do what the frame was asked. Back and Cancel drop an unapplied draft,
+/// as the old way back did; Apply queues the same commands as before.
+fn act(state: &mut State, face: &frame::Face, ask: frame::Ask) {
+    use frame::{Ask, Face};
+    match (ask, face) {
+        (Ask::Page(p), _) => {
+            state.show_library_page(p);
+            if let Some(v) = state.tool_library.as_mut() {
+                v.component_edit = None;
+            }
+        }
+        (Ask::Close, _) => state.close_tool_library(),
+        (Ask::Back | Ask::Cancel, Face::Component(_) | Face::UserHolder { .. }) => component_edit::close(state),
+        (Ask::Back | Ask::Cancel, Face::Tool { .. }) => state.close_tool_in_library(),
+        (Ask::Back | Ask::Cancel, Face::Holder(_)) => state.open_holder_in_library(None),
+        (Ask::Back | Ask::Cancel, Face::List(..)) => {}
+        (Ask::Apply, Face::Component(_)) => component_edit::apply(state),
+        (Ask::Apply, Face::UserHolder { .. }) => holder_form::apply(state),
+        (Ask::Duplicate, Face::UserHolder { .. }) => holder_form::duplicate(state),
+        (Ask::Duplicate, _) => {}
+        (Ask::Apply, Face::Tool { .. }) => apply_tool(state),
+        (Ask::Apply, _) => {}
+    }
+}
+
+/// One Apply queues the draft (`ChangeTool`, or `ReshapeTool` when a drawn
+/// cutter rides it) and, when the number changed, `SetToolNumber` - the
+/// same commands as Properties' Apply.
+fn apply_tool(state: &mut State) {
+    let _ = state.with_library_draft(|state, _| {
+        let name = state.tool_ui.name.clone();
+        let apply = state.apply_tool_numbers(&name);
+        state.pending.push_back(apply);
+        super::tool_settings::push_number_if_changed(state, &name);
+    });
 }
 
 /// The full list, or the rail beside the editor when a tool is open.
@@ -213,10 +293,9 @@ enum After {
     Shape(String),
 }
 
-/// The heading, then (#3897) two columns: the Tool, Recipes and Details
-/// tabs with their rows on the left, the preview on the right; the Apply
-/// row at the foot. The draft is swapped into `tool_ui` only while it is
-/// drawn (`with_library_draft`).
+/// (#3897) Two columns: the Tool, Recipes and Details tabs with their rows
+/// on the left, the preview on the right. The draft is swapped into
+/// `tool_ui` only while it is drawn (`with_library_draft`).
 fn editor(ui: &mut Ui, state: &mut State) {
     let after = state
         .with_library_draft(|state, face| {
@@ -229,14 +308,13 @@ fn editor(ui: &mut Ui, state: &mut State) {
             if crate::state::is_spun_kind(state.tool_ui.tool_kind()) {
                 state.sync_tool_profile_ui();
             }
-            ui.heading(format!("Tool: {name}"));
-            // The foot (Apply, and a refusal above it) and the gaps keep
-            // their room, so the columns never push the window taller.
-            let footer_h = if state.error_for(ErrorScope::Tool).is_some() { 100.0 } else { 72.0 };
+            // #4334: the name heads the window (the frame's header), and
+            // Apply stands in the shared footer, under this panel.
+            let footer_h = 8.0;
             // Bounded by the screen, not only by the room left: a column
             // as tall as the room would let the window grow each frame.
             let screen_h = ui.ctx().viewport_rect().height();
-            let col_h = (ui.available_height() - footer_h).min(screen_h * 0.7 - 190.0).max(160.0);
+            let col_h = (ui.available_height() - footer_h).min(screen_h * 0.7 - 150.0).max(160.0);
             let (rows_w, preview_w) = columns(ui.available_width());
             let mut shape = false;
             ui.horizontal_top(|ui| {
@@ -253,7 +331,6 @@ fn editor(ui: &mut Ui, state: &mut State) {
                     preview::draw(ui, state, face, egui::Vec2::new(preview_w, col_h));
                 });
             });
-            footer(ui, state, &name);
             if shape { After::Shape(name) } else { After::None }
         })
         .unwrap_or(After::None);
@@ -286,30 +363,6 @@ fn tabs(ui: &mut Ui, state: &mut State, tab: &mut ToolEditorTab, col_h: f32) -> 
             ToolEditorTab::Details => details_tab::draw(ui, state),
         });
     shape
-}
-
-/// Apply, with the Tool pane's refusal above it. One Apply queues the
-/// draft (`ChangeTool`, or `ReshapeTool` when a drawn cutter rides it)
-/// and, when the number changed, `SetToolNumber` - the same commands as
-/// Properties' Apply.
-fn footer(ui: &mut Ui, state: &mut State, name: &str) {
-    ui.separator();
-    if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
-        super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
-    }
-    let refusal = (state.tool_ui.tool_kind() == camcraft_app::tools::ToolKind::Waterjet)
-        .then(|| state.tool_ui.to_tool().torch_refusal())
-        .flatten();
-    if ui
-        .add_enabled(refusal.is_none(), egui::Button::new("Apply"))
-        .on_hover_text("write this draft to the tool (one undo step)")
-        .on_disabled_hover_text(refusal.as_deref().unwrap_or_default())
-        .clicked()
-    {
-        let apply = state.apply_tool_numbers(name);
-        state.pending.push_back(apply);
-        super::tool_settings::push_number_if_changed(state, name);
-    }
 }
 
 /// "Edit tool shape": the shape window edits through Properties' draft

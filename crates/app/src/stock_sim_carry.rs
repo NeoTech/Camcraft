@@ -81,6 +81,7 @@ pub fn machine_kind_name(kind: crate::machine::Kind) -> &'static str {
         Kind::MillTurn => "mill-turn",
         Kind::Plasma => "plasma",
         Kind::Waterjet => "waterjet",
+        Kind::Laser => "laser",
         Kind::WireEdm => "wire EDM",
         Kind::SinkerEdm => "sinker EDM",
     }

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/app", "crates/cl", "crates/gcode", "crates/motion", "crates/post", "crates/sim",
-  "crates/tools", "crates/ui", "crates/geometry", "crates/kernel", "crates/gpu", "crates/pathkernel",
+  "crates/tools", "crates/ui", "crates/ui-kit", "crates/geometry", "crates/kernel", "crates/gpu", "crates/pathkernel",
   "xtask"]
 
 [workspace.package]
@@ -19,6 +19,7 @@ camcraft-sim = { path = "crates/sim" }
 camcraft-motion = { path = "crates/motion" }
 camcraft-pathkernel = { path = "crates/pathkernel" }
 camcraft-gpu = { path = "crates/gpu" }
+camcraft-ui-kit = { path = "crates/ui-kit" }
 
 # ECS - alpha bindings, hard-pinned; expect churn on bumps.
 # flecs_alerts is NOT optional: flecs_ecs_sys 0.2.1's bindings.rs references

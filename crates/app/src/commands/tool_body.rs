@@ -341,14 +341,14 @@ impl SetToolBody {
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
         let invalid = |e: String| CommandError::Invalid(format!("tool '{name}': {e}"));
         let prev = tool_body::body_of(world, &entity);
-        let Some((source, place, facets)) = prev.as_ref().and_then(|b| match b.frame {
-            tool_body::BodyFrame::Lathe { place, .. } => Some((b.source.clone(), place, b.facets.to_vec())),
+        let Some((source, place, pad, facets)) = prev.as_ref().and_then(|b| match b.frame {
+            tool_body::BodyFrame::Lathe { place, pad, .. } => Some((b.source.clone(), place, pad, b.facets.to_vec())),
             tool_body::BodyFrame::Spindle { .. } => None,
         }) else {
             return Err(invalid("it carries no lathe body - an insert zone is part of one".to_owned()));
         };
         crate::tool_body_lathe::fits(&tool, zone.as_ref()).map_err(invalid)?;
-        let mut body = crate::tool_body_lathe::build(&source, place, zone, facets).map_err(invalid)?;
+        let mut body = crate::tool_body_lathe::build_padded(&source, place, zone, facets, pad).map_err(invalid)?;
         if let Some(ref p) = prev
             && !p.pieces.is_empty()
         {

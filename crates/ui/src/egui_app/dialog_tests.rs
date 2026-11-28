@@ -108,7 +108,7 @@ fn live(state: &State) -> OpParams {
 /// The control on the same row as `label`: the node of `role` whose
 /// vertical centre falls inside the label's rect.
 fn on_row<'a>(h: &'a Harness<'static, State>, label: &str, role: Role) -> egui_kittest::Node<'a> {
-    let lab = h.get_by_label(label).rect();
+    let lab = h.get_by_role_and_label(egui::accesskit::Role::Label, label).rect();
     h.query_all_by(move |n| n.role() == role)
         .find(|n| {
             let c = n.rect().center().y;
@@ -356,7 +356,7 @@ fn retyped(label: &str, tab: usize) -> Harness<'static, State> {
 #[test]
 fn contour_side_is_a_same_row_field() {
     let harness = retyped("2D Contour", super::op_tabs::SEC_GEO);
-    let lab = harness.get_by_label("Side").rect();
+    let lab = harness.get_by_role_and_label(egui::accesskit::Role::Label, "Side").rect();
     let combo = on_row(&harness, "Side", Role::ComboBox).rect();
     assert!(combo.left() > lab.right(), "the Side combo sits right of its label, not under it");
 }

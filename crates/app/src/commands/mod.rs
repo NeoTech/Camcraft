@@ -43,6 +43,7 @@ pub mod post_script_options;
 pub mod program_info;
 // #155: Pause / Home entries of the operation list.
 pub mod program_entry;
+pub mod pattern_folder;
 // M13.11: mesh repair (weld + fill holes) as one undo unit over UpdateModel.
 pub mod repair_model;
 // Issue #143: ribbon pins are saved with the project, so they are a command.
@@ -91,6 +92,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #3915: picks follow their faces by SolidCraft name at a re-import.
+pub mod update_model_follow;
 // #2463: link a model to its source file, or unlink it.
 pub mod model_link;
 // #1339: a person vouches for a mesh of unknown fidelity.
@@ -137,6 +140,10 @@ pub use post_script_options::{
 };
 pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
+pub use pattern_folder::{
+    CreatePatternFolder, DeletePatternFolder, EditPatternFolder, PatternEdit, SetPatternInstanceEnabled,
+    SetPatternMembers,
+};
 pub use model_link::SetModelSource;
 pub use repair_model::RepairModel;
 pub use vouch_fidelity::VouchModelFidelity;

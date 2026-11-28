@@ -11,7 +11,7 @@
 //! Provenance: our own UI over our own sinker parameters (general
 //! die-sink EDM practice); no vendor material or text.
 
-use egui::{Label, RichText, Ui};
+use egui::Ui;
 
 use camcraft_app::geo2d::Point2;
 use camcraft_app::operation::{OpParams, SinkerOrbitKind};
@@ -19,7 +19,7 @@ use camcraft_app::path_picks::PathPick;
 use camcraft_app::units::Unit;
 
 use super::fields::num;
-use super::layout::{check_row, consequence, group, prop_row};
+use super::layout::{check_row, consequence, group, note, prop_row};
 use super::start_exit_rows::{EXIT_GROUP, NOT_TAKEN, START_GROUP};
 
 /// Why a Sinker Burn without an orbit takes no point, as its groups say it.
@@ -77,7 +77,7 @@ pub(super) fn sinker_pick_groups(ui: &mut Ui, u: Unit, params: &mut OpParams) {
                 for (rows, list) in [(&ORBIT_START, &mut p.picks.start), (&ORBIT_EXIT, &mut p.picks.exit)] {
                     if list.is_empty() {
                         group(ui, rows.title, None, |ui| {
-                            ui.add(Label::new(RichText::new(format!("{NOT_TAKEN}{NO_ORBIT}")).weak()).wrap());
+                            note(ui, format!("{NOT_TAKEN}{NO_ORBIT}"));
                         });
                     } else {
                         point_group(ui, u, rows, at, list);

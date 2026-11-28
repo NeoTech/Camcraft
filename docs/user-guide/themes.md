@@ -64,6 +64,34 @@ clamped to the range.
 | `plate_hole` | Hole crosses and row and column names of a fixture plate |
 | `plate_dowel` | Dowel diamonds of a fixture plate |
 | `gcode_line` | The move of the selected G-code line, in the 3D view |
+| `tool_ground` | Ground of the tool, holder and profile previews |
+| `tool_axis` | Centre line of a tool preview |
+| `tool_grid` | Level lines of the tool profile preview |
+| `tool_flute` | Cutting band of a tool preview |
+| `tool_shank` | Shank of a tool preview and of a library thumbnail |
+| `tool_body` | Holder body of a tool or holder preview |
+| `tool_edge` | Outline of a tool or holder preview |
+| `tool_holder` | Holder outline in the tool profile and tool preview; its fill is this colour, partly transparent |
+| `tool_note` | Notes and labels in the tool and holder previews |
+| `tool_dim` | Dimension lines of the holder and side views |
+| `thumb_flute` | Cutting part of a tool library thumbnail |
+| `bad_ink` | A refused value or a cutter that cannot work: text and outline |
+| `warn_ink` | A warning of the tool assembly |
+| `mount_axis` | Spindle axis of the tool body page, and the lathe along arrow |
+| `mount_radial` | Lathe radial arrow of the tool body page |
+| `mount_tip` | Tool tip dot of the tool body page |
+| `mount_origin` | Model origin ring of the tool body page |
+| `mount_hint` | Pick hint text of the tool body page |
+| `close_hover` | Hover fill of a floating window's close button |
+| `close_ink` | The cross on a hovered close button |
+
+A theme does not set the colours that carry a meaning: the verdict
+colours of a simulation (clean, rest, gouge, not judged), the move kinds
+(feed, rapid, plunge), the selection, the boundary roles, and the
+warning, error and missing text of the pages. Each colour-vision mode
+(View preferences) has its own fixed set, and each set is tested so that
+these colours stay apart for that eye. A theme file with such a key is
+refused with "unknown token".
 
 ## Geometry (`geometry`, in points)
 
