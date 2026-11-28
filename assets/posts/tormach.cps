@@ -1549,6 +1549,13 @@ function onProbeResult() {
     var xy = false;
     for (var q = 0; q < axes.length; q++) if (axes[q].Axis !== "Z") xy = true;
     if (xy) {
+      // #4515: PathPilot's Numbered Parameters Reference documents rotation
+      // through G59.3 (#5390) only. The target slot is limited to G54-G59
+      // by the stream parser, but the active system can be extended.
+      if (wcsIndex > 9) {
+        throw new Error("PathPilot cannot write an XY probe result from " + wcsWord + inOp() +
+          ": no documented XY rotation parameter");
+      }
       var tgt = Number(p.SetWorkOffset) + 1;
       var rotA = "[#" + (5210 + 20 * wcsIndex) + " NE 0]";
       var g = nextO();

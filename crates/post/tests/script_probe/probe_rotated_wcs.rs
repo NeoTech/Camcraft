@@ -115,3 +115,41 @@ fn a_z_only_result_and_a_measure_only_result_have_no_guard() {
         assert!(!measure.contains("G10") && !measure.contains("ROTATION"), "{name}:\n{measure}");
     }
 }
+
+#[test]
+fn tormach_system_9_uses_the_last_documented_rotation_parameter() {
+    let stream = recorded::input("probe_t99_corner_g55.cnc");
+    let stream = stream.replace("PARAM WorkOffset 1.000000\n", "PARAM WorkOffset 9.000000\n");
+    let prog = post_stream(TORMACH, &Value::Null, &stream);
+    let want = guard(903, "[[#5390 NE 0] OR [#5250 NE 0]]", "G59.3 OR G55", "G10 L20 P2 X[#5420-#190] Y[#5421-#191]");
+    assert!(prog.contains(&want), "{prog}");
+}
+
+#[test]
+fn tormach_refuses_xy_probe_writes_from_extended_work_offsets() {
+    let stream = recorded::input("probe_t99_corner_g55.cnc");
+    for system in [10, 11, 500] {
+        let stream = stream.replace("PARAM WorkOffset 1.000000\n", &format!("PARAM WorkOffset {system}.000000\n"));
+        let result = engine::run_with(TORMACH, &Value::Null, &stream, &Value::Null);
+        let err = match result {
+            Ok(out) => panic!("system {system} must return no program:\n{}", out.program),
+            Err(err) => err.to_string(),
+        };
+        let want = format!("PathPilot cannot write an XY probe result from G54.1 P{system} in operation Probe1: no documented XY rotation parameter");
+        assert!(err.contains(&want), "{err}");
+    }
+}
+
+#[test]
+fn tormach_extended_work_offset_still_allows_z_only_and_measure_only() {
+    let face = recorded::input("probe_t99_face_g55.cnc").replace("PARAM WorkOffset 1.000000\n", "PARAM WorkOffset 10.000000\n");
+    let face = post_stream(TORMACH, &Value::Null, &face);
+    assert!(face.contains("G90 G54.1 P10 G40"), "{face}");
+    assert!(face.contains("G10 L20 P2 Z[#5422-#190]\n") && !face.contains("ROTATION"), "{face}");
+
+    let bore = recorded::input("probe_t99_bore_none.cnc").replace("PARAM WorkOffset 1.000000\n", "PARAM WorkOffset 11.000000\n");
+    let bore = post_stream(TORMACH, &Value::Null, &bore);
+    assert!(bore.contains("G90 G54.1 P11 G40"), "{bore}");
+    assert!(bore.contains("(MSG, CHECK PROBE RESULT #190..)\nM0\n"), "{bore}");
+    assert!(!bore.contains("G10 L20") && !bore.contains("ROTATION"), "{bore}");
+}
