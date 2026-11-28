@@ -1,8 +1,7 @@
 //! Adaptive trochoid shape checks from the project tests for issues #1509 and #2990.
 //! Gate map: covers camcraft_motion::machining2d (adaptive_troch, adaptive_troch_lanes, adaptive_troch_clean), camcraft_motion::quality.
 
-#[path = "common/adaptive_troch.rs"]
-mod fixtures;
+use crate::fixtures;
 
 // #3849: the clean-up engagement checks join this binary (no new top-level test binary).
 #[path = "adaptive_troch_parallel/clean.rs"]

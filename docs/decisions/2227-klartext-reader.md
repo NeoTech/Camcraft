@@ -85,3 +85,59 @@ reading `RL`/`RR` as `R0` (silent wrong path).
 `klartext/exec.rs` dispatch or `klartext/words.rs`, plus a test; no output
 type changes. `LBL` calls need a block list with a program counter instead
 of the single pass.
+
+## #2227 - Klartext reader, second slice: tapping, dwell, tolerance
+
+**What was decided.** The reader now reads every block that CamCraft's
+Klartext post writes today (#4227 cycles, #4095 cycle 32), so that each `.nc`
+golden of the post reads back without a refused block:
+
+- `CYCL DEF 206` (tapping with a floating tap holder): Q200, Q201, Q206,
+  Q211, Q203, Q204. Q211 can be left out (0).
+- `CYCL DEF 207` (rigid tapping): Q200, Q201, Q239, Q203, Q204, all required.
+- `CYCL DEF 9.0` / `9.1 DWELL <s>` (dwell time), recorded as a `DwellEvent`
+  at the `9.1` block.
+- `CYCL DEF 32.0` / `32.1 [T<mm>]` / optional `32.2 HSC-MODE:<0|1> [TA<deg>]`
+  (tolerance), checked and not stored.
+
+**Why, item by item.**
+- *Tapping motion.* Both cycles go at rapid to the set-up clearance, feed to
+  the thread depth, feed back out to the set-up clearance, and go at rapid
+  to the 2nd set-up clearance only when it is higher. This is the G84 chain
+  of `cycle_expand` (feed in and feed out), so the two readers give the same
+  shape. 206 dwells Q211 at the bottom (the `cl::Cycle` dwell, as Q211 of
+  cycle 200). The records are `CycleKind::FloatingTap` (206) and
+  `CycleKind::Tap` (207).
+- *Cycle 207 feed is S x Q239 at the call.* The control derives the feed from
+  the spindle speed and the pitch. The reader uses the S that is active at
+  the call. Without an S above 0 the call is refused: a guessed feed is a
+  wrong feed.
+- *A left-hand thread (negative Q239) is refused.* The control turns the
+  spindle against the programmed M3 for it. The reader output has only the
+  modal spindle direction, which would then be wrong. Our post writes
+  right-hand threads only.
+- *Cycle 9 is DEF-active.* The control dwells when it reads the `9.1` block,
+  so the dwell is recorded there, after the last move.
+- *Cycle 32 does not change the reader output.* The reader gives the
+  programmed path. The control smooths it within T; the reader cannot know
+  the smoothed path, and no consumer reads a tolerance yet. T must be finite
+  and not negative; TA must be in [0, 360] degrees.
+- *Sub-block order is enforced.* A `9.0` must be followed by its `9.1` and a
+  `32.0` by its `32.1`; any other block between them is refused by line and
+  block number. Only `32.2` is optional. Other sub-block cycles (1, 2, 7, 8,
+  10, 11, ...) stay refused by name (`CYCL DEF 10.0`).
+- *Name words are not checked.* The cycle names (`DWELL TIME`, `TOLERANCE`,
+  `TAPPING NEW`) depend on the control language, so the reader skips them; a
+  number in a name position is refused.
+- *`cl::Cycle::entry_z` is the surface Q203* for all Klartext hole cycles.
+  The first slice wrote the set-up clearance. Q203 is the real entry surface
+  (the reach-law datum), and it is what the post's CL stream records as
+  `ENTRY`. The RS-274 reader keeps R, because G81 has no surface word.
+
+**Dropped.** A tolerance field in `ParsedSection` (no consumer); reading a
+left-hand 207 with a flipped spindle direction (it changes a modal value from
+inside a cycle, with no test of the consumer side); a default S for 207.
+
+**Cost to change later.** A left-hand thread needs a spindle-direction
+override in the cycle record. A stored tolerance is one new field in
+`ParsedSection`.

@@ -118,6 +118,17 @@ off the profile, on the side you state. The side is never guessed from the
 geometry. The generated path's notes give the side, the offset and its
 two terms, the kerf width (twice the offset) and the start hole.
 
+**Compensation.** Wire Contour has a compensation mode: computer,
+control or wear. With computer compensation, the post writes the
+wire-centre path. With control compensation, a post that supports it (the Sodick
+LN2W post) writes the part contour and lets the control apply the wire
+offset under G41 / G42. The wire laws still judge the wire-centre path in
+each mode. A post that cannot write the control offset refuses it by name.
+
+**Guide reach.** A part whose origin is at the part bottom posts when
+the lower guide is at Z0. The guide-reach check does not read float
+round-off as a gap, and its messages never print "-0.000".
+
 **Start hole.** Type its X and Y; it is not picked in the viewport. For a
 die it is a hole in the slug, inside the profile; for a punch it is a
 hole or the stock's edge outside it. Either way it must stand more than
@@ -140,6 +151,15 @@ catcher, magnet or machine retention catches the freed piece. Alternatively,
 **Tab cut-off condition**. **Burn out the pocket (no core)** removes the
 interior with offset rings; **Wall clearance** must be at least the kerf
 offset. An incomplete release plan is refused.
+
+**Closing overlap** (closed profiles) rides the cut past its seam by the
+stated length before the lead-out, so no witness mark is left at the
+start. A skim takes the same overlap. It is refused with tabs, on an open
+run, and at a negative length. For an open run, the side **Centre** cuts
+a slit along the run's line: the kerf burns both sides and no side is
+kept. Skims also work on open runs. Each skim enters again from the air
+at the start end of the run. A reversed skim on an open run is refused by
+name.
 
 **Taper.** Positive **Taper angle** widens the profile downward from the
 top plane; negative narrows it. The machine must state a maximum taper.

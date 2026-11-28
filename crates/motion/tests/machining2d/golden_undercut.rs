@@ -3,7 +3,7 @@
 //! dovetail and a lollipop - the exact output pinned beside the
 //! behavioural laws of `motion::machining2d::undercut`'s own tests.
 //! Provenance: the project CL text grammar in docs/CNC-INTERMEDIATE.md.
-//! Regenerate with `WRITE_GOLDEN=1 cargo test -p camcraft-motion --test golden_undercut`,
+//! Regenerate with `WRITE_GOLDEN=1 cargo test -p camcraft-motion --test machining2d golden_undercut::`,
 //! then review the diff in crates/motion/tests/golden/.
 //!
 //! Gate map: covers camcraft_motion::machining2d::undercut and camcraft_tools::undercut.

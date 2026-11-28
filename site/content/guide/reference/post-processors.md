@@ -39,6 +39,7 @@ tests that behavior. A declaration does not implement controller support.
 | `probeAxisInversion` | Implements verified probing on mirrored machine axes. |
 | `threadHands` | Reads `SpindleDirection` and writes the spindle direction needed for the thread hand. |
 | `workOffsetIndex` | Receives `WorkOffset` as a 1-based number. Without it, offsets 1–6 arrive as `G54`–`G59`. |
+| `manualToolChange` | Array of the manual tool change modes that the post writes, for example `["manual-retract-top"]`. A machine whose `tooling.tool_change` is `manual` or `manual-retract-top` is refused by name unless the post declares that mode. |
 | `workOffsetMax` | Highest supported offset number; default 6. A valid declaration is a whole number from 1 to 255. |
 | `continuousThreading` | Implements chip-break dips as one synchronized chain. The controller manual must support synchronization across consecutive blocks. |
 | `rotariesBeforeTraverse` | `true` says the script turns the rotary axes to each section's pose at the safe Z before the first X/Y traverse. The first-traverse check then reads the work at the operation's own pose. Without it, the check reads every pose that the previous program can leave. A user's own script that declares it gets a note on the path. |

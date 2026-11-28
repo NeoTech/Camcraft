@@ -22,7 +22,7 @@ fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Region {
     Region::new(vec![Loop::new(pts.iter().map(|&(x, y)| Point2::new(x, y)).collect()).unwrap()]).unwrap()
 }
 
-#[path = "common/arc_measure.rs"]
+#[path = "../common/arc_measure.rs"]
 mod arc_measure;
 use arc_measure::{added_tangent_radii, cut_points, samples, seg_dist, to_wall};
 
