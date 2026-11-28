@@ -168,6 +168,13 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
+    // #3012: a by-part pattern folder posts an operation in several
+    // sections; one file per operation cannot hold that order.
+    if let Some((dup, _)) = streams.iter().enumerate().find_map(|(i, (n, _))| streams[..i].iter().find(|(m, _)| m == n)) {
+        return Err(format!(
+            "{dup}: a by-part pattern folder posts it once per copy - post one program, or set the folder to by tool"
+        ));
+    }
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.

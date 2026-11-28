@@ -35,7 +35,7 @@
 //! maximum for, an angle (or a corner's lean) above that maximum, a
 //! corner too sharp to lean, and a side the lean folds over.
 
-use super::{notes, wire_contour, WireParams, WireSide};
+use super::{notes, wire_contour, WireParams};
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2};
 use crate::geometry::Point3;
@@ -115,7 +115,7 @@ pub fn wire_contour_tapered(loops: &[Loop], chains: &[Vec<Point2>], p: &WirePara
     // An open run (#1109) has no ring to lean: reading its polyline as
     // one would close it with a chord back across the part. Refused by
     // name before anything is leaned.
-    if !chains.is_empty() || matches!(p.side, WireSide::Left | WireSide::Right) {
+    if !chains.is_empty() || p.side.is_open_side() {
         return Err(invalid(format!(
             "a {:.3} degree taper is asked on an open run - a taper is cut only around one closed profile (die or punch); cut the open run vertical (taper 0)",
             t.angle_deg

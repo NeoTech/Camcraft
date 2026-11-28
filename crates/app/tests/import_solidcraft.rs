@@ -5,7 +5,13 @@
 //! reader's own reason, and enters no history.
 //!
 //! Gate map (M4.4): covers camcraft_geometry::solidcraft,
-//! app::geometry::import, app::commands::import_model, app::mcp::tools.
+//! app::geometry::import, app::commands::import_model, app::mcp::tools,
+//! app::source_faces, app::commands::update_model,
+//! app::commands::repair_model, app::commands::delete_entity.
+
+// #3915: the SolidCraft face names beside a model's facets.
+#[path = "import_solidcraft/source_faces.rs"]
+mod source_faces;
 
 use std::path::{Path, PathBuf};
 

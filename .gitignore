@@ -47,3 +47,7 @@ loops.cmd
 /*.cnc
 /*.png
 /*.mch
+
+# Python bytecode from the site tests and tools (#4386): never tracked.
+__pycache__/
+*.pyc

@@ -19,6 +19,9 @@ pub mod fixture;
 pub mod fixture_mesh;
 // #2584: a generated machine model (blocks and cylinders), posed by axis values.
 pub mod machine_model;
+// #4266: the machine-frame view of the sim playback - the work turn the
+// display draws (pure vector/angle math, no document concern).
+pub mod machine_view;
 // #2181: the playback keyframes and the calculation before playback.
 pub mod play_keys;
 pub mod play_precalc;

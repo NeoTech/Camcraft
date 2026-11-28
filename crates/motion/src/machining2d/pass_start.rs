@@ -231,6 +231,18 @@ mod tests {
         assert_eq!(rings_fallbacks(std::slice::from_ref(&core)), 0, "{core}");
     }
 
+    /// #3734 pin (the first review note of d41c2b76a on PR #3577): the
+    /// start-side fallback note counts one time in `pass_start_fallbacks`,
+    /// so the op names the cause `FallbackCause::PassStart`, never
+    /// "Adaptive fell back" - and it counts once, not once per counter or
+    /// per prefix a caller adds.
+    #[test]
+    fn the_fallback_note_counts_once_as_the_pass_start_cause() {
+        let note = StartSide::from(PassStart::Outside).fallback_note(1.0);
+        assert_eq!(pass_start_fallbacks(std::slice::from_ref(&note)), 1, "{note}");
+        assert_eq!(pass_start_fallbacks(&[note.clone(), note]), 2, "two notes count two");
+    }
+
     #[test]
     fn auto_says_nothing_and_each_wall_case_is_named() {
         assert_eq!(PassStart::default(), PassStart::Auto);

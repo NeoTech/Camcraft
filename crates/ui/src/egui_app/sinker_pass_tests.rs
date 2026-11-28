@@ -29,7 +29,7 @@ fn sinker_page(pass: SinkerPass) -> Harness<'static, State> {
 }
 
 fn row_values(h: &Harness<'static, State>, label: &str) -> Vec<String> {
-    let lab = h.get_by_label(label).rect();
+    let lab = h.get_by_role_and_label(egui::accesskit::Role::Label, label).rect();
     h.query_all_by(|n| n.value().is_some())
         .filter(|n| {
             let c = n.rect().center().y;
@@ -42,7 +42,7 @@ fn row_values(h: &Harness<'static, State>, label: &str) -> Vec<String> {
 #[test]
 fn a_rough_op_shows_its_pass_and_the_finished_cavity_size() {
     let h = sinker_page(SinkerPass::Rough);
-    let row = h.get_by_label("Electrode pass").rect();
+    let row = h.get_by_role_and_label(egui::accesskit::Role::Label, "Electrode pass").rect();
     let combo = h.query_all_by(|n| n.role() == Role::ComboBox).any(|n| {
         let c = n.rect().center().y;
         c >= row.top() - 2.0 && c <= row.bottom() + 2.0 && n.value().as_deref() == Some("Rough (undersized)")
@@ -57,7 +57,7 @@ fn a_rough_op_shows_its_pass_and_the_finished_cavity_size() {
 #[test]
 fn a_finish_op_reads_finish_and_a_single_electrode_hides_the_cavity() {
     let h = sinker_page(SinkerPass::Finish);
-    let row = h.get_by_label("Electrode pass").rect();
+    let row = h.get_by_role_and_label(egui::accesskit::Role::Label, "Electrode pass").rect();
     let combo = h.query_all_by(|n| n.role() == Role::ComboBox).any(|n| {
         let c = n.rect().center().y;
         c >= row.top() - 2.0 && c <= row.bottom() + 2.0 && n.value().as_deref() == Some("Finish (to size)")

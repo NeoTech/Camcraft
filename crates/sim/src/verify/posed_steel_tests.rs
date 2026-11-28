@@ -117,6 +117,33 @@ fn a_fixed_clamp_under_the_stood_up_holder_is_clear_at_any_lean() {
     }
 }
 
+/// #4262: a radial pose that crosses the A plane's equator turns B from
+/// 180 to 0 while A stands at -90 - one pose written two ways, no turn
+/// of the tool. The housing (r 75, 250 long) stands upright over the
+/// tip in the machine frame, 70 mm and more above the A line; the
+/// machine table tops out 510 mm under it. It is clear, and the
+/// part-frame reading (no rotary stated) is clear too.
+#[test]
+fn a_b_flip_at_the_pole_of_a_turning_a_does_not_swing_the_housing_into_the_table() {
+    let ax = RotaryAxis { origin: Point3::new(0.0, 0.0, 0.0), dir: [1.0, 0.0, 0.0] };
+    let tool = wide_holder();
+    let table = [FixtureBox { min: Point3::new(-1020.0, -570.0, -2510.0), max: Point3::new(1020.0, 570.0, -510.0) }];
+    for (below, above) in [([0.0, 1.0, -1e-9], [0.0, 1.0, 1e-9]), ([0.0, -1.0, -1e-9], [0.0, -1.0, 1e-9])] {
+        assert_eq!(axis_to_angles(below)[1].abs(), 180.0, "the pose below the axis reads B180");
+        assert_eq!(axis_to_angles(above)[1], 0.0, "the pose above it reads B0");
+        let tip = Point3::new(0.0, 10.0 * above[1], 0.0);
+        let path = Toolpath::new(vec![
+            feed(tip, tip, below),
+            feed(tip, Point3::new(0.1, tip.y, 0.0), above),
+        ]);
+        let stack = HolderStack::cylinder(&tool);
+        let v = sweep(&path, &tool, &stack, &table, Some((75.0, 250.0)), 0.01, false, Some(&ax))[1];
+        assert_eq!(v, Verdict::Clear, "machine frame, pose {above:?}");
+        let p = posed_hits(&path, &tool, &stack, &table, Some((75.0, 250.0)), 0.01, false)[1];
+        assert_eq!(p, None, "part frame, pose {above:?}");
+    }
+}
+
 /// A tiny deterministic generator (no dependency): uniform in 0..1.
 struct Lcg(u64);
 impl Lcg {

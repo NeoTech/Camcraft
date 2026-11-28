@@ -112,6 +112,9 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             WireSide::Die => CutSide::Die,
             WireSide::Punch => CutSide::Punch,
             WireSide::Left | WireSide::Right => CutSide::Open,
+            // #3216: the centre slit is judged as an open run whose
+            // kerf burns both sides - the verify's centre reading.
+            WireSide::Centre => CutSide::Centre,
         };
         let start = w.picks.first(crate::path_picks::PickRole::Start).map(|p| p.xy);
         let cutoff_from = cutoff_from(w, &cache.path)?;

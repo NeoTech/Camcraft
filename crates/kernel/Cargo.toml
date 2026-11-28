@@ -17,6 +17,10 @@ truck = ["dep:truck-shapeops", "dep:truck-modeling", "dep:truck-meshalgo"]
 
 [dependencies]
 thiserror = { workspace = true }
+# #163, #4200: stage timings of the STEP read and the machining mesh are
+# tracing events; the app binaries and the benches print them (at debug
+# level; the bench sets its own filter).
+tracing = { workspace = true }
 # The Solidcraft reader (#1456): deflate for the .sc ZIP container (already
 # in Cargo.lock through png/tiff), JSON for its manifests.
 flate2 = "1.1"
@@ -44,6 +48,8 @@ truck-meshalgo = { workspace = true, optional = true }
 
 [dev-dependencies]
 camcraft-kernel = { path = ".", features = ["truck"] }
+# The #4200 profile bench prints the stage timings of the rotor read.
+tracing-subscriber = { workspace = true }
 # #2790: the STEP bench's truck side (truck-stepio, ruststep, truck-topology)
 # is a recorded reading now (tests/step_agreement/rows.rs); no truck STEP
 # crate is a dependency of this crate.

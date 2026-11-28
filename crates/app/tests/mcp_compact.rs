@@ -375,11 +375,7 @@ fn the_core_tool_set_is_a_small_subset_of_the_full_table() {
         provider::tools(Provider::Anthropic),
         "Full is today's table"
     );
-    assert!(
-        (20..=25).contains(&core.len()),
-        "core has {} tools",
-        core.len()
-    );
+    assert_eq!(core.len(), 28, "core retains its existing tools and adds the three editing tools");
     let names: Vec<&str> = full.iter().filter_map(|t| t["name"].as_str()).collect();
     for t in &core {
         let name = t["name"].as_str().expect("name");

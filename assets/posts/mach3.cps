@@ -19,7 +19,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 axisInversion = true; // verified on the engine's mirrored stream for a flipped WCS X/Y and an inverted machine X/Y (#2475): trace equivalence test + golden
 workOffsetIndex = true; // reads the 1-based WorkOffset number (#1385)
-workOffsetMax = 6;      // G54..G59 (the post writes no G59 P extension)
+workOffsetMax = 254;    // G54..G59 (1-6), G59 P7..P254 (#4149, Using Mach3Mill 10.7.18)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
@@ -392,8 +392,22 @@ function onRadiusCompensation() {
   msg("control cutter compensation (G41/G42) is not supported by the Mach3 post - choose In computer");
 }
 
-// #1385: the engine validates the offset index before this script receives it.
-function workOffsetName(n) { return "G" + (53 + n); }
+// #1385, #4149: the engine validates the offset index before this script receives it.
+// Mach3 supports G54..G59 for offsets 1..6, and extended offsets G59 P7..P254 (Using Mach3Mill 10.7.18).
+function workOffsetName(n) {
+  if (n !== Math.floor(n) || n < 1 || n > workOffsetMax) return "";
+  if (n <= 6) return "G" + (53 + n);
+  return "G59 P" + n;
+}
+
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) {
+    msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only");
+    return wcsWord;
+  }
+  return w;
+}
 
 function onParameter(name, value) {
   commentParam(name, value);
@@ -403,7 +417,7 @@ function onParameter(name, value) {
   if (name === "SetupChange") { setupNext = clean(value); return; }
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = workOffsetName(Number(value));
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);

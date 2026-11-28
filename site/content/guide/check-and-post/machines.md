@@ -70,7 +70,29 @@ your installed hardware.
 The {{ <icon name="tree-machine" /> }} Machine page has a **Library** picker and **Load other**, **Edit** and
 **Clear** actions. The overview shows the file's stated limits. A blank
 means **not stated**. The editor names invalid inputs and blocks saving
-until all refusals are fixed.
+until all refusals are fixed. The editor shows the spindle min/max speed
+refusal only under the two speed fields, not under the spindle power field.
+
+The Machines file editor adds, moves and removes the axes of a machine.
+It also reverses a linear axis and sets the direction of a rotary axis.
+
+A machine file can state more limits of the control. The post reads them:
+
+- `controller.work_offset_max` is the last preset row of the control. The
+  post refuses a higher work offset and names the setup.
+- `tooling.max_tool_number` is the highest tool number of the tool table.
+  Both Heidenhain posts refuse a higher tool number by name.
+- `tooling.d_number: "tool-number"` makes the Siemens 840D post write a
+  cutting edge D equal to the tool number T.
+- `tooling.spindle_mount` states the taper of the spindle. Each taper of
+  the holder library is a spindle mount, SK50 included.
+- `tooling.tool_change` can state a manual tool change: `manual` or
+  `manual-retract-top`. A post that does not write that manual tool change
+  refuses such a machine by name.
+
+The **Fehlmann Picomax 55** file states its travel limits, rigid tapping,
+5 preset rows and tool numbers up to 254. The library also has the
+**Haas VF-2SS YT** (`haas-vf2ssyt.mch`), with -508 to 508 mm of Y travel.
 
 In the browser's View controls, select **Show work envelope** to draw the
 active setup's machine travel as an outline. Mount a machine first. The
@@ -231,6 +253,12 @@ machine has no spindle - a torch states no rpm, power, speed range or
 tapping` and `a plasma table cuts flat sheet in X and Y - it states no
 rotary axis`.
 
+## Laser
+
+A machine file can declare the `laser` kind, and a tool can be a laser
+head. There is no laser operation yet, so you cannot cut on a laser
+machine in this release.
+
 ## Wire and sinker EDM
 
 The library includes **Sodick ALC400G** (`sodick-alc400g.mch`): X/Y
@@ -276,6 +304,19 @@ program, so post the tapers of each setup as their own program. The
 post refuses a 4-axis cut with two profiles, an arc in a tapered cut,
 the angle form (`G51` / `G52` `A`) and a wire offset (G41 / G42) in a
 taper. Its output has not been verified on a control.
+
+The LN2W post can also let the control apply the wire offset. Set the
+Wire Contour compensation to control (see
+[Wire Contour](@/guide/operations/operations-edm.md#wire-contour)). The
+post then writes the part contour under G41 / G42 Hnnn before the
+lead-in, with one register for each pass from H001, and G40 on each
+lead-out. It refuses a lead-in or a lead-out that is shorter than the
+offset radius.
+
+The **Sodick Wire EDM (Mark 21)** program header names the Mark 21 /
+EX21 control. It warns that LN1W/LN2W is not supported (the `G21` alarm
+E00170 and other taper words). It states the threading that the program
+does: T91 with AWT.
 
 Wire Contour runs on a machine file that declares `wire_edm`. The
 **Generic ISO Wire EDM** post takes its EDM words from the file's

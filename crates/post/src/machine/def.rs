@@ -272,6 +272,10 @@ pub struct Machine {
     /// control's tool table holds. `None` when the file states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tool_number: Option<u32>,
+    /// `controller.work_offset_max` (#4088): the highest work offset the
+    /// control holds. `None` keeps the post's own limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_offset_max: Option<u32>,
     /// `tooling.d_number` (#4143): how the control numbers the tool call's D word.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub d_number: Option<super::DNumberRule>,
@@ -341,6 +345,7 @@ impl Machine {
             && self.controller_identity.as_ref().is_none_or(|c| c.validate().is_ok())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.waterjet_sane()
+            && self.laser_sane()
             && self.plasma_sane()
             && self.edm_sane()
             && self.axes.iter().all(|a| {
@@ -376,6 +381,8 @@ impl Machine {
             "torch, no spindle".to_owned()
         } else if kind(Some(self)) == Kind::Waterjet {
             "waterjet nozzle, no spindle".to_owned()
+        } else if kind(Some(self)) == Kind::Laser {
+            "laser head, no spindle".to_owned()
         } else {
             format!(
                 "spindle {}-{} rpm",

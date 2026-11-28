@@ -51,11 +51,12 @@ fn block() -> Mesh {
 /// The machine `text` mounted and a punch around the block created at
 /// `taper` degrees; the generator's answer returned.
 fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
-    punch_with(text, taper, None)
+    punch_with(text, taper, None, 0.0)
 }
 
-/// [`punch`] with a no-core burnout (#540) stated.
-fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<(), String>) {
+/// [`punch`] with a no-core burnout (#540) and a closing overlap
+/// (#3216) stated.
+fn punch_with(text: &str, taper: f64, burnout: Option<f64>, overlap: f64) -> (World, Result<(), String>) {
     let world = new_world();
     let mut h = History::default();
     let m = parse_mch(text).expect("the fixture parses");
@@ -67,7 +68,9 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
     );
     h.execute(&world, ImportModel::from_mesh("block", block()));
     let op = WireContourOp {
+        overlap,
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
@@ -246,11 +249,33 @@ fn a_taper_whose_lower_edge_gouges_the_part_blocks_the_post() {
 /// with a burnout is refused by name - never cut upright silently.
 #[test]
 fn a_taper_with_a_no_core_burnout_is_refused_by_name() {
-    let (_, made) = punch_with(FIXTURE, 3.0, Some(0.5));
+    let (_, made) = punch_with(FIXTURE, 3.0, Some(0.5), 0.0);
     let err = made.expect_err("a tapered burnout");
     assert!(err.contains("Punch1") && err.contains("3.000 degree taper is asked with a no-core burnout"), "{err}");
-    let (_, made) = punch_with(FIXTURE, 0.0, Some(0.5));
+    let (_, made) = punch_with(FIXTURE, 0.0, Some(0.5), 0.0);
     assert!(made.as_ref().map_or_else(|e| !e.contains("taper"), |()| true), "a vertical burnout is not refused for a taper: {made:?}");
+}
+
+/// #3216: a closing overlap beside a constant taper is refused by name
+/// at the command door - the tapered cut leans one clean ring, and a
+/// seam-overlapped lap is not one. A 3 degree taper at overlap 1 mm
+/// once failed inside generation with "the wire path repeats a
+/// point"; the door now names the pair, and the same overlap on the
+/// vertical cut still rides its seam.
+#[test]
+fn a_closing_overlap_beside_a_taper_is_refused_by_name() {
+    let (_, made) = punch_with(FIXTURE, 3.0, None, 1.0);
+    let err = made.expect_err("a taper with a closing overlap");
+    assert!(
+        err.contains("a closing overlap is stated with a 3.000 degree taper") && err.contains("set the overlap to 0 or the taper to 0"),
+        "{err}"
+    );
+    assert!(!err.contains("repeats a point"), "the refusal names the pair at the door, never the taper builder's own: {err}");
+    let (world, made) = punch_with(FIXTURE, 0.0, None, 1.0);
+    made.expect("a vertical overlap rides its seam");
+    let e = model::find_by_name(&world, "Punch1").expect("op");
+    let path = model::toolpath_of(&world, &e).expect("the overlapped path").path;
+    assert!(path.notes.iter().any(|n| n.contains("rides 1.000 mm past its seam")), "{:?}", path.notes);
 }
 
 /// #1800 Done means: a non-zero taper on a machine that cannot post it is

@@ -29,10 +29,7 @@ pub(super) fn sizing(ui: &mut Ui, u: Unit, width: &mut f64, sizing: &mut DeburrB
     if sizing.profile == BreakProfile::Round {
         hint(ui, "a round break needs a ball-tipped cutter; a chamfer mill refuses it");
     }
-    let h = ui.spacing().interact_size.y;
-    prop_row(ui, "Number of passes", |ui| {
-        ui.add_sized([CTRL_W, h], DragValue::new(&mut sizing.passes).range(1..=DeburrBreak::MAX_PASSES));
-    });
+    prop_row(ui, "Number of passes", |ui| drag_sized_row(ui, DragValue::new(&mut sizing.passes).range(1..=DeburrBreak::MAX_PASSES)));
     hint(ui, "the break is cut in this many passes, from a small break to the full size");
 }
 
@@ -63,10 +60,10 @@ pub(super) fn filters(
         let mut remove = None;
         for (i, g) in exclude_edges.iter().enumerate() {
             ui.horizontal(|ui| {
-                if ui.small_button("×").on_hover_text("break this edge again").clicked() {
+                if small_button(ui, "×").on_hover_text("break this edge again").clicked() {
                     remove = Some(i);
                 }
-                ui.add(egui::Label::new(camcraft_app::pick::geo_label(world, g)).truncate());
+                list_row_truncated(ui, camcraft_app::pick::geo_label(world, g));
             });
         }
         if let Some(i) = remove
@@ -76,8 +73,7 @@ pub(super) fn filters(
         }
         let chains: Vec<&GeoSel> = picks.iter().filter(|g| matches!(g.feature, FeatureSel::Chain(_))).collect();
         let tip = "add the edges picked in Selection to this list";
-        if ui
-            .add_enabled(!chains.is_empty(), egui::Button::new("Exclude the picked edges").small())
+        if small_button_enabled(ui, !chains.is_empty(), "Exclude the picked edges")
             .on_hover_text(tip)
             .on_disabled_hover_text("pick edges in Selection first")
             .clicked()

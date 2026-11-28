@@ -3,11 +3,17 @@
 use super::*;
 use serde_json::json;
 
-/// A stand-in holder library (the real one is the caller's): three
+/// A stand-in holder library (the real one is the caller's): five
 /// entries, names compared case and spacing ignored.
 fn lib(w: &str) -> Result<HolderInfo, String> {
     let key = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
-    [("BT30 ER20", Some("BT30")), ("TTS ER20", Some("TTS")), ("ER20 chuck", None)]
+    [
+        ("BT30 ER20", Some("BT30")),
+        ("TTS ER20", Some("TTS")),
+        ("ER20 chuck", None),
+        ("HSK-A63 ER32", Some("HSK-A63")),
+        ("SK40 Shrink 12 mm", Some("SK40")),
+    ]
         .iter()
         .find(|(n, _)| key(n) == key(w))
         .map(|(n, t)| HolderInfo { name: (*n).to_owned(), taper: t.map(str::to_owned) })
@@ -83,4 +89,25 @@ fn stored_values_re_judge_the_same() {
     assert_eq!(mount_check(None, None), Ok(()));
     assert!(mount_check(Some("TTS"), Some("BT30 ER20")).is_err());
     assert!(mount_check(None, Some("no such holder")).is_err());
+}
+
+/// #4239: the HSK, DIN 69871 and 50-size tapers of the holder library
+/// are mounts a machine file states; a holder in the mount loads, a
+/// holder in another taper and a mount the library has not are refused
+/// by name.
+#[test]
+fn the_new_library_tapers_are_spindle_mounts() {
+    let v = json!({ "tooling": { "spindle_mount": "HSK-A63", "default_holder": "HSK-A63 ER32" } });
+    assert_eq!(parse_tooling(&v), Ok((Some("HSK-A63".into()), Some("HSK-A63 ER32".into()))));
+    let v = json!({ "tooling": { "spindle_mount": "sk40", "default_holder": "sk40 shrink 12 mm" } });
+    assert_eq!(parse_tooling(&v), Ok((Some("SK40".into()), Some("SK40 Shrink 12 mm".into()))));
+    for m in ["ISO30", "HSK-F63", "HSK-E40", "HSK-E32", "SK30", "SK50", "BT50", "CAT50"] {
+        assert_eq!(parse_tooling(&json!({ "tooling": { "spindle_mount": m } })), Ok((Some(m.into()), None)), "{m}");
+    }
+    let v = json!({ "tooling": { "spindle_mount": "SK40", "default_holder": "HSK-A63 ER32" } });
+    let e = parse_tooling(&v).expect_err("refused");
+    assert!(e.starts_with("tooling.default_holder:") && e.contains("HSK-A63") && e.contains("SK40"), "{e}");
+    let e = parse_tooling(&json!({ "tooling": { "spindle_mount": "HSK-A99" } })).expect_err("refused");
+    assert!(e.starts_with("tooling.spindle_mount:") && e.contains("\"HSK-A99\"") && e.contains("HSK-E32"), "{e}");
+    assert_eq!(mount_check(Some("HSK-A63"), Some("HSK-A63 ER32")), Ok(()));
 }

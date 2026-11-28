@@ -22,6 +22,7 @@ fn params(side: WireSide, start: (f64, f64), sharp: bool) -> WireParams {
         stock: None,
         clearance: 1.0,
         sharp_corners: sharp,
+        overlap: 0.0,
     }
 }
 

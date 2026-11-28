@@ -16,6 +16,8 @@ use camcraft_app::stock::StockShape;
 use flecs_ecs::prelude::World;
 use std::{collections::BTreeMap, fs};
 
+#[path = "agie_native/cobra.rs"]
+mod cobra;
 #[path = "agie_native/cutoff.rs"]
 mod cutoff;
 #[path = "agie_native/die.rs"]
@@ -102,6 +104,7 @@ fn punch_setup(
     );
     let wire = WireContourOp {
         lead_arc_radius: None,
+        compensation: Default::default(),
         top_z: Height::fixed(height),
         bottom_z: Height::fixed(0.0),
         condition: "AGIE_QN2".into(),
@@ -120,6 +123,7 @@ fn punch_setup(
         skims: Vec::new(),
         four_axis: None,
         sharp_corners: false,
+        overlap: 0.0,
     };
     h.execute(
         &world,

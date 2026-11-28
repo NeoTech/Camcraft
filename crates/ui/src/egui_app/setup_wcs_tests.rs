@@ -154,10 +154,13 @@ fn the_combo_lists_the_setups_post_range_by_its_names() {
 
     run(h.state_mut(), CommandKind::SelectPostNamed("Tormach PathPilot".into()));
     h.run();
-    let nine = entries(&mut h);
-    assert_eq!(nine.len(), 9, "{nine:?}");
-    assert_eq!(nine.get(6).map(String::as_str), Some("Work offset 7 (G59.1)"), "{nine:?}");
-    assert_eq!(nine.last().map(String::as_str), Some("Work offset 9 (G59.3)"), "{nine:?}");
+    // Tormach states G54-G59.3 and G54.1 P10-P500 (#4299); the combo stops
+    // at the setup command's own bound (MAX_SLOT + 1 = 255).
+    let tormach = entries(&mut h);
+    assert_eq!(tormach.len(), 255, "{tormach:?}");
+    assert_eq!(tormach.get(6).map(String::as_str), Some("Work offset 7 (G59.1)"), "{tormach:?}");
+    assert_eq!(tormach.get(8).map(String::as_str), Some("Work offset 9 (G59.3)"), "{tormach:?}");
+    assert_eq!(tormach.get(9).map(String::as_str), Some("Work offset 10 (G54.1 P10)"), "{tormach:?}");
 }
 
 /// #931: a stored pick the post cannot express stays visible as itself

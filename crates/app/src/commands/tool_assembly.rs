@@ -10,7 +10,7 @@
 
 use flecs_ecs::prelude::World;
 
-use camcraft_tools::component::ToolComponent;
+use camcraft_tools::component::{ComponentKind, ToolComponent};
 use camcraft_tools::component_geometry::ComponentGeometry;
 
 use crate::commands::{ChangeTool, Command, CommandError};
@@ -18,6 +18,31 @@ use crate::model;
 use crate::schema::{AssemblyLink, DocumentComponent, ToolAssembly, ToolBody};
 use crate::tool_assembly::{self as ta, components, table_set};
 use crate::tool_body;
+use crate::tools::ToolKind;
+
+/// #3646: cutter facts only on a tool item, running data only on an
+/// insert, and running rows a milling tool can take - checked when the
+/// row is made, not when a tool first reads it. #3645: the project and
+/// `.camtools` readers apply the same law to each row on file.
+pub(crate) fn row_refusal(row: &DocumentComponent) -> Option<String> {
+    let id = row.component.id();
+    if row.milling.is_some() && !matches!(row.component.kind(), ComponentKind::ToolItem { .. }) {
+        return Some(format!("the tool component '{id}' states cutter facts, but it is not a cutter body"));
+    }
+    if let Some(run) = &row.running {
+        if row.component.insert().is_none() {
+            return Some(format!("the tool component '{id}' states cutting data, but it is not an insert"));
+        }
+        if let Some(why) = camcraft_tools::cutting_rows::refusal_for_kind(&run.cutting, ToolKind::EndMill) {
+            return Some(format!("the tool component '{id}': {why}"));
+        }
+    }
+    None
+}
+
+fn row_law(row: &DocumentComponent) -> Result<(), CommandError> {
+    row_refusal(row).map_or(Ok(()), |why| Err(CommandError::Invalid(why)))
+}
 
 /// The message of a refusal, without the "invalid parameters:" prefix.
 fn said(e: CommandError) -> String {
@@ -79,9 +104,20 @@ impl UpsertDocumentComponent {
         if ta::component(world, component.id()).is_some() {
             return EditDocumentComponent::new(world, component, geometry).map(|e| Self(Upsert::Edit(e)));
         }
+        Self::with_row(world, DocumentComponent::new(component, geometry))
+    }
+
+    /// #3646: add or replace the whole row, its cutter facts and its
+    /// running data included. Refused by name: a fact on the wrong kind
+    /// of component, and every [`EditDocumentComponent`] refusal.
+    pub fn with_row(world: &World, row: DocumentComponent) -> Result<Self, CommandError> {
+        if ta::component(world, row.component.id()).is_some() {
+            return EditDocumentComponent::with_row(world, row).map(|e| Self(Upsert::Edit(e)));
+        }
+        row_law(&row)?;
         let prev = components(world);
         let mut next = prev.clone();
-        next.push(DocumentComponent { component, geometry });
+        next.push(row);
         Ok(Self(Upsert::Add { prev, next }))
     }
 
@@ -121,20 +157,45 @@ pub struct EditDocumentComponent {
 }
 
 impl EditDocumentComponent {
+    /// Replace the catalog fact and the geometry of a held row; its
+    /// cutter facts, running data, lathe body and library link stay. A
+    /// hand edit keeps the link (#3645): the sync status then shows that
+    /// the document copy differs from the library.
     pub fn new(world: &World, component: ToolComponent, geometry: ComponentGeometry) -> Result<Self, CommandError> {
-        let id = component.id().to_owned();
+        let held = ta::component(world, component.id());
+        let row = DocumentComponent {
+            library_ref: held.as_ref().and_then(|r| r.library_ref.clone()),
+            milling: held.as_ref().and_then(|r| r.milling),
+            lathe_body: held.as_ref().and_then(|r| r.lathe_body.clone()),
+            running: held.and_then(|r| r.running),
+            ..DocumentComponent::new(component, geometry)
+        };
+        Self::with_row(world, row)
+    }
+
+    /// #3646: replace a held row whole - the shared insert's running
+    /// data or a cutter body's facts too. Every tool built from it is
+    /// derived again in the same undo step. #3645: the library sync
+    /// lands through here, library link included.
+    pub fn with_row(world: &World, row: DocumentComponent) -> Result<Self, CommandError> {
+        row_law(&row)?;
+        let id = row.component.id().to_owned();
         let prev = components(world);
-        let row = DocumentComponent { component, geometry };
         let Some(at) = prev.iter().position(|r| r.component.id() == id) else {
             return Err(CommandError::Invalid(format!("the document holds no tool component '{id}'")));
         };
         if prev[at] == row {
             return Err(CommandError::Invalid(format!("the tool component '{id}' is already so")));
         }
+        // A change of the library link alone derives nothing again; a
+        // change of anything else (the #3646 cutter facts and running
+        // data included) derives every user again.
+        let content_changed = DocumentComponent { library_ref: None, ..prev[at].clone() }
+            != DocumentComponent { library_ref: None, ..row.clone() };
         let mut next = prev.clone();
         next[at] = row;
         let mut updates = Vec::new();
-        for user in ta::users_of(world, &id) {
+        for user in ta::users_of(world, &id).into_iter().filter(|_| content_changed) {
             let links = model::find_by_name(world, &user).and_then(|e| ta::assembly_of(world, &e)).map(|a| a.0).unwrap_or_default();
             let update = ToolUpdate::new(world, &user, &links, &next).map_err(|e| {
                 CommandError::Invalid(format!("the edit of tool component '{id}' is refused: {}", said(e)))

@@ -86,6 +86,9 @@ fn a_local_model_gets_the_core_tool_set_and_a_cloud_model_the_full_table() {
         }).collect();
         names.sort_unstable();
         assert_eq!(names, expected, "both local payloads contain exactly the core tools");
+        for name in ["rename_operation", "edit_tool", "set_work_material"] {
+            assert!(names.contains(&name), "local payload lacks {name}");
+        }
     }
     let fallback = &reqs[2].tools_payload;
     assert!(fallback["project"].is_object(), "fallback retains the project context");
@@ -97,6 +100,94 @@ fn a_local_model_gets_the_core_tool_set_and_a_cloud_model_the_full_table() {
     assert!(wire_tools.is_empty(), "Prompt-JSON sends its tools in the system prompt");
     assert!(system_prompt.expect("fallback system prompt")
         .contains("Mutating edits require user confirmation before execution."));
+}
+
+#[test]
+fn a_local_native_rename_changes_the_document_and_undo_turn_restores_it() {
+    use super::super::super::ai_chat::ToolCardStatus;
+    use camcraft_app::{mcp, model};
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::Queryable;
+
+    let mut h = blank_harness();
+    for (name, arguments) in [
+        ("set_stock", json!({"box":{"dx":60,"dy":40,"dz":10}})),
+        ("add_tool", json!({"catalog":"EM-0400-2FL"})),
+        (
+            "add_operation",
+            json!({"kind":"Face","tool":"EM-0400-2FL","name":"Face1"}),
+        ),
+    ] {
+        let st = &mut h.state_mut().state;
+        let request = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":arguments}});
+        let answer = mcp::answer_live(&st.world, &mut st.history, None, &request.to_string());
+        let reply: Value = serde_json::from_str(&answer.reply.expect("reply")).expect("JSON");
+        assert_eq!(reply["result"]["isError"], false, "{reply}");
+    }
+    let label = |h: &egui_kittest::Harness<'_, super::super::ShellUi>| {
+        let world = &h.state().state.world;
+        let op = model::find_by_name(world, "Face1").expect("stable key remains");
+        model::operation_label(world, "Face1", &op)
+    };
+    assert_eq!(label(&h), "Face1");
+    let depth = h.state().state.history.done_len();
+    h.run();
+    toggle_ai_chat_via_view_door(&mut h);
+    select_provider(&mut h, "Offline local (Ollama)");
+    let transport = ScriptedTransport::new(vec![
+        Ok(TransportOutput::AssistantResponse {
+            text: String::new(),
+            envelope: json!({"choices":[{"message":{"tool_calls":[{"id":"rename-1","type":"function",
+                "function":{"name":"rename_operation","arguments":json!({"name":"Face1","new_name":"Roughing"}).to_string()}}]}}]}),
+            fallback_override: None,
+        }),
+        Ok(TransportOutput::AssistantResponse {
+            text: "Renamed.".into(),
+            envelope: json!({"choices":[{"message":{"content":"Renamed."}}]}),
+            fallback_override: None,
+        }),
+    ]);
+    h.state_mut().state.ai_chat.set_transport(transport.clone());
+    // Deterministic version of the benchmark task, not a live model rerun.
+    submit_prompt(&mut h, "Rename Face1 to Roughing");
+    pump_until_idle(&mut h);
+    assert_eq!(label(&h), "Roughing");
+    assert_eq!(h.state().state.history.done_len(), depth + 1);
+    let turn = h.state().state.ai_chat.turns().last().expect("turn");
+    assert_eq!(turn.tool_cards.len(), 1);
+    assert_eq!(turn.tool_cards[0].status, ToolCardStatus::Succeeded);
+    {
+        let requests = transport.requests.lock().expect("requests");
+        assert_eq!(requests.len(), 2);
+        let tools = requests[0].tools_payload["tools"]
+            .as_array()
+            .expect("native tools");
+        assert!(
+            tools
+                .iter()
+                .any(|t| t["function"]["name"] == "rename_operation"),
+            "rename must be offered"
+        );
+        let result = requests[1]
+            .messages
+            .last()
+            .expect("tool reply")
+            .raw
+            .as_ref()
+            .expect("raw");
+        assert_eq!(result["tool_call_id"], "rename-1");
+        assert!(
+            result["content"]
+                .as_str()
+                .expect("result")
+                .contains("Roughing")
+        );
+    }
+    h.get_by_role_and_label(Role::Button, "Undo Turn").click();
+    h.run_steps(2);
+    assert_eq!(label(&h), "Face1");
+    assert_eq!(h.state().state.history.done_len(), depth);
+    assert!(h.state().state.ai_chat.turns().last().expect("turn").undone);
 }
 
 #[test]

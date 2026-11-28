@@ -56,6 +56,15 @@ pub struct ToolBodyDto {
     /// #396: a lathe body's insert zone (tool frame); absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub insert_zone: Option<InsertZoneDto>,
+    /// #3643, additive: a lathe body's pad (mm, the steel up to it
+    /// outside the facets), absent when 0. The bands are re-derived from
+    /// the facets and grown by it on load; a negative or non-finite pad,
+    /// or a pad on a spindle body, refuses the file by name. A reader
+    /// that predates the key cannot open such a file: the component row
+    /// the pad comes from carries a `pad` key that its strict row reader
+    /// refuses. A stated `null` is refused too, never read as no pad.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "stated_pad")]
+    pub pad: Option<f64>,
     /// Placed facets, tool frame (milling: tip at the origin, axis +Z;
     /// lathe: tip at the origin, +x radial, +z along the spindle).
     pub facets: Vec<[[f64; 3]; 3]>,
@@ -80,6 +89,12 @@ pub struct ToolBodyDto {
     /// coordinate systems so existing files stay byte-identical.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pieces: Vec<BodyPieceDto>,
+}
+
+/// A stated `pad` must be a number: `null` is refused, never read as
+/// absent (an absent key gives `None` through `serde(default)`).
+fn stated_pad<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    f64::deserialize(d).map(Some)
 }
 
 /// #2016: a tool's library holder on file - the reference, not the
@@ -213,17 +228,19 @@ impl ToolBodyDto {
                 offset: Some(*offset),
                 lathe: None,
                 insert_zone: None,
+                pad: None,
                 facets,
                 spun,
                 machine_default: b.machine_default,
                 pieces,
             },
-            BodyFrame::Lathe { place, zone, .. } => Self {
+            BodyFrame::Lathe { place, zone, pad, .. } => Self {
                 source: b.source.clone(),
                 axis: None,
                 offset: None,
                 lathe: Some(LathePlacementDto { radial: place.radial, along: place.along, tip: place.tip }),
                 insert_zone: zone.map(|z| InsertZoneDto { lo: z.lo, hi: z.hi }),
+                pad: (*pad > 0.0).then_some(*pad),
                 facets,
                 spun: None,
                 machine_default: false,
@@ -276,6 +293,9 @@ impl ToolBodyDto {
     }
 
     fn to_drawn_body(&self, tool: &str) -> Result<ToolBody, String> {
+        if self.pad.is_some() && self.lathe.is_none() {
+            return Err(format!("tool '{tool}': a body pad (\"pad\") is part of a lathe body, not a spindle one"));
+        }
         if let Some(pts) = &self.spun {
             if self.lathe.is_some() || self.insert_zone.is_some() {
                 return Err(format!("tool '{tool}': a drawn holder profile is a spindle body, not a lathe one"));
@@ -290,7 +310,8 @@ impl ToolBodyDto {
             (Some(_), Some(_), None) if zone.is_some() => Err("an insert zone needs a lathe placement, not a spindle one".to_owned()),
             (Some(axis), Some(offset), None) => crate::tool_body::build(&self.source, axis, offset, facets),
             (None, None, Some(l)) => {
-                crate::tool_body_lathe::build(&self.source, LathePlacement { radial: l.radial, along: l.along, tip: l.tip }, zone, facets)
+                let place = LathePlacement { radial: l.radial, along: l.along, tip: l.tip };
+                crate::tool_body_lathe::build_padded(&self.source, place, zone, facets, self.pad.unwrap_or(0.0))
             }
             _ => Err("the tool body states neither one spindle placement (axis and offset) nor one lathe placement".to_owned()),
         };

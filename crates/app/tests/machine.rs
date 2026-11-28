@@ -39,6 +39,9 @@ mod axis_rows;
 // #3071: the hobby router frames on the Grbl 1.1 post.
 #[path = "machine/hobby_routers.rs"]
 mod hobby_routers;
+// #4081: the laser machine kind and the laser head at the app doors.
+#[path = "machine/laser_kind.rs"]
+mod laser_kind;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()

@@ -1102,6 +1102,7 @@ fn waterjet_tabbed_plate_with_holes_matches_golden() {
         clearance_z: 10.0,
         cut_z: 6.0,
         model_excess: 0.0,
+        voice: camcraft_motion::sheet::Voice::WATERJET,
     };
     let path = waterjet_profile(&loops, &[], &part, &p).unwrap();
     assert!(path.notes.iter().any(|n| n.contains("3 hole(s), 2 tab(s)), 5 pierce(s)")), "{:?}", path.notes);
@@ -1268,6 +1269,7 @@ fn wire_contour_die_and_punch_match_golden() {
             stock: None,
             clearance: 1.0,
             sharp_corners: false,
+            overlap: 0.0,
         };
         let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
         assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
@@ -1299,6 +1301,7 @@ fn wire_open_cutoff_matches_golden() {
         clearance: 1.0,
         tabs: None,
         sharp_corners: false,
+        overlap: 0.0,
     };
     let line = vec![Point2::new(60.0, 0.0), Point2::new(60.0, 50.0)];
     let path = wire_contour(&[], &[line], &p).unwrap();

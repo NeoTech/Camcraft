@@ -72,6 +72,10 @@ pub enum WorkMaterial {
     Plywood,
     Acrylic,
     Hdpe,
+    // #3262: unalloyed wrought copper (C11000 ETP / C10100 OFHC, soft
+    // to half-hard). Appended: the table is indexed in ALL order and
+    // project files store the word, never the index.
+    Copper,
 }
 
 /// A cutting-speed (m/min) and feed-per-tooth (mm, at a 10 mm cutter)
@@ -108,7 +112,10 @@ const fn w(vc: (f64, f64), fz10: (f64, f64)) -> Window {
 /// router curve ([`crate::cutting_router::router_scale`]); their speeds
 /// sit at the low side of the woodworking and plastics ranges, and HSS
 /// takes about 0.7 of the carbide chip load.
-pub const TABLE: [MaterialRow; 12] = [
+/// The copper row (#3262) covers unalloyed wrought copper (C11000 ETP /
+/// C10100 OFHC, soft to half-hard, ISO 513 N); free-machining or
+/// age-hardened copper alloys (such as C14500 or C17200) differ.
+pub const TABLE: [MaterialRow; 13] = [
     MaterialRow { material: WorkMaterial::Aluminium6061, iso: 'N', kc11: 700.0, mc: 0.25,
         hss: w((100.0, 250.0), (0.04, 0.08)), carbide: w((250.0, 600.0), (0.05, 0.10)) },
     MaterialRow { material: WorkMaterial::MildSteel, iso: 'P', kc11: 1500.0, mc: 0.25,
@@ -133,10 +140,12 @@ pub const TABLE: [MaterialRow; 12] = [
         hss: w((80.0, 200.0), (0.10, 0.15)), carbide: w((150.0, 400.0), (0.14, 0.22)) },
     MaterialRow { material: WorkMaterial::Hdpe, iso: 'O', kc11: 200.0, mc: 0.25,
         hss: w((100.0, 250.0), (0.12, 0.18)), carbide: w((200.0, 500.0), (0.17, 0.26)) },
+    MaterialRow { material: WorkMaterial::Copper, iso: 'N', kc11: 950.0, mc: 0.25,
+        hss: w((45.0, 80.0), (0.03, 0.06)), carbide: w((120.0, 240.0), (0.04, 0.08)) },
 ];
 
 impl WorkMaterial {
-    pub const ALL: [WorkMaterial; 12] = [
+    pub const ALL: [WorkMaterial; 13] = [
         WorkMaterial::Aluminium6061,
         WorkMaterial::MildSteel,
         WorkMaterial::Stainless304,
@@ -149,6 +158,7 @@ impl WorkMaterial {
         WorkMaterial::Plywood,
         WorkMaterial::Acrylic,
         WorkMaterial::Hdpe,
+        WorkMaterial::Copper,
     ];
 
     #[must_use]
@@ -166,6 +176,7 @@ impl WorkMaterial {
             WorkMaterial::Plywood => "Plywood",
             WorkMaterial::Acrylic => "Acrylic (PMMA)",
             WorkMaterial::Hdpe => "HDPE",
+            WorkMaterial::Copper => "Copper (C11000)",
         }
     }
 
@@ -185,6 +196,7 @@ impl WorkMaterial {
             WorkMaterial::Plywood => "plywood",
             WorkMaterial::Acrylic => "acrylic",
             WorkMaterial::Hdpe => "hdpe",
+            WorkMaterial::Copper => "copper",
         }
     }
 
@@ -323,6 +335,42 @@ mod tests {
             assert_eq!(ToolMaterial::from_word(tm.word()), Some(tm));
         }
         assert_eq!(WorkMaterial::from_word("unobtainium"), None);
+    }
+
+    #[test]
+    fn copper_preset_is_appended_non_router_and_keeps_existing_rows() {
+        let existing: Vec<&str> = WorkMaterial::ALL[..12].iter().map(|m| m.word()).collect();
+        assert_eq!(
+            existing,
+            [
+                "aluminium_6061",
+                "mild_steel",
+                "stainless_304",
+                "grey_cast_iron",
+                "brass",
+                "plastics_pom",
+                "softwood",
+                "hardwood",
+                "mdf",
+                "plywood",
+                "acrylic",
+                "hdpe",
+            ]
+        );
+        assert_eq!(WorkMaterial::ALL.len(), 13);
+        assert_eq!(WorkMaterial::ALL[12], WorkMaterial::Copper);
+        assert_eq!(WorkMaterial::Copper as usize, 12);
+        assert_eq!(WorkMaterial::Copper.word(), "copper");
+        assert_eq!(WorkMaterial::Copper.label(), "Copper (C11000)");
+        assert_eq!(WorkMaterial::from_word("copper"), Some(WorkMaterial::Copper));
+        assert!(!WorkMaterial::Copper.router());
+        let row = WorkMaterial::Copper.row();
+        assert_eq!(row.iso, 'N');
+        assert_eq!((row.kc11, row.mc), (950.0, 0.25));
+        assert_eq!(row.hss.vc, (45.0, 80.0));
+        assert_eq!(row.hss.fz10, (0.03, 0.06));
+        assert_eq!(row.carbide.vc, (120.0, 240.0));
+        assert_eq!(row.carbide.fz10, (0.04, 0.08));
     }
 
     #[test]

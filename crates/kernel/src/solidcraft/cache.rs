@@ -26,6 +26,9 @@ const MESH_TAG: &[u8; 8] = b"SCMESH01";
 pub struct FinalBody {
     pub name: String,
     pub record: solidcore_record::brep::Brep,
+    /// The model body's `names` field as written (#3915; in format 10 the
+    /// index of its face names in `model.names`), read by `names::read`.
+    pub names: Option<Value>,
 }
 
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
@@ -212,5 +215,6 @@ pub fn final_body(manifest: &Value, payload: &[u8]) -> Result<FinalBody, KernelE
     Ok(FinalBody {
         name: text(mb, "name").to_owned(),
         record: saved.solid,
+        names: mb.get("names").cloned(),
     })
 }

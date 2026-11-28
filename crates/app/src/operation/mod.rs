@@ -129,6 +129,8 @@ mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
+// #4134: the Wire Contour's control / wear offset spans.
+pub mod wire_comp;
 mod agie_profile;
 mod agie_die;
 pub(crate) use agie_profile::{AgieSketch, agie_job, agie_quality, agie_sketch_job};

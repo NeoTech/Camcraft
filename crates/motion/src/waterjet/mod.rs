@@ -94,6 +94,10 @@ pub struct WaterjetParams {
     /// How much coarser than the importer's promise the model is, mm
     /// (#1053): the laws give it back out of [`KERF_TOL`].
     pub model_excess: f64,
+    /// Who speaks in the refusals and the notes: [`Voice::WATERJET`],
+    /// or [`Voice::LASER`] when the laser profile rides this generator
+    /// (#4081).
+    pub voice: Voice,
 }
 
 impl WaterjetParams {
@@ -106,7 +110,7 @@ impl WaterjetParams {
     /// The door: every refusal of the numbers by name, before any
     /// geometry is read.
     pub fn door(&self) -> Result<(), GenError> {
-        let bad = |w: String| Err(Voice::WATERJET.invalid(w));
+        let bad = |w: String| Err(self.voice.invalid(w));
         if !(self.kerf.is_finite() && self.kerf > 0.0) {
             return bad(format!("the kerf width must be a positive number (it is {})", self.kerf));
         }
@@ -145,7 +149,7 @@ impl WaterjetParams {
             }
         }
         if let Some(t) = &self.tabs {
-            tabs::door(t)?;
+            tabs::door(t, self.voice)?;
         }
         Ok(())
     }
@@ -158,9 +162,9 @@ impl WaterjetParams {
 pub fn waterjet_profile(loops: &[Loop], chains: &[Vec<Point2>], part: &Region, p: &WaterjetParams) -> Result<Toolpath, GenError> {
     p.door()?;
     if loops.is_empty() && chains.is_empty() {
-        return Err(GenError::Empty("waterjet profile: no contour to cut".into()));
+        return Err(GenError::Empty(format!("{}: no contour to cut", p.voice.who)));
     }
-    let contours = nest::contours(loops, chains, part, Voice::WATERJET)?;
+    let contours = nest::contours(loops, chains, part, p.voice)?;
     let order = nest::cut_order(&contours);
     emit::cut(&contours, &order, part, p)
 }
