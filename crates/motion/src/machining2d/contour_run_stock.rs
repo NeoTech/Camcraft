@@ -108,6 +108,13 @@ pub fn contour_open_run_sided(
     part: &SectionAt,
 ) -> Result<Toolpath, GenError> {
     let (ride, note) = sided_run_ride(pts, p, side, stock, part)?;
+    if let Some(q) = p.picks.start.first().map(|k| k.xy) {
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): the offset open run has no proved source endpoint mapping; \
+             clear the start point",
+            q.x, q.y
+        )));
+    }
     let mut path = contour_along_chain(&ride, p)?;
     path.notes.push(note);
     Ok(path)

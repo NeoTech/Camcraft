@@ -758,6 +758,7 @@ version = "0.28.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
+ "camcraft-gcode",
  "camcraft-geometry",
  "camcraft-motion",
  "camcraft-post",

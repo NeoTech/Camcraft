@@ -154,6 +154,7 @@ function tapPitchHolds(feed) {
 }
 var seqNum = 0;
 var seqNextForce = false;
+var usedBlockNumbers = {};
 var secStarted = 0;
 var safeRetractRefused = false;
 function optBool(k, def) {
@@ -166,8 +167,16 @@ function optStr(k, def) {
   return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "string" ? postOptions[k] : def;
 }
 function nextSeq() {
-  if (seqNum <= 0) seqNum = optInt("sequenceNumberStart", 10);
-  else seqNum += optInt("sequenceNumberIncrement", 10);
+  var increment = optInt("sequenceNumberIncrement", 10);
+  if (increment <= 0) throw new Error("sequence number increment must be positive");
+  var next = seqNum;
+  do {
+    var previous = next;
+    next = next <= 0 ? optInt("sequenceNumberStart", 10) : next + increment;
+    if (!isFinite(next) || next <= previous) throw new Error("cannot advance sequence number safely");
+  } while (usedBlockNumbers[next]);
+  seqNum = next;
+  usedBlockNumbers[seqNum] = true;
   return "N" + seqNum;
 }
 function isCommentOnly(a) {
@@ -1028,10 +1037,11 @@ function travelAxis(p) {  // where the target and the nominal trip differ most
   return d[0] >= d[1] && d[0] >= d[2] ? 0 : (d[1] >= d[2] ? 1 : 2);
 }
 function alarmUnless(cond, n, text) {  // alarm #3000=n unless cond holds
-  probeLabel += 1;
+  do { probeLabel += 1; } while (usedBlockNumbers[probeLabel]);
+  usedBlockNumbers[probeLabel] = true;
   block(["IF[" + cond + "]GOTO" + probeLabel]);
   block(["#3000=" + n + "(" + text + ")"]);
-  block(["N" + probeLabel]);
+  rawBlock(["N" + probeLabel]);
 }
 function minusU(expr, v) {  // expr - v, the sign folded into the operator
   var s = fn(v);  // macro-B text: a constant is not scaled by DPI (#1836)

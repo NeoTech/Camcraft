@@ -12,7 +12,7 @@
 //! that is clean, 20 an undercut (gouge), 16 a standing layer (rest),
 //! each 2 mm exactly, located.
 //!
-//! Gate map (M4.4): covers app::commands, app::geometry, motion::machining2d, app::model, app::operation, app::posting, app::schema, geometry::geometry::stock, app::stock_sim, sim::stock_sim, tools::tools, app::world.
+//! Gate map (M4.4): covers app::commands, app::geometry, motion::machining2d, app::model, app::operation, app::posting, app::schema, geometry::geometry::stock, app::stock_sim, sim::stock_sim, tools::tools, app::world, app::nc_sim, app::stock_play (PlaySeed::of_planned).
 
 use flecs_ecs::prelude::World;
 
@@ -29,6 +29,10 @@ use camcraft_app::stock::StockShape;
 use camcraft_app::stock_sim::{DEV_TOL, simulate_document};
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
+
+// #2218: external NC programs simulated against the setup.
+#[path = "stock_sim_document/nc_program.rs"]
+mod nc_program;
 
 fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
     catalog()

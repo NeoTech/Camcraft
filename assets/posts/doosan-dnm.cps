@@ -497,7 +497,7 @@ function disableSmoothing() {
 // #797: the machine check reads a lone rotary about X through the tool
 // axis (A0 B180 is its A180) and signs it by the stated direction (a
 // [-1,0,0] table holds the negated angle). The RTCP path below writes the
-// stream's letters as they come, never negated, so two poses the check
+// stream's letters with their sign conventions, so two poses the check
 // passes would post wrong: a B or C word on a machine with no rotary of
 // that name, and a non-zero A on a table stated along -X. Both are
 // refused by name here, as fanuc.cps does. (A [-1,0,0] rotary leans off
@@ -522,7 +522,16 @@ function missingLetter(p) {  // the first turning letter no rotary is named for,
 // stream zeros an unstated letter, and missingLetter has refused one
 // that turns, so a letter with no rotary here is a stated zero - a word
 // for it (C0 on an A/B head) is an address the control has no axis for.
-function angleWord(letter, v) { return statesRotary(letter) ? wa(letter, v) : ""; }  // degrees: never the document unit
+function angleWord(letter, v) {  // degrees: never the document unit
+  var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  for (var j = 0; j < rs.length; j++) {
+    if (String(rs[j].name || "").toUpperCase() === letter) {
+      // #4436: the table turns opposite to the tool-relative angle.
+      return wa(letter, rs[j].signConvention === "table_rh" ? -v : v);
+    }
+  }
+  return "";
+}
 function reversedLoneXRotary() {  // the rotary's name, else ""
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
   if (rs.length !== 1) return "";
@@ -568,7 +577,18 @@ function tilt(p) {  // words to append, [] if none, null if refused
     var rotWords = [];
     var aChanged = !has(lastA) || p.A !== lastA;
     if (aChanged) {
-      rotWords.push(angleWord("A", p.A));
+      // #4513: the machine check signs a lone rotary's angle by the
+      // stated direction - a [-1,0,0] table commands the negated angle
+      // (`judge.rs` x_rotary_problem), so the judged pose A20 reads
+      // A-20 on the machine. This path owns the word, so it writes the
+      // judged sign: the stream's A negated on a lone rotary stated
+      // along -X. (The G43.4 arm cannot re-express its RTCP stream and
+      // refuses such a table instead.) rotAt keeps the stream's letter;
+      // its readers want the magnitude only. A0 is the same word on
+      // either sign.
+      var rev = reversedLoneXRotary();
+      var aVal = rev === "A" && Math.abs(p.A) > 1e-9 ? -Number(p.A) : Number(p.A);
+      rotWords.push(angleWord("A", aVal));
     }
     return rotWords;
   }
@@ -580,7 +600,7 @@ function tilt(p) {  // words to append, [] if none, null if refused
   }
   var rev = reversedLoneXRotary();
   if (rev && Math.abs(p.A) > 1e-9) {
-    if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect posts the stream's angle unnegated, so it would leave the travel the machine check judged"); }
+    if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect does not reverse its angle for the stated axis direction, so it would leave the travel the machine check judged"); }
     return null;
   }
   if (!tcpmOn) {

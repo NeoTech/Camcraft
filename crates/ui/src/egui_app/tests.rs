@@ -154,6 +154,8 @@ mod tool_library_component_copies;
 mod tool_library_holders_ui;
 // #4338 (U12 of #3663): the holder search and the holder form.
 mod tool_library_holder_form;
+// #4455: the holder form's largest diameter and an Apply with no edit.
+mod tool_library_holder_largest;
 // #3898 (U7 of #3663): My library, the component editor and the stack.
 mod tool_library_components;
 mod tool_library_stack;
