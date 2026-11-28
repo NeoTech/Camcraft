@@ -31,9 +31,13 @@ HEIDENHAIN Klartext post and reader** (cycles 200, 206, 207, 9 and 32),
 the 5-Axis Parallel**, **the Sodick LN2W wire post** (control wire offset
 and constant taper), **SolidCraft face names that follow a re-import**, and
 **many post fixes** for Fanuc, Doosan DNM, Haas, Heidenhain, Sinumerik,
-Mach3, Mach4, LinuxCNC and Tormach. 193 pull requests merged since 0.27.0
-(58 features, 77 fixes, 2 performance changes, 10 refactors, docs, tests
-and process).
+Mach3, Mach4, LinuxCNC and Tormach. 194 pull requests merged since 0.27.0.
+193 of them have their own merge commit in `git log --format=%s
+v0.27.0..release/v0.28.0` (a "Merge pull request #N" subject). PR #4371
+has no merge commit: GitHub marks it merged because PR #4509 carries its
+head commits. By the title prefix of the 193 PRs: 58 `feat`, 76 `fix`, 2
+`perf`, 10 `refactor`, 18 `test`, 16 `docs`, 12 `chore`, and 1 with no
+prefix (a DXF import fix, PR #3968). PR #4371 is one more `fix`.
 
 ## Upgrade notes
 - Save a project in 0.28.0 only when each person who opens it also has
@@ -157,9 +161,14 @@ before you cut.
 - The pattern folder copies at the post.
 
 ## Known issues
-The cut line is 2026-11-27 20:59 UTC. These `P1` and `P2` issues are open
-and are not in this cut. Their fixes ship in the next minor. These `P1`
-issues need attention before you post:
+The cut line is 2026-11-27 20:59 UTC. The rule for this list: each `P1`
+and `P2` issue that is open at 2026-11-28 09:44 UTC and is not on the cut list
+(`gh issue list --state open --search 'label:P1,P2' --limit 200`). The list
+has 46 issues. Their fixes ship in the next minor. These `P1` issues need
+attention before you post:
+- **#4513 (P1): the Doosan DNM indexing path posts the A word with the
+  opposite sign for a lone rotary along -X, and the travel check passes.**
+  Filed after the cut line. Check the A sign on such a machine.
 - **#4417 (P1): the Fanuc post writes stream A/B words that a tilt-head
   chain (A carries B) reads as a different tool axis.** Do not post a
   tilt-head A-on-B machine with the Fanuc post until this is fixed.
@@ -182,14 +191,17 @@ issues need attention before you post:
 The release-tier site tests need zola 0.23.6, python3 and node on the cut
 runner. A runner without these tools fails the site step.
 
-All open `P1` and `P2` issues:
+All open `P1` and `P2` issues at 2026-11-28T09:44Z, not on the cut list:
+- #4513 (P1): doosan-dnm indexing path posts the A word with the opposite
+  sign for a lone rotary along -X, and the travel check passes (filed after
+  the cut line).
 - #4511 (P1): Fanuc and Doosan posts: a setup-change stop after a tilted
   section lifts Z with G43.4 still armed (filed after the cut line).
 - #4496 (P1): Generic component editor: a gauge-length edit redraws a user
   holder with the library body found by name, which can be thinner than the
   real steel (filed after the cut line).
 - #4455 (P1): Holder form: the Largest diameter field of a copied holder
-  reads 50.0 but the drawing shows Ø63.
+  reads 50.0 but the drawing shows Ø63 (filed after the cut line).
 - #4436 (P1): Fanuc and Doosan DNM posts ignore a rotary's sign_convention
   table_rh under G43.4.
 - #4417 (P1): Fanuc post writes stream A/B words that a tilt-head chain (A
