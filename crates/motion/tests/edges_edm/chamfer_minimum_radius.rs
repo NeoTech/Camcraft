@@ -1,8 +1,10 @@
 //! #3153 motion pins for the 2D Chamfer cone-band law.
 //!
 //! Gate map (#3153): covers motion::machining2d::chamfer,
-//! motion::machining2d::chamfer_side,
+//! motion::machining2d::chamfer_open, motion::machining2d::chamfer_side,
 //! motion::machining2d::contour_run_side, and geometry::geo2d::Region.
+
+mod end_caps;
 
 use camcraft_motion::cl::MoveKind;
 use camcraft_motion::geo2d::{Loop, Point2, Region};
@@ -100,86 +102,6 @@ fn a_closed_ring_offsets_toward_the_named_side() {
     assert!(
         (into.iter().map(|q| q.x).fold(f64::INFINITY, f64::min) - 2.0).abs() < 1e-6,
         "Inside moves the centerline into the selected region: {into:?}"
-    );
-}
-
-#[test]
-fn an_open_chain_offsets_on_its_named_air_side_and_keeps_its_break() {
-    let run = vec![Point2::new(-20.0, 20.0), Point2::new(20.0, 20.0)];
-    let section = |_| Ok(Some(rect(-20.0, -20.0, 20.0, 20.0)));
-    let p = params(2.0, Side::Outside);
-    let path =
-        chamfer_open_runs(std::slice::from_ref(&run), &p, &section).expect("open air offset");
-    let cut: Vec<_> = path
-        .moves
-        .iter()
-        .filter(|m| m.kind == MoveKind::Feed && (m.to.z - 17.0).abs() < 1e-12)
-        .collect();
-    assert_eq!(cut.len(), 3);
-    assert!(
-        cut.iter().any(|m| (m.to.y - 22.0).abs() < 1e-6),
-        "the selected run stands 2 mm into air: {cut:?}"
-    );
-    assert_eq!(
-        path.breaks[0].edge,
-        run.iter()
-            .map(|q| camcraft_motion::geometry::Point3::new(q.x, q.y, 20.0))
-            .collect::<Vec<_>>(),
-        "the offset does not grant credit beyond the picked chain"
-    );
-    let wrong = refusal(chamfer_open_runs(
-        std::slice::from_ref(&run),
-        &params(2.0, Side::Inside),
-        &section,
-    ));
-    assert!(
-        wrong.contains("wrong class") && wrong.contains("Side Inside"),
-        "{wrong}"
-    );
-
-    let blocked = Region::new(vec![
-        rect(-20.0, -20.0, 20.0, 20.0).loops()[0].clone(),
-        rect(-10.0, 21.0, 10.0, 25.0).loops()[0].clone(),
-    ])
-    .expect("wall and air-side material");
-    let blocked = refusal(chamfer_open_runs(std::slice::from_ref(&run), &p, &|_| {
-        Ok(Some(blocked.clone()))
-    }));
-    assert!(
-        blocked.contains("air side") && blocked.contains("smaller offset"),
-        "{blocked}"
-    );
-
-    let hole = Region::new(vec![
-        Loop::new(vec![
-            Point2::new(-30.0, -30.0),
-            Point2::new(30.0, -30.0),
-            Point2::new(30.0, 30.0),
-            Point2::new(-30.0, 30.0),
-        ])
-        .expect("outer"),
-        Loop::new(vec![
-            Point2::new(0.0, 0.0),
-            Point2::new(0.0, 20.0),
-            Point2::new(20.0, 20.0),
-            Point2::new(20.0, 0.0),
-        ])
-        .expect("hole"),
-    ])
-    .expect("holed section");
-    let hole_run = vec![Point2::new(5.0, 20.0), Point2::new(15.0, 20.0)];
-    let hole_path = chamfer_open_runs(
-        std::slice::from_ref(&hole_run),
-        &params(2.0, Side::Inside),
-        &|_| Ok(Some(hole.clone())),
-    )
-    .expect("an inside wall");
-    assert!(
-        feed_xy(&hole_path)
-            .iter()
-            .any(|q| (q.y - 18.0).abs() < 1e-6),
-        "Inside offsets a clear interior span toward the bounded air of the hole: {:?}",
-        feed_xy(&hole_path)
     );
 }
 
