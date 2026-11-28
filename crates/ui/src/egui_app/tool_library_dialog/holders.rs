@@ -13,6 +13,8 @@
 //! size and name, each term must match; "N of M holders"; Esc clears it),
 //! New holder, Import and Export. New holder makes a user holder of the
 //! machine's taper and opens it in the holder form (`holder_form`).
+//! #4389: Import… and Export… read and write holder files
+//! (`state_holder_files`).
 //! Frame cost: the library rows and their search words are built once for
 //! each thread; the search result is kept for its input
 //! (`state::holder_hits`); a frame reads the document's holder references
@@ -53,8 +55,10 @@ const SEARCH_HINT: &str = "Search taper, clamp, size or name";
 pub(crate) const NEW: &str = "New holder…";
 pub(crate) const IMPORT: &str = "Import…";
 pub(crate) const EXPORT: &str = "Export…";
-/// Why Import and Export are not offered yet.
-pub(crate) const NO_FILES: &str = "holder files follow in #4389";
+/// #4389: what Import and Export do.
+pub(crate) const IMPORT_HINT: &str =
+    "read a holder file (.camcomponents) and add its holders as user holders of this document (one undo step)";
+pub(crate) const EXPORT_HINT: &str = "write the user holders of this document to a holder file (.camcomponents)";
 /// The column heads.
 pub(crate) const HEADS: [&str; 7] = ["Name", "Taper", "Clamp", "Clamps Ø", "Gauge length", "Largest Ø", "Used by"];
 const TAPER_W: f32 = 170.0;
@@ -210,7 +214,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     let mut pick_taper = None;
     let mut open = None;
     let mut edit = None;
-    let mut new = false;
+    let mut clicks = Clicks::default();
     let mut filter = view.filter.clone();
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
@@ -219,7 +223,7 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
         });
         ui.separator();
         ui.vertical(|ui| {
-            new = header_row(ui, &mut filter, &hits);
+            clicks = header_row(ui, &mut filter, &hits);
             if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
                 super::super::error_text::error_text(ui, super::super::colorvision::text_inks(ui, &state.world).error, &msg);
             }
@@ -241,15 +245,29 @@ pub(super) fn draw(ui: &mut Ui, state: &mut State) {
     if let Some(id) = edit {
         super::component_edit::open(state, &id);
     }
-    if new {
+    if clicks.new {
         state.queue_component(ComponentAction::CopyAsUser { id: new_holder_id(&rows, machine.as_deref()) });
+    }
+    if clicks.import {
+        state.import_holders_dialog();
+    }
+    if clicks.export {
+        state.export_holders_dialog();
     }
 }
 
+/// The header row's buttons that were clicked.
+#[derive(Default)]
+struct Clicks {
+    new: bool,
+    import: bool,
+    export: bool,
+}
+
 /// #4338: the search box with its count, then New holder, Import and
-/// Export. Esc in the box clears it. Gives whether New holder was clicked.
-fn header_row(ui: &mut Ui, filter: &mut String, hits: &HolderHits) -> bool {
-    let mut new = false;
+/// Export. Esc in the box clears it. Gives the buttons clicked.
+fn header_row(ui: &mut Ui, filter: &mut String, hits: &HolderHits) -> Clicks {
+    let mut clicks = Clicks::default();
     ui.horizontal(|ui| {
         let w = (ui.available_width() - 420.0).max(140.0);
         let r = ui.add(egui::TextEdit::singleline(filter).hint_text(SEARCH_HINT).desired_width(w));
@@ -259,11 +277,11 @@ fn header_row(ui: &mut Ui, filter: &mut String, hits: &HolderHits) -> bool {
             filter.clear();
         }
         ui.weak(count_text(hits));
-        new = ui.button(NEW).on_hover_text("a user holder of the machine's taper, in this document, that you can edit (one undo step)").clicked();
-        let _ = ui.add_enabled(false, egui::Button::new(IMPORT)).on_disabled_hover_text(NO_FILES);
-        let _ = ui.add_enabled(false, egui::Button::new(EXPORT)).on_disabled_hover_text(NO_FILES);
+        clicks.new = ui.button(NEW).on_hover_text("a user holder of the machine's taper, in this document, that you can edit (one undo step)").clicked();
+        clicks.import = ui.button(IMPORT).on_hover_text(IMPORT_HINT).clicked();
+        clicks.export = ui.button(EXPORT).on_hover_text(EXPORT_HINT).clicked();
     });
-    new
+    clicks
 }
 
 /// #3898: the document's holders and adapters (its component table), each

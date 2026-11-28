@@ -113,6 +113,8 @@ mod component_library_tools;
 mod component_tools;
 // #4391: edit a user holder by its shape fields (the holder form's door).
 mod holder_shape_tools;
+// #4389: holder files.
+mod holder_file_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

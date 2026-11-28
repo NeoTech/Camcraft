@@ -57,6 +57,8 @@ mod test_import;
 mod program_info;
 #[path = "state_tool_library.rs"]
 mod tool_library_io;
+#[path = "state_holder_files.rs"]
+mod holder_files;
 #[path = "state_tool_library_dialog.rs"]
 mod tool_library_dialog;
 pub use tool_library_dialog::{

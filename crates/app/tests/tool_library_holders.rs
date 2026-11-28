@@ -23,10 +23,12 @@
 //! the document (`multi_seat`). #3643: a turning tool from linked lathe
 //! components (`lathe_stack`).
 //! #3919: the built-in shrink-fit chucks (`builtin_shrink`).
+//! #4389: holder files, their import command and MCP tools (`holder_files`).
 //! Gate map (M4.4): covers app::tool_library, app::commands (tool_import, tool_assembly),
 //! app::mcp (import_tool_library), app::script (importTools), app::tool_body, app::tool_assembly,
 //! app::project (component_wire, assembly_wire), app::component_library, app::commands (component_sync),
-//! app::mcp (component_tools, assembly_tools, component_library_tools).
+//! app::mcp (component_tools, assembly_tools, component_library_tools),
+//! app::commands (holder_file), app::mcp (holder_file_tools).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportMode, ImportReport, ImportTools, SetStock, SetToolBody,
@@ -70,6 +72,8 @@ mod lathe_stack;
 mod lathe_stack_pad;
 #[path = "tool_library_holders/builtin_shrink.rs"]
 mod builtin_shrink;
+#[path = "tool_library_holders/holder_files.rs"]
+mod holder_files;
 
 const DRAWN: &str = "Six";
 const MESH: &str = "Four";
