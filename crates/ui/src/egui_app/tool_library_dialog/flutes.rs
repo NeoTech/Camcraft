@@ -11,9 +11,11 @@
 //! lies on or inside that envelope: a groove only takes radius away.
 //!
 //! The rule (`docs/decisions/3908-tool-preview-flutes.md`):
-//! - kinds: the end, ball and bull nose mills, the twist drill and the
-//!   chamfer mill; every other kind draws its plain revolved model;
-//! - a stated count of 1..=[`MAX_FLUTES`]; no stated count, no flutes;
+//! - kinds: [`fluted_kind`] (#4452: every milling cutter with a cutting
+//!   length, the twist drill and the tap); every other kind draws its
+//!   plain revolved model;
+//! - a stated count of 1..=[`MAX_FLUTES`]; no stated count, no flutes
+//!   (#4452: a drill draws 2 and a tap 3 when none is stated);
 //! - the groove floor is [`CORE`] of the local radius, so a groove fades
 //!   to nothing at a ball tip or a drill point;
 //! - each groove takes [`GROOVE`] of one flute pitch, a sine section;
@@ -66,16 +68,14 @@ impl Grooves {
     /// The grooves `t` shows, or `None` for a tool the preview draws
     /// plain (a kind without flutes, no stated count, bad numbers).
     pub(crate) fn of(t: &Tool) -> Option<Self> {
-        let kind = matches!(
-            t.kind,
-            ToolKind::EndMill | ToolKind::BallNose | ToolKind::BullNose | ToolKind::Drill | ToolKind::Taper
-        );
-        let n = t.flutes.filter(|n| (1..=MAX_FLUTES).contains(n))?;
+        let kind = fluted_kind(t.kind);
+        let n = t.flutes.or_else(|| default_count(t.kind)).filter(|n| (1..=MAX_FLUTES).contains(n))?;
         let (len, r) = (t.flute_len, t.diameter * 0.5);
         if !(kind && len.is_finite() && len > 1e-9 && r.is_finite() && r > 1e-9) {
             return None;
         }
-        let helix = t.catalog.helix_deg.filter(|h| h.is_finite() && (0.0..=80.0).contains(h)).unwrap_or(0.0);
+        let helix = t.catalog.helix_deg.or_else(|| default_helix(t.kind));
+        let helix = helix.filter(|h| h.is_finite() && (0.0..=80.0).contains(h)).unwrap_or(0.0);
         Some(Self { n, twist: helix.to_radians().tan() / r, len })
     }
 
@@ -97,6 +97,47 @@ impl Grooves {
         let turn = (self.len * self.twist).abs() / TWIST_STEP;
         (turn.ceil().max(0.0) as usize).clamp(RINGS.0, RINGS.1)
     }
+}
+
+/// #4452: the kinds whose cutting part has flutes - the milling cutters
+/// (end, ball and bull nose, chamfer, keyseat, T-slot, dovetail,
+/// lollipop, form mill, thread mills) and the twist drill and the tap.
+/// The lathe tools, the probe, the electrode and the beam and wire tools
+/// draw their plain revolved model.
+pub(crate) fn fluted_kind(k: ToolKind) -> bool {
+    matches!(
+        k,
+        ToolKind::EndMill
+            | ToolKind::BallNose
+            | ToolKind::BullNose
+            | ToolKind::Drill
+            | ToolKind::Taper
+            | ToolKind::Tap
+            | ToolKind::ThreadMill
+            | ToolKind::ThreadMillSingle
+            | ToolKind::TSlot
+            | ToolKind::Keyseat
+            | ToolKind::Dovetail
+            | ToolKind::Lollipop
+            | ToolKind::FormMill
+    )
+}
+
+/// #4452: the flute count a kind draws when the tool states none - a
+/// twist drill has two flutes (DIN 338), a machine tap three. Display
+/// only; the tool keeps no count. Other kinds draw no flutes without one.
+fn default_count(k: ToolKind) -> Option<u32> {
+    match k {
+        ToolKind::Drill => Some(2),
+        ToolKind::Tap => Some(3),
+        _ => None,
+    }
+}
+
+/// #4452: the helix a twist drill draws when the tool states none - the
+/// 30 degrees of a DIN 338 type N drill. Other kinds draw straight.
+fn default_helix(k: ToolKind) -> Option<f64> {
+    (k == ToolKind::Drill).then_some(30.0)
 }
 
 /// The steel meridian `prof` (`(z, r)`, tip up) revolved with the
