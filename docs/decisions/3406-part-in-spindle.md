@@ -28,7 +28,7 @@ shows the record. The project key is additive.
   `G43 H`, a work offset for each tool, or the station's spindle word yet.
   A turning section through a milling post would come out as milling. So
   a part-in-spindle setup with work is refused at the program gate, by
-  name. The post section is a follow-up issue.
+  name. The post section is #4486.
 - **Clearing and stating.** The mode is not stated over a milling
   operation, and not cleared while the setup has any operation. A
   machine that is not a mill refuses the mode; a record on a setup whose
@@ -46,7 +46,7 @@ shows the record. The project key is additive.
 - A tool-kind filter on table stations: a drill on the table is a legal
   station for an on-centre hole, so any tool is accepted.
 - UI rows on the Setups page: the issue asks for commands and MCP tools.
-  A UI follow-up is filed.
+  The UI is #4487.
 
 **Cost to change.** The record is one additive key and one schema field.
 The post section adds code only in the posting path and removes the
