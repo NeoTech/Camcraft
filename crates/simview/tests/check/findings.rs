@@ -71,3 +71,71 @@ fn check_names_the_line_of_a_rapid_through_material() {
     assert!(out.contains("FAIL        stock: line 12: the rapid runs T1 through material at X30.000 Y0.000 Z-"), "{out}");
     assert!(!out.contains("stock: line 9"), "the rapid to Z2 is in air:\n{out}");
 }
+
+fn rib_program(name: &str, crossing: &str) -> String {
+    // The two slots leave a 2 mm rib at Y19..21. The last move crosses
+    // it between the centre and the old diagonal probes of the tool disc.
+    tmp(
+        name,
+        &format!(
+            "%\nO0100\nG21\nG90 G17 G94 G54 G40 G49 G80\nT1 M6\nG43 H1\nS8000 M3\n\
+G0 X-10. Y14. Z10.\nG0 Z-5.\nG1 X50. F600.\nG0 Z10.\nG0 X-10. Y26.\nG0 Z-5.\nG1 X50. F600.\nG0 Z10.\nG0 X-10. Y18.5\nG0 Z-3.\n{crossing} X50.\nM30\n%\n"
+        ),
+    )
+}
+
+#[test]
+fn check_detects_a_rapid_through_a_rib_between_probe_offsets() {
+    let nc = rib_program("rapid-rib.nc", "G0");
+    let o = check(&[
+        &nc,
+        "--dialect",
+        "fanuc",
+        "--stock",
+        "0,0,-10,40,40,0",
+        "--tools",
+        "T1=10",
+        "--cell",
+        "0.25",
+    ]);
+    let out = text(&o);
+    assert_eq!(o.status.code(), Some(2), "{out}");
+    assert!(
+        out.contains("FAIL        stock: line 18: the rapid runs T1 through material"),
+        "{out}"
+    );
+    assert!(!out.contains("PASS        stock:"), "{out}");
+}
+
+#[test]
+fn check_detects_a_holder_on_a_rib_between_probe_offsets() {
+    check_band_on_rib("holder", "T1=10:flute=1:holder=10x10");
+}
+
+#[test]
+fn check_detects_a_shank_on_a_rib_between_probe_offsets() {
+    check_band_on_rib("shank", "T1=10:flute=1:shank=10x1:holder=10x10");
+}
+
+fn check_band_on_rib(band: &str, tool: &str) {
+    let nc = rib_program(&format!("{band}-rib.nc"), "G1");
+    let o = check(&[
+        &nc,
+        "--dialect",
+        "fanuc",
+        "--stock",
+        "0,0,-10,40,40,0",
+        "--tools",
+        tool,
+        "--cell",
+        "0.25",
+    ]);
+    let out = text(&o);
+    assert_eq!(o.status.code(), Some(2), "{out}");
+    assert!(
+        out.contains(&format!(
+            "FAIL        holder law: line 18: the {band} of T1 meets material"
+        )),
+        "{out}"
+    );
+}

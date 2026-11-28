@@ -43,7 +43,8 @@ pub fn samples(mv: &Move, step: f64) -> Vec<Point3> {
 }
 
 /// Whether the disc of radius `r` about `(x, y)` at height `z` holds
-/// material deeper than `thr`: its centre and eight points on its rim.
+/// material deeper than `thr`. Both the radial and arc spacing of the
+/// concentric rings are at most one stock cell, including the outer rim.
 fn disc_in_material(stock: &Stock, p: Point3, r: f64, thr: f64) -> bool {
     let probe = |x: f64, y: f64| {
         let d = stock.distance(Point3::new(x, y, p.z));
@@ -52,11 +53,18 @@ fn disc_in_material(stock: &Stock, p: Point3, r: f64, thr: f64) -> bool {
     if probe(p.x, p.y) {
         return true;
     }
-    r > 0.0
-        && (0..8).any(|k| {
-            let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
-            probe(p.x + r * a.cos(), p.y + r * a.sin())
-        })
+    let rings = (r / stock.cell()).ceil() as usize;
+    for ring in 1..=rings {
+        let radius = r * (ring as f64 / rings as f64);
+        let points = (std::f64::consts::TAU * radius / stock.cell()).ceil() as usize;
+        for k in 0..points {
+            let a = std::f64::consts::TAU * (k as f64 / points as f64);
+            if probe(p.x + radius * a.cos(), p.y + radius * a.sin()) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// The bands over the flute: (name, radius, height of the band bottom

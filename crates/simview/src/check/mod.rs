@@ -110,7 +110,6 @@ fn post_checks(program: &Program, post: Option<&PostManifest>, machine: Option<&
     let Some(p) = post else {
         return r.not_judged(POST, "no post is given (--post): the units, work offsets and machine kind are not judged");
     };
-    let before = r.failed();
     let units = p.units.clone().unwrap_or_else(|| vec!["mm".to_owned()]);
     for (asks, word, g) in [(program.inch, "inch", "G20"), (program.mm, "mm", "G21")] {
         if asks && !units.iter().any(|u| u == word) {
@@ -130,7 +129,10 @@ fn post_checks(program: &Program, post: Option<&PostManifest>, machine: Option<&
         Some(m) => r.note(&format!("{} serves the {:?} machine {}", p.name, m.kind, m.name)),
         None => r.not_judged(POST, "no machine file is given (--machine): the machine kind that the post serves is not judged"),
     }
-    if !r.failed() || before {
+    if !r.failed() {
         r.pass(POST, &format!("the units and the work offsets agree with {}", p.name));
     }
 }
+
+#[cfg(test)]
+mod tests;
