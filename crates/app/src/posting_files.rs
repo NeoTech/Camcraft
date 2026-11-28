@@ -145,6 +145,8 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     ("Makera Carvera Air", AssetFile("makera-carvera-air.mch")),
     // #868: the Z1 (manual quick-change, air blast); posted through the Carvera post.
     ("Makera Z1", AssetFile("makera-z1.mch")),
+    // The Z1 Pro: the Z1 frame with ball screws and 2000 mm/min; same Carvera post.
+    ("Makera Z1 Pro", AssetFile("makera-z1-pro.mch")),
     // #728: Sienci's AltMill routers (SLB-EXT, grblHAL); pair with the "grblHAL" post.
     ("Sienci AltMill 2x4", AssetFile("sienci-altmill-2x4.mch")),
     ("Sienci AltMill 4x4", AssetFile("sienci-altmill-4x4.mch")),
@@ -433,6 +435,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "makera-carvera.mch") => Some(include_str!("../../../assets/machines/makera-carvera.mch")),
         ("machines", "makera-carvera-air.mch") => Some(include_str!("../../../assets/machines/makera-carvera-air.mch")),
         ("machines", "makera-z1.mch") => Some(include_str!("../../../assets/machines/makera-z1.mch")),
+        ("machines", "makera-z1-pro.mch") => Some(include_str!("../../../assets/machines/makera-z1-pro.mch")),
         ("machines", "sienci-altmill-2x4.mch") => Some(include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
         ("machines", "sienci-altmill-4x4.mch") => Some(include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
         ("machines", "sienci-altmill-4x8.mch") => Some(include_str!("../../../assets/machines/sienci-altmill-4x8.mch")),

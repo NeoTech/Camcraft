@@ -775,6 +775,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Makera Carvera", Kind::Mill),
         ("Makera Carvera Air", Kind::Mill),
         ("Makera Z1", Kind::Mill),
+        ("Makera Z1 Pro", Kind::Mill),
         ("Sienci AltMill 2x4", Kind::Mill),
         ("Sienci AltMill 4x4", Kind::Mill),
         ("Sienci AltMill 4x8", Kind::Mill),
