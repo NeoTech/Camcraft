@@ -92,6 +92,9 @@ pub(crate) struct Env {
     pub last_value: Value,
     /// Optional UI selection snapshot passed into live MCP calls (#1942).
     pub selection: Option<crate::mcp::SelectionContext>,
+    /// The user posts folder that the MCP post tools use instead of the
+    /// process's (#2074): set only by a test, `None` reads the process's.
+    pub user_posts: Option<PathBuf>,
 }
 
 /// The `cam` methods, as data: name, arity, TypeScript line, and the
@@ -144,6 +147,7 @@ impl Env {
             posted: None,
             last_value: Value::Null,
             selection: None,
+            user_posts: None,
         }
     }
 }

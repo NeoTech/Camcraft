@@ -35,6 +35,9 @@ mod pattern_folder_law;
 #[path = "mcp/pattern_folder_post.rs"]
 mod pattern_folder_post;
 // #3631: a 2D Pocket tool that no position fits, warned at edit time.
+// #2074: list_posts, select_post, preview_post and save_post_script.
+#[path = "mcp/post_tools.rs"]
+mod post_tools;
 #[path = "mcp/pocket_tool_fit.rs"]
 mod pocket_tool_fit;
 // #3915: import_model's `changes` when it updates a model.
