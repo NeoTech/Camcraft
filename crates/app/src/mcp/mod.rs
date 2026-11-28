@@ -80,6 +80,7 @@ mod setup_tools;
 // #3915: SolidCraft face names on features and picks.
 mod source_names;
 mod tool_delete;
+mod tool_duplicate;
 mod tool_edit;
 mod tools;
 mod wcs_circle;

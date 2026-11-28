@@ -48,7 +48,8 @@ fn a_library_module_reaches_its_crate_targets_and_the_binaries_whose_gate_map_na
     }
     let all = crate::plan::heavy_steps(&root()).len();
     assert!(n.len() * 4 < all, "{} of {all} steps: not narrow", n.len());
-    let why = "motion heavy: cross_invariance - crates/motion/src/drilling/boss.rs changed: the gate map names motion::drilling";
+    // #3189: cross_invariance is a module of the `holes` directory suite.
+    let why = "motion heavy: holes - crates/motion/src/drilling/boss.rs changed: the gate map names motion::drilling";
     assert!(p.notes.iter().any(|l| l.trim_start().starts_with(why)), "{:#?}", p.notes);
 }
 

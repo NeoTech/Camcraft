@@ -129,3 +129,29 @@ fn a_holder_fill_keeps_the_colour_of_its_token() {
         Color32::from_rgba_unmultiplied(255, 0, 0, 70)
     );
 }
+
+/// #4452: the 3D tool preview paints the cutting part, the shank and the
+/// holder in three theme inks: each a key of the theme format, three
+/// different colours, and each clears the UI contrast floor on the
+/// preview's ground, in the dark and the light column.
+#[test]
+fn the_3d_preview_parts_have_three_theme_inks() {
+    use camcraft_ui_kit::contrast;
+    let model = |t: &Tokens| [t.tool_model_flute, t.tool_model_shank, t.tool_model_holder];
+    let keys = ["tool_model_flute", "tool_model_shank", "tool_model_holder"];
+    for (column, t) in [("dark", Tokens::DARK), ("light", Tokens::LIGHT)] {
+        let inks = model(&t);
+        for (i, a) in inks.iter().enumerate() {
+            for b in &inks[i + 1..] {
+                assert_ne!(a, b, "{column}: the three parts have three inks");
+            }
+            let r = contrast::ratio(*a, t.tool_ground);
+            assert!(r >= contrast::UI, "{column}: {} on tool_ground reads {r:.2}", keys[i]);
+        }
+    }
+    for (at, name) in keys.iter().enumerate() {
+        assert!(tf::COLOR_NAMES.contains(name), "{name} is a colour key of the theme format");
+        let t = parse(&format!(r##""{name}":"#0A0B0C""##));
+        assert_eq!(model(&t)[at], Color32::from_rgb(10, 11, 12), "{name} sets its own ink");
+    }
+}

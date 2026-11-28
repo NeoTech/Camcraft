@@ -31,6 +31,9 @@ use super::face::GenError;
 /// reused. Between levels the tool lifts to clearance, or to the retract
 /// plane when that is the level link; a keep-down link has no area to be
 /// proved against here and lifts to the retract plane, named.
+/// A start pick must equal the endpoint selected by climb; it does not
+/// reverse or trim the run. Callers that offset a source run must prove
+/// its pick mapping or refuse the source pick before calling this function.
 ///
 /// Half the tool overhangs the run on either side; a verifier told about
 /// a surrounding region reads that as the wall it is, and says so.
@@ -45,13 +48,14 @@ pub fn contour_along_chain(
         ));
     }
     if let Some(q) = p.picks.first(PickRole::Start).map(|k| k.xy) {
-        // #1448: an open run starts at one of its ends; a picked start
-        // there is a later slice - refused by name, never ignored.
-        return Err(GenError::Invalid(format!(
-            "start point ({:.3}, {:.3}): an open chain starts at its end - a picked start is \
-             taken only on closed contours yet; clear the start point",
-            q.x, q.y
-        )));
+        let start = if p.climb { pts[0] } else { pts[pts.len() - 1] };
+        if q != start {
+            return Err(GenError::Invalid(format!(
+                "start point ({:.3}, {:.3}): an open chain starts at the endpoint chosen by climb; \
+                 pick that exact endpoint or clear the start point",
+                q.x, q.y
+            )));
+        }
     }
     if let Some(q) = p.picks.first(PickRole::Exit).map(|k| k.xy) {
         // #1473: likewise an open run leaves at its other end.

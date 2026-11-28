@@ -199,6 +199,7 @@ per_file! {
     step_empty_list => "empty_list.step",
     step_fig8 => "fig8.step",
     step_fillet_corner => "fillet_corner.step",
+    step_filleted_block => "filleted_block.step",
     step_hole_on_pocket_wall => "hole_on_pocket_wall.step",
     step_lathe_holder_offset => "lathe_holder_offset.step",
     step_modular_clamp_unit => "modular_clamp_unit.step",

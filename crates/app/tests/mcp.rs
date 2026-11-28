@@ -19,6 +19,9 @@ mod background_generate;
 mod background_streams;
 #[path = "mcp/approach_distance.rs"]
 mod mcp_approach_distance;
+// #2443: the drill cycle word `deep` (G83).
+#[path = "mcp/drill_deep.rs"]
+mod drill_deep;
 #[path = "mcp/finish3d_direction.rs"]
 mod mcp_finish3d_direction;
 #[path = "mcp/finish3d_pass_start.rs"]

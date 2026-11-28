@@ -16,6 +16,8 @@ mod blend;
 mod names;
 #[path = "solidcraft_import/names_misfit.rs"]
 mod names_misfit;
+#[path = "solidcraft_import/release_fixture.rs"]
+mod release_fixture;
 mod sc_util;
 mod step_util;
 
