@@ -13,7 +13,7 @@ use crate::script::Env;
 
 pub(super) const TOOLS: &[Tool] = &[Tool {
     name: "duplicate_tool",
-    description: "Copy a document tool as a new tool: the same geometry, cutting data, holder, stick-out, drawn cutter and component stack, under a free name (\"<name> (2)\", \"(3)\", ...) and the next free tool number the mounted machine does not reserve. One undo step removes the copy. Refused by name, changing nothing: an unknown name, an entity that is not a tool, or no free tool number.",
+    description: "Copy a document tool as a new tool: the same geometry, cutting data, holder, stick-out, drawn cutter and component stack, under a free name (\"<name> (2)\", \"(3)\", ...) and the next free tool number the mounted machine does not reserve. One undo step removes the copy. Refused by name, changing nothing: an unknown name, an entity that is not a tool, no free copy name, or no free tool number.",
     schema,
     run: duplicate_tool,
 }];

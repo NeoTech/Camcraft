@@ -102,6 +102,35 @@ fn duplicate_opens_the_copy_and_is_one_undo_step() {
     assert!(!h.state().state.tool_names().contains(&copy), "one undo removes the copy");
 }
 
+/// #4340: a draft with unapplied edits disables Duplicate (the copy would
+/// not carry them); a click does nothing and the draft stays. After Apply
+/// the draft is the tool again, and Duplicate is enabled.
+#[test]
+fn a_dirty_draft_disables_duplicate_until_apply() {
+    let mut h = shell_harness();
+    h.run_steps(2);
+    let name = first_tool(&h);
+    open_in_window(&mut h, &name);
+    let before = tool(&h, &name);
+    let done = h.state().state.history.done_len();
+    let changed = before.diameter + 0.5;
+    draft(&mut h).diameter = changed;
+    h.run_steps(2);
+    assert!(h.state().state.library_draft_changed(), "the draft has unapplied edits");
+    assert_eq!(button(&h, frame::DUPLICATE), Some(false), "a dirty draft disables Duplicate");
+    click_window_button(&mut h, frame::DUPLICATE);
+    h.run_steps(2);
+    assert_eq!(h.state().state.history.done_len(), done, "a disabled Duplicate queues no command");
+    let open = h.state().state.tool_library.as_ref().and_then(|v| v.open_tool()).map(str::to_owned);
+    assert_eq!(open.as_deref(), Some(name.as_str()), "the editor keeps the tool open");
+    assert!((draft(&mut h).diameter - changed).abs() < 1e-12, "the draft is untouched");
+    click_window_button(&mut h, frame::APPLY);
+    h.run_steps(3);
+    assert_eq!(h.state().state.history.done_len(), done + 1, "Apply is one undo step");
+    assert!(!h.state().state.library_draft_changed(), "after Apply the draft is the tool");
+    assert_eq!(button(&h, frame::DUPLICATE), Some(true), "after Apply Duplicate is enabled");
+}
+
 /// Cancel drops the unapplied draft and goes back to the list: no command
 /// lands and the tool keeps its numbers. Apply stays one undo step.
 #[test]

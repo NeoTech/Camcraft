@@ -39,6 +39,9 @@ pub(crate) const FOOTER_SPAN: &str = "ui/tool_library.footer";
 /// What the tool editor's Duplicate does (#4340).
 pub(crate) const DUPLICATE_TOOL_HINT: &str =
     "a new tool, copied from this tool as it is applied, with its holder and component stack (one undo step)";
+/// Why the tool editor's Duplicate is disabled: the draft has unapplied
+/// edits, which the copy would not carry (#4340).
+pub(crate) const DUPLICATE_DIRTY: &str = "the draft has unapplied changes: Apply or Cancel them first";
 
 /// What the window shows; the header and the footer follow it.
 #[derive(Clone, Debug, PartialEq)]
@@ -193,7 +196,12 @@ pub(crate) fn footer(ui: &mut Ui, state: &State, face: &Face, draft: &Draft) -> 
                 if ui.button(CANCEL).on_hover_text("drop the unapplied draft and go back to the list").clicked() {
                     ask = Some(Ask::Cancel);
                 }
-                if ui.button(DUPLICATE).on_hover_text(DUPLICATE_TOOL_HINT).clicked() {
+                if ui
+                    .add_enabled(!state.library_draft_changed(), Button::new(DUPLICATE))
+                    .on_hover_text(DUPLICATE_TOOL_HINT)
+                    .on_disabled_hover_text(DUPLICATE_DIRTY)
+                    .clicked()
+                {
                     ask = Some(Ask::Duplicate);
                 }
             }
