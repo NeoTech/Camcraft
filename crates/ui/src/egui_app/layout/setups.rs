@@ -8,7 +8,9 @@
 //!
 //! A corrupt or older saved arrangement never reaches the dock: it is
 //! refused by name on the status line and the default three-pane layout
-//! stands. Provenance: our own code, specced from the egui_dock 0.21 docs
+//! stands. #4483: a setup also keeps which panes are folded (the leaf's
+//! collapsed flag) and, for a folded side pane, its open share; a setup
+//! that an older build saved loads with every pane unfolded. Provenance: our own code, specced from the egui_dock 0.21 docs
 //! and vendored sources; no HSMWorks material involved.
 
 use egui_dock::{DockState, SurfaceIndex};
@@ -16,6 +18,7 @@ use egui_dock::{DockState, SurfaceIndex};
 use crate::state::{PanelSetupAsk, State};
 
 use super::build_dock;
+use super::fold::{self, PaneFolds};
 use crate::egui_app::shell::Tab;
 
 /// The arrangement inside this frame's dock, as the file keeps it. A node
@@ -24,8 +27,16 @@ use crate::egui_app::shell::Tab;
 /// cannot be read back. They are saved as a placeholder instead - the
 /// dock computes the real rect on the next frame - so a save of a fresh
 /// float or a split always reads back.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn encode(dock: &DockState<Tab>) -> Result<serde_json::Value, String> {
+    encode_folded(dock, &PaneFolds::new())
+}
+
+/// `encode`, with the open share of each folded side pane (#4483) and the
+/// mark that this setup carries fold state.
+pub(crate) fn encode_folded(dock: &DockState<Tab>, folds: &PaneFolds) -> Result<serde_json::Value, String> {
     let mut copy = dock.clone();
+    fold::write_open_shares(&mut copy, folds);
     for (_, node) in copy.iter_all_nodes_mut() {
         match node {
             egui_dock::Node::Leaf(leaf) => {
@@ -41,7 +52,15 @@ pub(crate) fn encode(dock: &DockState<Tab>) -> Result<serde_json::Value, String>
             egui_dock::Node::Empty => {}
         }
     }
-    serde_json::to_value(&copy).map_err(|e| format!("the panel arrangement is not writable ({e})"))
+    let mut value = serde_json::to_value(&copy)
+        .map_err(|e| format!("the panel arrangement is not writable ({e})"))?;
+    match value.as_object_mut() {
+        Some(map) => {
+            map.insert(fold::FOLD_MARK.to_owned(), serde_json::Value::from(1));
+        }
+        None => return Err(String::from("the panel arrangement is not a JSON object")),
+    }
+    Ok(value)
 }
 
 /// A rect JSON can read back: an unlaid-out dock's infinite one becomes a
@@ -61,8 +80,17 @@ fn known(rect: egui::Rect) -> egui::Rect {
 /// Read a saved arrangement back. A shape this build does not know, or a
 /// dock that breaks the permanence law, is refused by name.
 pub(crate) fn decode(value: &serde_json::Value) -> Result<DockState<Tab>, String> {
-    let mut dock: DockState<Tab> = serde_json::from_value(value.clone())
+    let mut value = value.clone();
+    let folds_kept = value
+        .as_object_mut()
+        .is_some_and(|map| map.remove(fold::FOLD_MARK).is_some());
+    let mut dock: DockState<Tab> = serde_json::from_value(value)
         .map_err(|e| format!("not a panel arrangement ({e})"))?;
+    // #4483: before folds, the dock's arrow set a flag that did nothing to
+    // a side pane. An older setup therefore loads with every pane open.
+    if !folds_kept {
+        fold::unfold_all(&mut dock);
+    }
     // #3892: the old "Tool library" tab is a window now. A setup saved
     // with it still loads; the tab goes. `remove_tab` also removes a
     // float that it leaves empty (`retain_tabs` keeps the empty float).
@@ -141,7 +169,7 @@ pub(crate) fn apply_ask(state: &mut State, dock: &mut DockState<Tab>, ask: Panel
         PanelSetupAsk::Save(raw) => {
             state.status = match camcraft_app::prefs::setup_name(&raw) {
                 Err(why) => format!("panel setup not saved: {why}"),
-                Ok(name) => match encode(dock) {
+                Ok(name) => match encode_folded(dock, &state.pane_folds) {
                     Err(why) => format!("panel setup not saved: {why}"),
                     Ok(json) => match state.save_panel_setup(name, json) {
                         Ok(()) => format!("panel setup '{name}' saved"),
@@ -156,11 +184,15 @@ pub(crate) fn apply_ask(state: &mut State, dock: &mut DockState<Tab>, ask: Panel
                 Some(json) => match decode(&json) {
                     Ok(loaded) => {
                         *dock = loaded;
+                        // The fold law reads each folded pane's open
+                        // share from the loaded dock on the next frame.
+                        state.pane_folds.clear();
                         state.remember_setup(&name);
                         format!("panel setup '{name}' loaded")
                     }
                     Err(why) => {
                         *dock = build_dock();
+                        state.pane_folds.clear();
                         format!(
                             "panel setup '{name}' not loaded: {why} - the default layout is in use"
                         )
@@ -168,6 +200,7 @@ pub(crate) fn apply_ask(state: &mut State, dock: &mut DockState<Tab>, ask: Panel
                 },
                 None => {
                     *dock = build_dock();
+                    state.pane_folds.clear();
                     format!("panel setup '{name}' is not saved - the default layout is in use")
                 }
             };
