@@ -51,13 +51,15 @@ fn cross(a: Point2, b: Point2) -> f64 {
 
 /// The floor read as a pocket or slot; None when its walls do not stand
 /// on opposite sides (a shoulder, a corner step, a plain top face).
-pub(super) fn classify(model: &str, floor: FaceId, f: Floor, islands: usize) -> Option<Pocket> {
+/// `islands` counts every inner ring; `bosses` only those that stand up
+/// out of the floor (a hole through the floor is no boss).
+pub(super) fn classify(model: &str, floor: FaceId, f: Floor, islands: usize, bosses: usize) -> Option<Pocket> {
     let n = f.ring.len();
     let closed = f.wall.iter().all(|w| *w);
     if !closed && !opposed_walls(&f) {
         return None;
     }
-    let slot = slot_of(&f, islands);
+    let slot = slot_of(&f, bosses);
     let kind = match (slot.is_some(), closed) {
         (true, _) => PocketKind::Slot,
         (false, true) => PocketKind::Closed,
@@ -193,8 +195,8 @@ fn min_rect(pts: &[Point2]) -> Option<(Point2, Point2, f64, f64)> {
 /// The floor as a straight channel: both long sides walled along their
 /// whole length, each end wholly walled (round or square) or wholly
 /// open, no islands, and an area that matches the shape.
-fn slot_of(f: &Floor, islands: usize) -> Option<SlotShape> {
-    if islands > 0 {
+fn slot_of(f: &Floor, bosses: usize) -> Option<SlotShape> {
+    if bosses > 0 {
         return None;
     }
     let (c, u, l, w) = min_rect(&f.ring)?;

@@ -37,6 +37,11 @@ fn key(p: Point3) -> Option<Key> {
     Some((q(p.x)?, q(p.y)?, q(p.z)?))
 }
 
+/// The lattice key of feature vertex `v` (local frame).
+fn vert_key(f: &Features, v: u32) -> Option<Key> {
+    f.verts.get(v as usize).and_then(|p| key(Point3::new(p[0], p[1], p[2])))
+}
+
 fn edge_key(a: Key, b: Key) -> (Key, Key) {
     if a <= b { (a, b) } else { (b, a) }
 }
@@ -157,6 +162,46 @@ impl Mesh {
             return None;
         }
         Some(Floor { ring: pts, wall, z, top, area: face.area })
+    }
+
+    /// Inner ring `lp` of the floor `fi` at `z` holds a boss: a facet off
+    /// the floor that shares an edge of the ring stands above the floor.
+    /// A hole through the floor has its wall below the floor, so it reads
+    /// false (#2440). A ring that does not key reads as a boss, the
+    /// cautious answer.
+    pub(super) fn rises_from(&self, f: &Features, fi: usize, lp: &Loop, z: f64) -> bool {
+        let keys: Option<Vec<Key>> = lp.verts.iter().map(|&v| vert_key(f, v)).collect();
+        let Some(keys) = keys.filter(|k| k.len() >= 2) else {
+            return true;
+        };
+        let n = keys.len();
+        for i in 0..n {
+            let (Some(&a), Some(&b)) = (keys.get(i), keys.get((i + 1) % n)) else {
+                return true;
+            };
+            for &t in self.edges.get(&edge_key(a, b)).map_or(&[][..], |v| v.as_slice()) {
+                if f.facet_face.get(t as usize).is_some_and(|&g| g as usize == fi) {
+                    continue;
+                }
+                let Some(w) = self.world.get(t as usize) else { continue };
+                let cz = (w[0].z + w[1].z + w[2].z) / 3.0;
+                if cz > z + Z_TOL {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// The feature vertices `a` and `b` span a boundary edge of face
+    /// `fi`: a facet of the face and a facet of another face share it.
+    pub(super) fn bounds_face(&self, f: &Features, fi: usize, a: u32, b: u32) -> bool {
+        let (Some(ka), Some(kb)) = (vert_key(f, a), vert_key(f, b)) else {
+            return false;
+        };
+        let on = self.edges.get(&edge_key(ka, kb)).map_or(&[][..], |v| v.as_slice());
+        let mine = |t: &u32| f.facet_face.get(*t as usize).is_some_and(|&g| g as usize == fi);
+        on.iter().any(mine) && !on.iter().all(mine)
     }
 
     /// The ring's vertices in world space, read off the facet corners
