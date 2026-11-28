@@ -19,8 +19,11 @@ mod scroll_gutter;
 pub(crate) mod setups;
 // #2516: Tab, Shift+Tab and Enter over the pane's value fields.
 pub mod field_ring;
+// #1122: the page status banner and the action bar (split from `form`).
+mod status;
 pub(crate) use controls::*;
 pub(crate) use form::*;
+pub(crate) use status::*;
 pub(crate) use row_name::*;
 pub(crate) use scroll_gutter::keep_scroll_gutter;
 #[cfg(test)]
